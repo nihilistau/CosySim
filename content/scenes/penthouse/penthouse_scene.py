@@ -660,6 +660,8 @@ class AgentStats:
     pleasure:     float = 10.0
     explicitness: float = 60.0
     openness:     float = 65.0
+    dominance:    float = 50.0
+    affection:    float = 30.0
 
     def clamp(self) -> "AgentStats":
         for f in self.__dataclass_fields__:
@@ -700,6 +702,10 @@ class AgentStats:
         elif self.fear > 30:     parts.append("nervous")
         if self.pleasure > 60:   parts.append("feeling a lot of pleasure")
         elif self.pleasure > 30: parts.append("pleasantly stimulated")
+        if self.dominance > 70:  parts.append("feeling dominant")
+        elif self.dominance < 30: parts.append("feeling submissive")
+        if self.affection > 70:  parts.append("deeply affectionate")
+        elif self.affection > 40: parts.append("warm and tender")
         return ", ".join(parts) if parts else "neutral"
 
     def to_dict(self) -> Dict:

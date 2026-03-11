@@ -27,15 +27,14 @@ class PenthouseSocialMixin:
         char = Character.load(char_id, db=self.db)
         if not char:
             return None
-        self.characters[char.id] = char
-        if not self.active_character:
-            self.active_character = char
 
         pk = personality_key or (
-            "bold_dominant" if len(self.characters) == 1 else "shy_submissive"
+            "bold_dominant" if len(self.characters) == 0 else "shy_submissive"
         )
         p_info = PERSONALITY_PROFILES.get(pk, PERSONALITY_PROFILES["playful_tease"])
-        stats = AgentStats(**{k: v for k, v in p_info["base_stats"].items()})
+        known_fields = {f.name for f in AgentStats.__dataclass_fields__.values()}
+        safe_stats = {k: v for k, v in p_info["base_stats"].items() if k in known_fields}
+        stats = AgentStats(**safe_stats)
         profile = CharacterProfile(
             personality_key=pk,
             traits=list(p_info["traits"]),
@@ -45,7 +44,12 @@ class PenthouseSocialMixin:
             position=POSITIONS[0],
             stats=stats,
         )
+
+        # Only commit to state after profile is fully constructed
+        self.characters[char.id] = char
         self.profiles[char.id] = profile
+        if not self.active_character:
+            self.active_character = char
 
         empty = self.scene_map.get_empty_locations()
         loc = random.choice(empty) if empty else self.scene_map.get_location("doorway")
