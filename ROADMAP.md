@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.18c** "CROSS-SERVICE CHAIN PROMPTS" ✅ | Last updated: 2026-07
+> Current: **v1.19a** "DEEP HAR API EXPLORATION" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,15 +10,29 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.18c — "CROSS-SERVICE CHAIN PROMPTS" ✅
+## Current Shipped State: v1.19a — "DEEP HAR API EXPLORATION" ✅
 
-**Baseline: 20 scenes, 61 scheduler tasks, 23 workspace skills, 11,737 tests, 17 pipeline stages, 17 templates.**
+**Baseline: 20 scenes, 61 scheduler tasks, 23 workspace skills, 11,737 tests, 17 pipeline stages, 17 templates, 50 workspace API ops across 29 YAML sections.**
 
-The v1.18 sprint delivers the Google Workspace cross-service pipeline: Sheets, Docs,
-Drive, NLM, and Gemini orchestrated through a stage-based WorkspacePipeline with
-scheduler-driven automation, MCP skills, and REST routes. v1.18c adds cross-service
-chain prompt workflows with 8 new templates and 4 new stages for complete
-Docs↔Sheets↔NLM↔Drive↔Nexus rotation.
+The v1.19a sprint delivers exhaustive API surface mining from Google Workspace HAR
+captures. 25 new YAML sections with full payload maps, parameter positions, tier
+gating documentation, bypass catalogs, 16 API keys across 12 services, and 8 new
+WorkspaceGeminiClient methods including pro-tier generation, PeopleStack search,
+experiment flag reading, and Espresso pre-warming.
+
+---
+
+## Shipped: v1.19a — "DEEP HAR API EXPLORATION" ✅
+
+- [x] 25 new YAML sections: sheets_gemini, docs_gemini, drive_gemini, drive_v2internal,
+  sheets_extended, people_stack, experiments, feedback, workspace_analytics, addons,
+  ogads, consent, growth_promos, api_key_catalog, auth_cookie_catalog, client_side_gating
+- [x] 50 total workspace operations documented with full payload maps
+- [x] 16 API keys cataloged across 12 Google services
+- [x] 8 new WorkspaceGeminiClient methods (14 total)
+- [x] Client-side tier gating bypass documented (body[0][5][0] = [2])
+- [x] HAR mining tools: har_deep_explorer.py, har_payload_analyzer.py
+- [x] 127 workspace tests pass
 
 ---
 
