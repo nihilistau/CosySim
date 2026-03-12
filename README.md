@@ -1,8 +1,8 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.12b](https://img.shields.io/badge/version-1.12b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11272](https://img.shields.io/badge/tests-11%2C272-brightgreen.svg)]() [![Skills: 373](https://img.shields.io/badge/skills-373-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.13b](https://img.shields.io/badge/version-1.13b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11456](https://img.shields.io/badge/tests-11%2C456-brightgreen.svg)]() [![Skills: 373](https://img.shields.io/badge/skills-373-0a7f5a.svg)]()
 
-> v1.12b — "NLM PIPELINE HARDENING" — Local-first multi-scene AI simulation framework
+> v1.13b — "FACTORY MIGRATION COMPLETE" — Local-first multi-scene AI simulation framework
 
 ## Overview
 
@@ -14,14 +14,14 @@ The framework features a **unified cyberpunk aesthetic** (neon_base template), *
 
 | Metric | Value |
 |--------|-------|
-| Version | **1.02b** — "NEONCITY 2: THE LIVING CITY" |
-| Tests | **10,720+ passing** / 345 test files |
+| Version | **1.13b** — "FACTORY MIGRATION COMPLETE" |
+| Tests | **11,456 passing** / 345 test files |
 | Scenes | **20** Flask scenes + 3 Streamlit apps |
 | Services | **12** launcher-managed services |
 | Skill packs | **38 packs / 373 skills** |
 | MCP tools | **42** domain modules |
 | Interceptors | **26** auto-registered pipeline hooks |
-| Scheduler tasks | **55** autonomous recurring tasks |
+| Scheduler tasks | **56** autonomous recurring tasks |
 | Copilot agents | **19** specialized agent definitions |
 | Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news |
 
@@ -199,7 +199,7 @@ CosySim/
 ├── config/                    # default.yaml, development.yaml, voices.yaml, mcp.json
 ├── scripts/
 │   └── argus/                 # ARGUS browser automation, CDP tools
-├── tests/                     # 315 test files, 9,577 passing
+├── tests/                     # 337 test files, 11,456 passing
 ├── training/                  # Fine-tuning pipelines, datasets, model registry
 ├── docs/                      # 51 documentation files (INDEX.md entry point)
 ├── .github/
@@ -213,7 +213,7 @@ CosySim/
 
 ## Testing
 
-**9,577 tests passing** out of 9,963 total (386 deselected by marker filter `not slow and not integration`). 315 test files covering all scenes, engine modules, and integrations.
+**11,456 tests passing** out of 11,842 total (386 deselected by marker filter `not slow and not integration`). 337 test files covering all scenes, engine modules, and integrations.
 
 ```powershell
 # Full default suite (~23 minutes)
