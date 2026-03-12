@@ -89,12 +89,17 @@ class NLMNotebookManager:
                 return dict(self._notebooks[slot_name])
 
         description = BUILTIN_SLOTS.get(slot_name, f"CosySim notebook: {slot_name}")
-        engine = get_nlm_engine()
-        result = engine.create_notebook(f"[CosySim] {slot_name}")
-        notebook_id = result.get("notebook_id") or result.get("id", "")
+        from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+        factory = get_notebook_factory()
+        notebook_id = factory.get_or_create(
+            f"[CosySim] {slot_name}",
+            category="bootstrap",
+            dedup_key=f"bootstrap:{slot_name}",
+        )
         if not notebook_id:
-            logger.error("Failed to create notebook for slot '%s': %s", slot_name, result)
-            return {"error": "create_failed", "detail": result}
+            logger.error("Failed to create notebook for slot '%s'", slot_name)
+            return {"error": "create_failed", "detail": description}
 
         entry: Dict[str, Any] = {
             "slot_name": slot_name,

@@ -246,6 +246,7 @@ class NLMEngine:
         file_paths: List[str],
         name: str,
         max_chars_per_source: int = 50000,
+        category: str = "knowledge",
     ) -> Dict[str, Any]:
         """Create a notebook with source code files as text sources.
 
@@ -253,15 +254,26 @@ class NLMEngine:
             file_paths: List of file paths to add as sources.
             name: Notebook name.
             max_chars_per_source: Max characters per source (NLM limit).
+            category: Factory category for notebook lifecycle management.
 
         Returns:
             Dict with notebook info and source add results.
         """
-        # Create the notebook first
-        result = self.create_notebook(name)
-        notebook_id = result.get("notebook_id") or result.get("id", "")
+        # Use factory for creation/dedup
+        try:
+            from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+            factory = get_notebook_factory()
+            notebook_id = factory.get_or_create(name, category=category)
+        except Exception:
+            notebook_id = None
+
         if not notebook_id:
-            return {"error": "Failed to create notebook", "detail": result}
+            # Fallback to direct creation
+            result = self.create_notebook(name)
+            notebook_id = result.get("notebook_id") or result.get("id", "")
+        if not notebook_id:
+            return {"error": "Failed to create notebook", "detail": {}}
 
         source_results = []
         for fpath in file_paths:

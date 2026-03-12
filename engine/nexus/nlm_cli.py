@@ -131,17 +131,17 @@ def cmd_converse(args: argparse.Namespace) -> None:
 
 def cmd_create(args: argparse.Namespace) -> None:
     """Create a new NLM notebook."""
-    engine = _get_engine()
-    sources = args.sources if args.sources else None
-    result = engine.create_notebook(args.name, sources=sources)
-    nb_id = result.get("notebook_id") or result.get("id", "")
+    from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+    category = getattr(args, "category", "general") or "general"
+    factory = get_notebook_factory()
+    nb_id = factory.get_or_create(args.name, category=category)
     if nb_id:
         logger.info("Created notebook: %s", nb_id)
         logger.info("  Name: %s", args.name)
-        if sources:
-            logger.info("  Sources: %s", len(sources))
+        logger.info("  Category: %s", category)
     else:
-        logger.error("%s", result)
+        logger.error("Failed to create notebook: %s", args.name)
 
 
 def cmd_list(args: argparse.Namespace) -> None:
