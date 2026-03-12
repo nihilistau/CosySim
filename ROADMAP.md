@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.19c** "COLAB PIPELINE INTEGRATION" ✅ | Last updated: 2026-07
+> Current: **v1.20a** "NEWS INTELLIGENCE HARDENING" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,14 +10,28 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.19c — "COLAB PIPELINE INTEGRATION" ✅
+## Current Shipped State: v1.20a — "NEWS INTELLIGENCE HARDENING" ✅
 
-**Baseline: 20 scenes, 61 scheduler tasks, 31 workspace skills, 11,748 tests, 24 pipeline stages, 25 templates, 50 workspace API ops across 29 YAML sections.**
+**Baseline: 20 scenes, 61 scheduler tasks, 31 workspace skills, 11,748+ tests, 24 pipeline stages, 25 templates, 50 workspace API ops across 29 YAML sections.**
 
-The v1.19c sprint integrates Google Colab — GPU runtimes, AI agent, and notebook
-builder — into the Workspace Pipeline. Three Colab stages, four Colab templates,
-four new MCP skills, six proxy routes, and 14 new tests complete the six-service
-rotation: NLM ↔ Docs ↔ Sheets ↔ Drive ↔ Gemini ↔ Colab ↔ Nexus.
+The v1.20a sprint hardens the news intelligence pipeline for production:
+SQLite-backed dedup persistence, retry with exponential backoff, per-source
+circuit breakers, health tracking, and full MetaMetrics integration across
+every pipeline stage. Test coverage expanded from 7 → 31 tests with complete
+SQLite isolation.
+
+---
+
+## Shipped: v1.20a — "NEWS INTELLIGENCE HARDENING" ✅
+
+- [x] DedupFilter rewritten with SQLite persistence (data/news_dedup.db)
+- [x] RSSFetcher rewritten with retry (3 attempts, exponential backoff)
+- [x] Circuit breaker (5 failures → skip, 1hr auto-reset)
+- [x] Per-source health tracking (_SourceHealth class)
+- [x] NEWS_METRICS category (13 metrics) added to MetaMetrics
+- [x] Full metrics wiring in NewsPipeline (fetch/dedup/store/cycle)
+- [x] 31 news pipeline tests, all pass (was 7)
+- [x] Full suite green
 
 ---
 
