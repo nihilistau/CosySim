@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 _GENAI_BASE = "https://appsgenaiserver-pa.clients6.google.com/v1/genai"
 _CLOUD_SEARCH_BASE = "https://cloudsearch.clients6.google.com/v1/query"
+_ESPRESSO_BASE = "https://espresso-pa.clients6.google.com"
+_PEOPLE_BASE = "https://people-pa.clients6.google.com"
 _CONTENT_TYPE = "application/json+protobuf"
 _ORIGIN = "https://docs.google.com"
 _REFERER = "https://docs.google.com/"
@@ -39,6 +41,7 @@ _USER_AGENT = (
 # Context codes (which Workspace app is calling)
 CTX_DOCS = 1
 CTX_SHEETS = 3
+CTX_ESPRESSO_SHEETS = 7  # Prewarm uses 7 for Sheets, not 3
 
 # Operation codes for streamGenerate
 OP_INIT = 61
@@ -46,6 +49,10 @@ OP_GENERATE_SHEETS = 23
 OP_GENERATE_DOCS = 96
 OP_CONTINUE = 16
 OP_INSERT = 15
+
+# Tier markers (client-side only — free accounts CAN use pro tier)
+TIER_FREE = 1
+TIER_PRO = 2
 
 # Document MIME types
 MIME_SHEETS = "application/vnd.google-apps.ritz"
@@ -56,6 +63,20 @@ _API_KEYS: Dict[str, str] = {
     "sheets": "REDACTED-GOOGLE-API-KEY",
     "docs": "REDACTED-GOOGLE-API-KEY",
     "cloud_search": "REDACTED-GOOGLE-API-KEY",
+    "people_autocomplete": "REDACTED-GOOGLE-API-KEY",
+    "people_autocomplete_alt": "REDACTED-GOOGLE-API-KEY",
+    "experiments": "REDACTED-GOOGLE-API-KEY",
+    "consent": "REDACTED-GOOGLE-API-KEY",
+    "addons": "REDACTED-GOOGLE-API-KEY",
+    "addons_alt": "REDACTED-GOOGLE-API-KEY",
+    "growth_promos": "REDACTED-GOOGLE-API-KEY",
+    "analytics": "REDACTED-GOOGLE-API-KEY",
+    "feedback": "REDACTED-GOOGLE-API-KEY",
+    "feedback_trigger": "REDACTED-GOOGLE-API-KEY",
+    "drive_files": "REDACTED-GOOGLE-API-KEY",
+    "drive_files_alt": "REDACTED-GOOGLE-API-KEY",
+    "drive_permissions": "REDACTED-GOOGLE-API-KEY",
+    "ogads": "REDACTED-GOOGLE-API-KEY",
 }
 
 
@@ -429,6 +450,405 @@ class WorkspaceGeminiClient:
         except requests.RequestException as exc:
             logger.error("Cloud Search failed: %s", exc)
             return {"error": str(exc), "results": []}
+
+    # ──── Espresso Prewarm ───────────────────────────────────────────────────
+
+    def prewarm(
+        self,
+        document_id: str,
+        document_title: str = "",
+        document_type: Optional[str] = None,
+        locale: str = "en",
+    ) -> Dict[str, Any]:
+        """Fire-and-forget prewarm call to Espresso for faster first generation.
+
+        Call this before the first ``stream_generate`` in a session to warm
+        Google's model servers.  The endpoint returns an empty array on success.
+
+        The Espresso endpoint uses a different context code mapping:
+        Sheets=7 (not 3), Docs=1 (same).
+
+        Args:
+            document_id: Spreadsheet or document ID.
+            document_title: Human-readable title (optional hint).
+            document_type: ``"sheets"`` or ``"docs"``; falls back to instance
+                default.
+            locale: User locale string (default ``"en"``).
+
+        Returns:
+            Dict with ``success`` bool and optional ``error``.
+        """
+        doc_type = document_type or self._document_type
+        espresso_ctx = CTX_ESPRESSO_SHEETS if doc_type == "sheets" else CTX_DOCS
+        session_token = f"goog_{hash(document_id) % 2**31}"
+        version = "6"
+
+        payload = [
+            [
+                None, None, locale, None, espresso_ctx,
+                [document_title] if document_title else [],
+                version, None, document_id, session_token,
+            ]
+        ]
+
+        api_key = _API_KEYS.get(doc_type, self._api_key)
+        headers = self._get_headers()
+        headers["Content-Type"] = _CONTENT_TYPE
+        params = self._get_params(extra={"key": api_key})
+
+        try:
+            resp = self._session.post(
+                f"{_ESPRESSO_BASE}/v1/prewarm",
+                headers=headers,
+                params=params,
+                json=payload,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            logger.debug("Prewarm succeeded for %s (%s)", document_id, doc_type)
+            return {"success": True, "document_id": document_id}
+        except requests.RequestException as exc:
+            logger.warning("Prewarm failed (non-fatal): %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    # ──── Gem Management ─────────────────────────────────────────────────────
+
+    def select_gem(
+        self,
+        gem_id: str,
+        prompt: str,
+        document_id: Optional[str] = None,
+        document_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Generate content using a specific Gem (custom AI persona).
+
+        Uses the same ``streamGenerate`` endpoint but includes the gem_id
+        in the payload to activate that persona's style and instructions.
+
+        Args:
+            gem_id: Gem identifier from ``list_gems()`` — e.g.
+                ``"writing-editor"``, ``"brainstormer"``, or a hex hash for
+                custom gems.
+            prompt: User prompt.
+            document_id: Optional document ID for context.
+            document_type: ``"sheets"`` or ``"docs"``.
+
+        Returns:
+            Generation result dict with ``text``, ``model``, ``gem_id``.
+        """
+        doc_type = document_type or self._document_type
+        ctx_code = CTX_SHEETS if doc_type == "sheets" else CTX_DOCS
+        op_code = OP_GENERATE_SHEETS if doc_type == "sheets" else OP_GENERATE_DOCS
+        session_id = f"goog_{hash(prompt) % 2**31}"
+
+        context_array: List[Any] = [ctx_code, None, None, None, session_id]
+
+        if doc_type == "sheets":
+            prompt_array: List[Any] = [None, None, prompt] + [None] * 27 + ["0"]
+        else:
+            prompt_array = [None, None, None, [[[None, None, prompt]]]]
+
+        # Gem reference is placed in the tier/config block
+        tier_block: List[Any] = [
+            TIER_PRO, None,
+            [[None, "1", 1182]],
+            None, None, None,
+            gem_id,
+        ]
+
+        payload: List[Any] = [
+            [op_code, None, context_array, prompt_array, None, tier_block, 1],
+            [ctx_code, None, 1],
+        ]
+
+        return self._execute_generate(payload, gem_id=gem_id)
+
+    def _execute_generate(
+        self,
+        payload: List[Any],
+        gem_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Execute a streamGenerate call with a pre-built payload.
+
+        Args:
+            payload: Complete protobuf-JSON payload array.
+            gem_id: Optional gem ID for metadata tagging.
+
+        Returns:
+            Result dict with ``text``, ``model``, ``gem_id``, ``usage``,
+            ``chunks``.
+        """
+        headers = self._get_headers()
+        headers["Content-Type"] = _CONTENT_TYPE
+        params = self._get_params(extra={"key": self._api_key, "alt": "sse"})
+
+        try:
+            resp = self._session.post(
+                f"{_GENAI_BASE}/streamGenerate",
+                headers=headers,
+                params=params,
+                json=payload,
+                stream=True,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            chunks = list(self._parse_stream(resp))
+            text_parts = [self._extract_text(c) for c in chunks]
+            text = "\n".join(t for t in text_parts if t)
+            model = self._extract_model(chunks)
+            usage = self._extract_usage(chunks)
+
+            result: Dict[str, Any] = {
+                "text": text,
+                "model": model,
+                "usage": usage,
+                "chunks": len(chunks),
+            }
+            if gem_id:
+                result["gem_id"] = gem_id
+            return result
+        except requests.RequestException as exc:
+            logger.error("streamGenerate failed: %s", exc)
+            return {"text": "", "error": str(exc)}
+
+    # ──── People Stack ───────────────────────────────────────────────────────
+
+    def people_autocomplete(
+        self,
+        query: str,
+        max_results: int = 10,
+        context: str = "SHARING",
+    ) -> Dict[str, Any]:
+        """Autocomplete people/contacts search via PeopleStack gRPC.
+
+        Uses the ``PeopleStackAutocompleteService/Autocomplete`` gRPC-Web
+        endpoint to search for users by name or email prefix.
+
+        Args:
+            query: Search query (name or email prefix).
+            max_results: Maximum number of results.
+            context: Context hint (``"SHARING"``, ``"MENTION"``).
+
+        Returns:
+            Dict with ``results`` list and ``count``.
+        """
+        api_key = _API_KEYS.get("people_autocomplete", "")
+        grpc_path = "/peoplestack.PeopleStackAutocompleteService/Autocomplete"
+
+        payload = {
+            "query": query,
+            "maxResults": max_results,
+            "context": context,
+        }
+
+        headers = self._get_headers()
+        headers["Content-Type"] = "application/json"
+        headers["X-Goog-Api-Key"] = api_key
+
+        try:
+            resp = self._session.post(
+                f"{_PEOPLE_BASE}{grpc_path}",
+                headers=headers,
+                json=payload,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results", data.get("people", []))
+            return {
+                "results": results if isinstance(results, list) else [],
+                "count": len(results) if isinstance(results, list) else 0,
+                "query": query,
+            }
+        except requests.RequestException as exc:
+            logger.error("PeopleStack autocomplete failed: %s", exc)
+            return {"results": [], "count": 0, "error": str(exc)}
+
+    def people_warmup(self) -> Dict[str, Any]:
+        """Prewarm the PeopleStack autocomplete service.
+
+        Fire-and-forget warmup call to reduce latency on subsequent
+        autocomplete requests.
+
+        Returns:
+            Dict with ``success`` bool.
+        """
+        api_key = _API_KEYS.get("people_autocomplete", "")
+        grpc_path = "/peoplestack.PeopleStackAutocompleteService/Warmup"
+
+        headers = self._get_headers()
+        headers["Content-Type"] = "application/json"
+        headers["X-Goog-Api-Key"] = api_key
+
+        try:
+            resp = self._session.post(
+                f"{_PEOPLE_BASE}{grpc_path}",
+                headers=headers,
+                json={},
+                timeout=5,
+            )
+            resp.raise_for_status()
+            return {"success": True}
+        except requests.RequestException as exc:
+            logger.debug("PeopleStack warmup failed (non-fatal): %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    # ──── Experiment Flags ───────────────────────────────────────────────────
+
+    def get_experiment_flags(self) -> Dict[str, Any]:
+        """Retrieve experiment/feature flags for the current user.
+
+        Calls the ``PeopleStackExperimentsService/GetExperimentFlags`` gRPC
+        endpoint to discover which features and A/B tests are active.
+
+        Returns:
+            Dict with ``flags`` list, ``count``, and ``raw`` response.
+        """
+        api_key = _API_KEYS.get("experiments", "")
+        grpc_path = (
+            "/peoplestackwebexperiments.PeopleStackExperimentsService"
+            "/GetExperimentFlags"
+        )
+
+        headers = self._get_headers()
+        headers["Content-Type"] = "application/json"
+        headers["X-Goog-Api-Key"] = api_key
+
+        try:
+            resp = self._session.post(
+                f"{_PEOPLE_BASE}{grpc_path}",
+                headers=headers,
+                json={},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            flags = data.get("flags", data.get("experimentFlags", []))
+            flag_list = flags if isinstance(flags, list) else []
+            return {
+                "flags": flag_list,
+                "count": len(flag_list),
+                "raw": data,
+            }
+        except requests.RequestException as exc:
+            logger.error("GetExperimentFlags failed: %s", exc)
+            return {"flags": [], "count": 0, "error": str(exc)}
+
+    # ──── Addons ─────────────────────────────────────────────────────────────
+
+    def list_addons(self) -> Dict[str, Any]:
+        """List installed Google Workspace add-ons.
+
+        Calls ``AddOnService/ListInstallations`` gRPC endpoint.
+
+        Returns:
+            Dict with ``addons`` list and ``count``.
+        """
+        api_key = _API_KEYS.get("addons", "")
+        grpc_path = (
+            "/google.internal.apps.addons.v1.AddOnService/ListInstallations"
+        )
+
+        headers = self._get_headers()
+        headers["Content-Type"] = "application/json"
+        headers["X-Goog-Api-Key"] = api_key
+
+        try:
+            resp = self._session.post(
+                f"{_PEOPLE_BASE}{grpc_path}",
+                headers=headers,
+                json={},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            addons = data.get("installations", data.get("addons", []))
+            addon_list = addons if isinstance(addons, list) else []
+            return {
+                "addons": addon_list,
+                "count": len(addon_list),
+            }
+        except requests.RequestException as exc:
+            logger.error("ListInstallations failed: %s", exc)
+            return {"addons": [], "count": 0, "error": str(exc)}
+
+    # ──── Growth Promos ──────────────────────────────────────────────────────
+
+    def fetch_promos(self, surface: str = "DOCS_EDITOR") -> Dict[str, Any]:
+        """Fetch growth/promotional recommendations for the current surface.
+
+        Calls ``FetchRecommendations`` to discover what features Google is
+        pushing to the user — useful for tracking new capabilities.
+
+        Args:
+            surface: Product surface (``"DOCS_EDITOR"``, ``"SHEETS_EDITOR"``).
+
+        Returns:
+            Dict with ``promos`` list.
+        """
+        api_key = _API_KEYS.get("growth_promos", "")
+
+        headers = self._get_headers()
+        headers["Content-Type"] = "application/json"
+        headers["X-Goog-Api-Key"] = api_key
+
+        payload = {"surface": surface}
+
+        try:
+            resp = self._session.post(
+                f"{_PEOPLE_BASE}/growthpromos.GrowthPromosService/FetchRecommendations",
+                headers=headers,
+                json=payload,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return {
+                "promos": data.get("recommendations", []),
+                "surface": surface,
+            }
+        except requests.RequestException as exc:
+            logger.debug("FetchRecommendations failed (non-fatal): %s", exc)
+            return {"promos": [], "error": str(exc)}
+
+    # ──── Tier Override ──────────────────────────────────────────────────────
+
+    def stream_generate_pro(
+        self,
+        prompt: str,
+        context: Optional[str] = None,
+        document_id: Optional[str] = None,
+        document_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Stream generate with Pro tier marker (client-side gating bypass).
+
+        Identical to ``stream_generate`` but forces ``[2]`` (Pro) tier marker
+        in the payload, which unlocks higher-quality model responses on free
+        accounts.
+
+        Args:
+            prompt: User prompt.
+            context: Optional context.
+            document_id: Optional document ID.
+            document_type: ``"sheets"`` or ``"docs"``.
+
+        Returns:
+            Generation result dict.
+        """
+        doc_type = document_type or self._document_type
+        payload = self._build_generate_payload(
+            prompt=prompt,
+            context=context,
+            document_id=document_id,
+            document_type=doc_type,
+        )
+        # Override tier marker: payload[0][5][0] = 2 (Pro)
+        if (isinstance(payload, list) and len(payload) > 0
+                and isinstance(payload[0], list) and len(payload[0]) > 5
+                and isinstance(payload[0][5], list) and len(payload[0][5]) > 0):
+            payload[0][5][0] = TIER_PRO
+
+        return self._execute_generate(payload)
 
     # ──── Payload Construction ───────────────────────────────────────────────
 

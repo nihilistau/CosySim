@@ -1,8 +1,11 @@
 """Workspace RPC Registry — parallel registry for Google Workspace Gemini endpoints.
 
-Loads workspace_gemini, sheets_gemini, docs_gemini, drive_gemini, and
-cloud_search sections from ``config/nlm_rpcids.yaml`` and provides typed
-lookup for endpoint paths, auth methods, and operation metadata.
+Loads workspace_gemini, sheets_gemini, docs_gemini, drive_gemini,
+cloud_search, workspace_support, drive_v2internal, sheets_extended,
+people_stack, experiments, feedback, workspace_analytics, addons,
+ogads, consent, and growth_promos sections from
+``config/nlm_rpcids.yaml`` and provides typed lookup for endpoint
+paths, auth methods, and operation metadata.
 """
 
 from __future__ import annotations
@@ -24,17 +27,28 @@ _WORKSPACE_SECTIONS = (
     "drive_gemini",
     "cloud_search",
     "workspace_support",
+    "drive_v2internal",
+    "sheets_extended",
+    "people_stack",
+    "experiments",
+    "feedback",
+    "workspace_analytics",
+    "addons",
+    "ogads",
+    "consent",
+    "growth_promos",
 )
 
 _registry_instance: Optional["WorkspaceRPCRegistry"] = None
 
 
 class WorkspaceRPCRegistry:
-    """Registry for Google Workspace Gemini RPC definitions.
+    """Registry for Google Workspace RPC definitions.
 
-    Mirrors the design of ``NLMRPCRegistry`` but covers the workspace_gemini,
-    sheets_gemini, docs_gemini, drive_gemini, and cloud_search sections of
-    the unified YAML.
+    Mirrors the design of ``NLMRPCRegistry`` but covers 16 workspace sections
+    spanning Gemini generation, Drive v2internal, Sheets extended ops,
+    PeopleStack, Experiments, Feedback, Analytics, Add-ons, Consent, and
+    Growth Promos.
     """
 
     def __init__(self, yaml_path: Optional[Path] = None) -> None:
