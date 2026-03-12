@@ -3,6 +3,47 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.20a] — "NEWS INTELLIGENCE HARDENING" — 2026-07
+
+Production-grade hardening of the news intelligence pipeline with SQLite-backed
+deduplication, retry/circuit-breaker fetching, per-source health tracking, and
+full metrics integration via MetaMetrics.
+
+### Changed: DedupFilter — SQLite Persistence
+- Replaced in-memory `Set` with SQLite-backed persistence (`data/news_dedup.db`)
+- Fingerprints survive across process restarts; configurable retention (default 30 days)
+- WAL mode + NORMAL synchronous for performance
+- Thread-safe with `threading.Lock` on in-memory set
+- New methods: `count()`, `prune()`, constructor accepts `db_path` for test isolation
+
+### Changed: RSSFetcher — Retry & Circuit-Breaker
+- Exponential backoff retry: 3 attempts at 1s, 2s, 4s delays (configurable)
+- Circuit breaker: 5 consecutive failures → source skipped, auto-reset after 1 hour
+- Per-source health tracking via `_SourceHealth` class (error count, consecutive
+  failures, last error, total successes)
+- `get_source_health()` returns per-URL health summaries
+- Catches both `URLError` and `OSError` for broader error coverage
+- Uses `datetime.now(timezone.utc)` instead of deprecated `datetime.utcnow()`
+
+### Changed: NewsPipeline — Full Metrics Integration
+- Every stage emits metrics via `engine.nexus.meta_metrics`:
+  `news.fetch.total`, `news.fetch.fresh`, `news.dedup.filtered`,
+  `news.dedup.ratio`, `news.store.success`, `news.store.failed`,
+  `news.distill.qa_pairs`, `news.cycle.duration_s`
+- `run_fetch_cycle()` records total cycle duration
+- Constructor accepts optional `db_path` for isolated DedupFilter
+
+### Added: NEWS_METRICS Category (MetaMetrics)
+- 13 news-specific metric names registered in `engine/nexus/meta_metrics.py`
+- Included in `ALL_METRIC_NAMES` for dashboard/trend visibility
+
+### Added: Tests (7 → 31)
+- 7 new DedupFilter tests: persistence across instances, prune, count, SQLite isolation
+- 4 new RSSFetcher tests: circuit breaker, reset on success, health report, skip tripped
+- 2 new metrics tests: pipeline metrics recording, NEWS_METRICS category validation
+- All 31 tests pass with full test isolation via `tmp_path`
+
+---
 ## [1.19c] — "COLAB PIPELINE INTEGRATION" — 2026-07
 
 Integrates the Colab AI agent, GPU runtime, and notebook builder into the

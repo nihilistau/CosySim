@@ -144,12 +144,29 @@ SYSTEM_METRICS = [
     "nlm.research.sessions",
 ]
 
+NEWS_METRICS = [
+    "news.fetch.total",
+    "news.fetch.fresh",
+    "news.fetch.latency_ms",
+    "news.fetch.sources_success",
+    "news.fetch.sources_failure",
+    "news.fetch.sources_skipped",
+    "news.dedup.filtered",
+    "news.dedup.ratio",
+    "news.store.success",
+    "news.store.failed",
+    "news.distill.latency_ms",
+    "news.distill.qa_pairs",
+    "news.cycle.duration_s",
+]
+
 ALL_METRIC_NAMES = (
     KNOWLEDGE_METRICS
     + INFERENCE_METRICS
     + TASK_METRICS
     + TEST_METRICS
     + SYSTEM_METRICS
+    + NEWS_METRICS
 )
 
 
