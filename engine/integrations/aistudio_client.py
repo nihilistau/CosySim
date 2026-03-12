@@ -609,16 +609,23 @@ class AIStudioClient:
         content: str,
         task_type: str = "RETRIEVAL_DOCUMENT",
         title: Optional[str] = None,
+        output_dimensionality: Optional[int] = None,
     ) -> List[float]:
         """Generate an embedding vector for a piece of text (embedContent).
 
+        Supports Gemini Embedding 2 MRL (Matryoshka Representation Learning)
+        via the ``output_dimensionality`` parameter for variable-size vectors.
+
         Args:
-            model: Embedding model, e.g. ``"text-embedding-004"``.
+            model: Embedding model, e.g. ``"gemini-embedding-001"``.
             content: Text to embed.
             task_type: Embedding task type. One of: RETRIEVAL_QUERY,
                 RETRIEVAL_DOCUMENT, SEMANTIC_SIMILARITY, CLASSIFICATION,
-                CLUSTERING, QUESTION_ANSWERING, FACT_VERIFICATION.
+                CLUSTERING, QUESTION_ANSWERING, FACT_VERIFICATION,
+                CODE_RETRIEVAL_QUERY.
             title: Optional title for RETRIEVAL_DOCUMENT tasks.
+            output_dimensionality: MRL output dimensions (768, 1536, or 3072).
+                None uses model default (3072 for gemini-embedding-001).
 
         Returns:
             List of float embedding values.
@@ -630,6 +637,8 @@ class AIStudioClient:
         }
         if title:
             body["title"] = title
+        if output_dimensionality is not None:
+            body["outputDimensionality"] = output_dimensionality
         result = self._rest_request("POST", f"models/{model}:embedContent", data=body)
         embedding = result.get("embedding", {})
         return embedding.get("values", [])
@@ -1270,6 +1279,7 @@ class AIStudioClient:
         model: str,
         texts: List[str],
         task_type: str = "RETRIEVAL_DOCUMENT",
+        output_dimensionality: Optional[int] = None,
     ) -> List[List[float]]:
         """Batch generate embeddings for multiple texts (BatchEmbedContents).
 
@@ -1277,18 +1287,22 @@ class AIStudioClient:
             model: Embedding model name.
             texts: List of text strings to embed.
             task_type: Embedding task type.
+            output_dimensionality: MRL output dimensions (768, 1536, or 3072).
+                None uses model default.
 
         Returns:
             List of embedding vectors (each a list of floats).
         """
-        requests_list = [
-            {
+        requests_list = []
+        for t in texts:
+            req: Dict[str, Any] = {
                 "model": f"models/{model}",
                 "content": {"parts": [{"text": t}]},
                 "taskType": task_type,
             }
-            for t in texts
-        ]
+            if output_dimensionality is not None:
+                req["outputDimensionality"] = output_dimensionality
+            requests_list.append(req)
         result = self._rest_request(
             "POST",
             f"models/{model}:batchEmbedContents",

@@ -93,8 +93,10 @@ class TestFreshness:
 
     def test_custom_max_age(self):
         """Short max_age_days makes entries stale faster."""
-        scorer = KnowledgeScorer(max_age_days=10)
-        entry = _make_entry(age_days=5)
+        with patch("engine.config.get_config") as mock_cfg:
+            mock_cfg.return_value.get.return_value = {}
+            scorer = KnowledgeScorer(max_age_days=10)
+        entry = _make_entry(age_days=5, category="uncategorized")
         assert scorer.freshness(entry) == pytest.approx(0.5, abs=0.02)
 
 
