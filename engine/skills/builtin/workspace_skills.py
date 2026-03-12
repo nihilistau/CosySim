@@ -513,3 +513,97 @@ def workspace_fetch_news(
     except Exception as exc:
         logger.error("workspace_fetch_news failed: %s", exc)
         return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Run full cross-service pipeline: Drive→NLM→Gemini→Sheets→Docs→Nexus",
+    tags=["workspace", "cross-service", "pipeline", "full"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_full_cross_service(topic: str) -> str:
+    """Execute the full cross-service rotation pipeline.
+
+    Searches Drive, researches with NLM, enriches with Gemini, creates
+    both a Sheet and a Doc, uploads to Drive, and stores in Nexus.
+    This is the most comprehensive pipeline template available.
+    """
+    pipeline = _pipeline()
+    try:
+        run = pipeline.full_cross_service(topic=topic)
+        return json.dumps(run.to_dict(), default=str)
+    except Exception as exc:
+        logger.error("workspace_full_cross_service failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Distill a topic through Docs→NLM→Nexus knowledge pipeline",
+    tags=["workspace", "docs", "nlm", "distill", "knowledge"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_distill(topic: str, title: str = "") -> str:
+    """Create a doc, export to NLM, research, and store distilled knowledge.
+
+    Uses the docs_nlm_distill template to create comprehensive knowledge
+    entries from a topic by passing content through Docs and NLM.
+    """
+    pipeline = _pipeline()
+    try:
+        run = pipeline.docs_nlm_distill(topic=topic, title=title or None)
+        return json.dumps(run.to_dict(), default=str)
+    except Exception as exc:
+        logger.error("workspace_distill failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Run full news cycle: fetch→enrich→NLM→Sheet+Doc→Drive→Nexus",
+    tags=["workspace", "news", "full-cycle", "analysis"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_news_full_cycle(category: str = "ai_research") -> str:
+    """Execute the complete news analysis cycle.
+
+    Fetches news, enriches with Gemini analysis, researches via NLM,
+    creates both a data Sheet and analysis Doc, uploads to Drive,
+    and stores everything in Nexus.
+    """
+    pipeline = _pipeline()
+    try:
+        run = pipeline.news_full_cycle(category=category)
+        return json.dumps(run.to_dict(), default=str)
+    except Exception as exc:
+        logger.error("workspace_news_full_cycle failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Enrich content using Workspace Gemini transformation",
+    tags=["workspace", "gemini", "enrich", "transform"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_enrich(text: str, prompt: str = "Summarise into key takeaways") -> str:
+    """Transform or enrich text content using Workspace Gemini.
+
+    Runs the gemini_enrich stage to transform, summarise, expand, or
+    restructure content.  Useful as a standalone enrichment step.
+    """
+    pipeline = _pipeline()
+    try:
+        run = pipeline.run(
+            "gemini_enrich_only",
+            stages=[
+                {"stage": "gemini_enrich", "params": {"prompt": prompt}},
+                {"stage": "nexus_store", "params": {"category": "enriched", "content_type": "note"}},
+            ],
+            text=text,
+            prompt=prompt,
+        )
+        return json.dumps(run.to_dict(), default=str)
+    except Exception as exc:
+        logger.error("workspace_enrich failed: %s", exc)
+        return json.dumps({"error": str(exc)})

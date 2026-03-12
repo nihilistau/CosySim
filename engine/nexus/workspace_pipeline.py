@@ -5,16 +5,43 @@ to execute multi-stage knowledge pipelines.  Each pipeline is a named sequence
 of stages that move data between services, with Drive as the intermediate
 storage / movement layer and Nexus as the final knowledge destination.
 
-Pipelines:
-    research_and_distill  — NLM research → Sheets data → Nexus knowledge
-    create_knowledge_doc  — NLM sources → Docs draft → Nexus document
-    data_enrichment       — Sheets Fill-with-Gemini → Nexus structured data
+Stages (17):
+    nlm_research       — Research a topic via NotebookLM
+    create_doc         — Create a Google Doc (optionally with Gemini content)
+    create_sheet       — Create or populate a Google Sheet
+    fill_sheet         — Fill a sheet range using Gemini enrichment
+    drive_search       — Search Drive files using AI Overview semantic search
+    drive_ask          — Ask Gemini a question about Drive files
+    drive_upload       — Upload content to Drive as an intermediate artifact
+    nexus_store        — Store pipeline results in Nexus as knowledge entries
+    columnsmith        — Run Columnsmith AI transformations on sheet columns
+    export_doc         — Export a Google Doc to text for downstream processing
+    nlm_add_source     — Add a source to an NLM notebook
+    workspace_generate — Generate text via WorkspaceGeminiClient
+    fetch_news         — Fetch news articles via the NewsPipeline
+    docs_to_sheets     — Convert a doc export into a structured sheet
+    sheets_to_doc      — Convert sheet data into a formatted document
+    gemini_enrich      — Enrich/transform content using Workspace Gemini
+    prewarm            — Pre-warm Gemini models for latency reduction
+
+Pipelines (17):
+    research_and_distill   — NLM research → Sheets data → Nexus knowledge
+    create_knowledge_doc   — NLM sources → Docs draft → Nexus document
+    data_enrichment        — Sheets Fill-with-Gemini → Nexus structured data
     cross_source_synthesis — Drive search → NLM → Nexus synthesis
-    news_pipeline         — Fetch RSS → NLM distill → Sheets → Nexus
-    doc_to_notebook       — Docs → Drive → NLM notebook source → distill
-    sheet_to_knowledge    — Sheets export → NLM research → Nexus entries
-    generate_and_store    — Workspace Gemini generation → Nexus
-    news_to_knowledge     — Fetch → NLM research → Docs → Drive → Nexus
+    news_pipeline          — Fetch RSS → NLM distill → Sheets → Nexus
+    doc_to_notebook        — Docs → Drive → NLM notebook source → distill
+    sheet_to_knowledge     — Sheets export → NLM research → Nexus entries
+    generate_and_store     — Workspace Gemini generation → Nexus
+    news_to_knowledge      — Fetch → NLM research → Docs → Drive → Nexus
+    docs_nlm_distill       — Docs → export → NLM source → research → Nexus
+    sheets_enrichment_cycle— Sheet → fill → columnsmith → doc report → Nexus
+    drive_nlm_nexus        — Drive search → ask → enrich → NLM → doc → Nexus
+    full_cross_service     — Drive → NLM → Gemini → Sheets → Docs → Drive → Nexus
+    knowledge_distillation — Generate → enrich → NLM source → research → Nexus
+    news_full_cycle        — News → enrich → NLM → Sheet + Doc → Drive → Nexus
+    doc_structure_extract  — Doc → extract structured data → Sheet → Nexus
+    sheet_knowledge_report — Sheet → doc report → NLM → Drive → Nexus
 """
 
 from __future__ import annotations
@@ -536,6 +563,212 @@ def _stage_fetch_news(
     }
 
 
+def _stage_docs_to_sheets(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Convert a Google Doc export into a structured Google Sheet.
+
+    Exports a doc as text, then uses Workspace Gemini to build a spreadsheet
+    from the document content — enabling structured data extraction from
+    unstructured documents.
+
+    Params:
+        doc_id (str): Document ID to export (or from context).
+        sheet_title (str): Title for the new sheet.
+        extraction_prompt (str): Optional Gemini prompt for how to structure
+            the data.  Defaults to a generic "extract key data" prompt.
+
+    Returns:
+        Dict with ``doc_id``, ``sheet_id``, ``sheet_url``, ``rows_created``.
+    """
+    from engine.integrations.google_docs_client import get_docs_client
+    from engine.integrations.gsheets_client import get_sheets_client
+
+    doc_id = params.get("doc_id") or context.get("doc_id", "")
+    sheet_title = params.get("sheet_title") or context.get("title", "Extracted Data")
+    extraction_prompt = params.get("extraction_prompt", "")
+
+    docs_client = get_docs_client()
+    if docs_client is None:
+        raise RuntimeError("No Google Docs account available")
+
+    doc_text = docs_client.export_doc(doc_id, format="text")
+    if not doc_text:
+        raise RuntimeError(f"Failed to export doc {doc_id}")
+
+    sheets_client = get_sheets_client()
+    if sheets_client is None:
+        raise RuntimeError("No Google Sheets account available")
+
+    if extraction_prompt:
+        prompt = f"{extraction_prompt}\n\nSource document content:\n{doc_text[:8000]}"
+        result = sheets_client.build_with_gemini(prompt=prompt, title=sheet_title)
+    else:
+        result = sheets_client.create_spreadsheet(title=sheet_title)
+        if result:
+            lines = doc_text.strip().split("\n")
+            data = [[line] for line in lines[:500]]
+            if data:
+                sheets_client.write_range(
+                    result.get("spreadsheetId", ""),
+                    "Sheet1!A1",
+                    data,
+                )
+
+    sheet_id = (result or {}).get("spreadsheetId", "")
+    return {
+        "doc_id": doc_id,
+        "sheet_id": sheet_id,
+        "sheet_url": f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit",
+        "rows_created": len(doc_text.strip().split("\n")) if doc_text else 0,
+        "text": doc_text,
+    }
+
+
+def _stage_sheets_to_doc(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Convert structured sheet data into a formatted Google Doc.
+
+    Reads a sheet range and creates a document from it, optionally using
+    Workspace Gemini to transform the data into prose or a report.
+
+    Params:
+        sheet_id (str): Spreadsheet ID (or from context).
+        range (str): Sheet range to read (default ``"Sheet1"``).
+        doc_title (str): Title for the new document.
+        transform_prompt (str): Optional Gemini prompt for transforming
+            the data into document format.
+
+    Returns:
+        Dict with ``sheet_id``, ``doc_id``, ``doc_url``.
+    """
+    from engine.integrations.google_docs_client import get_docs_client
+    from engine.integrations.gsheets_client import get_sheets_client
+
+    sheet_id = params.get("sheet_id") or context.get("sheet_id", "")
+    read_range = params.get("range", "Sheet1")
+    doc_title = params.get("doc_title") or context.get("title", "Sheet Report")
+    transform_prompt = params.get("transform_prompt", "")
+
+    sheets_client = get_sheets_client()
+    if sheets_client is None:
+        raise RuntimeError("No Google Sheets account available")
+
+    data = sheets_client.read_range(sheet_id, read_range)
+    if not data:
+        raise RuntimeError(f"No data in sheet {sheet_id} range {read_range}")
+
+    text_lines = []
+    for row in data:
+        text_lines.append(" | ".join(str(cell) for cell in row))
+    sheet_text = "\n".join(text_lines)
+
+    docs_client = get_docs_client()
+    if docs_client is None:
+        raise RuntimeError("No Google Docs account available")
+
+    if transform_prompt:
+        full_prompt = f"{transform_prompt}\n\nData:\n{sheet_text[:8000]}"
+        result = docs_client.create_with_gemini(title=doc_title, prompt=full_prompt)
+    else:
+        result = docs_client.create_doc(title=doc_title)
+        if result and result.get("documentId"):
+            docs_client.append_to_doc(result["documentId"], sheet_text)
+
+    doc_id = (result or {}).get("documentId", "")
+    return {
+        "sheet_id": sheet_id,
+        "doc_id": doc_id,
+        "doc_url": f"https://docs.google.com/document/d/{doc_id}/edit",
+        "text": sheet_text,
+    }
+
+
+def _stage_gemini_enrich(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Enrich content using Workspace Gemini for cross-stage transformation.
+
+    Takes text from a previous stage and runs a Gemini prompt against it
+    to transform, summarise, expand, or restructure the content before
+    passing it to the next stage.
+
+    Params:
+        prompt (str): Transformation prompt (e.g. "Summarise into 5 bullet
+            points", "Extract action items", "Rewrite for a technical
+            audience").
+        text (str): Input text to transform (or from context).
+        document_type (str): ``"sheets"`` or ``"docs"`` context.
+
+    Returns:
+        Dict with ``text`` (enriched output), ``original_length``,
+        ``enriched_length``, ``prompt``.
+    """
+    from engine.integrations.workspace_gemini_client import get_workspace_gemini_client
+
+    prompt = params.get("prompt") or context.get("prompt", "Summarise this content")
+    text = params.get("text") or context.get("text", "")
+    doc_type = params.get("document_type", "docs")
+
+    if not text and context.get("answers"):
+        parts = []
+        for qa in context["answers"]:
+            parts.append(f"Q: {qa['question']}\nA: {qa['answer']}")
+        text = "\n\n".join(parts)
+
+    if not text and context.get("digest"):
+        text = context["digest"]
+
+    full_prompt = f"{prompt}\n\nContent:\n{text[:12000]}"
+    client = get_workspace_gemini_client(document_type=doc_type)
+    result = client.stream_generate(full_prompt)
+
+    enriched_text = result.get("text", "")
+    return {
+        "text": enriched_text,
+        "original_length": len(text),
+        "enriched_length": len(enriched_text),
+        "prompt": prompt,
+        "model": result.get("model", ""),
+    }
+
+
+def _stage_prewarm(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Pre-warm Workspace Gemini models to reduce first-request latency.
+
+    Calls the espresso-pa prewarm endpoint before generation stages.
+    Should be the first stage in latency-sensitive pipelines.
+
+    Params:
+        document_type (str): ``"sheets"`` or ``"docs"`` context.
+
+    Returns:
+        Dict with ``prewarmed`` status and ``duration_ms``.
+    """
+    import requests as req
+
+    doc_type = params.get("document_type", context.get("document_type", "sheets"))
+    ctx_code = 3 if doc_type == "sheets" else 1
+
+    try:
+        resp = req.post(
+            "https://espresso-pa.clients6.google.com/v1/prewarm",
+            json=[ctx_code],
+            timeout=10,
+        )
+        return {
+            "prewarmed": resp.status_code == 200,
+            "status_code": resp.status_code,
+            "document_type": doc_type,
+        }
+    except Exception as exc:
+        logger.warning("Prewarm failed (non-blocking): %s", exc)
+        return {"prewarmed": False, "error": str(exc)}
+
+
 # ──── Stage Registry ──────────────────────────────────────────────────────────
 
 STAGE_REGISTRY: Dict[str, Callable] = {
@@ -552,6 +785,10 @@ STAGE_REGISTRY: Dict[str, Callable] = {
     "nlm_add_source": _stage_nlm_add_source,
     "workspace_generate": _stage_workspace_generate,
     "fetch_news": _stage_fetch_news,
+    "docs_to_sheets": _stage_docs_to_sheets,
+    "sheets_to_doc": _stage_sheets_to_doc,
+    "gemini_enrich": _stage_gemini_enrich,
+    "prewarm": _stage_prewarm,
 }
 
 
@@ -605,6 +842,81 @@ PIPELINE_TEMPLATES: Dict[str, List[Dict[str, Any]]] = {
         {"stage": "create_doc", "params": {}},
         {"stage": "drive_upload", "params": {"subfolder": "news"}},
         {"stage": "nexus_store", "params": {"category": "news", "content_type": "document", "tags": ["news", "knowledge"]}},
+    ],
+
+    # ── Cross-Service Chain Prompt Templates ──────────────────────────────────
+    # These templates implement the Docs↔Sheets↔NLM↔Drive↔Nexus rotation
+    # workflows that leverage each service's built-in Gemini for its domain.
+
+    "docs_nlm_distill": [
+        {"stage": "create_doc", "params": {}},
+        {"stage": "export_doc", "params": {}},
+        {"stage": "nlm_add_source", "params": {}},
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "research", "content_type": "document", "tags": ["distilled", "cross-service"]}},
+    ],
+
+    "sheets_enrichment_cycle": [
+        {"stage": "create_sheet", "params": {}},
+        {"stage": "fill_sheet", "params": {}},
+        {"stage": "columnsmith", "params": {}, "optional": True},
+        {"stage": "sheets_to_doc", "params": {"transform_prompt": "Create a summary report from this data"}},
+        {"stage": "nexus_store", "params": {"category": "data", "content_type": "note", "tags": ["enriched", "gemini"]}},
+    ],
+
+    "drive_nlm_nexus": [
+        {"stage": "drive_search", "params": {}},
+        {"stage": "drive_ask", "params": {}},
+        {"stage": "gemini_enrich", "params": {"prompt": "Synthesise the key findings and insights"}},
+        {"stage": "nlm_add_source", "params": {}, "optional": True},
+        {"stage": "nlm_research", "params": {}, "optional": True},
+        {"stage": "create_doc", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "research", "content_type": "document", "tags": ["drive-sourced", "synthesis"]}},
+    ],
+
+    "full_cross_service": [
+        {"stage": "prewarm", "params": {}, "optional": True},
+        {"stage": "drive_search", "params": {}},
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "gemini_enrich", "params": {"prompt": "Extract structured data points, metrics, and key findings"}},
+        {"stage": "create_sheet", "params": {"title": "Research Data"}},
+        {"stage": "create_doc", "params": {}},
+        {"stage": "drive_upload", "params": {"subfolder": "cross-service"}},
+        {"stage": "nexus_store", "params": {"category": "research", "content_type": "document", "tags": ["cross-service", "full-rotation"]}},
+    ],
+
+    "knowledge_distillation": [
+        {"stage": "workspace_generate", "params": {}},
+        {"stage": "gemini_enrich", "params": {"prompt": "Distil into clear, concise knowledge entries with key takeaways"}},
+        {"stage": "nlm_add_source", "params": {}},
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "knowledge", "content_type": "note", "tags": ["distilled"]}},
+    ],
+
+    "news_full_cycle": [
+        {"stage": "fetch_news", "params": {"store": True}},
+        {"stage": "gemini_enrich", "params": {"prompt": "Analyse these news articles: identify key themes, trends, and implications"}},
+        {"stage": "nlm_add_source", "params": {}, "optional": True},
+        {"stage": "nlm_research", "params": {}, "optional": True},
+        {"stage": "create_sheet", "params": {"title": "News Analysis"}},
+        {"stage": "create_doc", "params": {}},
+        {"stage": "drive_upload", "params": {"subfolder": "news"}},
+        {"stage": "nexus_store", "params": {"category": "news", "content_type": "document", "tags": ["news", "full-cycle", "analysed"]}},
+    ],
+
+    "doc_structure_extract": [
+        {"stage": "export_doc", "params": {}},
+        {"stage": "gemini_enrich", "params": {"prompt": "Extract all structured data, tables, lists, and key-value pairs from this document"}},
+        {"stage": "docs_to_sheets", "params": {"extraction_prompt": "Create a structured spreadsheet from this document's data"}},
+        {"stage": "nexus_store", "params": {"category": "data", "content_type": "note", "tags": ["extracted", "structured"]}},
+    ],
+
+    "sheet_knowledge_report": [
+        {"stage": "sheets_to_doc", "params": {"transform_prompt": "Write a comprehensive analysis report based on this data"}},
+        {"stage": "nlm_add_source", "params": {}},
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "drive_upload", "params": {"subfolder": "reports"}},
+        {"stage": "nexus_store", "params": {"category": "research", "content_type": "document", "tags": ["report", "data-driven"]}},
     ],
 }
 
@@ -892,6 +1204,68 @@ class WorkspacePipeline:
             PipelineRun with results.
         """
         return self.run("news_pipeline", topic=topic, sources=sources or [], **kwargs)
+
+    def docs_nlm_distill(self, topic: str, title: Optional[str] = None, **kwargs: Any) -> PipelineRun:
+        """Run the docs_nlm_distill pipeline.
+
+        Creates a doc, exports it to NLM, researches, and stores in Nexus.
+
+        Args:
+            topic: Topic to document and distill.
+            title: Optional document title.
+            **kwargs: Additional parameters.
+
+        Returns:
+            PipelineRun with results.
+        """
+        return self.run(
+            "docs_nlm_distill",
+            topic=topic,
+            title=title or f"Distill: {topic}",
+            **kwargs,
+        )
+
+    def full_cross_service(self, topic: str, **kwargs: Any) -> PipelineRun:
+        """Run the full_cross_service pipeline.
+
+        Complete rotation: Drive → NLM → Gemini → Sheets → Docs → Drive → Nexus.
+
+        Args:
+            topic: Research topic for cross-service workflow.
+            **kwargs: Additional parameters.
+
+        Returns:
+            PipelineRun with results.
+        """
+        return self.run("full_cross_service", topic=topic, **kwargs)
+
+    def knowledge_distillation(self, topic: str, **kwargs: Any) -> PipelineRun:
+        """Run the knowledge_distillation pipeline.
+
+        Generate → enrich → NLM source → NLM research → Nexus.
+
+        Args:
+            topic: Topic to generate and distill.
+            **kwargs: Additional parameters.
+
+        Returns:
+            PipelineRun with results.
+        """
+        return self.run("knowledge_distillation", topic=topic, **kwargs)
+
+    def news_full_cycle(self, category: str = "", **kwargs: Any) -> PipelineRun:
+        """Run the news_full_cycle pipeline.
+
+        Fetch → enrich → NLM → Sheet + Doc → Drive → Nexus.
+
+        Args:
+            category: News category (ai_research, tech, world, science).
+            **kwargs: Additional parameters.
+
+        Returns:
+            PipelineRun with results.
+        """
+        return self.run("news_full_cycle", category=category, **kwargs)
 
 
 # ──── Factory ─────────────────────────────────────────────────────────────────

@@ -175,7 +175,8 @@ def test_pipeline_stages_registered() -> Dict[str, Any]:
         "nlm_research", "nlm_add_source", "create_doc", "create_sheet",
         "fill_sheet", "drive_search", "drive_upload", "drive_ask",
         "nexus_store", "export_doc", "workspace_generate", "fetch_news",
-        "columnsmith",
+        "columnsmith", "docs_to_sheets", "sheets_to_doc", "gemini_enrich",
+        "prewarm",
     ]
     missing = [s for s in expected_stages if s not in STAGE_REGISTRY]
     if missing:
@@ -191,6 +192,9 @@ def test_pipeline_templates_available() -> Dict[str, Any]:
         "research_and_distill", "create_knowledge_doc", "data_enrichment",
         "cross_source_synthesis", "news_pipeline", "doc_to_notebook",
         "sheet_to_knowledge", "generate_and_store", "news_to_knowledge",
+        "docs_nlm_distill", "sheets_enrichment_cycle", "drive_nlm_nexus",
+        "full_cross_service", "knowledge_distillation", "news_full_cycle",
+        "doc_structure_extract", "sheet_knowledge_report",
     ]
     missing = [t for t in expected_templates if t not in PIPELINE_TEMPLATES]
     if missing:

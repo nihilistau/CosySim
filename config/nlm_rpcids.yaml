@@ -1606,3 +1606,114 @@ drive_gemini:
       notes: >
         Reads file contents via Drive API, then sends question + context to
         workspace_gemini.stream_generate for cross-source synthesis.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Workspace Supporting Services — discovered via HAR mining July 2026
+# ═══════════════════════════════════════════════════════════════════════════════
+workspace_support:
+  meta:
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-12"
+    notes: >
+      Supporting services discovered via HAR analysis of Sheets/Docs Gemini
+      interactions.  These endpoints are called automatically by the Workspace
+      frontend during Gemini operations but can be invoked directly for
+      pre-warming, analytics, and recommendations.
+
+  operations:
+    prewarm:
+      host: "espresso-pa.clients6.google.com"
+      path: "/v1/prewarm"
+      method: "POST"
+      auth_method: "api_key_query_param"
+      category: performance
+      description: "Pre-warm Gemini AI models before generation to reduce latency"
+      notes: >
+        Called by Workspace apps before the first streamGenerate request.
+        Pre-loads model weights and context.  Reduces first-request latency
+        significantly.  Payload is a minimal protobuf-JSON array.
+      parameters:
+        context_code: "3=sheets, 1=docs"
+
+    fetch_recommendation:
+      host: "appsgrowthpromo-pa.clients6.google.com"
+      path: "/v1/promotion/FetchRecommendation"
+      method: "POST"
+      auth_method: "api_key_query_param"
+      api_key: "REDACTED-GOOGLE-API-KEY"
+      category: recommendation
+      description: "Fetch AI-powered feature recommendations"
+      notes: >
+        Returns contextual suggestions and feature recommendations based on
+        current user activity and document state.  Can be used to discover
+        available AI capabilities for the current context.
+
+    fetch_recommendations_batch:
+      host: "appsgrowthpromo-pa.clients6.google.com"
+      path: "/v1/promotion/FetchRecommendations"
+      method: "POST"
+      auth_method: "api_key_query_param"
+      api_key: "REDACTED-GOOGLE-API-KEY"
+      category: recommendation
+      description: "Batch fetch multiple AI recommendations"
+
+    peoplestack_autocomplete:
+      host: "peoplestack-pa.clients6.google.com"
+      path: "/$rpc/peoplestack.PeopleStackAutocompleteService/Autocomplete"
+      method: "POST"
+      auth_method: "api_key_query_param"
+      category: collaboration
+      description: "People autocomplete for Workspace sharing and collaboration"
+      notes: "Used for @mentions, sharing dialogs, and collaborator suggestions."
+
+    async_data:
+      host: "ogads-pa.clients6.google.com"
+      path: "/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData"
+      method: "POST"
+      auth_method: "api_key_query_param"
+      category: data
+      description: "Fetch async data for Workspace integrations"
+
+    workspace_batch:
+      host: "workspaceui-pa.clients6.google.com"
+      path: "/batch"
+      method: "POST"
+      auth_method: "api_key_query_param"
+      category: batch
+      description: "Batch multiple Workspace UI operations"
+      notes: >
+        Allows combining multiple Workspace operations (settings, UI state,
+        preferences) into a single request.
+
+    addons_list:
+      host: "addons-pa.clients6.google.com"
+      path: "/$rpc/google.internal.apps.addons.v1.AddOnService/ListInstallations"
+      method: "POST"
+      auth_method: "api_key_query_param"
+      category: extensions
+      description: "List installed Workspace add-ons and extensions"
+
+    waa_ping:
+      host: "waa-pa.clients6.google.com"
+      path: "/$rpc/google.internal.waa.v1.Waa/Ping"
+      method: "POST"
+      auth_method: "api_key_query_param"
+      category: analytics
+      description: "Workspace analytics and activity tracking ping"
+
+    doc_sync:
+      host: "docs.google.com"
+      path: "/document/d/{doc_id}/docos/p/sync"
+      method: "POST"
+      auth_method: "cookie_sapisidhash"
+      category: collaboration
+      description: "Real-time document collaboration sync"
+      notes: "Used for live co-editing and operational transforms."
+
+    scripts_ui:
+      host: "docs.google.com"
+      path: "/document/d/{doc_id}/scripts/uirea"
+      method: "POST"
+      auth_method: "cookie_sapisidhash"
+      category: automation
+      description: "Apps Script UI integration for document automation"

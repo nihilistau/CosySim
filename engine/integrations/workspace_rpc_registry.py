@@ -23,6 +23,7 @@ _WORKSPACE_SECTIONS = (
     "docs_gemini",
     "drive_gemini",
     "cloud_search",
+    "workspace_support",
 )
 
 _registry_instance: Optional["WorkspaceRPCRegistry"] = None
