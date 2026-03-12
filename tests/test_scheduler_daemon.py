@@ -313,7 +313,7 @@ class TestBuiltinTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 57
+        assert daemon.register.call_count == 61
 
     def test_doc_sync_task_registered(self) -> None:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
@@ -396,5 +396,115 @@ class TestBuiltinTasks:
             _doc_sync_callback()
         # Nexus add_entry should have been called with the changed files
         assert mock_client.add_entry.called
+
+
+class TestWorkspacePipelineTasks:
+    """Tests for workspace pipeline scheduler task registration and callbacks."""
+
+    def test_workspace_news_pipeline_task_registered(self) -> None:
+        """workspace-news-pipeline task is registered."""
+        from engine.nexus.scheduler_daemon import _register_builtin_tasks
+
+        daemon = MagicMock()
+        _register_builtin_tasks(daemon)
+        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        assert "workspace-news-pipeline" in task_ids
+
+    def test_workspace_news_to_knowledge_task_registered(self) -> None:
+        """workspace-news-to-knowledge task is registered."""
+        from engine.nexus.scheduler_daemon import _register_builtin_tasks
+
+        daemon = MagicMock()
+        _register_builtin_tasks(daemon)
+        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        assert "workspace-news-to-knowledge" in task_ids
+
+    def test_workspace_research_cycle_task_registered(self) -> None:
+        """workspace-research-cycle task is registered."""
+        from engine.nexus.scheduler_daemon import _register_builtin_tasks
+
+        daemon = MagicMock()
+        _register_builtin_tasks(daemon)
+        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        assert "workspace-research-cycle" in task_ids
+
+    def test_workspace_pipeline_health_task_registered(self) -> None:
+        """workspace-pipeline-health task is registered."""
+        from engine.nexus.scheduler_daemon import _register_builtin_tasks
+
+        daemon = MagicMock()
+        _register_builtin_tasks(daemon)
+        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        assert "workspace-pipeline-health" in task_ids
+
+    def test_news_pipeline_callback_runs_template(self) -> None:
+        """News pipeline callback invokes workspace pipeline run()."""
+        from engine.nexus.scheduler_daemon import _workspace_news_pipeline_callback
+
+        mock_run = MagicMock()
+        mock_run.run_id = "test-123"
+        mock_run.pipeline_name = "news_pipeline"
+        mock_run.status = MagicMock(value="completed")
+        mock_run.stages = [{"status": "completed"}, {"status": "completed"}]
+        mock_run.final_output = {"articles_fetched": 10, "stored": 8}
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = mock_run
+
+        with patch(
+            "engine.nexus.workspace_pipeline.get_workspace_pipeline",
+            return_value=mock_pipeline,
+        ), patch("engine.nexus.client.get_nexus_client", return_value=MagicMock()):
+            result = _workspace_news_pipeline_callback()
+
+        assert result["run_id"] == "test-123"
+        assert result["status"] == "completed"
+        assert result["articles_fetched"] == 10
+        mock_pipeline.run.assert_called_once()
+
+    def test_pipeline_health_callback_checks_clients(self) -> None:
+        """Pipeline health callback checks client availability."""
+        from engine.nexus.scheduler_daemon import _workspace_pipeline_health_callback
+
+        with patch(
+            "engine.nexus.workspace_pipeline.get_workspace_pipeline",
+            return_value=MagicMock(list_runs=MagicMock(return_value=[])),
+        ), patch(
+            "engine.nexus.workspace_pipeline.STAGE_REGISTRY",
+            {"a": None, "b": None, "c": None},
+        ), patch(
+            "engine.nexus.workspace_pipeline.PIPELINE_TEMPLATES",
+            {"t1": [], "t2": []},
+        ), patch("engine.nexus.client.get_nexus_client", return_value=MagicMock()):
+            result = _workspace_pipeline_health_callback()
+
+        assert result["stages_registered"] == 3
+        assert result["templates_available"] == 2
+        assert "clients" in result
+
+    def test_research_cycle_callback_fallback_topic(self) -> None:
+        """Research cycle callback uses default topic when Nexus queue empty."""
+        from engine.nexus.scheduler_daemon import _workspace_research_cycle_callback
+
+        mock_run = MagicMock()
+        mock_run.run_id = "r-1"
+        mock_run.status = MagicMock(value="completed")
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = mock_run
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+
+        with patch(
+            "engine.nexus.workspace_pipeline.get_workspace_pipeline",
+            return_value=mock_pipeline,
+        ), patch(
+            "engine.nexus.client.get_nexus_client",
+            return_value=mock_client,
+        ):
+            result = _workspace_research_cycle_callback()
+
+        assert result["topics_processed"] == 1
+        assert result["results"][0]["status"] == "completed"
 
 
