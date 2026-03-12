@@ -450,3 +450,66 @@ def workspace_news(topic: str, sources: str = "") -> str:
     except Exception as exc:
         logger.error("workspace_news failed: %s", exc)
         return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Generate text content using Workspace Gemini (Sheets/Docs context)",
+    tags=["workspace", "gemini", "generate", "text"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_generate(prompt: str, context: str = "sheets", store: bool = True) -> str:
+    """Generate content via Workspace Gemini and optionally store in Nexus.
+
+    Uses the workspace_generate pipeline stage. Context can be 'sheets' or 'docs'.
+    If store=True, runs generate_and_store template (generates then stores in Nexus).
+    If store=False, runs only the generation stage.
+    """
+    pipeline = _pipeline()
+    try:
+        if store:
+            run = pipeline.run("generate_and_store", topic=prompt, context=context)
+        else:
+            run = pipeline.run_stages(
+                [{"name": "workspace_generate"}],
+                topic=prompt,
+                prompt=prompt,
+                context=context,
+            )
+        return json.dumps(run.to_dict(), default=str)
+    except Exception as exc:
+        logger.error("workspace_generate failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Fetch latest news articles via RSS and optionally store in Nexus",
+    tags=["workspace", "news", "rss", "fetch"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_fetch_news(
+    categories: str = "ai_research",
+    max_articles: int = 20,
+    store: bool = True,
+) -> str:
+    """Fetch news articles from curated RSS sources.
+
+    Categories: ai_research, tech, world, science (pipe-separated for multiple).
+    Articles are deduplicated and optionally stored in Nexus.
+    """
+    pipeline = _pipeline()
+    cat_list = [c.strip() for c in categories.split("|") if c.strip()]
+
+    try:
+        run = pipeline.run_stages(
+            [{"name": "fetch_news"}],
+            topic=f"News fetch: {', '.join(cat_list)}",
+            categories=cat_list,
+            max_articles=max_articles,
+            store_articles=store,
+        )
+        return json.dumps(run.to_dict(), default=str)
+    except Exception as exc:
+        logger.error("workspace_fetch_news failed: %s", exc)
+        return json.dumps({"error": str(exc)})

@@ -350,3 +350,116 @@ class TestWorkspaceNews:
             workspace_news("AI", sources="https://a.com|https://b.com")
             _, kwargs = mock_pipe.return_value.news_digest.call_args
             assert kwargs.get("sources") == ["https://a.com", "https://b.com"]
+
+
+class TestWorkspaceGenerate:
+    """Tests for workspace_generate skill."""
+
+    def test_generate_with_store(self):
+        """workspace_generate runs generate_and_store template by default."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_run = MagicMock()
+            mock_run.to_dict.return_value = {"status": "completed", "generated": "text"}
+            mock_pipe.return_value.run.return_value = mock_run
+
+            from engine.skills.builtin.workspace_skills import workspace_generate
+            result = _parse(workspace_generate("Write a summary of AI trends"))
+            assert result["status"] == "completed"
+            mock_pipe.return_value.run.assert_called_once_with(
+                "generate_and_store", topic="Write a summary of AI trends", context="sheets"
+            )
+
+    def test_generate_without_store(self):
+        """workspace_generate runs only generation stage when store=False."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_run = MagicMock()
+            mock_run.to_dict.return_value = {"status": "completed"}
+            mock_pipe.return_value.run_stages.return_value = mock_run
+
+            from engine.skills.builtin.workspace_skills import workspace_generate
+            result = _parse(workspace_generate("test prompt", store=False))
+            assert result["status"] == "completed"
+            mock_pipe.return_value.run_stages.assert_called_once()
+
+    def test_generate_docs_context(self):
+        """workspace_generate passes context parameter to pipeline."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_run = MagicMock()
+            mock_run.to_dict.return_value = {"status": "completed"}
+            mock_pipe.return_value.run.return_value = mock_run
+
+            from engine.skills.builtin.workspace_skills import workspace_generate
+            workspace_generate("draft a report", context="docs")
+            _, kwargs = mock_pipe.return_value.run.call_args
+            assert kwargs.get("context") == "docs"
+
+    def test_generate_error_returns_json(self):
+        """workspace_generate returns error JSON on failure."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_pipe.return_value.run.side_effect = RuntimeError("API down")
+
+            from engine.skills.builtin.workspace_skills import workspace_generate
+            result = _parse(workspace_generate("test"))
+            assert "error" in result
+
+
+class TestWorkspaceFetchNews:
+    """Tests for workspace_fetch_news skill."""
+
+    def test_fetch_news_default_category(self):
+        """workspace_fetch_news uses ai_research category by default."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_run = MagicMock()
+            mock_run.to_dict.return_value = {"status": "completed", "articles": 5}
+            mock_pipe.return_value.run_stages.return_value = mock_run
+
+            from engine.skills.builtin.workspace_skills import workspace_fetch_news
+            result = _parse(workspace_fetch_news())
+            assert result["status"] == "completed"
+            call_kwargs = mock_pipe.return_value.run_stages.call_args
+            assert call_kwargs[1].get("categories") == ["ai_research"]
+
+    def test_fetch_news_multiple_categories(self):
+        """workspace_fetch_news parses pipe-separated categories."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_run = MagicMock()
+            mock_run.to_dict.return_value = {"status": "completed"}
+            mock_pipe.return_value.run_stages.return_value = mock_run
+
+            from engine.skills.builtin.workspace_skills import workspace_fetch_news
+            workspace_fetch_news(categories="ai_research|tech|world")
+            call_kwargs = mock_pipe.return_value.run_stages.call_args
+            assert call_kwargs[1].get("categories") == ["ai_research", "tech", "world"]
+
+    def test_fetch_news_custom_max_articles(self):
+        """workspace_fetch_news passes max_articles parameter."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_run = MagicMock()
+            mock_run.to_dict.return_value = {"status": "completed"}
+            mock_pipe.return_value.run_stages.return_value = mock_run
+
+            from engine.skills.builtin.workspace_skills import workspace_fetch_news
+            workspace_fetch_news(max_articles=50)
+            call_kwargs = mock_pipe.return_value.run_stages.call_args
+            assert call_kwargs[1].get("max_articles") == 50
+
+    def test_fetch_news_no_store(self):
+        """workspace_fetch_news respects store=False."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_run = MagicMock()
+            mock_run.to_dict.return_value = {"status": "completed"}
+            mock_pipe.return_value.run_stages.return_value = mock_run
+
+            from engine.skills.builtin.workspace_skills import workspace_fetch_news
+            workspace_fetch_news(store=False)
+            call_kwargs = mock_pipe.return_value.run_stages.call_args
+            assert call_kwargs[1].get("store_articles") is False
+
+    def test_fetch_news_error_returns_json(self):
+        """workspace_fetch_news returns error JSON on failure."""
+        with patch("engine.skills.builtin.workspace_skills._pipeline") as mock_pipe:
+            mock_pipe.return_value.run_stages.side_effect = RuntimeError("feed timeout")
+
+            from engine.skills.builtin.workspace_skills import workspace_fetch_news
+            result = _parse(workspace_fetch_news())
+            assert "error" in result
