@@ -3,6 +3,40 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.10b] — "SYSTEM CONSOLIDATION" — 2026-03
+
+Architecture consolidation sprint — unifying registries, wiring the training
+export pipeline, and adding comprehensive test infrastructure.
+
+### News Registry Consolidation (GAP-1 closed)
+- **Unified news source registry** — merged `news/source_registry.py` constants
+  (NEWS_SOURCES, CURATED_QUESTIONS, helpers) into `news_sources.py`, eliminating
+  the duplicate registry that caused import confusion.
+- Deleted `engine/nexus/news/source_registry.py` (66 lines removed).
+- Updated all callers: `rss_fetcher.py`, `news_pipeline.py`, test suite.
+
+### Training Flywheel Auto-Export
+- **`_training_sync_callback()`** now auto-exports JSONL when ≥50 unexported
+  examples exist (min quality 0.7). 332 examples collected at 0.809 avg quality.
+- Export dir: `data/training_exports/`
+
+### Test Infrastructure
+- **Scene health suite** — `tests/test_scene_health_all.py`: 24 scenes validated
+  with parametrized import, skill-pack, and template checks (63 passed, 11 skipped).
+- **Skill registration suite** — `tests/test_skill_registration.py`: 57 builtin
+  skill modules validated with import and function-presence checks (118 passed).
+
+### Files Changed
+- `engine/nexus/news_sources.py` — Added consolidated constants + helpers
+- `engine/nexus/news/source_registry.py` — DELETED
+- `engine/nexus/news/rss_fetcher.py` — Updated import
+- `engine/nexus/news/news_pipeline.py` — Updated import
+- `engine/nexus/scheduler_daemon.py` — Training export in sync callback
+- `tests/test_scene_health_all.py` — NEW (scene health suite)
+- `tests/test_skill_registration.py` — NEW (skill registration suite)
+- `tests/test_news_pipeline.py` — Updated imports
+
+---
 ## [1.09b] — "PIPELINE VALIDATION" — 2026-03
 
 NLM pipeline hardening sprint — closing data flow gaps between news ingestion,
