@@ -3,6 +3,57 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.19a] — "DEEP HAR API EXPLORATION" — 2026-07
+
+Exhaustive API surface mining from Google Workspace HAR captures.
+50 operations across 29 YAML sections with full payload maps, parameter positions,
+tier gating documentation, and bypass catalogs.
+
+### Added: YAML Registry Expansion (25 new sections)
+- `sheets_gemini` (2 ops) — columnsmith_execute, external_data_fetch
+- `cloud_search` (1 op) — cross-workspace semantic search
+- `docs_gemini` (2 ops) — help_me_create, style_matching
+- `drive_gemini` (2 ops) — ai_overview_search, ask_gemini
+- `drive_v2internal` (9 ops) — internal Drive v2 API (files, permissions, changes, etc.)
+- `sheets_extended` (4 ops) — data validation, import, export, history
+- `people_stack` (3 ops) — autocomplete, warmup, profile_lookup
+- `experiments` (1 op) — A/B experiment flag reading
+- `feedback` (3 ops) — submit, thumbs_up_down, report_issue
+- `workspace_analytics` (2 ops) — log_event, batch_log
+- `addons` (2 ops) — list_addons, install_addon
+- `ogads` (1 op) — growth promo display
+- `consent` (1 op) — check/update consent status
+- `growth_promos` (2 ops) — get_promos, dismiss_promo
+- `api_key_catalog` — 16 API keys across 12 Google services
+- `auth_cookie_catalog` — Session auth params (SID, HSID, SSID, APISID, SAPISID, at, bl, f_sid)
+- `client_side_gating` — Tier markers, viewport injection, model selection bypass
+- `nlm_identity`, `quota_events`, `mime_types`, `parameters`, `meta`
+
+### Added: Client Methods (8 new, 14 total)
+- `prewarm()` — Espresso pre-initialization (context=7)
+- `select_gem()` — Switch to custom/built-in Gems
+- `people_autocomplete()` — PeopleStack contact search
+- `people_warmup()` — PeopleStack session prewarm
+- `get_experiment_flags()` — Read A/B experiment assignments
+- `list_addons()` — Workspace addon catalog
+- `fetch_promos()` — Growth/onboarding promotions
+- `stream_generate_pro()` — Pro-tier generation (tier_marker=2 bypass)
+
+### Added: HAR Mining Tools
+- `scripts/har_deep_explorer.py` — Automated multi-service HAR extraction
+- `scripts/har_payload_analyzer.py` — Protobuf-JSON payload decoding
+
+### Key Discovery: Client-Side Tier Gating
+- **Tier gating is CLIENT-SIDE ONLY** — free accounts CAN set `[2]` (Pro) marker
+- Position: `body[0][5][0]` in streamGenerate payloads
+- Unlocks: higher token limits, advanced model capabilities, priority processing
+- No server-side enforcement observed in any HAR capture
+
+### Tests
+- 127 workspace tests pass (25 new registry tests)
+- Full API key and auth cookie catalog tests
+
+---
 ## [1.18c] — "CROSS-SERVICE CHAIN PROMPTS" — 2026-07
 
 Major expansion of the workspace pipeline with cross-service chain prompt workflows,
