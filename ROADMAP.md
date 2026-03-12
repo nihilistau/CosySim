@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.13b** "FACTORY MIGRATION COMPLETE" ✅ | Last updated: 2026-03
+> Current: **v1.18b** "SCHEDULER INTEGRATION" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,24 +10,168 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.02b — "NEONCITY 2: THE LIVING CITY" ✅
+## Current Shipped State: v1.18b — "SCHEDULER INTEGRATION" ✅
 
-The v1.0 milestone represents a complete overhaul from a loose scene collection
-into a unified cyberpunk RPG framework with deep game systems.
+**Baseline: 20 scenes, 61 scheduler tasks, 19 workspace skills, 11,721 tests, 13 pipeline stages, 9 templates.**
 
-**Shipped in this release (8 phases):**
-- **Phase 1** — Character neurochemistry (6 neurotransmitters), skill progression
-  (8 skills, 6 levels), territory system (16 districts, crew HQ)
-- **Phase 2** — Unified neon_base.html template for all 17 scenes with cyberpunk
-  aesthetic (glass panels, scan-lines, particle system)
-- **Phase 3** — Phone panel CSS/JS rewrite + onboarding quest system (7 quests)
-- **Phase 4** — Cyberspace hacking engine (ICE barriers, programs, cyberdecks)
-- **Phase 5** — Living world (market economy, NPC routines, faction AI, weather)
-- **Phase 6** — Multiplayer foundation (sessions, presence, messaging, leaderboards)
-- **Phase 7** — In-game world news system + bottom-of-screen ticker in every scene
-- **Phase 8** — Documentation, version, and polish
+The v1.18 sprint delivers the Google Workspace cross-service pipeline: Sheets, Docs,
+Drive, NLM, and Gemini orchestrated through a stage-based WorkspacePipeline with
+scheduler-driven automation, MCP skills, and REST routes.
 
-**Baseline: 20 scenes, 55+ skill packs / ~420 skills, 10,988 tests passing (337 files), v1.07b.**
+---
+
+## Shipped: v1.18b — "SCHEDULER INTEGRATION" ✅
+
+- [x] 4 workspace pipeline scheduler tasks: news-pipeline (8h), news-to-knowledge (daily),
+  research-cycle (12h), pipeline-health (6h)
+- [x] End-to-end workspace smoke test (`scripts/workspace_smoke_test.py`)
+- [x] SCHEDULER.md and WORKSPACE_PIPELINE.md documentation
+- [x] Scheduler tasks: 57 → 61
+- [x] Tests: 44 scheduler tests (7 new), 11,721+ total
+
+---
+
+## Shipped: v1.18a — "PIPELINE STAGE EXPANSION" ✅
+
+- [x] `workspace_generate` stage — direct WorkspaceGeminiClient.stream_generate
+- [x] `fetch_news` stage — bridges standalone NewsPipeline RSS fetcher
+- [x] Pipeline stages: 11 → 13, templates: 7 → 9
+- [x] `workspace_generate` + `workspace_fetch_news` MCP skills (17 → 19)
+- [x] `/api/workspace/news/fetch` + `/api/workspace/news/digest` proxy routes (11 → 13)
+- [x] 22 new tests (13 pipeline + 9 skills)
+- [x] Tests: 11,721 passing
+
+---
+
+## Shipped: v1.17c — "HAR PAYLOAD VERIFICATION" ✅
+
+- [x] Rewrote all WorkspaceGeminiClient payloads to protobuf-JSON arrays (HAR-verified)
+- [x] Added operation codes, context codes, 3 HAR-verified API keys
+- [x] Updated nlm_rpcids.yaml workspace sections with correct formats
+- [x] Tests: 166 workspace + 39 registry passing
+
+---
+
+## Shipped: v1.17b — "WORKSPACE PIPELINE" ✅
+
+- [x] WorkspaceGeminiClient — stream_generate, get_settings, list_gems, quota_summary, cloud_search
+- [x] GoogleDocsClient — full CRUD + Gemini generation (create, get, update, export, generate)
+- [x] GoogleSheetsClient expanded — fill_with_gemini, build_with_gemini, execute_columnsmith, fetch_external_data
+- [x] GoogleDriveClient expanded — ai_overview_search, ask_gemini
+- [x] WorkspacePipeline — 11 stages, 7 templates, cross-service orchestrator
+- [x] WorkspaceRPCRegistry — parallel registry for Workspace endpoints
+- [x] 17 workspace @skill functions + 11 proxy routes
+- [x] 166 new tests, 11,706 total
+
+---
+
+## Shipped: v1.16b — "EMBEDDING AUTO-WIRE" ✅
+
+- [x] Auto-embed every Nexus write into ChromaDB vector store
+- [x] Batch re-indexing of unembedded entries via scheduler task
+- [x] Content-type → collection mapping (10 types → 8 collections)
+- [x] Scheduler tasks: 56 → 57
+- [x] 31 new tests
+
+---
+
+## Shipped: v1.15b — "GEMINI EMBEDDING 2 + MRL VECTOR SEARCH" ✅
+
+- [x] EmbeddingService with Gemini + LMStudio provider chain, MRL support (768/1536/3072 dims)
+- [x] ChromaDB-backed NexusVectorStore with 8 collection types
+- [x] 4 embedding MCP skills (semantic_search, vector_add, text_similarity, embedding_stats)
+- [x] Query router: 5 → 6 tiers (new Tier 2: Vector Semantic Search)
+- [x] Tests: 11,507 passing
+
+---
+
+## Shipped: v1.14b — "ERROR VISIBILITY" ✅
+
+- [x] Structured logging for 10 silent exception blocks across 4 pipeline files
+- [x] cache_pipeline (4), system_reflection (3), auto_diagnosis (2), qa_expander (1)
+
+---
+
+## Shipped: v1.13b — "FACTORY MIGRATION COMPLETE" ✅
+
+- [x] All 6 remaining notebook creation paths routed through NLMNotebookFactory
+- [x] Engine-level nlm_engine.create_from_files() uses factory with fallback
+- [x] ARGUS pipeline tests updated to mock factory
+
+---
+
+## Shipped: v1.12b — "NLM PIPELINE HARDENING" ✅
+
+- [x] 5 more files migrated to NLMNotebookFactory (teacher, reflection, qa_expander, forge, bootstrap)
+- [x] news-nlm-retry scheduler task (every 8h) with retry queue processing
+- [x] Failed distillations now queue to retry (not just uploads)
+
+---
+
+## Shipped: v1.11b — "NLM NOTEBOOK FACTORY" ✅
+
+- [x] Centralised NLMNotebookFactory with dedup keys, weekly rotation, persistent tracking
+- [x] Single state file replaces 6 separate state files
+- [x] News NLM pipeline refactored to use factory
+- [x] 14 new tests
+
+---
+
+## Shipped: v1.10b — "SYSTEM CONSOLIDATION" ✅
+
+- [x] Consolidated duplicate news source registries into single module
+- [x] Training flywheel auto-export (≥50 examples → JSONL at 0.7 quality)
+- [x] Scene health test suite (24 scenes, 74 parametrized tests)
+- [x] Skill registration test suite (57 skills, 118 parametrized tests)
+
+---
+
+## Shipped: v1.09b — "PIPELINE VALIDATION" ✅
+
+- [x] Real-time training flywheel feed (bypass 24h daily sync delay)
+- [x] Credential guard with cookie/staleness checks before NLM calls
+- [x] Retry queue for failed distillations (persist, 3 attempts, max 10)
+- [x] Runtime hardening: bare except → logged handlers in admin panel
+
+---
+
+## Shipped: v1.08b — "GAME SYSTEM INTEGRATION" ✅
+
+- [x] Wire neurochemistry into NPC conversation interceptors
+- [x] Hack engine → territory control reward multiplier
+- [x] Custom news publishing + `publish_news` skill
+
+---
+
+## Shipped: v1.07b — "PIPELINE INTELLIGENCE" ✅
+
+- [x] Automated topic discovery, NLM-driven knowledge distillation, news ingestion pipeline
+- [x] Query router NLM-backed deep research tier (5-tier pipeline)
+- [x] Training flywheel wiring, Unsloth QLoRA orchestrator, ContentRouter
+- [x] Tests: 10,988 passing
+
+---
+
+## Shipped: v1.06b — "AAA+++ ANIMATION" ✅
+
+- [x] 55-state animation state machine, 111 poses, 5-tab Animation Studio UI
+- [x] 6 MCP animation skills, YAML content system, model browser
+- [x] 128 new tests
+
+---
+
+## Shipped: v1.05b — "AUTONOMY SPRINT" ✅
+
+- [x] Priority-based task queue, agent task scheduler, backup/restore skills
+- [x] Versioned prompt templates (20 built-in), Flask metrics dashboard
+
+---
+
+## Shipped: v1.04b — "SYSTEM INTEGRATION" ✅
+
+- [x] LMStudio auth, character picker, agent loop UI, first-person camera
+- [x] Smart test runner (4-tier strategy), automated test scheduler
+- [x] Tests: 10,988 passing
 
 ---
 
@@ -57,105 +201,32 @@ into a unified cyberpunk RPG framework with deep game systems.
 - [x] Nexus rules reseeded
 - **Tests: 10,988 passing** (330 files, 2,751 in tier-2 suite)
 
-## Shipped: v1.05b — "AUTONOMY SPRINT" ✅
+---
 
-- [x] Priority-based task queue with retry logic and load balancing
-- [x] Agent task scheduler with MCP skill integration
-- [x] Backup, restore, diagnostics, and auto-heal skills (8 MCP skills)
-- [x] Self-recovery workflows for common failure modes
-- [x] Versioned prompt templates with expansion and A/B testing (20 built-in)
-- [x] Template management MCP skills (5 skills)
-- [x] Flask blueprint at `/metrics/dashboard` (cyberpunk glass-morphism UI)
-- [x] Real-time system metrics and performance tracking (6 API endpoints)
+## Shipped: v1.02b — "NEONCITY 2: THE LIVING CITY" ✅
+
+- [x] Character neurochemistry (6 neurotransmitters), skill progression (8 skills, 6 levels)
+- [x] Unified neon_base.html template, phone panel rewrite, onboarding quests
+- [x] Cyberspace hacking engine, living world, multiplayer foundation
+- [x] In-game world news system + bottom-of-screen ticker
 
 ---
 
-## Shipped: v1.06b — "AAA+++ ANIMATION" ✅
+## Post-v1.18 Roadmap (2026-Q3+)
 
-- [x] 55-state animation state machine with procedural bone animation
-- [x] 111 built-in poses across 12 categories
-- [x] 5-tab Animation Studio UI (Poses, Expressions, Sequences, Library, Models)
-- [x] Director avatar with full AnimManager registration and interactive controls
-- [x] 6 MCP animation skills for agent-driven animation control
-- [x] YAML content system (animations.yaml, interactions.yaml, catalog.yaml)
-- [x] Reusable engine/animation/ framework (AnimationConfig, PoseLibrary, ModelCatalog)
-- [x] Model browser with search/filter for 21 cataloged models
-- [x] Code quality polish (silent exception logging, config constants, validation helpers)
-- [x] 128 new tests (14 skill + 114 framework)
+### Cross-Service Chain Prompts
+- Docs→NLM chain: draft doc → upload to NLM → distill → store
+- Sheets enrichment chain: create → fill with Gemini → export
+- Drive→NLM→Nexus chain: semantic search → NLM research → store
+- News automation: 3x daily scheduler-driven news cycles
 
----
-
-## Shipped: v1.07b — "PIPELINE INTELLIGENCE" ✅
-
-### NotebookLM Research Pipeline
-- [x] Automated topic discovery and source curation (NewsSourceRegistry, 30+ sources, 7 categories)
-- [x] NLM-driven knowledge distillation into Nexus (NewsNLMPipeline, 10 distillation questions)
-- [x] News ingestion system: fetch → notebook → distill → store (full pipeline with scheduler)
-- [x] Code documentation notebooks for implementation guidance (4 bootstrap notebooks)
-
-### Nexus Knowledge Deepening
-- [x] Query router NLM-backed deep research tier (5-tier pipeline, tier 4 = direct NLM)
-- [x] Automated knowledge freshness checks and stale entry cleanup (per-category TTL, quality scoring)
-- [x] Training flywheel: feed all Q&A into fine-tuning pipeline (query router → flywheel wiring)
-
-### Local Agent Autonomy
-- [x] Fine-tune local models on CosySim-specific Q&A and code patterns (Unsloth QLoRA orchestrator)
-- [x] Agent self-improvement: benchmark → learn → adapt loop (BenchmarkRunner + auto-promotion)
-- [x] Router agent: classify tasks → delegate to appropriate model/agent (ContentRouter)
-
-### System Polish
-- [x] Scene health monitoring with auto-restart (scene_health_check.py + CDP diagnostics)
-- [x] Performance profiling and caching optimization (InterceptorCache + Nexus cache + LMStudio bench)
-- [x] Comprehensive integration test suite across all game systems (337 test files, 10,988 tests)
-
----
-
-## Shipped: v1.08b — "GAME SYSTEM INTEGRATION" ✅
-
-### Game System Integration
-- [x] Wire neurochemistry into NPC conversation interceptors (NeurochemistryInterceptor registered, priority 4)
-- [x] Hack engine → territory control reward multiplier (up to +50% bonus)
-- [x] Custom news publishing from conversations/skills/player actions
-- [x] `publish_news` skill for LLM-driven article generation
-- [x] `get_character_modifier()` utility for game system neurochemistry queries
-
----
-
-## Shipped: v1.09b — "PIPELINE VALIDATION" ✅
-
-### NLM Pipeline Hardening
-- [x] Real-time training flywheel feed (bypass 24h daily sync delay)
-- [x] Credential guard with cookie/staleness checks before NLM calls
-- [x] Retry queue for failed distillations (persist, 3 attempts, max 10)
-- [x] CLI --retry flag for independent queue processing
-- [x] Runtime hardening: bare except → logged handlers in admin panel
-
----
-
-## Shipped: v1.10b — "SYSTEM CONSOLIDATION" ✅
-
-### Architecture Consolidation
-- [x] Consolidated duplicate news source registries into single module
-- [x] Wired training flywheel auto-export (≥50 examples → JSONL at 0.7 quality)
-- [x] Scene health test suite (24 scenes, 74 parametrized tests)
-- [x] Skill registration test suite (57 skills, 118 parametrized tests)
-
-### Carry Forward
-- [ ] End-to-end live pipeline run: fetch → NLM distill → Nexus store
-- [ ] NLM notebook factory: centralize 4 creation paths
-- [ ] TUI dashboard enhancements: real-time metrics, task queue display
-
----
-
-## Post-v1.0 Roadmap (2026-Q3+)
-
-### 2. Advanced NLM Automation
+### Advanced NLM Automation
 - Architecture research: use NLM to evaluate design alternatives autonomously
 - Multi-notebook orchestration for complex research sessions
 - NLM-driven code generation with distilled implementation guides
 - Automated notebook lifecycle management (create → populate → distill → archive)
 
-### 3. System Evolution
+### System Evolution
 - TUI dashboard enhancements: real-time metrics, task queue display
 - Full autonomous operation: local agents maintain system without human input
 - Cross-scene interaction and shared world state
