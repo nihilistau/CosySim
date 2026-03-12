@@ -3,6 +3,32 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.17c] — "HAR PAYLOAD VERIFICATION" — 2026-07
+
+Verified and corrected all Workspace Gemini payloads against real HAR captures.
+
+### Changed: WorkspaceGeminiClient
+- Rewrote all payload builders to use protobuf-JSON arrays (not dicts)
+- Added context code constants (CTX_DOCS=1, CTX_SHEETS=3)
+- Added operation codes (OP_INIT=61, OP_GENERATE_SHEETS=23, OP_GENERATE_DOCS=96,
+  OP_CONTINUE=16, OP_INSERT=15), MIME type constants
+- Added 3 HAR-verified API keys for Sheets, Docs, Cloud Search
+- Rewrote: get_settings→`[[ctx,ctx]]`, quota_summary→`[null,1,[ctx]]`,
+  list_gems→`[ctx,"en"]`, update_settings→`[[],[ctx,ctx],null,1]`
+- Added recursive `_extract_text` for deeply nested array responses
+- Added `_parse_quota_response` for protobuf-JSON quota arrays
+
+### Changed: nlm_rpcids.yaml
+- Updated workspace_gemini: auth method, API keys, context codes, MIME types,
+  operation codes, payload templates for all 5 operations
+- Updated sheets_gemini: proto-text format notes, correct URL paths with `/u/0/`
+- Updated cloud_search: API key, requestOptions format, auth method
+
+### Tests
+- Updated 3 workspace client tests + 3 registry tests for new formats
+- All 166 workspace tests + 39 registry tests pass
+
+---
 ## [1.17b] — "WORKSPACE PIPELINE" — 2026-03
 
 Google Workspace Gemini integration: unified cross-service pipeline connecting
