@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.18b** "SCHEDULER INTEGRATION" ✅ | Last updated: 2026-07
+> Current: **v1.18c** "CROSS-SERVICE CHAIN PROMPTS" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,13 +10,26 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.18b — "SCHEDULER INTEGRATION" ✅
+## Current Shipped State: v1.18c — "CROSS-SERVICE CHAIN PROMPTS" ✅
 
-**Baseline: 20 scenes, 61 scheduler tasks, 19 workspace skills, 11,721 tests, 13 pipeline stages, 9 templates.**
+**Baseline: 20 scenes, 61 scheduler tasks, 23 workspace skills, 11,737 tests, 17 pipeline stages, 17 templates.**
 
 The v1.18 sprint delivers the Google Workspace cross-service pipeline: Sheets, Docs,
 Drive, NLM, and Gemini orchestrated through a stage-based WorkspacePipeline with
-scheduler-driven automation, MCP skills, and REST routes.
+scheduler-driven automation, MCP skills, and REST routes. v1.18c adds cross-service
+chain prompt workflows with 8 new templates and 4 new stages for complete
+Docs↔Sheets↔NLM↔Drive↔Nexus rotation.
+
+---
+
+## Shipped: v1.18c — "CROSS-SERVICE CHAIN PROMPTS" ✅
+
+- [x] 4 new pipeline stages: docs_to_sheets, sheets_to_doc, gemini_enrich, prewarm
+- [x] 8 new cross-service chain templates (docs_nlm_distill, full_cross_service, etc.)
+- [x] 4 new workspace skills (23 total)
+- [x] 10 new HAR-discovered endpoints (workspace_support section)
+- [x] Pipeline stages: 13 → 17, templates: 9 → 17
+- [x] Tests: 63 workspace pipeline, 102 workspace RPC registry, 11,737+ total
 
 ---
 

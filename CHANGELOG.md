@@ -3,6 +3,46 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.18c] — "CROSS-SERVICE CHAIN PROMPTS" — 2026-07
+
+Major expansion of the workspace pipeline with cross-service chain prompt workflows,
+4 new pipeline stages, 8 new templates, and 10 HAR-discovered API endpoints.
+
+### Added: Pipeline Stages (13 → 17)
+- `docs_to_sheets` — export doc content → create structured spreadsheet via Gemini
+- `sheets_to_doc` — read sheet range → transform to prose via Gemini
+- `gemini_enrich` — Workspace Gemini content transformation/enrichment
+- `prewarm` — espresso-pa model pre-warming for reduced first-request latency
+
+### Added: Cross-Service Chain Templates (9 → 17)
+- `docs_nlm_distill` — doc → export → NLM source → research → Nexus
+- `sheets_enrichment_cycle` — sheet → fill → columnsmith → doc → Nexus
+- `drive_nlm_nexus` — Drive search → ask → enrich → NLM → doc → Nexus
+- `full_cross_service` — prewarm → Drive → NLM → Gemini → Sheets → Docs → Drive → Nexus
+- `knowledge_distillation` — generate → enrich → NLM source → research → Nexus
+- `news_full_cycle` — fetch → enrich → NLM → sheet + doc + drive → Nexus
+- `doc_structure_extract` — export doc → Gemini enrich → docs_to_sheets → Nexus
+- `sheet_knowledge_report` — sheet → doc → NLM source → research → drive → Nexus
+
+### Added: Workspace Skills (19 → 23)
+- `workspace_full_cross_service` — run the complete rotation pipeline
+- `workspace_distill` — doc → NLM → Nexus distillation
+- `workspace_news_full_cycle` — complete news → knowledge cycle
+- `workspace_enrich` — Gemini content transformation
+
+### Added: HAR-Discovered Endpoints (workspace_support section)
+- espresso-pa prewarm, appsgrowthpromo-pa recommendation fetch
+- peoplestack-pa autocomplete, ogads-pa async data service
+- workspaceui-pa batch operations, addons-pa list installations
+- waa-pa analytics ping, docs sync + scripts/uirea integration
+- Workspace RPC sections: 5 → 6
+
+### Tests
+- 63 workspace pipeline tests (12 new cross-service template tests)
+- 102 workspace RPC registry tests (updated section/operation counts)
+- Full suite: 11,737 passed (only 1 pre-existing flaky: test_realm combat)
+
+---
 ## [1.18b] — "SCHEDULER INTEGRATION" — 2026-07
 
 Registered workspace pipeline templates as recurring scheduler tasks and created

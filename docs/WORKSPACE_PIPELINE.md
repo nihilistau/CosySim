@@ -1,9 +1,9 @@
 # Workspace Pipeline — Cross-Service Orchestrator
 
 > **Module:** `engine/nexus/workspace_pipeline.py`
-> **Version:** v1.18a
-> **Skills:** `engine/skills/builtin/workspace_skills.py` (19 skills)
-> **Tests:** `tests/test_workspace_pipeline.py` (53 tests)
+> **Version:** v1.18c
+> **Skills:** `engine/skills/builtin/workspace_skills.py` (23 skills)
+> **Tests:** `tests/test_workspace_pipeline.py` (63 tests)
 
 ## Overview
 
@@ -14,10 +14,13 @@ that call real Google service clients — no mocks, no stubs.
 ```
 Input (topic/question/data)
   │
+  ├─→ prewarm ─→ pre-warm AI models for faster first-request
   ├─→ fetch_news ─→ RSS articles from curated sources
   ├─→ nlm_research ─→ NotebookLM deep research
   ├─→ workspace_generate ─→ Workspace Gemini text generation
+  ├─→ gemini_enrich ─→ Gemini content transformation/enrichment
   ├─→ create_doc / create_sheet ─→ structured content
+  ├─→ docs_to_sheets / sheets_to_doc ─→ cross-format conversion
   ├─→ drive_upload / drive_search ─→ file management
   └─→ nexus_store ─→ persist to Nexus KMS
 ```
@@ -27,7 +30,7 @@ Input (topic/question/data)
 ```
                     ┌─────────────────────────────────────────┐
                     │         WorkspacePipeline                │
-                    │    13 Stages • 9 Templates               │
+                    │    17 Stages • 17 Templates              │
                     └──────────┬──────────────────────────────┘
                                │
          ┌─────────┬───────────┼───────────┬──────────┬────────┐
@@ -43,7 +46,7 @@ Input (topic/question/data)
     └─────────────────────────────────────────────────────────────┘
 ```
 
-## Stage Registry (13 Stages)
+## Stage Registry (17 Stages)
 
 | Stage | Client | Description |
 |-------|--------|-------------|
@@ -56,12 +59,19 @@ Input (topic/question/data)
 | `drive_upload` | GoogleDriveClient | Upload content to Google Drive |
 | `drive_ask` | GoogleDriveClient | Ask Gemini questions about Drive files |
 | `nexus_store` | Nexus Client | Persist results to Nexus knowledge base |
-| `doc_export` | GoogleDocsClient | Export document content as text/HTML |
+| `export_doc` | GoogleDocsClient | Export document content as text/HTML |
+| `columnsmith` | GoogleSheetsClient | Column formula/transformation execution |
 | `workspace_generate` | WorkspaceGeminiClient | Direct Gemini text generation |
 | `fetch_news` | NewsPipeline | Fetch RSS articles from curated sources |
+| `docs_to_sheets` | Docs + Sheets + Gemini | Export doc → structure as spreadsheet |
+| `sheets_to_doc` | Sheets + Docs + Gemini | Read sheet range → transform to prose |
+| `gemini_enrich` | WorkspaceGeminiClient | Content transformation/enrichment via Gemini |
+| `prewarm` | espresso-pa | Pre-warm AI models for reduced first-request latency |
 | *(custom)* | User-defined | Register via `pipeline.register_stage()` |
 
-## Pipeline Templates (9 Templates)
+## Pipeline Templates (17 Templates)
+
+### Core Templates (v1.17–v1.18a)
 
 ### `research_and_distill`
 NLM research → Sheets data → Drive upload → Nexus storage.
@@ -135,6 +145,72 @@ Best for: Full knowledge pipeline from current events to stored documents.
 pipeline.run("news_to_knowledge", topic="Daily AI Digest", categories=["ai_research"])
 ```
 
+### Cross-Service Chain Templates (v1.18c)
+
+### `docs_nlm_distill`
+Create Doc → Export → Add to NLM → Research → Nexus.
+Best for: Distilling document content into structured knowledge via NLM.
+
+```python
+pipeline.docs_nlm_distill(topic="architecture patterns", title="Architecture Guide")
+```
+
+### `sheets_enrichment_cycle`
+Create Sheet → Fill with Gemini → Columnsmith transforms → Convert to Doc → Nexus.
+Best for: Building structured data that gets enriched and documented.
+
+```python
+pipeline.run("sheets_enrichment_cycle", topic="market analysis", prompt="Top 20 AI companies")
+```
+
+### `drive_nlm_nexus`
+Drive Search → Ask Gemini → Enrich → (optional) NLM → Create Doc → Nexus.
+Best for: Mining Drive for knowledge and synthesizing with NLM research.
+
+```python
+pipeline.run("drive_nlm_nexus", query="authentication design", question="How does auth work?")
+```
+
+### `full_cross_service`
+Prewarm → Drive Search → NLM Research → Gemini Enrich → Sheet → Doc → Drive Upload → Nexus.
+Best for: Complete rotation through all services — the "crown jewel" pipeline.
+
+```python
+pipeline.full_cross_service(topic="neural architecture search", question="Compare NAS techniques")
+```
+
+### `knowledge_distillation`
+Workspace Generate → Gemini Enrich → NLM Add Source → NLM Research → Nexus.
+Best for: Deep knowledge distillation — generate → refine → research → store.
+
+```python
+pipeline.knowledge_distillation(topic="transformer optimization", prompt="Explain KV cache compression")
+```
+
+### `news_full_cycle`
+Fetch News → Gemini Enrich → (optional) NLM → Sheet + Doc + Drive → Nexus.
+Best for: Complete news-to-knowledge pipeline with all output formats.
+
+```python
+pipeline.news_full_cycle(topic="AI News Weekly", categories=["ai_research", "llm"])
+```
+
+### `doc_structure_extract`
+Export Doc → Gemini Enrich → Docs-to-Sheets → Nexus.
+Best for: Extracting structured data from prose documents.
+
+```python
+pipeline.run("doc_structure_extract", doc_id="abc123", prompt="Extract key metrics and dates")
+```
+
+### `sheet_knowledge_report`
+Sheets-to-Doc → NLM Add Source → NLM Research → Drive Upload → Nexus.
+Best for: Converting spreadsheet data into researched knowledge reports.
+
+```python
+pipeline.run("sheet_knowledge_report", sheet_id="xyz789", topic="Q4 performance analysis")
+```
+
 ## Usage
 
 ### Python API
@@ -177,6 +253,10 @@ workspace_pipeline(template="news_to_knowledge", topic="AI trends")
 workspace_news(topic="latest tech", sources="https://a.com|https://b.com")
 workspace_create_doc(title="Report", prompt="Write about...")
 workspace_create_sheet(title="Data", prompt="Create spreadsheet of...")
+workspace_full_cross_service(topic="NAS", question="Compare techniques")
+workspace_distill(topic="transformer opts", title="Optimization Guide")
+workspace_news_full_cycle(topic="AI Weekly", categories="ai_research|llm")
+workspace_enrich(text="Raw content...", prompt="Summarize and structure")
 ```
 
 ### REST API
