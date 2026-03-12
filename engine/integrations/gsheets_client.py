@@ -8,6 +8,7 @@ All endpoints use the Sheets v4 API and Drive v3 for file-level operations.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -424,6 +425,231 @@ class GoogleSheetsClient:
         )
         resp.raise_for_status()
         return resp.text
+
+    # ──── Gemini Integration ─────────────────────────────────────────────────
+
+    def fill_with_gemini(
+        self,
+        sheet_id: str,
+        range_: str,
+        prompt: str,
+        sheet_name: str = "Sheet1",
+    ) -> Dict[str, Any]:
+        """Fill a range with Gemini-generated data.
+
+        Uses the Workspace Gemini ``streamGenerate`` endpoint to generate
+        structured data and writes it into the specified range.  Mirrors the
+        "Fill with Gemini" feature in Sheets.
+
+        Args:
+            sheet_id: The spreadsheet ID.
+            range_: Target range in A1 notation (e.g. "B2:D10").
+            prompt: Prompt describing what data to generate.
+            sheet_name: Target sheet tab name (default: "Sheet1").
+
+        Returns:
+            Dict with generated text, rows written count, and sheet_id.
+        """
+        from engine.integrations.workspace_gemini_client import (
+            WorkspaceGeminiClient,
+        )
+
+        existing = self.read_raw(sheet_id, sheet_name)
+        context = json.dumps(existing[:20]) if existing else None
+
+        gemini = WorkspaceGeminiClient(account=self._account)
+        result = gemini.stream_generate(
+            prompt=f"For a Google Sheets spreadsheet, {prompt}. Return data as "
+                   f"tab-separated rows suitable for pasting into cells.",
+            context=context,
+            document_id=sheet_id,
+            document_type="sheets",
+        )
+
+        text = result.get("text", "")
+        rows_written = 0
+        if text:
+            parsed_rows = self._parse_tsv(text)
+            if parsed_rows:
+                full_range = f"{sheet_name}!{range_}"
+                headers = self._get_headers({"Content-Type": "application/json"})
+                params = {"valueInputOption": "USER_ENTERED"}
+                body = {"values": parsed_rows}
+                try:
+                    resp = self._session.put(
+                        f"{_SHEETS_API}/{sheet_id}/values/{full_range}",
+                        headers=headers,
+                        params=params,
+                        json=body,
+                        timeout=60,
+                    )
+                    resp.raise_for_status()
+                    rows_written = len(parsed_rows)
+                except requests.RequestException as exc:
+                    logger.error("fill_with_gemini write failed: %s", exc)
+
+        return {
+            "sheet_id": sheet_id,
+            "text": text,
+            "rows_written": rows_written,
+            "model": result.get("model", ""),
+        }
+
+    def build_with_gemini(
+        self,
+        prompt: str,
+        title: Optional[str] = None,
+        folder_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create an entire spreadsheet from a prompt using Gemini.
+
+        Mirrors the "Build with Gemini" feature that generates a complete
+        spreadsheet structure (headers, formulas, data) from a natural
+        language description.
+
+        Args:
+            prompt: Description of the desired spreadsheet.
+            title: Optional spreadsheet title.  If None, Gemini generates one.
+            folder_id: Optional parent folder ID.
+
+        Returns:
+            Dict with id, url, title, rows_written, and generation result.
+        """
+        from engine.integrations.workspace_gemini_client import (
+            WorkspaceGeminiClient,
+        )
+
+        gemini = WorkspaceGeminiClient(account=self._account)
+        result = gemini.stream_generate(
+            prompt=f"Build a complete Google Sheets spreadsheet for: {prompt}. "
+                   f"Include headers and sample data. Format as tab-separated "
+                   f"values with the first row as column headers.",
+            document_type="sheets",
+        )
+
+        text = result.get("text", "")
+        if not title:
+            title = prompt[:60].strip().replace("\n", " ")
+
+        sheet = self.create_sheet(title, folder_id=folder_id)
+        sheet_id = sheet["id"]
+        rows_written = 0
+
+        if text:
+            parsed_rows = self._parse_tsv(text)
+            if parsed_rows:
+                write_result = self.write_rows(
+                    sheet_id,
+                    [{f"col_{i}": v for i, v in enumerate(row)} for row in parsed_rows[:1]],
+                )
+                if len(parsed_rows) > 1:
+                    headers_list = parsed_rows[0]
+                    data_dicts = [
+                        {headers_list[i] if i < len(headers_list) else f"col_{i}": v
+                         for i, v in enumerate(row)}
+                        for row in parsed_rows[1:]
+                    ]
+                    self.write_rows(sheet_id, data_dicts, start_row=2)
+                rows_written = len(parsed_rows)
+
+        return {
+            "id": sheet_id,
+            "url": sheet["url"],
+            "title": title,
+            "rows_written": rows_written,
+            "model": result.get("model", ""),
+        }
+
+    def execute_columnsmith(
+        self,
+        sheet_id: str,
+        column_spec: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Execute a column transformation via the columnsmith endpoint.
+
+        This endpoint handles AI-powered column formula/transformation
+        operations in Google Sheets.
+
+        Args:
+            sheet_id: The spreadsheet ID.
+            column_spec: Column transformation specification dict containing
+                the column index, formula type, and parameters.
+
+        Returns:
+            API response dict with transformation results.
+        """
+        headers = self._get_headers({"Content-Type": "application/json"})
+        try:
+            resp = self._session.post(
+                f"https://docs.google.com/spreadsheets/u/0/d/{sheet_id}/columnsmith/execute",
+                headers=headers,
+                json=column_spec,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except requests.RequestException as exc:
+            logger.error("columnsmith execute failed: %s", exc)
+            return {"error": str(exc)}
+
+    def fetch_external_data(
+        self,
+        sheet_id: str,
+        source_spec: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Fetch data from external sources into the spreadsheet.
+
+        Uses the externaldata/fetchData endpoint that powers web data
+        import and enrichment in Sheets.
+
+        Args:
+            sheet_id: The spreadsheet ID.
+            source_spec: External data source specification.
+
+        Returns:
+            API response dict with fetched data.
+        """
+        headers = self._get_headers({"Content-Type": "application/json"})
+        try:
+            resp = self._session.post(
+                f"https://docs.google.com/spreadsheets/u/0/d/{sheet_id}/externaldata/fetchData",
+                headers=headers,
+                json=source_spec,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except requests.RequestException as exc:
+            logger.error("externaldata fetchData failed: %s", exc)
+            return {"error": str(exc)}
+
+    @staticmethod
+    def _parse_tsv(text: str) -> List[List[str]]:
+        """Parse tab-separated or pipe-separated text into rows.
+
+        Handles various formats that Gemini might return including TSV,
+        pipe-separated tables, and comma-separated values.
+
+        Args:
+            text: Raw text output from Gemini.
+
+        Returns:
+            List of rows, where each row is a list of cell values.
+        """
+        rows: List[List[str]] = []
+        for line in text.strip().split("\n"):
+            line = line.strip()
+            if not line or line.startswith("---") or line.startswith("==="):
+                continue
+            if "\t" in line:
+                cells = [c.strip() for c in line.split("\t")]
+            elif "|" in line:
+                cells = [c.strip() for c in line.split("|") if c.strip()]
+            else:
+                cells = [c.strip() for c in line.split(",")]
+            if cells:
+                rows.append(cells)
+        return rows
 
     # ──── Tab management ──────────────────────────────────────────────────────
 

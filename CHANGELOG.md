@@ -3,6 +3,73 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.17b] — "WORKSPACE PIPELINE" — 2026-03
+
+Google Workspace Gemini integration: unified cross-service pipeline connecting
+Docs, Sheets, Drive, and NotebookLM via a custom RPC pipeline with Nexus as
+the knowledge sink.
+
+### New: WorkspaceGeminiClient (`engine/integrations/workspace_gemini_client.py`)
+- `stream_generate()` — core Workspace Gemini generation endpoint
+- `get_settings()`, `list_gems()`, `quota_summary()`, `update_settings()`
+- `cloud_search()` — cross-workspace semantic search
+- Streaming `application/json+protobuf` response parser
+- SAPISIDHASH + API key auth via GoogleAccountPool
+
+### New: GoogleDocsClient (`engine/integrations/google_docs_client.py`)
+- Full CRUD: `create_doc()`, `get_doc()`, `update_doc()`, `append_to_doc()`
+- Export: `export_doc(fmt)`, `export_doc_bytes(fmt)` — text/html/pdf/docx/md
+- `delete_doc()`, `list_docs()` — Drive-based document management
+- Gemini: `generate_content()`, `create_with_gemini()` — "Help me create"
+
+### New: WorkspacePipeline (`engine/nexus/workspace_pipeline.py`)
+- Cross-service orchestrator with 11 stage executors
+- 7 pipeline templates: research_and_distill, create_knowledge_doc,
+  data_enrichment, cross_source_synthesis, news_pipeline, code_analysis,
+  competitive_intel
+- All templates end with `nexus_store` — knowledge always flows to Nexus
+- Pipeline run tracking with stage-level status, duration, and output
+
+### New: WorkspaceRPCRegistry (`engine/integrations/workspace_rpc_registry.py`)
+- Parallel registry for Workspace endpoints (mirrors NLMRPCRegistry)
+- Loads workspace_gemini, sheets_gemini, docs_gemini, drive_gemini,
+  cloud_search sections from `config/nlm_rpcids.yaml`
+
+### New: Workspace Skills (`engine/skills/builtin/workspace_skills.py`)
+- 17 @skill functions (pack="workspace"):
+  workspace_search, workspace_ask, workspace_create_doc,
+  workspace_knowledge_doc, workspace_create_sheet, workspace_fill_sheet,
+  workspace_columnsmith, workspace_generate, workspace_quota,
+  workspace_research, workspace_pipeline, workspace_list_pipelines,
+  workspace_pipeline_status, workspace_synthesize, workspace_news
+
+### Expanded: GoogleSheetsClient
+- `fill_with_gemini()` — AI data enrichment via streamGenerate
+- `build_with_gemini()` — create entire spreadsheet from prompt
+- `execute_columnsmith()` — AI column transformations
+- `fetch_external_data()` — external data fetch and parse
+
+### Expanded: GoogleDriveClient
+- `ai_overview_search()` — semantic search across Drive
+- `ask_gemini()` — cross-source synthesis with file context
+
+### Expanded: NLM Live Proxy
+- 11 new Flask routes under `/api/workspace/*`:
+  generate, search, ask, docs/create, sheets/create, sheets/fill,
+  pipeline, pipeline/status, pipeline/templates, status
+
+### Expanded: nlm_rpcids.yaml
+- 5 new sections: workspace_gemini (5 ops), sheets_gemini (2 ops),
+  cloud_search (1 op), docs_gemini (2 ops), drive_gemini (2 ops)
+
+### Tests
+- 166 new tests across 5 files:
+  test_workspace_gemini_client (35), test_google_docs_client (26),
+  test_workspace_pipeline (40), test_workspace_skills (30),
+  test_workspace_rpc_registry (35)
+- Full suite: 11,706 passed
+
+---
 ## [1.16b] — "EMBEDDING AUTO-WIRE" — 2026-03
 
 Auto-embeds every Nexus write into the ChromaDB vector store so it fills

@@ -4575,6 +4575,264 @@ def create_nlm_proxy_app() -> Flask:
         result = get_source_summary(source_id, cookies)
         return jsonify(result)
 
+    # ── Workspace Gemini Routes ───────────────────────────────────────────
+
+    @app.route("/api/workspace/generate", methods=["POST"])
+    def workspace_generate_route():
+        """Stream-generate text via the Workspace Gemini backend.
+
+        Body: {prompt, context?, document_type?}
+        Returns: {text, model, usage, chunks}
+        """
+        from engine.integrations.workspace_gemini_client import get_workspace_gemini_client
+        body = request.json or {}
+        prompt = body.get("prompt", "")
+        if not prompt:
+            return jsonify({"error": "prompt is required"}), 400
+
+        client = get_workspace_gemini_client()
+        if client is None:
+            return jsonify({"error": "No Workspace Gemini account available"}), 503
+
+        try:
+            result = client.stream_generate(
+                prompt=prompt,
+                context=body.get("context"),
+                document_type=body.get("document_type", "docs"),
+            )
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+
+    @app.route("/api/workspace/search", methods=["POST"])
+    def workspace_search_route():
+        """AI Overview search across Google Drive.
+
+        Body: {query, page_size?}
+        Returns: {results, total}
+        """
+        from engine.integrations.google_drive_client import get_drive_client
+        body = request.json or {}
+        query = body.get("query", "")
+        if not query:
+            return jsonify({"error": "query is required"}), 400
+
+        client = get_drive_client()
+        if client is None:
+            return jsonify({"error": "No Drive account available"}), 503
+
+        try:
+            result = client.ai_overview_search(
+                query=query,
+                page_size=body.get("page_size", 20),
+            )
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+
+    @app.route("/api/workspace/ask", methods=["POST"])
+    def workspace_ask_route():
+        """Ask Gemini a question about Drive files.
+
+        Body: {question, file_ids?, max_files?}
+        Returns: {answer, sources, model, usage}
+        """
+        from engine.integrations.google_drive_client import get_drive_client
+        body = request.json or {}
+        question = body.get("question", "")
+        if not question:
+            return jsonify({"error": "question is required"}), 400
+
+        client = get_drive_client()
+        if client is None:
+            return jsonify({"error": "No Drive account available"}), 503
+
+        try:
+            result = client.ask_gemini(
+                question=question,
+                file_ids=body.get("file_ids"),
+                max_context_files=body.get("max_files", 10),
+            )
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+
+    @app.route("/api/workspace/docs/create", methods=["POST"])
+    def workspace_docs_create_route():
+        """Create a Google Doc with optional Gemini content.
+
+        Body: {title, prompt?, content?, folder_id?}
+        Returns: {doc_id, title, url}
+        """
+        from engine.integrations.google_docs_client import get_docs_client
+        body = request.json or {}
+        title = body.get("title", "")
+        if not title:
+            return jsonify({"error": "title is required"}), 400
+
+        client = get_docs_client()
+        if client is None:
+            return jsonify({"error": "No Docs account available"}), 503
+
+        try:
+            prompt = body.get("prompt", "")
+            content = body.get("content", "")
+            folder_id = body.get("folder_id")
+
+            if prompt:
+                result = client.create_with_gemini(title=title, prompt=prompt, folder_id=folder_id)
+            else:
+                result = client.create_doc(title=title, folder_id=folder_id)
+                if content and result and result.get("documentId"):
+                    client.append_to_doc(result["documentId"], content)
+
+            doc_id = (result or {}).get("documentId", "")
+            return jsonify({
+                "doc_id": doc_id,
+                "title": title,
+                "url": f"https://docs.google.com/document/d/{doc_id}/edit",
+            }), 201
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+
+    @app.route("/api/workspace/sheets/create", methods=["POST"])
+    def workspace_sheets_create_route():
+        """Build a spreadsheet from a natural language prompt.
+
+        Body: {title, prompt}
+        Returns: {sheet_id, title, url}
+        """
+        from engine.integrations.gsheets_client import get_sheets_client
+        body = request.json or {}
+        prompt = body.get("prompt", "")
+        title = body.get("title", "Untitled Sheet")
+        if not prompt:
+            return jsonify({"error": "prompt is required"}), 400
+
+        client = get_sheets_client()
+        if client is None:
+            return jsonify({"error": "No Sheets account available"}), 503
+
+        try:
+            result = client.build_with_gemini(prompt=prompt, title=title)
+            sheet_id = (result or {}).get("spreadsheetId", "")
+            return jsonify({
+                "sheet_id": sheet_id,
+                "title": title,
+                "url": f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit",
+            }), 201
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+
+    @app.route("/api/workspace/sheets/fill", methods=["POST"])
+    def workspace_sheets_fill_route():
+        """Fill a sheet range with Gemini-enriched data.
+
+        Body: {sheet_id, range, prompt}
+        Returns: {updated_range, values_written}
+        """
+        from engine.integrations.gsheets_client import get_sheets_client
+        body = request.json or {}
+        sheet_id = body.get("sheet_id", "")
+        cell_range = body.get("range", "")
+        prompt = body.get("prompt", "")
+
+        if not all([sheet_id, cell_range, prompt]):
+            return jsonify({"error": "sheet_id, range, and prompt are required"}), 400
+
+        client = get_sheets_client()
+        if client is None:
+            return jsonify({"error": "No Sheets account available"}), 503
+
+        try:
+            result = client.fill_with_gemini(
+                spreadsheet_id=sheet_id,
+                cell_range=cell_range,
+                prompt=prompt,
+            )
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+
+    @app.route("/api/workspace/pipeline", methods=["POST"])
+    def workspace_pipeline_route():
+        """Run a named Workspace pipeline template.
+
+        Body: {template, topic?, ...params}
+        Returns: PipelineRun dict
+        """
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+        body = request.json or {}
+        template = body.get("template", "")
+        if not template:
+            return jsonify({"error": "template is required"}), 400
+
+        pipeline = get_workspace_pipeline()
+        params = {k: v for k, v in body.items() if k != "template"}
+
+        try:
+            run = pipeline.run(template, **params)
+            return jsonify(run.to_dict())
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 502
+
+    @app.route("/api/workspace/pipeline/status/<run_id>", methods=["GET"])
+    def workspace_pipeline_status_route(run_id: str):
+        """Get status of a pipeline run.
+
+        Returns: PipelineRun dict or 404
+        """
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+        pipeline = get_workspace_pipeline()
+        run = pipeline.get_run(run_id)
+        if run is None:
+            return jsonify({"error": f"Pipeline run {run_id} not found"}), 404
+        return jsonify(run.to_dict())
+
+    @app.route("/api/workspace/pipeline/templates", methods=["GET"])
+    def workspace_pipeline_templates_route():
+        """List available pipeline templates.
+
+        Returns: {templates: {name: [stages]}}
+        """
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+        pipeline = get_workspace_pipeline()
+        return jsonify({"templates": pipeline.list_templates()})
+
+    @app.route("/api/workspace/status", methods=["GET"])
+    def workspace_status_route():
+        """Get Workspace integration status — available services and quota.
+
+        Returns: {services, quota, registry}
+        """
+        from engine.integrations.workspace_gemini_client import get_workspace_gemini_client
+        from engine.integrations.workspace_rpc_registry import get_workspace_registry
+
+        registry = get_workspace_registry()
+        services = {
+            "workspace_gemini": get_workspace_gemini_client() is not None,
+        }
+        try:
+            from engine.integrations.gsheets_client import get_sheets_client
+            services["sheets"] = get_sheets_client() is not None
+        except Exception:
+            services["sheets"] = False
+        try:
+            from engine.integrations.google_drive_client import get_drive_client
+            services["drive"] = get_drive_client() is not None
+        except Exception:
+            services["drive"] = False
+        try:
+            from engine.integrations.google_docs_client import get_docs_client
+            services["docs"] = get_docs_client() is not None
+        except Exception:
+            services["docs"] = False
+
+        return jsonify({
+            "services": services,
+            "registry": registry.summary(),
+        })
+
     return app
 
 

@@ -386,6 +386,105 @@ class GoogleDriveClient:
         folder = self.create_folder(name, parent_id=parent_id)
         return folder["id"]
 
+    # ──── Gemini Integration ─────────────────────────────────────────────────
+
+    def ai_overview_search(
+        self,
+        query: str,
+        page_size: int = 20,
+    ) -> Dict[str, Any]:
+        """Semantic search across Drive using AI Overviews.
+
+        Uses Cloud Search to perform intent-based file discovery that goes
+        beyond keyword matching.  Powers the "AI Overviews" feature in Drive.
+
+        Args:
+            query: Natural language search query (e.g. "the document mentioning
+                last year's revenue numbers").
+            page_size: Number of results to return.
+
+        Returns:
+            Dict with results list and search metadata.
+        """
+        from engine.integrations.workspace_gemini_client import (
+            WorkspaceGeminiClient,
+        )
+
+        gemini = WorkspaceGeminiClient(account=self._account)
+        return gemini.cloud_search(query=query, page_size=page_size)
+
+    def ask_gemini(
+        self,
+        question: str,
+        file_ids: Optional[List[str]] = None,
+        max_context_files: int = 10,
+    ) -> Dict[str, Any]:
+        """Ask Gemini a question about Drive files.
+
+        Mirrors the "Ask Gemini in Drive" feature that synthesises answers
+        across multiple files.  If ``file_ids`` is provided, only those files
+        are used as context.  Otherwise, Drive search finds relevant files.
+
+        Args:
+            question: The question to ask about the files.
+            file_ids: Optional list of specific file IDs to use as context.
+            max_context_files: Maximum files to include in context when
+                searching (default: 10).
+
+        Returns:
+            Dict with ``answer`` (synthesised text), ``sources`` (files used),
+            and ``model`` information.
+        """
+        from engine.integrations.workspace_gemini_client import (
+            WorkspaceGeminiClient,
+        )
+
+        context_parts: List[str] = []
+        sources: List[Dict[str, Any]] = []
+
+        if file_ids:
+            for fid in file_ids[:max_context_files]:
+                try:
+                    meta = self.get_file_metadata(fid)
+                    content = self.download_text(fid)
+                    context_parts.append(
+                        f"--- File: {meta.get('title', fid)} ---\n{content[:4000]}"
+                    )
+                    sources.append({"id": fid, "name": meta.get("title", fid)})
+                except Exception as exc:
+                    logger.warning("Could not read file %s for context: %s", fid, exc)
+        else:
+            search_results = self.ai_overview_search(question, page_size=max_context_files)
+            for item in search_results.get("results", []):
+                metadata = item.get("metadata", {})
+                fid = metadata.get("objectId", "")
+                name = metadata.get("displayName", fid)
+                if fid:
+                    try:
+                        content = self.download_text(fid)
+                        context_parts.append(
+                            f"--- File: {name} ---\n{content[:4000]}"
+                        )
+                        sources.append({"id": fid, "name": name})
+                    except Exception:
+                        pass
+
+        full_context = "\n\n".join(context_parts) if context_parts else None
+
+        gemini = WorkspaceGeminiClient(account=self._account)
+        result = gemini.stream_generate(
+            prompt=question,
+            context=full_context,
+            document_type="docs",
+        )
+
+        return {
+            "answer": result.get("text", ""),
+            "sources": sources,
+            "model": result.get("model", ""),
+            "usage": result.get("usage", {}),
+        }
+
     # ──── CosySim helpers ─────────────────────────────────────────────────────
 
     def upload_text_to_cosysim_folder(

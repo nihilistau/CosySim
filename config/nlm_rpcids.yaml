@@ -1349,3 +1349,222 @@ colab:
     ExecuteCell:
       category: runtime
       description: "Execute a notebook cell"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Workspace Gemini — appsgenaiserver-pa endpoints
+# Discovered via ARGUS HAR mining (Sheets, Docs, Drive)
+# These endpoints are shared across all Workspace apps when using Gemini features.
+# ═══════════════════════════════════════════════════════════════════════════════
+workspace_gemini:
+  meta:
+    service_name: "AppsGenAIServer"
+    base_url: "https://appsgenaiserver-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    api_key_param: "key"
+    protocol: "grpc-json-transcoding"
+    content_type: "application/json+protobuf"
+    streaming: true
+    transfer_encoding: "chunked"
+    source: "argus_har_capture_2026-06"
+    notes: >
+      Shared Gemini backend for Google Workspace apps (Sheets, Docs, Slides).
+      Uses API key in query param rather than SAPISIDHASH.  Responses use chunked
+      transfer encoding with application/json+protobuf content type.
+
+  operations:
+    stream_generate:
+      path: "/v1/genai/streamGenerate"
+      method: "POST"
+      category: generation
+      streaming: true
+      description: "Stream-based Gemini text generation for Workspace apps"
+      notes: >
+        Core generation endpoint.  Payload includes the prompt, context from
+        the active document/sheet, and model parameters.  Response is chunked
+        protobuf-JSON.  Context varies by app: Sheets sends cell ranges,
+        Docs sends paragraph text, etc.
+      parameters:
+        prompt: "User prompt text"
+        context: "Document/sheet context (cells, paragraphs, etc.)"
+        document_type: "sheets|docs|slides|drive"
+        model_version: "Gemini model version to use"
+        response_language: "Language code for response (e.g. en)"
+
+    get_settings:
+      path: "/v1/genai/getSettings"
+      method: "POST"
+      category: config
+      streaming: false
+      description: "Get current Gemini settings for the user"
+      notes: "Returns model preferences, feature flags, usage limits."
+
+    list_gems:
+      path: "/v1/genai/listGems"
+      method: "POST"
+      category: discovery
+      streaming: false
+      description: "List available Gemini models and capabilities"
+      notes: "Returns list of gems (model configs) available to the user."
+
+    quota_summary:
+      path: "/v1/genai/quotaSummary"
+      method: "POST"
+      category: quota
+      streaming: false
+      description: "Get Gemini API usage quota summary"
+      notes: "Returns daily/monthly usage and remaining quota."
+
+    update_settings:
+      path: "/v1/genai/updateUserSettings"
+      method: "POST"
+      category: config
+      streaming: false
+      description: "Update user Gemini preferences"
+      notes: "Set preferred model, language, feature toggles."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Sheets Gemini — Sheets-specific AI endpoints
+# ═══════════════════════════════════════════════════════════════════════════════
+sheets_gemini:
+  meta:
+    service_name: "GoogleSheetsGemini"
+    base_url: "https://docs.google.com"
+    auth_method: "cookie_sapisidhash"
+    protocol: "rest"
+    source: "argus_har_capture_2026-06"
+    notes: >
+      Sheets-specific Gemini features accessed through the standard Sheets
+      REST API base.  These run alongside the main Sheets API v4 methods.
+
+  operations:
+    columnsmith_execute:
+      path: "/spreadsheets/d/{spreadsheet_id}/columnsmith/execute"
+      method: "POST"
+      category: transformation
+      streaming: false
+      description: "AI-driven column transformation — applies Gemini to cell ranges"
+      notes: >
+        Columnsmith runs Gemini on a column of data to transform, classify,
+        extract, or enrich each row.  Similar to ARRAYFORMULA but AI-powered.
+        The formula field contains a natural language instruction.
+      parameters:
+        spreadsheet_id: "Target spreadsheet ID"
+        column: "Target column letter or range (e.g. C2:C100)"
+        formula: "Natural language transformation instruction"
+        source_columns: "Input column(s) to read from (e.g. A2:B100)"
+
+    external_data_fetch:
+      path: "/spreadsheets/d/{spreadsheet_id}/externaldata/fetchData"
+      method: "POST"
+      category: enrichment
+      streaming: false
+      description: "Fetch and inject external data into sheet cells"
+      notes: >
+        Used by 'Fill with Gemini' to pull web data, research, or computed
+        values into a cell range.  The prompt describes what data to fetch.
+      parameters:
+        spreadsheet_id: "Target spreadsheet ID"
+        range: "Cell range to fill (e.g. B2:B50)"
+        prompt: "What data to fetch/compute for each row"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Cloud Search — Cross-workspace semantic search
+# ═══════════════════════════════════════════════════════════════════════════════
+cloud_search:
+  meta:
+    service_name: "CloudSearch"
+    base_url: "https://cloudsearch.clients6.google.com"
+    auth_method: "cookie_sapisidhash"
+    protocol: "rest"
+    source: "argus_har_capture_2026-06"
+    notes: >
+      Cloud Search provides unified semantic search across all Google Workspace
+      content — Drive files, Docs, Sheets, Slides, Gmail, Calendar, etc.
+      Powers the "AI Overviews" feature in Drive.
+
+  operations:
+    query_search:
+      path: "/v1/query/search"
+      method: "POST"
+      category: search
+      streaming: false
+      description: "Cross-workspace semantic search query"
+      notes: >
+        Accepts natural language queries and returns ranked results from
+        across Workspace.  Supports data source filters, result types,
+        and pagination.
+      parameters:
+        query: "Natural language search query"
+        page_size: 20
+        data_source_restrictions: "Optional data source filter"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Docs Gemini — Document-specific AI endpoints
+# ═══════════════════════════════════════════════════════════════════════════════
+docs_gemini:
+  meta:
+    service_name: "GoogleDocsGemini"
+    base_url: "https://docs.google.com"
+    auth_method: "cookie_sapisidhash"
+    protocol: "rest"
+    source: "argus_har_capture_2026-06"
+    notes: >
+      Google Docs AI features — "Help me create", style matching, format
+      matching, and content generation.  Uses the Workspace Gemini backend
+      (appsgenaiserver-pa) for actual generation; these entries document
+      the Docs-specific integration points.
+
+  operations:
+    help_me_create:
+      path: "via_workspace_gemini"
+      method: "POST"
+      category: generation
+      streaming: true
+      description: "Generate document content from a prompt via Docs Gemini"
+      notes: >
+        Delegates to workspace_gemini.stream_generate with document_type='docs'.
+        Includes current document context (surrounding paragraphs, style info).
+
+    match_style:
+      path: "via_workspace_gemini"
+      method: "POST"
+      category: formatting
+      streaming: false
+      description: "Match the style of generated content to existing document"
+      notes: >
+        After generation, Docs applies style matching using document styles.
+        Not a separate endpoint — happens client-side after stream_generate.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Drive Gemini — Drive-specific AI endpoints
+# ═══════════════════════════════════════════════════════════════════════════════
+drive_gemini:
+  meta:
+    service_name: "GoogleDriveGemini"
+    base_url: "https://drive.google.com"
+    auth_method: "cookie_sapisidhash"
+    protocol: "rest"
+    source: "argus_har_capture_2026-06"
+    notes: >
+      Drive AI features — AI Overviews, Ask Gemini, semantic file discovery.
+      AI Overview search uses Cloud Search.  Ask Gemini delegates to the
+      Workspace Gemini backend after gathering file context via Drive API.
+
+  operations:
+    ai_overview_search:
+      path: "via_cloud_search"
+      method: "POST"
+      category: search
+      streaming: false
+      description: "Semantic search across Drive files using AI Overviews"
+      notes: "Delegates to cloud_search.query_search with Drive data source filter."
+
+    ask_gemini:
+      path: "via_workspace_gemini"
+      method: "POST"
+      category: generation
+      streaming: true
+      description: "Ask Gemini a question about Drive files"
+      notes: >
+        Reads file contents via Drive API, then sends question + context to
+        workspace_gemini.stream_generate for cross-source synthesis.
