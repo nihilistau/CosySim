@@ -3,6 +3,34 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.09b] — "PIPELINE VALIDATION" — 2026-03
+
+NLM pipeline hardening sprint — closing data flow gaps between news ingestion,
+NLM distillation, Nexus storage, and the training flywheel.
+
+### NLM Pipeline Hardening
+- **Real-time training feed** — `_store_qa_to_nexus()` now calls
+  `TrainingFlywheel.collect_from_qa()` immediately after storing Q&A pairs,
+  eliminating the 24-hour delay from the daily `training-sync` task.
+- **Credential guard** — NLM pipeline checks that GoogleAccountPool has
+  valid cookies before attempting calls. Warns on stale accounts (>7 days)
+  and fails loudly when pool is empty instead of silently returning 0 results.
+- **Retry queue** — Failed NLM distillations are persisted to a JSON queue
+  file for automatic retry on the next pipeline run. Items are dropped after
+  3 failed attempts. Max queue size: 10 items.
+- **CLI --retry flag** — `python -m engine.nexus.news_nlm_pipeline --retry`
+  processes the retry queue independently.
+
+### Runtime Hardening (continued)
+- Replaced 3 bare `except:` blocks in admin panel with `logger.warning()`
+- Added debug logging to NexusClient config fallback path
+
+### Files Changed
+- `engine/nexus/news_nlm_pipeline.py` — Training feed, credential guard, retry queue
+- `content/scenes/admin/admin_panel.py` — Silent exception → logged handlers
+- `engine/nexus/client.py` — Config fallback logging
+
+---
 ## [1.08b] — "GAME SYSTEM INTEGRATION" — 2026-03
 
 Cross-system wiring sprint — connecting neurochemistry, territory control,

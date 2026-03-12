@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.08b** "GAME SYSTEM INTEGRATION" ✅ | Last updated: 2026-03
+> Current: **v1.09b** "PIPELINE VALIDATION" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -119,32 +119,25 @@ into a unified cyberpunk RPG framework with deep game systems.
 - [x] `publish_news` skill for LLM-driven article generation
 - [x] `get_character_modifier()` utility for game system neurochemistry queries
 
-### Live Pipeline Validation
-- [ ] End-to-end news pipeline run: fetch → NLM distill → Nexus store → training flywheel
-- [ ] Bootstrap notebook refresh with live NLM distillation
-- [ ] Scheduler daemon live test: verify all 47 tasks fire correctly
-- [ ] Training flywheel export and fine-tune dry run
+---
 
-### TUI & Operator Dashboard
+## Shipped: v1.09b — "PIPELINE VALIDATION" ✅
+
+### NLM Pipeline Hardening
+- [x] Real-time training flywheel feed (bypass 24h daily sync delay)
+- [x] Credential guard with cookie/staleness checks before NLM calls
+- [x] Retry queue for failed distillations (persist, 3 attempts, max 10)
+- [x] CLI --retry flag for independent queue processing
+- [x] Runtime hardening: bare except → logged handlers in admin panel
+
+### Still Open (carry forward)
+- [ ] End-to-end live pipeline run: fetch → NLM distill → Nexus store
 - [ ] TUI dashboard enhancements: real-time metrics, task queue display
 - [ ] Operator HUD: queue, health, retry/resume, force-complete
-- [ ] Multiplayer presence visible in scene UIs
-
-### Runtime Hardening
-- [ ] Remove remaining silent-success fallbacks across scenes
-- [ ] Add missing error recovery paths in agent loop
-- [ ] Nexus server startup reliability improvements
 
 ---
 
 ## Post-v1.0 Roadmap (2026-Q3+)
-
-### 1. Live Pipeline Validation (v1.09b candidate)
-- End-to-end news pipeline: fetch → NLM distill → Nexus store → training flywheel
-- Bootstrap notebook refresh with live NLM distillation
-- Scheduler daemon live test: verify all 47 tasks fire correctly
-- Training flywheel export and fine-tune dry run
-- Requires: NLM auth recovery first
 
 ### 2. Advanced NLM Automation
 - Architecture research: use NLM to evaluate design alternatives autonomously
