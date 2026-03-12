@@ -391,18 +391,27 @@ class SystemReflection:
         self, document: str, period: str
     ) -> Dict[str, Any]:
         """Send reflection document to NLM and extract insights."""
-        from engine.nexus.nlm_notebook_manager import get_notebook_manager
+        from engine.nexus.nlm_notebook_factory import get_notebook_factory
+        from engine.nexus.nlm_engine import get_nlm_engine
 
-        mgr = get_notebook_manager()
+        factory = get_notebook_factory()
+        nb_name = f"reflection-{period}-{datetime.now().strftime('%Y%m%d')}"
+        notebook_id = factory.get_or_create(nb_name, category="session")
+        if not notebook_id:
+            logger.warning("Failed to create reflection notebook")
+            return {"insights": [], "notebook_id": "", "turns": 0}
 
-        # Create a dedicated reflection notebook
-        notebook_id = mgr.create_notebook(
-            name=f"reflection-{period}-{datetime.now().strftime('%Y%m%d')}",
-            purpose="system_reflection",
-        )
+        try:
+            engine = get_nlm_engine()
+        except Exception as exc:
+            logger.warning("NLM engine unavailable: %s", exc)
+            return {"insights": [], "notebook_id": notebook_id, "turns": 0}
 
         # Add the reflection document as a source
-        mgr.add_text_source(notebook_id, document, "System Metrics Report")
+        try:
+            engine.add_source(notebook_id, "text", document)
+        except Exception as exc:
+            logger.warning("Failed to add reflection source: %s", exc)
 
         # Select questions based on period
         questions = (
@@ -414,18 +423,12 @@ class SystemReflection:
         turns = 0
         for question in questions:
             try:
-                answer = mgr.ask(notebook_id, question)
+                answer = engine.ask(notebook_id, question)
                 turns += 1
                 parsed = self._parse_nlm_answer(question, answer)
                 insights.extend(parsed)
             except Exception as exc:
                 logger.warning("NLM question failed: %s", exc)
-
-        # Cleanup
-        try:
-            mgr.delete_notebook(notebook_id)
-        except Exception:
-            pass
 
         return {
             "insights": insights,

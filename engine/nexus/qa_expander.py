@@ -183,12 +183,16 @@ class QAExpander:
             return stored
         if self.dry_run:
             return "dry-run-nb"
-        # Create a dedicated expansion notebook
-        nlm = self._nlm()
-        result = nlm.create_notebook("CosySim QA Expansion Workspace")
-        nb_id = result.get("notebook_id", result.get("id", ""))
+        # Create via centralised factory
+        from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+        factory = get_notebook_factory()
+        nb_id = factory.get_or_create(
+            "CosySim QA Expansion Workspace",
+            category="session",
+        )
         if not nb_id:
-            raise RuntimeError(f"Could not create expansion notebook: {result}")
+            raise RuntimeError("Could not create expansion notebook via factory")
         self._state["notebook_id"] = nb_id
         _save_state(self._state)
         logger.info("Created QA expansion notebook: %s", nb_id)

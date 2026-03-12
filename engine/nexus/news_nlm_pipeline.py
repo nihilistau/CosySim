@@ -473,6 +473,10 @@ class NewsNLMPipeline:
         qa_pairs = self._run_distillation(notebook_id)
         result["qa_count"] = len(qa_pairs)
 
+        if not qa_pairs and digest_text:
+            result["error"] = "Distillation returned no Q&A — queuing for retry"
+            _enqueue_retry(digest_text, date_label, "distillation_failed")
+
         # 6. Store Q&A in Nexus
         if qa_pairs:
             stored = self._store_qa_to_nexus(qa_pairs, date_label)
