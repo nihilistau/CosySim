@@ -769,6 +769,143 @@ def _stage_prewarm(
         return {"prewarmed": False, "error": str(exc)}
 
 
+def _stage_drive_copy(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Copy a Drive file using the v2internal API.
+
+    Supports template duplication with automatic title and parent override.
+
+    Params:
+        file_id (str): Source file ID to copy (or from context).
+        title (str): Title for the copy.
+        parent_id (str): Destination folder ID.
+
+    Returns:
+        Dict with the new file's ``id``, ``title``, and ``alternateLink``.
+    """
+    from engine.integrations.google_drive_client import get_drive_client
+
+    file_id = params.get("file_id") or context.get("file_id")
+    if not file_id:
+        raise ValueError("drive_copy requires file_id")
+
+    client = get_drive_client()
+    result = client.v2_copy_file(
+        file_id=file_id,
+        title=params.get("title") or context.get("title"),
+        parent_id=params.get("parent_id") or context.get("parent_id"),
+        description=params.get("description"),
+    )
+    return result
+
+
+def _stage_drive_export(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Export a Google Workspace file to a different format.
+
+    Exports Docs/Sheets/Slides to text, HTML, PDF, CSV, DOCX, or XLSX.
+
+    Params:
+        file_id (str): File ID to export (or from context).
+        mime_type (str): Target format — ``text``, ``html``, ``pdf``,
+            ``csv``, ``docx``, ``xlsx``, or full MIME type.
+
+    Returns:
+        Dict with ``content`` (decoded text or base64), ``mime_type``,
+        and ``size`` in bytes.
+    """
+    import base64
+
+    from engine.integrations.google_drive_client import get_drive_client
+
+    file_id = params.get("file_id") or context.get("file_id") or context.get("doc_id")
+    if not file_id:
+        raise ValueError("drive_export requires file_id")
+
+    mime_type = params.get("mime_type", "text")
+    client = get_drive_client()
+    content = client.v2_export_file(file_id, mime_type)
+
+    is_text = mime_type in ("text", "html", "csv", "text/plain", "text/html", "text/csv")
+    return {
+        "content": content.decode("utf-8", errors="replace") if is_text else base64.b64encode(content).decode(),
+        "mime_type": mime_type,
+        "size": len(content),
+        "file_id": file_id,
+        "is_text": is_text,
+    }
+
+
+def _stage_drive_permissions(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Manage file permissions using the v2internal API.
+
+    When ``action`` is ``list``, returns current permissions.
+    When ``action`` is ``set``, adds or updates a permission.
+
+    Params:
+        file_id (str): Target file ID (or from context).
+        action (str): ``list`` or ``set``.
+        role (str): Permission role (for ``set``).
+        perm_type (str): Permission type (for ``set``).
+        email (str): Email address (for user/group types).
+
+    Returns:
+        Dict with ``permissions`` list or created ``permission`` dict.
+    """
+    from engine.integrations.google_drive_client import get_drive_client
+
+    file_id = params.get("file_id") or context.get("file_id")
+    if not file_id:
+        raise ValueError("drive_permissions requires file_id")
+
+    action = params.get("action", "list")
+    client = get_drive_client()
+
+    if action == "set":
+        perm = client.v2_insert_permission(
+            file_id=file_id,
+            role=params.get("role", "reader"),
+            perm_type=params.get("perm_type", "anyone"),
+            email=params.get("email"),
+            with_link=params.get("with_link", True),
+            send_notification=params.get("send_notification", False),
+        )
+        return {"permission": perm, "action": "set"}
+    else:
+        perms = client.v2_get_permissions(file_id)
+        return {"permissions": perms, "action": "list", "count": len(perms)}
+
+
+def _stage_sheet_revisions(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Retrieve revision history for a spreadsheet.
+
+    Params:
+        spreadsheet_id (str): Target spreadsheet (or from context).
+        max_results (int): Maximum revisions to return (default 50).
+
+    Returns:
+        Dict with ``revisions`` list and ``count``.
+    """
+    from engine.integrations.gsheets_client import get_sheets_client
+
+    spreadsheet_id = params.get("spreadsheet_id") or context.get("spreadsheet_id") or context.get("sheet_id")
+    if not spreadsheet_id:
+        raise ValueError("sheet_revisions requires spreadsheet_id")
+
+    client = get_sheets_client()
+    revisions = client.get_revision_history(
+        spreadsheet_id,
+        max_results=params.get("max_results", 50),
+    )
+    return {"revisions": revisions, "count": len(revisions), "spreadsheet_id": spreadsheet_id}
+
+
 # ──── Stage Registry ──────────────────────────────────────────────────────────
 
 STAGE_REGISTRY: Dict[str, Callable] = {
@@ -789,6 +926,10 @@ STAGE_REGISTRY: Dict[str, Callable] = {
     "sheets_to_doc": _stage_sheets_to_doc,
     "gemini_enrich": _stage_gemini_enrich,
     "prewarm": _stage_prewarm,
+    "drive_copy": _stage_drive_copy,
+    "drive_export": _stage_drive_export,
+    "drive_permissions": _stage_drive_permissions,
+    "sheet_revisions": _stage_sheet_revisions,
 }
 
 
@@ -917,6 +1058,33 @@ PIPELINE_TEMPLATES: Dict[str, List[Dict[str, Any]]] = {
         {"stage": "nlm_research", "params": {}},
         {"stage": "drive_upload", "params": {"subfolder": "reports"}},
         {"stage": "nexus_store", "params": {"category": "research", "content_type": "document", "tags": ["report", "data-driven"]}},
+    ],
+
+    # ── v1.19b Drive v2internal & Sheets Extended Templates ───────────────────
+
+    "drive_template_clone": [
+        {"stage": "drive_copy", "params": {}},
+        {"stage": "drive_permissions", "params": {"action": "set", "role": "reader", "perm_type": "anyone"}},
+        {"stage": "nexus_store", "params": {"category": "drive", "content_type": "note", "tags": ["cloned", "template"]}},
+    ],
+
+    "drive_export_and_distill": [
+        {"stage": "drive_export", "params": {"mime_type": "text"}},
+        {"stage": "gemini_enrich", "params": {"prompt": "Distil the key information, facts, and actionable items"}},
+        {"stage": "nlm_add_source", "params": {}, "optional": True},
+        {"stage": "nlm_research", "params": {}, "optional": True},
+        {"stage": "nexus_store", "params": {"category": "knowledge", "content_type": "document", "tags": ["exported", "distilled"]}},
+    ],
+
+    "drive_audit_permissions": [
+        {"stage": "drive_permissions", "params": {"action": "list"}},
+        {"stage": "nexus_store", "params": {"category": "audit", "content_type": "note", "tags": ["permissions", "audit"]}},
+    ],
+
+    "sheet_revision_audit": [
+        {"stage": "sheet_revisions", "params": {"max_results": 100}},
+        {"stage": "gemini_enrich", "params": {"prompt": "Analyse these spreadsheet revisions: identify major changes, editors, and patterns"}, "optional": True},
+        {"stage": "nexus_store", "params": {"category": "audit", "content_type": "note", "tags": ["revisions", "audit"]}},
     ],
 }
 

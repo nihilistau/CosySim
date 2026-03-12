@@ -1,9 +1,9 @@
 # Workspace Pipeline — Cross-Service Orchestrator
 
 > **Module:** `engine/nexus/workspace_pipeline.py`
-> **Version:** v1.18c
-> **Skills:** `engine/skills/builtin/workspace_skills.py` (23 skills)
-> **Tests:** `tests/test_workspace_pipeline.py` (63 tests)
+> **Version:** v1.19b
+> **Skills:** `engine/skills/builtin/workspace_skills.py` (27 skills)
+> **Tests:** `tests/test_workspace_pipeline.py` (74 tests)
 
 ## Overview
 
@@ -22,6 +22,9 @@ Input (topic/question/data)
   ├─→ create_doc / create_sheet ─→ structured content
   ├─→ docs_to_sheets / sheets_to_doc ─→ cross-format conversion
   ├─→ drive_upload / drive_search ─→ file management
+  ├─→ drive_copy / drive_export ─→ v2internal file operations
+  ├─→ drive_permissions ─→ list or set file access
+  ├─→ sheet_revisions ─→ spreadsheet revision history
   └─→ nexus_store ─→ persist to Nexus KMS
 ```
 
@@ -30,7 +33,7 @@ Input (topic/question/data)
 ```
                     ┌─────────────────────────────────────────┐
                     │         WorkspacePipeline                │
-                    │    17 Stages • 17 Templates              │
+                    │    21 Stages • 21 Templates              │
                     └──────────┬──────────────────────────────┘
                                │
          ┌─────────┬───────────┼───────────┬──────────┬────────┐
@@ -67,9 +70,13 @@ Input (topic/question/data)
 | `sheets_to_doc` | Sheets + Docs + Gemini | Read sheet range → transform to prose |
 | `gemini_enrich` | WorkspaceGeminiClient | Content transformation/enrichment via Gemini |
 | `prewarm` | espresso-pa | Pre-warm AI models for reduced first-request latency |
+| `drive_copy` | GoogleDriveClient (v2internal) | Copy files via internal v2 API |
+| `drive_export` | GoogleDriveClient (v2internal) | Export files to text/html/pdf/csv/docx/xlsx |
+| `drive_permissions` | GoogleDriveClient (v2internal) | List or set file access permissions |
+| `sheet_revisions` | GoogleSheetsClient (extended) | Fetch spreadsheet revision history |
 | *(custom)* | User-defined | Register via `pipeline.register_stage()` |
 
-## Pipeline Templates (17 Templates)
+## Pipeline Templates (21 Templates)
 
 ### Core Templates (v1.17–v1.18a)
 
@@ -211,6 +218,40 @@ Best for: Converting spreadsheet data into researched knowledge reports.
 pipeline.run("sheet_knowledge_report", sheet_id="xyz789", topic="Q4 performance analysis")
 ```
 
+### Drive & Sheets Internal Templates (v1.19b)
+
+### `drive_template_clone`
+Copy file → Set permissions → Nexus store.
+Best for: Creating shared copies of template files.
+
+```python
+pipeline.run("drive_template_clone", file_id="abc123", title="Q4 Report Copy", role="reader", perm_type="anyone")
+```
+
+### `drive_export_and_distill`
+Export file → Gemini enrich → NLM research → Nexus store.
+Best for: Exporting Drive files and distilling content into knowledge.
+
+```python
+pipeline.run("drive_export_and_distill", file_id="abc123", export_mime="text/plain", topic="architecture docs")
+```
+
+### `drive_audit_permissions`
+List permissions → Nexus store audit log.
+Best for: Security audits of file access across Drive.
+
+```python
+pipeline.run("drive_audit_permissions", file_id="abc123", category="security_audit")
+```
+
+### `sheet_revision_audit`
+Fetch revision history → Nexus store audit.
+Best for: Tracking spreadsheet changes and edit history.
+
+```python
+pipeline.run("sheet_revision_audit", spreadsheet_id="xyz789", category="revision_audit")
+```
+
 ## Usage
 
 ### Python API
@@ -257,6 +298,10 @@ workspace_full_cross_service(topic="NAS", question="Compare techniques")
 workspace_distill(topic="transformer opts", title="Optimization Guide")
 workspace_news_full_cycle(topic="AI Weekly", categories="ai_research|llm")
 workspace_enrich(text="Raw content...", prompt="Summarize and structure")
+workspace_copy_file(file_id="abc123", title="Copy", role="reader")
+workspace_export_file(file_id="abc123", export_mime="text/plain")
+workspace_set_permissions(file_id="abc123", role="writer", perm_type="user", value="user@example.com")
+workspace_sheet_revisions(spreadsheet_id="xyz789")
 ```
 
 ### REST API
@@ -274,6 +319,10 @@ POST /api/workspace/sheets/fill    — Fill sheet with Gemini
 GET  /api/workspace/pipeline/status/<id> — Check run status
 GET  /api/workspace/pipeline/templates   — List templates
 GET  /api/workspace/status               — Service health
+POST /api/workspace/drive/copy          — Copy file (v2internal)
+POST /api/workspace/drive/export        — Export file (v2internal)
+POST /api/workspace/drive/permissions   — List/set file permissions
+POST /api/workspace/sheets/revisions    — Get spreadsheet revision history
 ```
 
 ### Scheduler Tasks

@@ -101,6 +101,7 @@ class TestStageRegistry:
             "columnsmith", "export_doc", "nlm_add_source",
             "workspace_generate", "fetch_news",
             "docs_to_sheets", "sheets_to_doc", "gemini_enrich", "prewarm",
+            "drive_copy", "drive_export", "drive_permissions", "sheet_revisions",
         ]
         for name in expected:
             assert name in STAGE_REGISTRY, f"Missing stage: {name}"
@@ -112,7 +113,7 @@ class TestStageRegistry:
 
     def test_stage_count(self):
         """Registry has the expected number of stages."""
-        assert len(STAGE_REGISTRY) == 17
+        assert len(STAGE_REGISTRY) == 21
 
 
 class TestPipelineTemplates:
@@ -127,13 +128,15 @@ class TestPipelineTemplates:
             "docs_nlm_distill", "sheets_enrichment_cycle", "drive_nlm_nexus",
             "full_cross_service", "knowledge_distillation", "news_full_cycle",
             "doc_structure_extract", "sheet_knowledge_report",
+            "drive_template_clone", "drive_export_and_distill",
+            "drive_audit_permissions", "sheet_revision_audit",
         ]
         for name in expected:
             assert name in PIPELINE_TEMPLATES, f"Missing template: {name}"
 
     def test_template_count(self):
         """Correct number of templates are defined."""
-        assert len(PIPELINE_TEMPLATES) == 17
+        assert len(PIPELINE_TEMPLATES) == 21
 
     def test_templates_have_stages(self):
         """Every template has at least one stage."""
@@ -711,3 +714,145 @@ class TestCrossServiceTemplates:
         for name in new_stages:
             assert name in STAGE_REGISTRY, f"Missing new stage: {name}"
             assert callable(STAGE_REGISTRY[name]), f"Stage {name} not callable"
+
+
+# ──── v1.19b Stage & Template Tests ───────────────────────────────────────────
+
+
+class TestV119bStages:
+    """Tests for v1.19b Drive v2internal and Sheets extended stages."""
+
+    def test_v19b_stages_registered(self):
+        """All 4 v1.19b stages are in the STAGE_REGISTRY."""
+        new_stages = ["drive_copy", "drive_export", "drive_permissions", "sheet_revisions"]
+        for name in new_stages:
+            assert name in STAGE_REGISTRY, f"Missing v1.19b stage: {name}"
+            assert callable(STAGE_REGISTRY[name]), f"Stage {name} not callable"
+
+    @patch("engine.integrations.google_drive_client.get_drive_client")
+    def test_drive_copy_stage(self, mock_get):
+        """drive_copy stage calls v2_copy_file and returns copy metadata."""
+        mock_client = MagicMock()
+        mock_client.v2_copy_file.return_value = {
+            "id": "new123",
+            "title": "Copy of Doc",
+            "alternateLink": "https://docs.google.com/...",
+        }
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["drive_copy"]
+        params = {"file_id": "src123", "title": "My Copy"}
+        result = stage_fn(params, {})
+
+        mock_client.v2_copy_file.assert_called_once()
+        assert result["id"] == "new123"
+        assert result["title"] == "Copy of Doc"
+
+    @patch("engine.integrations.google_drive_client.get_drive_client")
+    def test_drive_export_stage(self, mock_get):
+        """drive_export stage calls v2_export_file and returns content."""
+        mock_client = MagicMock()
+        mock_client.v2_export_file.return_value = b"exported content here"
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["drive_export"]
+        params = {"file_id": "file456", "mime_type": "text"}
+        result = stage_fn(params, {})
+
+        mock_client.v2_export_file.assert_called_once_with("file456", "text")
+        assert result["size"] == len(b"exported content here")
+        assert "content" in result
+        assert result["is_text"] is True
+
+    @patch("engine.integrations.google_drive_client.get_drive_client")
+    def test_drive_permissions_stage(self, mock_get):
+        """drive_permissions stage handles list action."""
+        mock_client = MagicMock()
+        mock_client.v2_get_permissions.return_value = [
+            {"id": "p1", "role": "owner"},
+            {"id": "p2", "role": "reader"},
+        ]
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["drive_permissions"]
+        params = {"file_id": "file789", "action": "list"}
+        result = stage_fn(params, {})
+
+        mock_client.v2_get_permissions.assert_called_once_with("file789")
+        assert result["count"] == 2
+        assert result["action"] == "list"
+
+    @patch("engine.integrations.google_drive_client.get_drive_client")
+    def test_drive_permissions_set_stage(self, mock_get):
+        """drive_permissions stage handles set action."""
+        mock_client = MagicMock()
+        mock_client.v2_insert_permission.return_value = {"id": "p3", "role": "writer"}
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["drive_permissions"]
+        params = {"file_id": "file789", "action": "set", "role": "writer"}
+        result = stage_fn(params, {})
+
+        mock_client.v2_insert_permission.assert_called_once()
+        assert result["action"] == "set"
+        assert result["permission"]["role"] == "writer"
+
+    @patch("engine.integrations.gsheets_client.get_sheets_client")
+    def test_sheet_revisions_stage(self, mock_get):
+        """sheet_revisions stage fetches revision history."""
+        mock_client = MagicMock()
+        mock_client.get_revision_history.return_value = [
+            {"revisionId": "r1", "modifiedTime": "2025-01-01T00:00:00Z"},
+            {"revisionId": "r2", "modifiedTime": "2025-01-02T00:00:00Z"},
+        ]
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["sheet_revisions"]
+        params = {"spreadsheet_id": "sheet_abc"}
+        result = stage_fn(params, {})
+
+        mock_client.get_revision_history.assert_called_once()
+        assert result["count"] == 2
+        assert len(result["revisions"]) == 2
+
+
+class TestV119bTemplates:
+    """Tests for v1.19b pipeline templates."""
+
+    def test_drive_template_clone_stages(self):
+        """drive_template_clone has correct stage sequence."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["drive_template_clone"]]
+        assert "drive_copy" in stages
+        assert "nexus_store" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_drive_export_and_distill_stages(self):
+        """drive_export_and_distill has correct stage sequence."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["drive_export_and_distill"]]
+        assert "drive_export" in stages
+        assert "nlm_research" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_drive_audit_permissions_stages(self):
+        """drive_audit_permissions has correct stage sequence."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["drive_audit_permissions"]]
+        assert "drive_permissions" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_sheet_revision_audit_stages(self):
+        """sheet_revision_audit has correct stage sequence."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["sheet_revision_audit"]]
+        assert "sheet_revisions" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_v19b_templates_end_with_nexus_store(self):
+        """All 4 v1.19b templates end with nexus_store."""
+        new_templates = [
+            "drive_template_clone", "drive_export_and_distill",
+            "drive_audit_permissions", "sheet_revision_audit",
+        ]
+        for name in new_templates:
+            stages = PIPELINE_TEMPLATES[name]
+            assert stages[-1]["stage"] == "nexus_store", (
+                f"v1.19b template {name} doesn't end with nexus_store"
+            )

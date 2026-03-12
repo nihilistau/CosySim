@@ -704,6 +704,214 @@ class GoogleSheetsClient:
             )
             return False
 
+    # ──── Extended internal API ───────────────────────────────────────────────
+
+    def _docs_base_url(self, spreadsheet_id: str, suffix: str) -> str:
+        """Build a docs.google.com URL for internal Sheets endpoints.
+
+        Args:
+            spreadsheet_id: The spreadsheet ID.
+            suffix: Path suffix after the spreadsheet ID.
+
+        Returns:
+            Full URL string.
+        """
+        return f"{_SHEETS_ORIGIN}/spreadsheets/u/0/d/{spreadsheet_id}/{suffix}"
+
+    def batch_save(
+        self,
+        spreadsheet_id: str,
+        commands: List[Dict[str, Any]],
+        version_counter: int = 1,
+    ) -> Dict[str, Any]:
+        """Save spreadsheet changes via the internal batch save endpoint.
+
+        Bypasses the public Sheets v4 API rate limits by using the same
+        internal endpoint that the browser UI uses for batch writes.
+
+        Args:
+            spreadsheet_id: Target spreadsheet ID.
+            commands: List of command dicts (cell updates, formatting, formulas).
+            version_counter: Version counter — increments with each save.
+
+        Returns:
+            Dict with save result including version info.
+        """
+        headers = self._get_headers()
+        url = self._docs_base_url(spreadsheet_id, "save")
+
+        commands_json = json.dumps(commands)
+        form_data = {
+            "vc": str(version_counter),
+            "c": str(len(commands)),
+            "commands": commands_json,
+        }
+
+        try:
+            resp = self._session.post(
+                url,
+                headers=headers,
+                data=form_data,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            result = resp.json() if resp.text.strip() else {"status": "ok"}
+            logger.info(
+                "Batch saved %d commands to sheet %s",
+                len(commands),
+                spreadsheet_id,
+            )
+            return result
+        except Exception as exc:
+            logger.error(
+                "Batch save failed for sheet %s: %s", spreadsheet_id, exc
+            )
+            return {"status": "error", "error": str(exc)}
+
+    def get_session_prefs(
+        self,
+        spreadsheet_id: str,
+        prefs: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Get or set session preferences for spreadsheet editing.
+
+        When ``prefs`` is None, retrieves current session preferences.
+        When ``prefs`` is provided, updates the preferences.
+
+        Args:
+            spreadsheet_id: Target spreadsheet ID.
+            prefs: Optional preferences dict to set. If None, retrieves current.
+
+        Returns:
+            Dict with current or updated preferences.
+        """
+        headers = self._get_headers(
+            {"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        url = self._docs_base_url(spreadsheet_id, "prefs")
+
+        form_data = {}
+        if prefs:
+            form_data["prefs"] = json.dumps(prefs)
+
+        try:
+            resp = self._session.post(
+                url,
+                headers=headers,
+                data=form_data,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            result = resp.json() if resp.text.strip() else {}
+            logger.debug("Got session prefs for sheet %s", spreadsheet_id)
+            return result
+        except Exception as exc:
+            logger.warning(
+                "Failed to get/set prefs for sheet %s: %s",
+                spreadsheet_id,
+                exc,
+            )
+            return {"status": "error", "error": str(exc)}
+
+    def fetch_external_data_batch(
+        self,
+        spreadsheet_id: str,
+        ranges: List[str],
+        data_sources: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Batch fetch external data for IMPORTDATA/IMPORTHTML cells.
+
+        Extended version of external data fetch supporting multiple ranges
+        and complex data source configs.  Powers the IMPORTDATA, IMPORTHTML,
+        IMPORTFEED, IMPORTXML functions and "Fill with Gemini" enrichment.
+
+        Args:
+            spreadsheet_id: Target spreadsheet ID.
+            ranges: List of cell ranges to fill (e.g. ["A1:A10", "B1:B10"]).
+            data_sources: Optional list of external data source configs.
+
+        Returns:
+            Dict with fetched data results per range.
+        """
+        headers = self._get_headers(
+            {"Content-Type": "application/x-www-form-urlencoded"}
+        )
+        url = self._docs_base_url(spreadsheet_id, "externaldata/fetchData")
+
+        form_data: Dict[str, str] = {
+            "ranges": json.dumps(ranges),
+        }
+        if data_sources:
+            form_data["dataSources"] = json.dumps(data_sources)
+
+        try:
+            resp = self._session.post(
+                url,
+                headers=headers,
+                data=form_data,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            result = resp.json() if resp.text.strip() else {}
+            logger.info(
+                "Fetched external data for %d ranges in sheet %s",
+                len(ranges),
+                spreadsheet_id,
+            )
+            return result
+        except Exception as exc:
+            logger.warning(
+                "External data fetch failed for sheet %s: %s",
+                spreadsheet_id,
+                exc,
+            )
+            return {"status": "error", "error": str(exc)}
+
+    def get_revision_history(
+        self,
+        spreadsheet_id: str,
+        max_results: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Get version history / revisions for a spreadsheet.
+
+        Returns the revision history including timestamps, editors, and
+        change summaries.  Useful for audit trails and tracking changes.
+
+        Args:
+            spreadsheet_id: Target spreadsheet ID.
+            max_results: Maximum number of revisions to return.
+
+        Returns:
+            List of revision dicts with timestamp, editor, and summary.
+        """
+        headers = self._get_headers()
+        url = self._docs_base_url(spreadsheet_id, "revisions")
+        params = {"maxResults": max_results}
+
+        try:
+            resp = self._session.get(
+                url,
+                headers=headers,
+                params=params,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json() if resp.text.strip() else {}
+            revisions = data.get("items", data.get("revisions", []))
+            logger.debug(
+                "Got %d revisions for sheet %s",
+                len(revisions),
+                spreadsheet_id,
+            )
+            return revisions
+        except Exception as exc:
+            logger.warning(
+                "Failed to get revisions for sheet %s: %s",
+                spreadsheet_id,
+                exc,
+            )
+            return []
+
 
 # ──── Factory ─────────────────────────────────────────────────────────────────
 

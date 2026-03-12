@@ -3,6 +3,58 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.19b] — "DRIVE V2INTERNAL + SHEETS EXTENDED LIVE-WIRING" — 2026-07
+
+Live-wires the v2internal Drive API and extended Sheets API endpoints discovered
+during v1.19a HAR mining into production client methods, pipeline stages, skills,
+and proxy routes.
+
+### Added: Drive v2internal Client Methods (6 new)
+- `v2_copy_file(file_id, title, parent_id)` — copy files via internal v2 API
+- `v2_trash_file(file_id)` — trash files (soft delete)
+- `v2_export_file(file_id, mime_type)` — export to text/html/pdf/csv/docx/xlsx
+- `v2_get_permissions(file_id)` — list file permissions
+- `v2_insert_permission(file_id, role, perm_type, value)` — grant access
+- `v2_update_metadata(file_id, metadata)` — update title, description, etc.
+- Three separate API keys for read/upload/permissions operations
+- Common params: supportsTeamDrives, includeTeamDriveItems, enforceSingleParent, supportsAllDrives
+
+### Added: Sheets Extended Client Methods (4 new)
+- `batch_save(spreadsheet_id, commands)` — browser-style batch save (bypasses public API rate limits)
+- `get_session_prefs(spreadsheet_id)` — session preferences and feature flags
+- `fetch_external_data_batch(spreadsheet_id, requests)` — external data import
+- `get_revision_history(spreadsheet_id)` — full revision/edit history
+
+### Added: Pipeline Stages (17 → 21)
+- `drive_copy` — copy files via v2internal API
+- `drive_export` — export files to target format
+- `drive_permissions` — list or set file permissions
+- `sheet_revisions` — fetch spreadsheet revision history
+
+### Added: Pipeline Templates (17 → 21)
+- `drive_template_clone` — copy → set permissions → store
+- `drive_export_and_distill` — export → Gemini enrich → NLM → store
+- `drive_audit_permissions` — list permissions → store audit
+- `sheet_revision_audit` — fetch revisions → analyse → store
+
+### Added: MCP Skills (23 → 27)
+- `workspace_copy_file` — copy Drive files with optional permission set
+- `workspace_export_file` — export Drive files to target format
+- `workspace_set_permissions` — manage file access permissions
+- `workspace_sheet_revisions` — fetch spreadsheet edit history
+
+### Added: Proxy Routes (12 → 16)
+- `POST /api/workspace/drive/copy` — Drive file copy
+- `POST /api/workspace/drive/export` — Drive file export
+- `POST /api/workspace/drive/permissions` — Drive permission management
+- `GET /api/workspace/sheets/revisions` — Sheets revision history
+
+### Tests
+- 74 workspace pipeline tests pass (11 new v1.19b stage + template tests)
+- All v1.19b stage tests use correct inline-import patching pattern
+- Full suite green (~11,722+ passed)
+
+---
 ## [1.19a] — "DEEP HAR API EXPLORATION" — 2026-07
 
 Exhaustive API surface mining from Google Workspace HAR captures.
