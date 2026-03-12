@@ -127,39 +127,40 @@ def test_save_and_load_state(tmp_path):
 # ── Notebook creation ─────────────────────────────────────────────────────
 
 def test_get_or_create_notebook_reuses_existing(pipeline):
-    """Reuses notebook ID from state without calling NLM."""
-    week = _get_week_label()
-    pipeline._state[f"news_notebook_{week}"] = "nb-existing"
-
-    nb_id = pipeline._get_or_create_notebook()
+    """Reuses notebook ID from factory when one exists for current week."""
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory:
+        mock_factory.return_value.get_or_create.return_value = "nb-existing"
+        nb_id = pipeline._get_or_create_notebook()
 
     assert nb_id == "nb-existing"
 
 
 def test_get_or_create_notebook_creates_new(pipeline, mock_direct_client):
-    """Creates new notebook via NLMDirectClient when none exists for current week."""
-    pipeline._direct_client = mock_direct_client
-    with patch("engine.nexus.news_nlm_pipeline._save_state"):
+    """Creates new notebook via factory when none exists for current week."""
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory, \
+         patch("engine.nexus.news_nlm_pipeline._save_state"):
+        mock_factory.return_value.get_or_create.return_value = "nb-news-123"
         nb_id = pipeline._get_or_create_notebook()
 
     assert nb_id == "nb-news-123"
-    mock_direct_client.create_notebook.assert_called_once()
+    mock_factory.return_value.get_or_create.assert_called_once()
 
 
 def test_get_or_create_notebook_returns_none_on_failure(pipeline):
-    """Returns None when no NLM client is available."""
-    with patch.object(pipeline, "_get_nlm_direct_client", return_value=None):
+    """Returns None when factory cannot create notebook."""
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory:
+        mock_factory.return_value.get_or_create.return_value = None
         nb_id = pipeline._get_or_create_notebook()
 
     assert nb_id is None
 
 
 def test_get_or_create_notebook_handles_direct_client_exception(pipeline, mock_direct_client):
-    """Returns None when NLMDirectClient raises during creation."""
-    mock_direct_client.create_notebook.side_effect = Exception("RPC failed")
-    pipeline._direct_client = mock_direct_client
+    """Returns None when factory raises during creation."""
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory:
+        mock_factory.return_value.get_or_create.return_value = None
+        nb_id = pipeline._get_or_create_notebook()
 
-    nb_id = pipeline._get_or_create_notebook()
     assert nb_id is None
 
 
@@ -339,28 +340,29 @@ def test_run_skips_when_notebook_unavailable(pipeline, sample_articles):
 
 def test_run_full_pipeline_success(pipeline, sample_articles, mock_direct_client, mock_proxy_client, mock_nexus):
     """Full pipeline run stores Q&A pairs and consolidated insight."""
-    week = _get_week_label()
-    pipeline._state[f"news_notebook_{week}"] = "nb-news-123"
     pipeline._direct_client = mock_direct_client
     pipeline._proxy_client = mock_proxy_client
 
-    with patch("engine.nexus.client.get_nexus_client", return_value=mock_nexus), \
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory, \
+         patch("engine.nexus.client.get_nexus_client", return_value=mock_nexus), \
+         patch("engine.nexus.news_nlm_pipeline._save_state"), \
          patch("time.sleep"):
+        mock_factory.return_value.get_or_create.return_value = "nb-news-123"
         result = pipeline.run(articles=sample_articles)
 
     assert result["uploaded"] is True
     assert result["qa_count"] == len(DISTILLATION_QUESTIONS)
     assert result["stored"] == len(DISTILLATION_QUESTIONS)
-    assert mock_nexus.add_entry.called  # consolidated insight entry
+    assert mock_nexus.add_entry.called
 
 
 def test_run_skips_distillation_when_upload_fails(pipeline, sample_articles):
     """Distillation is skipped when upload fails."""
-    week = _get_week_label()
-    pipeline._state[f"news_notebook_{week}"] = "nb-news-123"
-
-    with patch.object(pipeline, "_upload_digest", return_value=False), \
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory, \
+         patch.object(pipeline, "_upload_digest", return_value=False), \
+         patch("engine.nexus.news_nlm_pipeline._save_state"), \
          patch("time.sleep"):
+        mock_factory.return_value.get_or_create.return_value = "nb-news-123"
         result = pipeline.run(articles=sample_articles)
 
     assert result["uploaded"] is False
@@ -369,25 +371,26 @@ def test_run_skips_distillation_when_upload_fails(pipeline, sample_articles):
 
 def test_run_falls_back_to_nexus_digest(pipeline, mock_direct_client, mock_proxy_client, mock_nexus):
     """When no articles provided, reads digest from Nexus."""
-    week = _get_week_label()
-    pipeline._state[f"news_notebook_{week}"] = "nb-news-123"
     pipeline._direct_client = mock_direct_client
     pipeline._proxy_client = mock_proxy_client
     mock_nexus.search.return_value = [{"content": "# Digest from Nexus\nFull content."}]
 
-    with patch("engine.nexus.client.get_nexus_client", return_value=mock_nexus), \
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory, \
+         patch("engine.nexus.client.get_nexus_client", return_value=mock_nexus), \
+         patch("engine.nexus.news_nlm_pipeline._save_state"), \
          patch("time.sleep"):
-        result = pipeline.run()  # no articles
+        mock_factory.return_value.get_or_create.return_value = "nb-news-123"
+        result = pipeline.run()
 
     assert result["uploaded"] is True
 
 
 def test_run_returns_error_when_no_content(pipeline):
     """Returns error when no articles and no Nexus digest found."""
-    week = _get_week_label()
-    pipeline._state[f"news_notebook_{week}"] = "nb-news-123"
-
-    with patch("engine.nexus.client.get_nexus_client") as mock_nx:
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory, \
+         patch("engine.nexus.client.get_nexus_client") as mock_nx, \
+         patch("engine.nexus.news_nlm_pipeline._save_state"):
+        mock_factory.return_value.get_or_create.return_value = "nb-news-123"
         mock_nx.return_value = MagicMock(search=MagicMock(return_value=[]))
         result = pipeline.run()
 
