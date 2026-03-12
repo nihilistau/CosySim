@@ -1298,6 +1298,32 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         _auto_embedding_callback,
     )
 
+    # ── Workspace Pipeline Tasks ──────────────────────────────────────────
+    daemon.register(
+        "workspace-news-pipeline",
+        "Workspace News Pipeline — fetch RSS → optional NLM distillation → store in Nexus",
+        "every_8h",
+        _workspace_news_pipeline_callback,
+    )
+    daemon.register(
+        "workspace-news-to-knowledge",
+        "News-to-Knowledge — fetch news → NLM research → Docs → Drive → Nexus",
+        "daily",
+        _workspace_news_to_knowledge_callback,
+    )
+    daemon.register(
+        "workspace-research-cycle",
+        "Research Cycle — run research_and_distill pipeline for queued topics",
+        "every_12h",
+        _workspace_research_cycle_callback,
+    )
+    daemon.register(
+        "workspace-pipeline-health",
+        "Pipeline Health Check — verify pipeline stages and client connectivity",
+        "every_6h",
+        _workspace_pipeline_health_callback,
+    )
+
 
 def _auto_embedding_callback() -> Dict[str, Any]:
     """Batch-embed new Nexus entries and Q&A pairs into the vector store."""
@@ -1319,7 +1345,200 @@ def _auto_embedding_callback() -> Dict[str, Any]:
         return {"error": str(exc)}
 
 
-def _cdp_mine_callback()-> Dict[str, Any]:
+# ── Workspace Pipeline Callbacks ──────────────────────────────────────────────
+
+
+def _workspace_news_pipeline_callback() -> Dict[str, Any]:
+    """Run the workspace news_pipeline template: fetch RSS → NLM → Sheets → Nexus."""
+    try:
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+        pipeline = get_workspace_pipeline()
+        run = pipeline.run(
+            "news_pipeline",
+            topic="Latest AI & Technology News",
+            categories=["ai_research", "tech"],
+            max_articles=30,
+            store_articles=True,
+        )
+
+        result: Dict[str, Any] = {
+            "run_id": run.run_id,
+            "pipeline": run.pipeline_name,
+            "status": run.status.value,
+            "stages_completed": len([s for s in run.stages if s.get("status") == "completed"]),
+            "stages_total": len(run.stages),
+        }
+
+        if run.final_output:
+            result["articles_fetched"] = run.final_output.get("articles_fetched", 0)
+            result["articles_stored"] = run.final_output.get("stored", 0)
+
+        # Store pipeline run summary in Nexus
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            client.add_entry(
+                title=f"News Pipeline Run: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
+                content=json.dumps(result, default=str),
+                content_type="history",
+                category="news",
+            )
+        except Exception:
+            pass
+
+        return result
+    except Exception as exc:
+        logger.error("Workspace news pipeline failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _workspace_news_to_knowledge_callback() -> Dict[str, Any]:
+    """Run the news_to_knowledge pipeline: fetch → NLM → Docs → Drive → Nexus."""
+    try:
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+        pipeline = get_workspace_pipeline()
+        run = pipeline.run(
+            "news_to_knowledge",
+            topic="Daily Knowledge Distillation",
+            categories=["ai_research", "science"],
+            max_articles=15,
+            store_articles=True,
+        )
+
+        result: Dict[str, Any] = {
+            "run_id": run.run_id,
+            "pipeline": run.pipeline_name,
+            "status": run.status.value,
+            "stages_completed": len([s for s in run.stages if s.get("status") == "completed"]),
+            "stages_total": len(run.stages),
+        }
+        if run.final_output:
+            result["doc_id"] = run.final_output.get("doc_id")
+            result["drive_file_id"] = run.final_output.get("file_id")
+
+        return result
+    except Exception as exc:
+        logger.error("News-to-knowledge pipeline failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _workspace_research_cycle_callback() -> Dict[str, Any]:
+    """Run research_and_distill for queued topics from Nexus."""
+    try:
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+        from engine.nexus.client import get_nexus_client
+
+        pipeline = get_workspace_pipeline()
+        client = get_nexus_client()
+
+        # Look for pending research topics in Nexus
+        topics_to_research: list = []
+        try:
+            search_result = client.search("research_queue pending")
+            if search_result and isinstance(search_result, list):
+                for entry in search_result[:3]:
+                    if isinstance(entry, dict):
+                        topics_to_research.append(
+                            entry.get("title", "").replace("research_queue: ", "")
+                        )
+        except Exception:
+            pass
+
+        # Fallback to default topics if nothing queued
+        if not topics_to_research:
+            topics_to_research = ["latest AI agent frameworks and tool calling"]
+
+        results = []
+        for topic in topics_to_research[:3]:
+            try:
+                run = pipeline.run("research_and_distill", topic=topic)
+                results.append({
+                    "topic": topic,
+                    "run_id": run.run_id,
+                    "status": run.status.value,
+                })
+            except Exception as exc:
+                results.append({"topic": topic, "error": str(exc)})
+
+        return {
+            "topics_processed": len(results),
+            "results": results,
+        }
+    except Exception as exc:
+        logger.error("Research cycle failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _workspace_pipeline_health_callback() -> Dict[str, Any]:
+    """Check workspace pipeline stage connectivity and client availability."""
+    try:
+        from engine.nexus.workspace_pipeline import (
+            PIPELINE_TEMPLATES,
+            STAGE_REGISTRY,
+            get_workspace_pipeline,
+        )
+
+        pipeline = get_workspace_pipeline()
+        health: Dict[str, Any] = {
+            "stages_registered": len(STAGE_REGISTRY),
+            "templates_available": len(PIPELINE_TEMPLATES),
+            "template_names": list(PIPELINE_TEMPLATES.keys()),
+            "clients": {},
+        }
+
+        # Check each client's availability
+        client_checks = {
+            "workspace_gemini": "engine.integrations.workspace_gemini_client.get_workspace_gemini_client",
+            "sheets": "engine.integrations.gsheets_client.get_sheets_client",
+            "docs": "engine.integrations.google_docs_client.get_docs_client",
+            "drive": "engine.integrations.google_drive_client.get_drive_client",
+            "nlm": "engine.integrations.nlm_direct_client.get_nlm_client",
+            "nexus": "engine.nexus.client.get_nexus_client",
+        }
+        for client_name, import_path in client_checks.items():
+            try:
+                module_path, func_name = import_path.rsplit(".", 1)
+                import importlib
+                mod = importlib.import_module(module_path)
+                getter = getattr(mod, func_name)
+                obj = getter()
+                health["clients"][client_name] = obj is not None
+            except Exception:
+                health["clients"][client_name] = False
+
+        # Check recent pipeline runs
+        runs = pipeline.list_runs()
+        health["recent_runs"] = len(runs)
+        if runs:
+            latest = runs[-1]
+            health["latest_run"] = {
+                "id": latest.get("run_id"),
+                "pipeline": latest.get("pipeline_name"),
+                "status": latest.get("status"),
+            }
+
+        # Store health snapshot in Nexus
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            client.add_entry(
+                title=f"Pipeline Health: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
+                content=json.dumps(health, default=str),
+                content_type="note",
+                category="system",
+            )
+        except Exception:
+            pass
+
+        return health
+    except Exception as exc:
+        logger.error("Pipeline health check failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _cdp_mine_callback() -> Dict[str, Any]:
     """Daily: mine CDP monitor logs for browser_debugger + error_classifier training data."""
     try:
         import subprocess
