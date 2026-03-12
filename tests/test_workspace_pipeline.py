@@ -99,6 +99,7 @@ class TestStageRegistry:
             "nlm_research", "create_doc", "create_sheet", "fill_sheet",
             "drive_search", "drive_ask", "drive_upload", "nexus_store",
             "columnsmith", "export_doc", "nlm_add_source",
+            "workspace_generate", "fetch_news",
         ]
         for name in expected:
             assert name in STAGE_REGISTRY, f"Missing stage: {name}"
@@ -110,7 +111,7 @@ class TestStageRegistry:
 
     def test_stage_count(self):
         """Registry has the expected number of stages."""
-        assert len(STAGE_REGISTRY) == 11
+        assert len(STAGE_REGISTRY) == 13
 
 
 class TestPipelineTemplates:
@@ -121,14 +122,14 @@ class TestPipelineTemplates:
         expected = [
             "research_and_distill", "create_knowledge_doc", "data_enrichment",
             "cross_source_synthesis", "news_pipeline", "doc_to_notebook",
-            "sheet_to_knowledge",
+            "sheet_to_knowledge", "generate_and_store", "news_to_knowledge",
         ]
         for name in expected:
             assert name in PIPELINE_TEMPLATES, f"Missing template: {name}"
 
     def test_template_count(self):
         """Correct number of templates are defined."""
-        assert len(PIPELINE_TEMPLATES) == 7
+        assert len(PIPELINE_TEMPLATES) == 9
 
     def test_templates_have_stages(self):
         """Every template has at least one stage."""
@@ -483,3 +484,134 @@ class TestStageExecutors:
             from engine.nexus.workspace_pipeline import _stage_drive_search
             with pytest.raises(RuntimeError, match="No Google Drive"):
                 _stage_drive_search({}, {})
+
+    def test_workspace_generate_stage_calls_client(self):
+        """workspace_generate stage calls WorkspaceGeminiClient.stream_generate."""
+        with patch(
+            "engine.integrations.workspace_gemini_client.get_workspace_gemini_client"
+        ) as mock_fn:
+            mock_client = MagicMock()
+            mock_client.stream_generate.return_value = {
+                "text": "Generated content",
+                "model": "gemini-2.5-pro",
+                "prompt_tokens": 10,
+                "completion_tokens": 50,
+            }
+            mock_fn.return_value = mock_client
+
+            from engine.nexus.workspace_pipeline import _stage_workspace_generate
+
+            result = _stage_workspace_generate(
+                {"prompt": "Write about AI safety"},
+                {},
+            )
+            assert result["text"] == "Generated content"
+            assert result["model"] == "gemini-2.5-pro"
+            assert result["generated"] is True
+            mock_client.stream_generate.assert_called_once()
+
+    def test_workspace_generate_stage_falls_back_to_topic(self):
+        """workspace_generate uses topic from context when no prompt given."""
+        with patch(
+            "engine.integrations.workspace_gemini_client.get_workspace_gemini_client"
+        ) as mock_fn:
+            mock_client = MagicMock()
+            mock_client.stream_generate.return_value = {"text": "ok"}
+            mock_fn.return_value = mock_client
+
+            from engine.nexus.workspace_pipeline import _stage_workspace_generate
+
+            _stage_workspace_generate({}, {"topic": "quantum computing"})
+            call_args = mock_client.stream_generate.call_args
+            assert call_args[0][0] == "quantum computing"
+
+    def test_fetch_news_stage_returns_articles(self):
+        """fetch_news stage fetches and returns article data."""
+        mock_item = MagicMock()
+        mock_item.title = "AI Breakthrough"
+        mock_item.url = "https://example.com/article"
+        mock_item.summary = "A major AI advance"
+        mock_item.source = "TechNews"
+
+        mock_digest = MagicMock()
+        mock_digest.items = [mock_item]
+
+        with patch(
+            "engine.nexus.news.news_pipeline.get_news_pipeline"
+        ) as mock_pipe_fn, patch(
+            "engine.nexus.news_sources.get_questions",
+            return_value=["What's new in AI?"],
+        ):
+            mock_pipeline = MagicMock()
+            mock_pipeline.fetch_category.return_value = [mock_item]
+            mock_pipeline.store_items_to_nexus.return_value = 1
+            mock_pipeline.build_digest.return_value = mock_digest
+            mock_pipe_fn.return_value = mock_pipeline
+
+            from engine.nexus.workspace_pipeline import _stage_fetch_news
+
+            result = _stage_fetch_news(
+                {"category": "ai_research"},
+                {},
+            )
+            assert result["total_fetched"] == 1
+            assert result["total_stored"] == 1
+            assert len(result["articles"]) == 1
+            assert result["articles"][0]["title"] == "AI Breakthrough"
+            assert "distillation_questions" in result
+            assert len(result["distillation_questions"]) >= 1
+
+    def test_fetch_news_stage_stores_by_default(self):
+        """fetch_news stage stores items to Nexus by default."""
+        with patch(
+            "engine.nexus.news.news_pipeline.get_news_pipeline"
+        ) as mock_pipe_fn, patch(
+            "engine.nexus.news_sources.get_questions", return_value=[],
+        ):
+            mock_pipeline = MagicMock()
+            mock_pipeline.fetch_category.return_value = [MagicMock(
+                title="T", url="u", summary="s", source="S"
+            )]
+            mock_pipeline.store_items_to_nexus.return_value = 1
+            mock_pipeline.build_digest.return_value = MagicMock(items=[])
+            mock_pipe_fn.return_value = mock_pipeline
+
+            from engine.nexus.workspace_pipeline import _stage_fetch_news
+
+            _stage_fetch_news({"category": "tech"}, {})
+            mock_pipeline.store_items_to_nexus.assert_called_once()
+
+    def test_fetch_news_stage_skips_store_when_disabled(self):
+        """fetch_news stage skips Nexus store when store=False."""
+        with patch(
+            "engine.nexus.news.news_pipeline.get_news_pipeline"
+        ) as mock_pipe_fn, patch(
+            "engine.nexus.news_sources.get_questions", return_value=[],
+        ):
+            mock_pipeline = MagicMock()
+            mock_pipeline.fetch_category.return_value = []
+            mock_pipeline.build_digest.return_value = MagicMock(items=[])
+            mock_pipe_fn.return_value = mock_pipeline
+
+            from engine.nexus.workspace_pipeline import _stage_fetch_news
+
+            _stage_fetch_news({"category": "tech", "store": False}, {})
+            mock_pipeline.store_items_to_nexus.assert_not_called()
+
+    def test_news_pipeline_template_starts_with_fetch(self):
+        """news_pipeline template starts with fetch_news stage."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["news_pipeline"]]
+        assert stages[0] == "fetch_news"
+
+    def test_generate_and_store_template_stages(self):
+        """generate_and_store template has correct stages."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["generate_and_store"]]
+        assert stages == ["workspace_generate", "nexus_store"]
+
+    def test_news_to_knowledge_template_stages(self):
+        """news_to_knowledge template has correct stage sequence."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["news_to_knowledge"]]
+        assert stages[0] == "fetch_news"
+        assert "nlm_research" in stages
+        assert "create_doc" in stages
+        assert stages[-1] == "nexus_store"

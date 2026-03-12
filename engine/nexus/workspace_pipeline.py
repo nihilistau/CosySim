@@ -10,9 +10,11 @@ Pipelines:
     create_knowledge_doc  — NLM sources → Docs draft → Nexus document
     data_enrichment       — Sheets Fill-with-Gemini → Nexus structured data
     cross_source_synthesis — Drive search → NLM → Nexus synthesis
-    news_pipeline         — Fetch → NLM notebook → distill → Sheets → Nexus
+    news_pipeline         — Fetch RSS → NLM distill → Sheets → Nexus
     doc_to_notebook       — Docs → Drive → NLM notebook source → distill
     sheet_to_knowledge    — Sheets export → NLM research → Nexus entries
+    generate_and_store    — Workspace Gemini generation → Nexus
+    news_to_knowledge     — Fetch → NLM research → Docs → Drive → Nexus
 """
 
 from __future__ import annotations
@@ -427,6 +429,113 @@ def _stage_nlm_add_source(params: Dict[str, Any], context: Dict[str, Any]) -> An
     return {"notebook_id": notebook_id, "source_added": True, "result": result}
 
 
+def _stage_workspace_generate(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Generate text via WorkspaceGeminiClient.stream_generate.
+
+    Directly invokes the Workspace Gemini generation endpoint,
+    independent of Docs/Sheets-specific wrappers.
+
+    Params:
+        prompt (str): Generation prompt (or falls back to ``topic`` / ``question``).
+        document_type (str): ``"sheets"`` or ``"docs"`` — selects API key and
+            context code.  Defaults to ``"sheets"``.
+        doc_id (str): Optional document / spreadsheet ID for context.
+
+    Returns:
+        Dict with ``text``, ``model``, ``prompt_tokens``, ``completion_tokens``.
+    """
+    from engine.integrations.workspace_gemini_client import get_workspace_gemini_client
+
+    prompt = (
+        params.get("prompt")
+        or context.get("prompt")
+        or context.get("topic")
+        or context.get("question", "")
+    )
+    doc_type = params.get("document_type", context.get("document_type", "sheets"))
+    doc_id = params.get("doc_id", context.get("doc_id"))
+
+    client = get_workspace_gemini_client(document_type=doc_type)
+    result = client.stream_generate(prompt, doc_id=doc_id)
+
+    return {
+        "text": result.get("text", ""),
+        "model": result.get("model", ""),
+        "prompt_tokens": result.get("prompt_tokens", 0),
+        "completion_tokens": result.get("completion_tokens", 0),
+        "generated": True,
+    }
+
+
+def _stage_fetch_news(
+    params: Dict[str, Any], context: Dict[str, Any]
+) -> Any:
+    """Fetch news articles via the standalone NewsPipeline.
+
+    Bridges the independent RSS/web news fetcher into the workspace pipeline,
+    so ``news_pipeline`` templates can start with real article fetching
+    instead of generic NLM research.
+
+    Params:
+        category (str): News category to fetch (``"ai_research"``, ``"tech"``,
+            ``"world"``, ``"science"``).  If empty, fetches all categories.
+        limit (int): Max articles per source (default 20).
+        store (bool): Whether to store raw articles to Nexus (default True).
+
+    Returns:
+        Dict with ``articles`` list, ``total_fetched``, ``total_stored``,
+        ``digest`` markdown, and ``text`` (for downstream stages).
+    """
+    from engine.nexus.news.news_pipeline import get_news_pipeline
+    from engine.nexus.news_sources import get_questions
+
+    category = (
+        params.get("category")
+        or context.get("category")
+        or context.get("topic", "")
+    )
+
+    news = get_news_pipeline()
+
+    if category and category in ("ai_research", "tech", "world", "science"):
+        items = news.fetch_category(category)
+    else:
+        items = []
+        for cat_items in (news.fetch_all() or {}).values():
+            items.extend(cat_items)
+
+    stored = 0
+    if params.get("store", True) and items:
+        stored = news.store_items_to_nexus(items)
+
+    digest = news.build_digest(items, category=category or "all")
+
+    digest_text = ""
+    if digest:
+        lines = [f"# News Digest — {category or 'all'}"]
+        for item in (digest.items or []):
+            lines.append(f"\n## {item.title}")
+            lines.append(f"Source: {item.source} | {item.url}")
+            lines.append(item.summary or "")
+        digest_text = "\n".join(lines)
+
+    questions = get_questions(category) if category else []
+
+    return {
+        "articles": [
+            {"title": i.title, "url": i.url, "summary": i.summary, "source": i.source}
+            for i in (items or [])
+        ],
+        "total_fetched": len(items or []),
+        "total_stored": stored,
+        "digest": digest_text,
+        "text": digest_text,
+        "distillation_questions": questions,
+    }
+
+
 # ──── Stage Registry ──────────────────────────────────────────────────────────
 
 STAGE_REGISTRY: Dict[str, Callable] = {
@@ -441,6 +550,8 @@ STAGE_REGISTRY: Dict[str, Callable] = {
     "columnsmith": _stage_columnsmith,
     "export_doc": _stage_export_doc,
     "nlm_add_source": _stage_nlm_add_source,
+    "workspace_generate": _stage_workspace_generate,
+    "fetch_news": _stage_fetch_news,
 }
 
 
@@ -468,7 +579,8 @@ PIPELINE_TEMPLATES: Dict[str, List[Dict[str, Any]]] = {
         {"stage": "nexus_store", "params": {"category": "research", "content_type": "note"}},
     ],
     "news_pipeline": [
-        {"stage": "nlm_research", "params": {}},
+        {"stage": "fetch_news", "params": {"store": True}},
+        {"stage": "nlm_research", "params": {}, "optional": True},
         {"stage": "create_sheet", "params": {"title": "News Digest"}},
         {"stage": "nexus_store", "params": {"category": "news", "content_type": "note", "tags": ["news", "digest"]}},
     ],
@@ -482,6 +594,17 @@ PIPELINE_TEMPLATES: Dict[str, List[Dict[str, Any]]] = {
         {"stage": "drive_search", "params": {}},
         {"stage": "nlm_research", "params": {}},
         {"stage": "nexus_store", "params": {"category": "data", "content_type": "note"}},
+    ],
+    "generate_and_store": [
+        {"stage": "workspace_generate", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "generated", "content_type": "note"}},
+    ],
+    "news_to_knowledge": [
+        {"stage": "fetch_news", "params": {"store": True}},
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "create_doc", "params": {}},
+        {"stage": "drive_upload", "params": {"subfolder": "news"}},
+        {"stage": "nexus_store", "params": {"category": "news", "content_type": "document", "tags": ["news", "knowledge"]}},
     ],
 }
 
