@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.12b** "NLM PIPELINE HARDENING" ✅ | Last updated: 2026-03
+> Current: **v1.13b** "FACTORY MIGRATION COMPLETE" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
