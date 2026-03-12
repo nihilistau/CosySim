@@ -200,39 +200,30 @@ class NewsNLMPipeline:
     def _get_or_create_notebook(self) -> Optional[str]:
         """Get current week's news notebook ID, creating it if needed.
 
-        Strategy:
-        1. Check state file for existing notebook ID (reuse within same week).
-        2. Try NLMDirectClient.create_notebook() — proven batchexecute RPC path.
-        3. Return None if creation fails (pipeline skips distillation).
+        Delegates to the centralised NLMNotebookFactory for deduplication,
+        state persistence, and credential management.
 
         Returns:
             Notebook ID string, or None if NLM unavailable.
         """
+        from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
         week = _get_week_label()
-        notebook_key = f"news_notebook_{week}"
-        notebook_id = self._state.get(notebook_key)
-
-        if notebook_id:
-            logger.debug("Reusing news notebook %s for week %s", notebook_id, week)
-            return notebook_id
-
         notebook_name = f"{_NOTEBOOK_NAME_PREFIX} {week}"
 
-        # Primary: NLMDirectClient.create_notebook() via browser-attached cookies
-        direct = self._get_nlm_direct_client()
-        if direct:
-            try:
-                notebook_id = direct.create_notebook(notebook_name)
-                if notebook_id:
-                    self._state[notebook_key] = notebook_id
-                    _save_state(self._state)
-                    logger.info("Created news notebook %s -> %s (direct)", notebook_name, notebook_id)
-                    return notebook_id
-            except Exception as exc:
-                logger.warning("NLMDirectClient.create_notebook failed: %s", exc)
+        factory = get_notebook_factory()
+        notebook_id = factory.get_or_create(
+            name=notebook_name,
+            category="news",
+        )
 
-        logger.warning("News notebook creation failed — no NLM path available")
-        return None
+        if notebook_id:
+            # Keep local state in sync for backward compatibility
+            notebook_key = f"news_notebook_{week}"
+            self._state[notebook_key] = notebook_id
+            _save_state(self._state)
+
+        return notebook_id
 
     def _build_digest_text(self, articles: List[Any], max_articles: int = 20) -> str:
         """Build a formatted text digest from article objects.
