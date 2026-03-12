@@ -386,7 +386,7 @@ class AutoDiagnosis:
                 if test_lines:
                     parts.append(f"## Test Function ({failure.test_file})\n```python\n{''.join(test_lines[:50])}\n```")
             except Exception:
-                pass
+                logger.debug("Could not read test file %s", failure.test_file, exc_info=True)
 
         # Read source file around the error line
         if failure.source_file and failure.source_file != failure.test_file:
@@ -402,7 +402,7 @@ class AutoDiagnosis:
                     )
                     parts.append(f"## Source ({failure.source_file}:{failure.source_line})\n```python\n{snippet}\n```")
                 except Exception:
-                    pass
+                    logger.debug("Could not read source file %s", failure.source_file, exc_info=True)
 
         # Include traceback
         if failure.traceback:

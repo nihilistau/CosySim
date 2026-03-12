@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from engine.nexus.bootstrap_notebooks import (
     NOTEBOOK_CONFIGS,
@@ -121,15 +121,15 @@ def test_notebook_configs_include_control_plane_notebook() -> None:
 
 
 def test_get_or_create_notebook_accepts_reserved_uuid_response() -> None:
-    """Reserved UUID responses from the live proxy should still materialize a notebook URL."""
+    """Factory-based notebook creation should produce a URL from the notebook ID."""
     state = {"notebooks": {}}
 
+    mock_factory = MagicMock()
+    mock_factory.get_or_create.return_value = "ccf725c2-ddeb-4c9f-805c-c3668c3e4abf"
+
     with patch(
-        "engine.nexus.bootstrap_notebooks._nlm_post",
-        return_value={
-            "notebook_id": "ccf725c2-ddeb-4c9f-805c-c3668c3e4abf",
-            "message": "Notebook UUID reserved. Add sources to materialise on NLM backend.",
-        },
+        "engine.nexus.nlm_notebook_factory.get_notebook_factory",
+        return_value=mock_factory,
     ):
         result = _get_or_create_notebook("copilot-system-control", "desc", state)
 

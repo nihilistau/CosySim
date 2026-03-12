@@ -280,20 +280,21 @@ class SystemReflection:
                             "direction": trend.get("direction", "stable"),
                         }
                 except Exception:
-                    pass
+                    logger.warning("Metrics trend collection failed", exc_info=True)
 
             # Check for regressions
             try:
                 regressions = mm.check_regressions()
                 result["regressions"] = [asdict(a) for a in regressions]
             except Exception:
+                logger.warning("Regression detection failed", exc_info=True)
                 result["regressions"] = []
 
             # Dashboard summary
             try:
                 result["dashboard"] = mm.dashboard(hours=days * 24)
             except Exception:
-                pass
+                logger.warning("Dashboard generation failed", exc_info=True)
 
         except ImportError:
             logger.warning("MetaMetrics not available")

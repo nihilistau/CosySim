@@ -391,9 +391,14 @@ class TestRunLive:
     def test_run_creates_notebook_if_missing(self) -> None:
         e = _make_expander(dry_run=False)
         e._state.pop("notebook_id", None)
-        with patch("time.sleep"):
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = "nb-expansion-new"
+        with (
+            patch("time.sleep"),
+            patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=mock_factory),
+        ):
             e.run(batch_size=1)
-        e._hybrid.create_notebook.assert_called_once()
+        mock_factory.get_or_create.assert_called_once()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -447,7 +452,7 @@ class TestSchedulerIntegration:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 55
+        assert daemon.register.call_count == 56
 
     def test_qa_expansion_callback_calls_run(self) -> None:
         from engine.nexus.scheduler_daemon import _qa_expansion_callback
