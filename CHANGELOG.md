@@ -3,6 +3,32 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.16b] — "EMBEDDING AUTO-WIRE" — 2026-03
+
+Auto-embeds every Nexus write into the ChromaDB vector store so it fills
+organically. Adds scheduler task for batch re-indexing existing entries.
+
+### Embedding Auto-Wire (`engine/nexus/embedding_hooks.py`)
+- `auto_embed_entry()` — embeds after `NexusClient.add_entry()` succeeds
+- `auto_embed_qa()` — embeds after `NexusClient.add_qa()` succeeds
+- `batch_embed_nexus_entries()` — batch-index unembedded knowledge entries
+- `batch_embed_qa_entries()` — batch-index unembedded Q&A pairs
+- Content-type → collection mapping (10 types → 8 collections)
+
+### NexusClient Integration
+- `add_entry()` calls `auto_embed_entry()` after successful POST
+- `add_qa()` calls `auto_embed_qa()` after successful POST
+- Failures are best-effort (logged, never raised)
+
+### Scheduler
+- New `auto-embedding` task (every 4h) — batch re-indexes unembedded entries
+- Total scheduler tasks: 57
+
+### Tests
+- 31 new tests in `test_embedding_hooks.py`
+- All content-type mappings, auto-embed, batch, error handling, scheduler wiring
+
+---
 ## [1.15b] — "GEMINI EMBEDDING 2 + MRL VECTOR SEARCH" — 2026-03
 
 Adds semantic vector search to Nexus via Gemini Embedding 2 with Matryoshka

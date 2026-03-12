@@ -1,8 +1,8 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.15b](https://img.shields.io/badge/version-1.15b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11507](https://img.shields.io/badge/tests-11%2C507-brightgreen.svg)]() [![Skills: 377](https://img.shields.io/badge/skills-377-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.16b](https://img.shields.io/badge/version-1.16b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11507](https://img.shields.io/badge/tests-11%2C507-brightgreen.svg)]() [![Skills: 377](https://img.shields.io/badge/skills-377-0a7f5a.svg)]()
 
-> v1.15b — "GEMINI EMBEDDING 2 + MRL VECTOR SEARCH" — Local-first multi-scene AI simulation framework
+> v1.16b — "EMBEDDING AUTO-WIRE" — Local-first multi-scene AI simulation framework
 
 ## Overview
 
@@ -14,7 +14,7 @@ The framework features a **unified cyberpunk aesthetic** (neon_base template), *
 
 | Metric | Value |
 |--------|-------|
-| Version | **1.15b** — "GEMINI EMBEDDING 2 + MRL VECTOR SEARCH" |
+| Version | **1.16b** — "EMBEDDING AUTO-WIRE" |
 | Tests | **11,507 passing** / 345 test files |
 | Scenes | **20** Flask scenes + 3 Streamlit apps |
 | Services | **12** launcher-managed services |
