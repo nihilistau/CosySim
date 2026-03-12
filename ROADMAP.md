@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.19b** "DRIVE V2INTERNAL + SHEETS EXTENDED LIVE-WIRING" ✅ | Last updated: 2026-07
+> Current: **v1.19c** "COLAB PIPELINE INTEGRATION" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,14 +10,26 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.19b — "DRIVE V2INTERNAL + SHEETS EXTENDED LIVE-WIRING" ✅
+## Current Shipped State: v1.19c — "COLAB PIPELINE INTEGRATION" ✅
 
-**Baseline: 20 scenes, 61 scheduler tasks, 27 workspace skills, 11,748 tests, 21 pipeline stages, 21 templates, 50 workspace API ops across 29 YAML sections.**
+**Baseline: 20 scenes, 61 scheduler tasks, 31 workspace skills, 11,748 tests, 24 pipeline stages, 25 templates, 50 workspace API ops across 29 YAML sections.**
 
-The v1.19b sprint live-wires the Drive v2internal and Sheets extended APIs discovered
-during v1.19a HAR mining into production client methods, pipeline stages, MCP skills,
-and proxy routes. 6 Drive v2internal methods, 4 Sheets extended methods, 4 new pipeline
-stages, 4 new templates, 4 new skills, and 4 new proxy routes — all tested.
+The v1.19c sprint integrates Google Colab — GPU runtimes, AI agent, and notebook
+builder — into the Workspace Pipeline. Three Colab stages, four Colab templates,
+four new MCP skills, six proxy routes, and 14 new tests complete the six-service
+rotation: NLM ↔ Docs ↔ Sheets ↔ Drive ↔ Gemini ↔ Colab ↔ Nexus.
+
+---
+
+## Shipped: v1.19c — "COLAB PIPELINE INTEGRATION" ✅
+
+- [x] 3 new Colab pipeline stages (colab_execute, colab_ask, colab_build)
+- [x] 4 new Colab pipeline templates (research_and_compute, data_analysis, nlm_colab_loop, colab_build_and_store)
+- [x] 4 new Colab MCP skills (workspace_colab_execute, _ask, _build, _pipeline)
+- [x] 6 new Colab proxy routes (/api/colab/ask, /execute, /build, /status, /pipeline)
+- [x] 14 new tests (88 workspace pipeline total, all pass)
+- [x] Pipeline stages: 21 → 24, templates: 21 → 25, workspace skills: 27 → 31
+- [x] Full suite green (~11,748 passed)
 
 ---
 

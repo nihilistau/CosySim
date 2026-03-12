@@ -102,6 +102,7 @@ class TestStageRegistry:
             "workspace_generate", "fetch_news",
             "docs_to_sheets", "sheets_to_doc", "gemini_enrich", "prewarm",
             "drive_copy", "drive_export", "drive_permissions", "sheet_revisions",
+            "colab_execute", "colab_ask", "colab_build",
         ]
         for name in expected:
             assert name in STAGE_REGISTRY, f"Missing stage: {name}"
@@ -113,7 +114,7 @@ class TestStageRegistry:
 
     def test_stage_count(self):
         """Registry has the expected number of stages."""
-        assert len(STAGE_REGISTRY) == 21
+        assert len(STAGE_REGISTRY) == 24
 
 
 class TestPipelineTemplates:
@@ -130,13 +131,15 @@ class TestPipelineTemplates:
             "doc_structure_extract", "sheet_knowledge_report",
             "drive_template_clone", "drive_export_and_distill",
             "drive_audit_permissions", "sheet_revision_audit",
+            "research_and_compute", "data_analysis", "nlm_colab_loop",
+            "colab_build_and_store",
         ]
         for name in expected:
             assert name in PIPELINE_TEMPLATES, f"Missing template: {name}"
 
     def test_template_count(self):
         """Correct number of templates are defined."""
-        assert len(PIPELINE_TEMPLATES) == 21
+        assert len(PIPELINE_TEMPLATES) == 25
 
     def test_templates_have_stages(self):
         """Every template has at least one stage."""
@@ -856,3 +859,165 @@ class TestV119bTemplates:
             assert stages[-1]["stage"] == "nexus_store", (
                 f"v1.19b template {name} doesn't end with nexus_store"
             )
+
+
+# ──── v1.19c Colab Stages ────────────────────────────────────────────────────
+
+
+class TestV119cStages:
+    """Tests for the three Colab pipeline stages added in v1.19c."""
+
+    @patch("engine.integrations.colab_client.get_colab_client")
+    def test_colab_execute_stage(self, mock_get):
+        """colab_execute stage runs code via ColabClient."""
+        mock_client = MagicMock()
+        mock_client.run_python.return_value = {"output": "42\n", "success": True}
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["colab_execute"]
+        params = {"code": "print(42)", "timeout": 60}
+        ctx = {"pipeline_id": "test-c19c", "results": []}
+        result = stage_fn(params, ctx)
+
+        mock_client.run_python.assert_called_once_with("print(42)", timeout=60)
+        assert result["output"] == "42\n"
+        assert result["success"] is True
+
+    @patch("engine.integrations.colab_client.get_colab_client")
+    def test_colab_execute_default_timeout(self, mock_get):
+        """colab_execute stage uses default timeout when not specified."""
+        mock_client = MagicMock()
+        mock_client.run_python.return_value = {"output": "ok"}
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["colab_execute"]
+        result = stage_fn({"code": "pass"}, {"pipeline_id": "t", "results": []})
+
+        mock_client.run_python.assert_called_once_with("pass", timeout=120)
+
+    @patch("engine.integrations.colab_client.get_colab_client")
+    def test_colab_execute_error(self, mock_get):
+        """colab_execute stage returns error dict on failure."""
+        mock_get.side_effect = RuntimeError("no GPU")
+
+        stage_fn = STAGE_REGISTRY["colab_execute"]
+        result = stage_fn({"code": "x"}, {"pipeline_id": "t", "results": []})
+
+        assert "error" in result
+
+    @patch("engine.integrations.colab_client.get_colab_client")
+    def test_colab_ask_stage(self, mock_get):
+        """colab_ask stage sends prompt to Gemini agent."""
+        mock_client = MagicMock()
+        mock_client.ask.return_value = "The answer is 42."
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["colab_ask"]
+        params = {"prompt": "What is life?", "context_text": "biology"}
+        result = stage_fn(params, {"pipeline_id": "t", "results": []})
+
+        mock_client.ask.assert_called_once_with("What is life?", context="biology", timeout=120)
+        assert result["answer"] == "The answer is 42."
+
+    @patch("engine.integrations.colab_client.get_colab_client")
+    def test_colab_ask_defaults(self, mock_get):
+        """colab_ask stage uses empty context and default timeout."""
+        mock_client = MagicMock()
+        mock_client.ask.return_value = "ok"
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["colab_ask"]
+        result = stage_fn({"prompt": "hi"}, {"pipeline_id": "t", "results": []})
+
+        mock_client.ask.assert_called_once_with("hi", context="", timeout=120)
+
+    @patch("engine.integrations.colab_client.get_colab_client")
+    def test_colab_ask_error(self, mock_get):
+        """colab_ask stage returns error dict on failure."""
+        mock_get.side_effect = ConnectionError("offline")
+
+        stage_fn = STAGE_REGISTRY["colab_ask"]
+        result = stage_fn({"prompt": "x"}, {"pipeline_id": "t", "results": []})
+
+        assert "error" in result
+
+    @patch("engine.integrations.colab_client.get_colab_client")
+    def test_colab_build_stage(self, mock_get):
+        """colab_build stage creates and polls a task."""
+        mock_client = MagicMock()
+        mock_client.create_task.return_value = "task-123"
+        mock_client.query_task.return_value = "# Notebook Content"
+        mock_get.return_value = mock_client
+
+        stage_fn = STAGE_REGISTRY["colab_build"]
+        params = {"task_description": "Build ML pipeline", "timeout": 10}
+        result = stage_fn(params, {"pipeline_id": "t", "results": []})
+
+        mock_client.create_task.assert_called_once()
+        mock_client.update_task.assert_called_once_with("task-123", "Build ML pipeline")
+        assert result["task_id"] == "task-123"
+        assert result["status"] == "complete"
+
+    @patch("engine.integrations.colab_client.get_colab_client")
+    def test_colab_build_error(self, mock_get):
+        """colab_build stage returns error dict on failure."""
+        mock_get.side_effect = Exception("auth")
+
+        stage_fn = STAGE_REGISTRY["colab_build"]
+        result = stage_fn({"task_description": "x"}, {"pipeline_id": "t", "results": []})
+
+        assert "error" in result
+
+
+class TestV119cTemplates:
+    """Tests for the four Colab pipeline templates added in v1.19c."""
+
+    def test_research_and_compute_template(self):
+        """research_and_compute template has correct stages."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["research_and_compute"]]
+        assert "nlm_research" in stages
+        assert "colab_execute" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_data_analysis_template(self):
+        """data_analysis template has correct stages."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["data_analysis"]]
+        assert "drive_search" in stages
+        assert "colab_execute" in stages or "colab_ask" in stages
+
+    def test_nlm_colab_loop_template(self):
+        """nlm_colab_loop template has correct stages."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["nlm_colab_loop"]]
+        assert "nlm_research" in stages
+        assert "colab_ask" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_colab_build_and_store_template(self):
+        """colab_build_and_store template has correct stages."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["colab_build_and_store"]]
+        assert "colab_build" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_v19c_templates_end_with_nexus_store(self):
+        """All 4 v1.19c Colab templates end with nexus_store."""
+        colab_templates = [
+            "research_and_compute", "data_analysis",
+            "nlm_colab_loop", "colab_build_and_store",
+        ]
+        for name in colab_templates:
+            stages = PIPELINE_TEMPLATES[name]
+            assert stages[-1]["stage"] == "nexus_store", (
+                f"v1.19c template {name} doesn't end with nexus_store"
+            )
+
+    def test_v19c_template_stages_are_registered(self):
+        """Every stage referenced in v1.19c templates exists in STAGE_REGISTRY."""
+        colab_templates = [
+            "research_and_compute", "data_analysis",
+            "nlm_colab_loop", "colab_build_and_store",
+        ]
+        for tpl_name in colab_templates:
+            for step in PIPELINE_TEMPLATES[tpl_name]:
+                assert step["stage"] in STAGE_REGISTRY, (
+                    f"Stage {step['stage']} in template {tpl_name} not in STAGE_REGISTRY"
+                )
