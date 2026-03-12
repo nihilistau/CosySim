@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.10b** "SYSTEM CONSOLIDATION" ✅ | Last updated: 2026-03
+> Current: **v1.11b** "NLM NOTEBOOK FACTORY" ✅ | Last updated: 2026-03
 
 ## Philosophy
 

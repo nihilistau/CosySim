@@ -3,6 +3,32 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.11b] — "NLM NOTEBOOK FACTORY" — 2026-03
+
+Centralised notebook lifecycle management — replaces 11 scattered notebook
+creation paths with a single factory providing dedup, rotation, and tracking.
+
+### NLM Notebook Factory
+- **`engine/nexus/nlm_notebook_factory.py`** — `NLMNotebookFactory` with dedup
+  keys, weekly rotation for ephemeral categories (news, argus, session, research),
+  persistent tracking for bootstrap/master/training notebooks.
+- State file: `data/nlm_notebooks_state.json` (replaces 6 separate state files).
+- `cleanup_stale(max_age_days=30)` removes old ephemeral records.
+- Singleton access via `get_notebook_factory()`.
+
+### News NLM Pipeline Refactor
+- **`_get_or_create_notebook()`** now delegates to factory instead of calling
+  `NLMDirectClient.create_notebook()` directly.
+- All 10 pipeline tests updated to mock factory pattern.
+
+### Files Changed
+- `engine/nexus/nlm_notebook_factory.py` — NEW (~300 lines)
+- `engine/nexus/news_nlm_pipeline.py` — Refactored notebook creation
+- `tests/test_nlm_notebook_factory.py` — NEW (14 tests)
+- `tests/test_news_nlm_pipeline.py` — Updated mocks (10 tests)
+- 68/68 NLM pipeline tests passing
+
+---
 ## [1.10b] — "SYSTEM CONSOLIDATION" — 2026-03
 
 Architecture consolidation sprint — unifying registries, wiring the training
