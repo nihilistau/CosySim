@@ -3,6 +3,55 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.15b] — "GEMINI EMBEDDING 2 + MRL VECTOR SEARCH" — 2026-03
+
+Adds semantic vector search to Nexus via Gemini Embedding 2 with Matryoshka
+Representation Learning (MRL), upgrading the query router from 5 to 6 tiers.
+
+### New: Embedding Service (`engine/nexus/embedding_service.py`)
+- Unified `EmbeddingService` with Gemini + LMStudio provider chain
+- MRL support: 768/1536/3072 dimensions with L2 normalization
+- In-memory LRU cache (10K entries), task-type-aware embeddings
+- Singleton via `get_embedding_service()`
+
+### New: Vector Store (`engine/nexus/vector_store.py`)
+- ChromaDB-backed `NexusVectorStore` with 8 collection types
+- Custom `_ServiceEmbeddingFunction` bridging ChromaDB ↔ EmbeddingService
+- Cosine similarity search with configurable top-k and min-score
+
+### New: Embedding Skills (`engine/skills/builtin/embedding_skills.py`)
+- `nexus_semantic_search` — vector search across Nexus collections
+- `nexus_vector_add` — add content to vector store
+- `nexus_text_similarity` — compute pairwise text similarity
+- `nexus_embedding_stats` — cache and store statistics
+
+### Query Router Upgrade (5→6 tiers)
+- New Tier 2: Vector Semantic Search (between Q&A Cache and FTS)
+- `vector_hits` stat tracking in RouterStats
+- Confidence capped at 0.92 for vector results
+
+### AI Studio Client
+- `output_dimensionality` parameter for MRL dimension control in embed methods
+
+### Test Debt Cleanup (v1.13b factory migration)
+- Fixed `test_nlm_notebook_manager.py` — all 20 tests migrated to mock factory
+- Fixed `test_nlm_forge_skills.py` — all create_notebook tests use factory
+- Fixed `test_knowledge_forge.py` — build_topic tests mock factory
+- Fixed `test_knowledge_quality.py` — freshness test mocks config
+- 11,507 tests passing
+
+---
+## [1.14b] — "ERROR VISIBILITY" — 2026-03
+
+Added structured logging to 10 silent exception blocks across 4 pipeline files.
+
+### Error Visibility
+- `cache_pipeline.py` — 4 bare `except:` blocks → `logger.warning(exc_info=True)`
+- `system_reflection.py` — 3 silent exceptions → logged with context
+- `auto_diagnosis.py` — 2 suppressed errors → warning-level logging
+- `qa_expander.py` — 1 silent catch → debug-level logging
+
+---
 ## [1.13b] — "FACTORY MIGRATION COMPLETE" — 2026-03
 
 Complete factory migration — every notebook creation path in the codebase now
