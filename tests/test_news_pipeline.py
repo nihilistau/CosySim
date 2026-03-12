@@ -103,7 +103,7 @@ def test_dedup_filter_get_seen_fingerprints():
 # ──── Source Registry Tests ────
 
 def test_source_registry_returns_sources():
-    from engine.nexus.news.source_registry import get_sources
+    from engine.nexus.news_sources import get_sources
     sources = get_sources("ai_research")
     assert len(sources) > 0
     assert "rss" in sources[0]
@@ -111,19 +111,19 @@ def test_source_registry_returns_sources():
 
 
 def test_source_registry_unknown_category():
-    from engine.nexus.news.source_registry import get_sources
+    from engine.nexus.news_sources import get_sources
     assert get_sources("nonexistent") == []
 
 
 def test_source_registry_curated_questions():
-    from engine.nexus.news.source_registry import get_questions
+    from engine.nexus.news_sources import get_questions
     questions = get_questions("ai_research")
     assert len(questions) >= 5
     assert all(isinstance(q, str) for q in questions)
 
 
 def test_source_registry_all_categories():
-    from engine.nexus.news.source_registry import get_all_categories
+    from engine.nexus.news_sources import get_all_categories
     cats = get_all_categories()
     assert "ai_research" in cats
     assert "tech" in cats

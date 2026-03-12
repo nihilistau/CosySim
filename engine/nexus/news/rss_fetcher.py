@@ -10,7 +10,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from engine.nexus.news.news_models import NewsItem
-from engine.nexus.news.source_registry import get_sources
+from engine.nexus.news_sources import get_sources
 
 logger = logging.getLogger(__name__)
 
