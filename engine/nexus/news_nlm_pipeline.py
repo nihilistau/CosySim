@@ -5,7 +5,8 @@ After news articles are fetched and stored in Nexus, this pipeline:
 2. Uploads the day's digest as a text source
 3. Runs targeted distillation questions via batch-ask
 4. Stores Q&A pairs in Nexus (news category) for agent consumption
-5. Persists notebook ID for continuity across runs
+5. Feeds training flywheel immediately for real-time learning
+6. Persists notebook ID for continuity across runs
 
 The pipeline uses a multi-strategy approach for NotebookLM access:
 - Primary: NLMDirectClient (batchexecute RPCs via browser-attached cookies)
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 # ── State file for notebook ID persistence ──────────────────────────────
 _STATE_FILE = Path(__file__).resolve().parent.parent.parent / ".github" / "hooks" / "logs" / "news_nlm_state.json"
+
+# ── Retry queue for failed distillations ────────────────────────────────
+_RETRY_QUEUE_FILE = _STATE_FILE.parent / "news_nlm_retry_queue.json"
 
 # ── Notebook name (rolling — replaced each week) ────────────────────────
 _NOTEBOOK_NAME_PREFIX = "CosySim News Intelligence"
@@ -75,6 +79,44 @@ def _get_week_label() -> str:
     return f"{now.year}-W{now.isocalendar()[1]:02d}"
 
 
+# ── Retry queue helpers ─────────────────────────────────────────────────
+
+def _load_retry_queue() -> List[Dict[str, Any]]:
+    """Load failed distillation attempts from retry queue."""
+    try:
+        if _RETRY_QUEUE_FILE.exists():
+            return json.loads(_RETRY_QUEUE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return []
+
+
+def _save_retry_queue(queue: List[Dict[str, Any]]) -> None:
+    """Persist failed distillation attempts for later retry."""
+    try:
+        _RETRY_QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _RETRY_QUEUE_FILE.write_text(json.dumps(queue, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.debug("Could not save retry queue: %s", exc)
+
+
+def _enqueue_retry(digest_text: str, date_label: str, reason: str) -> None:
+    """Add a failed distillation attempt to the retry queue."""
+    queue = _load_retry_queue()
+    # Cap queue size to prevent unbounded growth
+    if len(queue) >= 10:
+        queue = queue[-9:]  # Keep newest 9, make room for this one
+    queue.append({
+        "digest_text": digest_text[:50000],  # Cap text size
+        "date_label": date_label,
+        "reason": reason,
+        "queued_at": time.time(),
+        "attempts": 0,
+    })
+    _save_retry_queue(queue)
+    logger.info("Retry queue: added failed distillation for %s (%s)", date_label, reason)
+
+
 # ── Pipeline ─────────────────────────────────────────────────────────────
 
 class NewsNLMPipeline:
@@ -113,11 +155,17 @@ class NewsNLMPipeline:
             if account is None:
                 account = pool.get_by_name("knack112358")
             if account:
+                # Credential guard: verify cookies exist and aren't obviously stale
+                if not account.cookies:
+                    logger.warning("NLM account '%s' has no cookies — auth refresh needed", account.name)
+                    return None
+                if account.is_stale():
+                    logger.warning("NLM account '%s' cookies are stale (>7 days) — auth refresh recommended", account.name)
                 self._direct_client = NLMDirectClient(account)
                 return self._direct_client
-            logger.debug("No NotebookLM-capable account in pool")
+            logger.warning("No NotebookLM-capable account in pool — run cookie refresh")
         except Exception as exc:
-            logger.debug("Could not load NLM direct client: %s", exc)
+            logger.warning("Could not load NLM direct client: %s", exc)
         return None
 
     def _get_nlm_proxy_client(self):
@@ -314,7 +362,7 @@ class NewsNLMPipeline:
         return qa_pairs
 
     def _store_qa_to_nexus(self, qa_pairs: List[Dict[str, str]], date_label: str) -> int:
-        """Store distilled Q&A pairs into Nexus.
+        """Store distilled Q&A pairs into Nexus and feed the training flywheel.
 
         Args:
             qa_pairs: List of {question, answer} dicts.
@@ -329,13 +377,29 @@ class NewsNLMPipeline:
             for pair in qa_pairs:
                 q = pair["question"]
                 a = pair["answer"]
-                # Prefix questions with date context so they remain searchable
                 tagged_q = f"[News {date_label}] {q}"
                 nexus.add_qa(tagged_q, a, category="news")
                 stored += 1
-                time.sleep(0.02)  # avoid hammering DB
+                time.sleep(0.02)
         except Exception as exc:
-            logger.debug("Nexus Q&A storage failed: %s", exc)
+            logger.warning("Nexus Q&A storage failed after %d pairs: %s", stored, exc)
+
+        # Feed training flywheel immediately (don't wait for daily sync)
+        if stored > 0:
+            try:
+                from engine.nexus.training_flywheel import get_training_flywheel
+                flywheel = get_training_flywheel()
+                for pair in qa_pairs:
+                    flywheel.collect_from_qa(
+                        question=pair["question"],
+                        answer=pair["answer"],
+                        source="nlm",
+                        metadata={"date": date_label, "pipeline": "news_nlm"},
+                    )
+                logger.info("Training flywheel: fed %d news Q&A pairs", stored)
+            except Exception as exc:
+                logger.debug("Training flywheel feed skipped: %s", exc)
+
         return stored
 
     def run(
@@ -369,8 +433,11 @@ class NewsNLMPipeline:
         if not dry_run:
             notebook_id = self._get_or_create_notebook()
             if not notebook_id:
-                result["error"] = "NLM notebook unavailable — skipping distillation"
-                logger.info("News NLM pipeline skipped: NLM offline")
+                result["error"] = "NLM notebook unavailable — queuing for retry"
+                logger.warning("News NLM pipeline: NLM offline, queuing digest for retry")
+                if digest_text or articles:
+                    text = digest_text or self._build_digest_text(articles, max_articles)
+                    _enqueue_retry(text, date_label, "notebook_unavailable")
                 return result
             result["notebook_id"] = notebook_id
         else:
@@ -404,7 +471,8 @@ class NewsNLMPipeline:
         result["uploaded"] = uploaded
 
         if not uploaded:
-            result["error"] = "Digest upload failed — distillation skipped"
+            result["error"] = "Digest upload failed — queuing for retry"
+            _enqueue_retry(digest_text, date_label, "upload_failed")
             return result
 
         # 4. Wait briefly for NLM to index the source
@@ -442,6 +510,49 @@ class NewsNLMPipeline:
         )
         return result
 
+    def process_retries(self, max_retries: int = 3) -> Dict[str, Any]:
+        """Process queued failed distillations.
+
+        Called by the scheduler or manually to retry previously failed
+        NLM distillation attempts. Items exceeding max_retries are dropped.
+
+        Args:
+            max_retries: Max attempts per queued item before dropping.
+
+        Returns:
+            Dict with processed, succeeded, dropped, remaining counts.
+        """
+        queue = _load_retry_queue()
+        if not queue:
+            return {"processed": 0, "succeeded": 0, "dropped": 0, "remaining": 0}
+
+        succeeded = 0
+        dropped = 0
+        remaining_items: List[Dict[str, Any]] = []
+
+        for item in queue:
+            if item.get("attempts", 0) >= max_retries:
+                dropped += 1
+                logger.info("Retry queue: dropping %s after %d attempts", item["date_label"], max_retries)
+                continue
+
+            item["attempts"] = item.get("attempts", 0) + 1
+            result = self.run(digest_text=item["digest_text"])
+
+            if result.get("stored", 0) > 0:
+                succeeded += 1
+                logger.info("Retry queue: succeeded for %s (%d Q&A stored)", item["date_label"], result["stored"])
+            else:
+                remaining_items.append(item)
+
+        _save_retry_queue(remaining_items)
+        return {
+            "processed": len(queue),
+            "succeeded": succeeded,
+            "dropped": dropped,
+            "remaining": len(remaining_items),
+        }
+
 
 # ── Singleton ────────────────────────────────────────────────────────────
 
@@ -464,11 +575,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run News NLM distillation pipeline")
     parser.add_argument("--articles-limit", type=int, default=20, help="Max articles to include")
     parser.add_argument("--dry-run", action="store_true", help="Build digest but don't upload")
+    parser.add_argument("--retry", action="store_true", help="Process retry queue only")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     pipeline = get_news_nlm_pipeline()
-    result = pipeline.run(max_articles=args.articles_limit, dry_run=args.dry_run)
+
+    if args.retry:
+        result = pipeline.process_retries()
+    else:
+        result = pipeline.run(max_articles=args.articles_limit, dry_run=args.dry_run)
     print(json.dumps(result, indent=2))
 
 
