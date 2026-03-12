@@ -126,22 +126,43 @@ async def notebooklm_node_create_notebook(
     sources: str = "[]",
     description: str = "",
     topics: str = "",
+    category: str = "general",
 ) -> str:
-    """Create a new NotebookLM notebook via the Node bridge.
+    """Create a new NotebookLM notebook via the centralised factory.
 
     ``sources`` is a JSON array of ``{type, value}`` dicts.
+    ``category`` is one of: news, bootstrap, training, research, session, argus, knowledge, general.
     Returns JSON with notebook ``id`` and ``url``.
     """
     try:
-        from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
+        from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+        factory = get_notebook_factory()
+        notebook_id = factory.get_or_create(name, category=category or "general")
+        if not notebook_id:
+            return json.dumps({"error": "Factory failed to create notebook"})
+
+        # Add sources via engine if provided
         src_list = json.loads(sources) if isinstance(sources, str) else sources
-        result = get_nlm_node_bridge().create_notebook(
-            name=name,
-            sources=src_list,
-            description=description,
-            topics=[t.strip() for t in topics.split(",") if t.strip()],
-        )
-        return json.dumps(result, default=str)
+        if src_list:
+            from engine.nexus.nlm_engine import get_nlm_engine
+            engine = get_nlm_engine()
+            for src in src_list:
+                try:
+                    engine.add_source(
+                        notebook_id,
+                        src.get("type", "text"),
+                        src.get("value", ""),
+                    )
+                except Exception as exc:
+                    logger.debug("Source add failed: %s", exc)
+
+        return json.dumps({
+            "notebook_id": notebook_id,
+            "name": name,
+            "category": category,
+            "url": f"https://notebooklm.google.com/notebook/{notebook_id}",
+        })
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 

@@ -75,29 +75,35 @@ asyncio.run(main())
 
 
 def upload_via_nlm_direct() -> str | None:
-    """Use the project's NLM direct client (requires valid HAR cookies)."""
+    """Use the centralised notebook factory then add journal content."""
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
     try:
+        from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+        factory = get_notebook_factory()
+        notebook_id = factory.get_or_create(
+            "CosySim Project Journal & Onboarding",
+            category="bootstrap",
+            dedup_key="bootstrap:project-journal",
+        )
+        if not notebook_id:
+            logger.warning("Factory failed to create journal notebook")
+            return None
+
+        # Add journal content as source via direct client
         from engine.integrations.google_account_pool import GoogleAccountPool
         from engine.integrations.nlm_direct_client import NLMDirectClient
 
         pool = GoogleAccountPool()
         accounts = pool.get_available_accounts(service="notebooklm")
-        if not accounts:
-            logger.warning("No NLM-capable accounts in pool")
-            return None
+        if accounts:
+            client = NLMDirectClient(accounts[0])
+            content = JOURNAL_PATH.read_text(encoding="utf-8")
+            client.add_source_text(notebook_id, content, "PROJECT_JOURNAL.md")
 
-        account = accounts[0]
-        client = NLMDirectClient(account)
-
-        content = JOURNAL_PATH.read_text(encoding="utf-8")
-        result = client.create_notebook(
-            title="CosySim Project Journal & Onboarding",
-            sources=[{"type": "text", "content": content, "title": "PROJECT_JOURNAL.md"}],
-        )
-        return result.get("notebook_url") or result.get("url")
+        return f"https://notebooklm.google.com/notebook/{notebook_id}"
     except Exception as e:
         logger.warning("NLM direct upload failed: %s", e)
         return None

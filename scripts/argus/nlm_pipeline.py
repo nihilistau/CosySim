@@ -327,32 +327,21 @@ class ArgusNLMPipeline:
             NLM notebook ID string, or None if unavailable.
         """
         week = _week_label()
-        key = f"argus_notebook_{target}_{week}"
-        notebook_id = self._state.get(key)
-
-        if notebook_id:
-            logger.debug("Reusing ARGUS notebook %s for %s/%s", notebook_id, target, week)
-            return notebook_id
-
         notebook_name = f"{_NOTEBOOK_PREFIX} — {target.upper()} {week}"
         try:
-            from engine.mcp.nlm_node_bridge import get_nlm_node_bridge
-            result = get_nlm_node_bridge().create_notebook(
-                title=notebook_name,
-                description=(
-                    f"ARGUS API discoveries for {target.upper()} (week {week}). "
-                    "Auto-generated from live traffic capture and endpoint registry."
-                ),
+            from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+            factory = get_notebook_factory()
+            notebook_id = factory.get_or_create(
+                notebook_name,
+                category="argus",
             )
-            if isinstance(result, dict) and result.get("notebook_id"):
-                notebook_id = result["notebook_id"]
-                self._state[key] = notebook_id
-                _save_state(self._state)
-                logger.info("Created ARGUS notebook %s → %s", notebook_name, notebook_id)
-                return notebook_id
+            if notebook_id:
+                logger.info("Got ARGUS notebook %s → %s", notebook_name, notebook_id)
+            return notebook_id
         except Exception as exc:
             logger.debug("Could not create ARGUS NLM notebook: %s", exc)
-        return None
+            return None
 
     def _upload_discovery_doc(self, notebook_id: str, doc_text: str, target: str) -> bool:
         """Upload the discovery document as a text source to the NLM notebook."""

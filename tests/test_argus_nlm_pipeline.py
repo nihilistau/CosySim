@@ -145,50 +145,47 @@ class TestArgusDocBuilder:
 class TestGetOrCreateNotebook:
     def test_returns_cached_notebook_id(self, tmp_path: Path) -> None:
         state_file = tmp_path / "state.json"
-        state_file.write_text(
-            json.dumps({"argus_notebook_nlm_2025-W01": "existing-nb"}),
-            encoding="utf-8",
-        )
-        mock_bridge = MagicMock()
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = "existing-nb"
         with (
             patch("scripts.argus.nlm_pipeline._STATE_FILE", new=state_file),
             patch("scripts.argus.nlm_pipeline._week_label", return_value="2025-W01"),
-            patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", return_value=mock_bridge),
+            patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=mock_factory),
         ):
             from scripts.argus.nlm_pipeline import ArgusNLMPipeline
             p = ArgusNLMPipeline()
             result = p._get_or_create_notebook("nlm")
 
         assert result == "existing-nb"
-        mock_bridge.create_notebook.assert_not_called()
+        mock_factory.get_or_create.assert_called_once()
 
     def test_creates_new_notebook_and_caches(self, tmp_path: Path) -> None:
         state_file = tmp_path / "state.json"
-        mock_bridge = MagicMock()
-        mock_bridge.create_notebook.return_value = {"notebook_id": "new-nb-456"}
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = "new-nb-456"
 
         with (
             patch("scripts.argus.nlm_pipeline._STATE_FILE", new=state_file),
             patch("scripts.argus.nlm_pipeline._week_label", return_value="2025-W42"),
-            patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", return_value=mock_bridge),
+            patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=mock_factory),
         ):
             from scripts.argus.nlm_pipeline import ArgusNLMPipeline
             p = ArgusNLMPipeline()
             result = p._get_or_create_notebook("gemini")
 
         assert result == "new-nb-456"
-        assert p._state.get("argus_notebook_gemini_2025-W42") == "new-nb-456"
 
     def test_returns_none_on_bridge_failure(self, tmp_path: Path) -> None:
         state_file = tmp_path / "state.json"
-        with patch("scripts.argus.nlm_pipeline._STATE_FILE", new=state_file):
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.side_effect = RuntimeError("NLM offline")
+
+        with (
+            patch("scripts.argus.nlm_pipeline._STATE_FILE", new=state_file),
+            patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=mock_factory),
+        ):
             from scripts.argus.nlm_pipeline import ArgusNLMPipeline
             p = ArgusNLMPipeline()
-
-        mock_bridge = MagicMock()
-        mock_bridge.create_notebook.side_effect = RuntimeError("NLM offline")
-
-        with patch("engine.mcp.nlm_node_bridge.get_nlm_node_bridge", return_value=mock_bridge):
             result = p._get_or_create_notebook("nlm")
 
         assert result is None

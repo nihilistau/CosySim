@@ -103,21 +103,29 @@ def nlm_batch_ask(questions: str, notebook_id: str = "") -> str:
     category="SYSTEM",
     tags=["nlm", "notebook", "create"],
 )
-def nlm_create_notebook(name: str, sources: str = "") -> str:
-    """Create a NotebookLM notebook.
+def nlm_create_notebook(name: str, sources: str = "", category: str = "general") -> str:
+    """Create a NotebookLM notebook via the centralised factory.
 
     Args:
         name: Notebook name.
         sources: Optional JSON array of source URLs.
+        category: Notebook category (news, bootstrap, training, research, etc.).
 
     Returns:
         JSON with notebook_id and metadata.
     """
     try:
-        engine = _get_engine()
-        source_list = json.loads(sources) if sources else None
-        result = engine.create_notebook(name, sources=source_list)
-        return json.dumps(result, ensure_ascii=False)
+        from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+        factory = get_notebook_factory()
+        notebook_id = factory.get_or_create(name, category=category or "general")
+        if not notebook_id:
+            return json.dumps({"error": "Factory failed to create notebook"})
+        return json.dumps({
+            "notebook_id": notebook_id,
+            "name": name,
+            "category": category,
+        }, ensure_ascii=False)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
