@@ -1359,17 +1359,28 @@ workspace_gemini:
   meta:
     service_name: "AppsGenAIServer"
     base_url: "https://appsgenaiserver-pa.clients6.google.com"
-    auth_method: "api_key_query_param"
+    auth_method: "api_key_query_param_plus_sapisidhash"
     api_key_param: "key"
     protocol: "grpc-json-transcoding"
     content_type: "application/json+protobuf"
     streaming: true
     transfer_encoding: "chunked"
-    source: "argus_har_capture_2026-06"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-08"
     notes: >
       Shared Gemini backend for Google Workspace apps (Sheets, Docs, Slides).
-      Uses API key in query param rather than SAPISIDHASH.  Responses use chunked
-      transfer encoding with application/json+protobuf content type.
+      Uses BOTH API key in query param AND SAPISIDHASH cookies for auth.
+      Payloads are protobuf-JSON arrays (nested lists), NOT dict-style JSON.
+      Context code 3=Sheets, 1=Docs determines app-specific behaviour.
+    api_keys:
+      sheets: "REDACTED-GOOGLE-API-KEY"
+      docs: "REDACTED-GOOGLE-API-KEY"
+    context_codes:
+      sheets: 3
+      docs: 1
+    mime_types:
+      sheets: "application/vnd.google-apps.ritz"
+      docs: "application/vnd.google-apps.kix"
 
   operations:
     stream_generate:
@@ -1379,16 +1390,20 @@ workspace_gemini:
       streaming: true
       description: "Stream-based Gemini text generation for Workspace apps"
       notes: >
-        Core generation endpoint.  Payload includes the prompt, context from
-        the active document/sheet, and model parameters.  Response is chunked
-        protobuf-JSON.  Context varies by app: Sheets sends cell ranges,
-        Docs sends paragraph text, etc.
+        Core generation endpoint.  Payload is a protobuf-JSON array:
+        [[op_code, null, context_array, prompt_array, null, [null,null,1], 1], [null,null,1]].
+        Operation codes: 61=init, 23=generate(sheets), 96=generate(docs), 16=continue, 15=insert.
+        Prompt format varies by context:
+          Sheets (op=23): body[0][3] = [null, null, "prompt_text", ...27 nulls, "0"]
+          Docs (op=96):   body[0][3] = [null, null, null, [[[null, null, "prompt_text"]]]]
+        Response is a single-line JSON array (not SSE chunks) with deeply nested text.
       parameters:
-        prompt: "User prompt text"
-        context: "Document/sheet context (cells, paragraphs, etc.)"
-        document_type: "sheets|docs|slides|drive"
-        model_version: "Gemini model version to use"
-        response_language: "Language code for response (e.g. en)"
+        op_code: "61=init, 23=generate_sheets, 96=generate_docs, 16=continue"
+        context_code: "3=sheets, 1=docs (body[0][2][0])"
+        session_id: "Format: goog_-NNNNNNNNNN (body[0][2][4])"
+        document_id: "Spreadsheet/doc ID in doc reference (body[0][2][7+])"
+        document_mime: "ritz=sheets, kix=docs"
+        session_token: "Encrypted token ~1617 chars at body[0][8] (optional)"
 
     get_settings:
       path: "/v1/genai/getSettings"
@@ -1396,15 +1411,20 @@ workspace_gemini:
       category: config
       streaming: false
       description: "Get current Gemini settings for the user"
-      notes: "Returns model preferences, feature flags, usage limits."
+      notes: >
+        Payload: [[ctx, ctx]] where ctx=3 for Sheets, ctx=1 for Docs.
+        Response: [null,[1,null,1,0]] or [[["timestamp",epoch],0,1],[1,null,1,0]].
 
     list_gems:
       path: "/v1/genai/listGems"
       method: "POST"
       category: discovery
       streaming: false
-      description: "List available Gemini models and capabilities"
-      notes: "Returns list of gems (model configs) available to the user."
+      description: "List available Gemini models and capabilities (gems)"
+      notes: >
+        Payload: [ctx, language_code, [...optional_context...]].
+        Returns gem definitions with names, descriptions, starter prompts, and
+        colour schemes.  Known gems include: sentiment-analyzer, writing-editor.
 
     quota_summary:
       path: "/v1/genai/quotaSummary"
@@ -1412,7 +1432,10 @@ workspace_gemini:
       category: quota
       streaming: false
       description: "Get Gemini API usage quota summary"
-      notes: "Returns daily/monthly usage and remaining quota."
+      notes: >
+        Payload: [null, 1, [ctx]].
+        Response: [[null,["total",null,"remaining",status,null,null,["reset_epoch"]],"used",[ctx],1],[]].
+        Example: total=10000000, remaining=9999998, used="2", reset_epoch="1775026800".
 
     update_settings:
       path: "/v1/genai/updateUserSettings"
@@ -1420,7 +1443,9 @@ workspace_gemini:
       category: config
       streaming: false
       description: "Update user Gemini preferences"
-      notes: "Set preferred model, language, feature toggles."
+      notes: >
+        Payload: [[], [ctx, ctx], null, 1].
+        Response: [[["timestamp",epoch],0,1]].
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Google Sheets Gemini — Sheets-specific AI endpoints
@@ -1430,23 +1455,28 @@ sheets_gemini:
     service_name: "GoogleSheetsGemini"
     base_url: "https://docs.google.com"
     auth_method: "cookie_sapisidhash"
-    protocol: "rest"
-    source: "argus_har_capture_2026-06"
+    protocol: "internal_proto_text"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-08"
     notes: >
-      Sheets-specific Gemini features accessed through the standard Sheets
-      REST API base.  These run alongside the main Sheets API v4 methods.
+      Sheets-specific Gemini features accessed through the Sheets REST base.
+      IMPORTANT: These endpoints use URL-encoded form data with internal
+      proto-text format (e.g. {1=14,17={1=136#prompt text...}}), NOT
+      protobuf-JSON arrays like the streamGenerate endpoint.  Responses
+      have )]}\' XSS protection prefix followed by JSON.
 
   operations:
     columnsmith_execute:
-      path: "/spreadsheets/d/{spreadsheet_id}/columnsmith/execute"
+      path: "/spreadsheets/u/0/d/{spreadsheet_id}/columnsmith/execute"
       method: "POST"
       category: transformation
       streaming: false
+      content_type: "application/x-www-form-urlencoded"
       description: "AI-driven column transformation — applies Gemini to cell ranges"
       notes: >
         Columnsmith runs Gemini on a column of data to transform, classify,
-        extract, or enrich each row.  Similar to ARRAYFORMULA but AI-powered.
-        The formula field contains a natural language instruction.
+        extract, or enrich each row.  Payload uses internal proto-text format
+        in the request body, NOT JSON.  Response starts with )]}' prefix.
       parameters:
         spreadsheet_id: "Target spreadsheet ID"
         column: "Target column letter or range (e.g. C2:C100)"
@@ -1454,14 +1484,16 @@ sheets_gemini:
         source_columns: "Input column(s) to read from (e.g. A2:B100)"
 
     external_data_fetch:
-      path: "/spreadsheets/d/{spreadsheet_id}/externaldata/fetchData"
+      path: "/spreadsheets/u/0/d/{spreadsheet_id}/externaldata/fetchData"
       method: "POST"
       category: enrichment
       streaming: false
+      content_type: "application/x-www-form-urlencoded"
       description: "Fetch and inject external data into sheet cells"
       notes: >
         Used by 'Fill with Gemini' to pull web data, research, or computed
-        values into a cell range.  The prompt describes what data to fetch.
+        values into a cell range.  Payload uses internal proto-text format.
+        Response starts with )]}' prefix.
       parameters:
         spreadsheet_id: "Target spreadsheet ID"
         range: "Cell range to fill (e.g. B2:B50)"
@@ -1474,13 +1506,17 @@ cloud_search:
   meta:
     service_name: "CloudSearch"
     base_url: "https://cloudsearch.clients6.google.com"
-    auth_method: "cookie_sapisidhash"
-    protocol: "rest"
-    source: "argus_har_capture_2026-06"
+    auth_method: "api_key_query_param_plus_sapisidhash"
+    api_key: "REDACTED-GOOGLE-API-KEY"
+    protocol: "rest_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-08"
     notes: >
       Cloud Search provides unified semantic search across all Google Workspace
       content — Drive files, Docs, Sheets, Slides, Gmail, Calendar, etc.
-      Powers the "AI Overviews" feature in Drive.
+      Uses BOTH API key in query param AND SAPISIDHASH.  Payloads are standard
+      JSON dicts (NOT protobuf arrays).  Requires requestOptions with
+      searchApplicationId and clientId fields.
 
   operations:
     query_search:
@@ -1490,13 +1526,15 @@ cloud_search:
       streaming: false
       description: "Cross-workspace semantic search query"
       notes: >
-        Accepts natural language queries and returns ranked results from
-        across Workspace.  Supports data source filters, result types,
-        and pagination.
+        Payload: {"query":"text","requestOptions":{"searchApplicationId":"...","clientId":"..."},"pageSize":20}.
+        Returns ranked results from across Workspace content.
+        The searchApplicationId and clientId are HAR-extracted session values.
       parameters:
         query: "Natural language search query"
         page_size: 20
-        data_source_restrictions: "Optional data source filter"
+        request_options:
+          search_application_id: "HAR-extracted value"
+          client_id: "HAR-extracted value"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Google Docs Gemini — Document-specific AI endpoints
