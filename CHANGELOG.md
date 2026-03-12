@@ -3,6 +3,36 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.18a] — "PIPELINE STAGE EXPANSION" — 2026-07
+
+Added workspace_generate and fetch_news pipeline stages, bridging the standalone
+news system into the workspace pipeline orchestrator.
+
+### Added: Pipeline Stages
+- `workspace_generate` — direct WorkspaceGeminiClient.stream_generate invocation
+  with prompt/topic/question fallback chain
+- `fetch_news` — bridges standalone NewsPipeline RSS fetcher with fetch → dedup →
+  store → digest flow
+- Stage registry: 11 → 13 stages
+
+### Added: Pipeline Templates
+- `generate_and_store` — workspace_generate → nexus_store
+- `news_to_knowledge` — fetch_news → nlm_research → create_doc → drive_upload → nexus_store
+- Fixed `news_pipeline` template: now starts with real RSS fetch_news stage
+- Template count: 7 → 9
+
+### Added: Skills & Routes
+- `workspace_generate` skill — text generation via Workspace Gemini with optional Nexus store
+- `workspace_fetch_news` skill — RSS article fetching with category filtering
+- `POST /api/workspace/news/fetch` — proxy route for news fetching
+- `POST /api/workspace/news/digest` — proxy route for full news pipeline
+- Workspace skills: 17 → 19, proxy routes: 11 → 13
+
+### Tests
+- 22 new test cases (13 pipeline + 9 skills)
+- Full suite: 11,721 passed (up from 11,703)
+
+---
 ## [1.17c] — "HAR PAYLOAD VERIFICATION" — 2026-07
 
 Verified and corrected all Workspace Gemini payloads against real HAR captures.
