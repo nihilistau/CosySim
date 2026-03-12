@@ -100,6 +100,7 @@ class TestStageRegistry:
             "drive_search", "drive_ask", "drive_upload", "nexus_store",
             "columnsmith", "export_doc", "nlm_add_source",
             "workspace_generate", "fetch_news",
+            "docs_to_sheets", "sheets_to_doc", "gemini_enrich", "prewarm",
         ]
         for name in expected:
             assert name in STAGE_REGISTRY, f"Missing stage: {name}"
@@ -111,7 +112,7 @@ class TestStageRegistry:
 
     def test_stage_count(self):
         """Registry has the expected number of stages."""
-        assert len(STAGE_REGISTRY) == 13
+        assert len(STAGE_REGISTRY) == 17
 
 
 class TestPipelineTemplates:
@@ -123,13 +124,16 @@ class TestPipelineTemplates:
             "research_and_distill", "create_knowledge_doc", "data_enrichment",
             "cross_source_synthesis", "news_pipeline", "doc_to_notebook",
             "sheet_to_knowledge", "generate_and_store", "news_to_knowledge",
+            "docs_nlm_distill", "sheets_enrichment_cycle", "drive_nlm_nexus",
+            "full_cross_service", "knowledge_distillation", "news_full_cycle",
+            "doc_structure_extract", "sheet_knowledge_report",
         ]
         for name in expected:
             assert name in PIPELINE_TEMPLATES, f"Missing template: {name}"
 
     def test_template_count(self):
         """Correct number of templates are defined."""
-        assert len(PIPELINE_TEMPLATES) == 9
+        assert len(PIPELINE_TEMPLATES) == 17
 
     def test_templates_have_stages(self):
         """Every template has at least one stage."""
@@ -615,3 +619,95 @@ class TestStageExecutors:
         assert "nlm_research" in stages
         assert "create_doc" in stages
         assert stages[-1] == "nexus_store"
+
+
+# ──── Cross-Service Chain Template Tests ──────────────────────────────────────
+
+
+class TestCrossServiceTemplates:
+    """Tests for the v1.18c cross-service chain prompt templates."""
+
+    def test_docs_nlm_distill_template(self):
+        """docs_nlm_distill chains doc creation through NLM to Nexus."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["docs_nlm_distill"]]
+        assert stages[0] == "create_doc"
+        assert "export_doc" in stages
+        assert "nlm_add_source" in stages
+        assert "nlm_research" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_sheets_enrichment_cycle_template(self):
+        """sheets_enrichment_cycle chains sheet creation through enrichment."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["sheets_enrichment_cycle"]]
+        assert stages[0] == "create_sheet"
+        assert "fill_sheet" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_drive_nlm_nexus_template(self):
+        """drive_nlm_nexus chains Drive search through NLM to Nexus."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["drive_nlm_nexus"]]
+        assert stages[0] == "drive_search"
+        assert "drive_ask" in stages
+        assert "gemini_enrich" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_full_cross_service_template(self):
+        """full_cross_service is the complete rotation pipeline."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["full_cross_service"]]
+        assert "drive_search" in stages
+        assert "nlm_research" in stages
+        assert "gemini_enrich" in stages
+        assert "create_sheet" in stages
+        assert "create_doc" in stages
+        assert "drive_upload" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_knowledge_distillation_template(self):
+        """knowledge_distillation chains generation through NLM research."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["knowledge_distillation"]]
+        assert stages[0] == "workspace_generate"
+        assert "nlm_research" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_news_full_cycle_template(self):
+        """news_full_cycle is the complete news→knowledge pipeline."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["news_full_cycle"]]
+        assert stages[0] == "fetch_news"
+        assert "gemini_enrich" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_doc_structure_extract_template(self):
+        """doc_structure_extract chains doc export through Gemini to sheets."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["doc_structure_extract"]]
+        assert stages[0] == "export_doc"
+        assert "gemini_enrich" in stages
+        assert "docs_to_sheets" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_sheet_knowledge_report_template(self):
+        """sheet_knowledge_report chains sheet data through NLM research."""
+        stages = [s["stage"] for s in PIPELINE_TEMPLATES["sheet_knowledge_report"]]
+        assert stages[0] == "sheets_to_doc"
+        assert "nlm_add_source" in stages
+        assert "nlm_research" in stages
+        assert stages[-1] == "nexus_store"
+
+    def test_all_cross_service_templates_end_with_nexus_store(self):
+        """All 8 new cross-service templates end with nexus_store."""
+        new_templates = [
+            "docs_nlm_distill", "sheets_enrichment_cycle", "drive_nlm_nexus",
+            "full_cross_service", "knowledge_distillation", "news_full_cycle",
+            "doc_structure_extract", "sheet_knowledge_report",
+        ]
+        for name in new_templates:
+            stages = PIPELINE_TEMPLATES[name]
+            assert stages[-1]["stage"] == "nexus_store", (
+                f"Cross-service template {name} doesn't end with nexus_store"
+            )
+
+    def test_new_stages_are_callable(self):
+        """All 4 new stages (docs_to_sheets, sheets_to_doc, gemini_enrich, prewarm) are callable."""
+        new_stages = ["docs_to_sheets", "sheets_to_doc", "gemini_enrich", "prewarm"]
+        for name in new_stages:
+            assert name in STAGE_REGISTRY, f"Missing new stage: {name}"
+            assert callable(STAGE_REGISTRY[name]), f"Stage {name} not callable"

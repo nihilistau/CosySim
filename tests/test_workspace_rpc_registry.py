@@ -276,14 +276,14 @@ class TestSummary:
         """summary reports correct counts."""
         registry = WorkspaceRPCRegistry()
         s = registry.summary()
-        assert s["sections_loaded"] == 5
-        assert s["total_operations"] >= 12  # 5+2+1+2+2 = 12 minimum
+        assert s["sections_loaded"] == 6
+        assert s["total_operations"] >= 22  # 5+2+1+2+2+10 = 22 minimum
 
     def test_summary_section_names(self):
         """summary includes all section names."""
         registry = WorkspaceRPCRegistry()
         s = registry.summary()
-        for name in ["workspace_gemini", "sheets_gemini", "cloud_search", "docs_gemini", "drive_gemini"]:
+        for name in ["workspace_gemini", "sheets_gemini", "cloud_search", "docs_gemini", "drive_gemini", "workspace_support"]:
             assert name in s["sections"]
 
 
