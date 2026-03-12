@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.09b** "PIPELINE VALIDATION" ✅ | Last updated: 2026-03
+> Current: **v1.10b** "SYSTEM CONSOLIDATION" ✅ | Last updated: 2026-03
 
 ## Philosophy
 
@@ -130,10 +130,20 @@ into a unified cyberpunk RPG framework with deep game systems.
 - [x] CLI --retry flag for independent queue processing
 - [x] Runtime hardening: bare except → logged handlers in admin panel
 
-### Still Open (carry forward)
+---
+
+## Shipped: v1.10b — "SYSTEM CONSOLIDATION" ✅
+
+### Architecture Consolidation
+- [x] Consolidated duplicate news source registries into single module
+- [x] Wired training flywheel auto-export (≥50 examples → JSONL at 0.7 quality)
+- [x] Scene health test suite (24 scenes, 74 parametrized tests)
+- [x] Skill registration test suite (57 skills, 118 parametrized tests)
+
+### Carry Forward
 - [ ] End-to-end live pipeline run: fetch → NLM distill → Nexus store
+- [ ] NLM notebook factory: centralize 4 creation paths
 - [ ] TUI dashboard enhancements: real-time metrics, task queue display
-- [ ] Operator HUD: queue, health, retry/resume, force-complete
 
 ---
 
