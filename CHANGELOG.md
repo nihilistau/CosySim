@@ -3,6 +3,29 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.12b] — "NLM PIPELINE HARDENING" — 2026-03
+
+Factory migration and retry hardening — all notebook creation flows through
+the centralised factory, and failed distillations auto-retry.
+
+### Factory Migration (5 files)
+- **teacher_pipeline.py** — `training` category, dedup by model type (was calling
+  nonexistent `mgr.create_notebook()`)
+- **system_reflection.py** — `session` category + `nlm_engine` for source/ask
+  (was calling nonexistent manager methods — now working)
+- **qa_expander.py** — `session` category for expansion workspace
+- **knowledge_forge.py** — `knowledge` category with topic dedup key
+- **bootstrap_notebooks.py** — `bootstrap` category for arch/code notebooks
+
+### Retry Pipeline Hardening
+- **news_nlm_pipeline.py** — Failed distillations now queue to retry (not just uploads)
+- **scheduler_daemon.py** — New `news-nlm-retry` task (every 8h) consuming
+  `data/nlm_retry_queue.json` via `process_retries(max_retries=3)`
+
+### Documentation
+- README version badge updated to **v1.12b**, test count to **11,272**
+
+---
 ## [1.11b] — "NLM NOTEBOOK FACTORY" — 2026-03
 
 Centralised notebook lifecycle management — replaces 11 scattered notebook
