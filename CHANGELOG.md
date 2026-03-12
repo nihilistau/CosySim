@@ -3,6 +3,27 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.13b] — "FACTORY MIGRATION COMPLETE" — 2026-03
+
+Complete factory migration — every notebook creation path in the codebase now
+routes through the centralised `NLMNotebookFactory`.
+
+### Factory Migration (6 remaining stragglers)
+- **nlm_notebook_manager.py** — `bootstrap` category with slot-based dedup key
+- **nlm_cli.py** — factory with configurable `--category` parameter
+- **engine/mcp/tools/nlm.py** — MCP tool uses factory + engine source adds
+- **nlm_forge_skills.py** — skill uses factory with category parameter
+- **scripts/argus/nlm_pipeline.py** — `argus` category, removed local state tracking
+- **scripts/upload_journal_to_nlm.py** — `bootstrap` category with explicit dedup key
+
+### Engine-Level Migration
+- **nlm_engine.create_from_files()** — uses factory for creation with direct fallback
+
+### Test Fixes
+- ARGUS pipeline tests updated to mock factory instead of old bridge/state paths
+- Scheduler task count assertions updated to 56 (news-nlm-retry from v1.12b)
+
+---
 ## [1.12b] — "NLM PIPELINE HARDENING" — 2026-03
 
 Factory migration and retry hardening — all notebook creation flows through
