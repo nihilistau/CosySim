@@ -4833,6 +4833,55 @@ def create_nlm_proxy_app() -> Flask:
             "registry": registry.summary(),
         })
 
+    @app.route("/api/workspace/news/fetch", methods=["POST"])
+    def workspace_news_fetch_route():
+        """Fetch news articles via RSS and optionally store in Nexus.
+
+        Body: {categories?: ["ai_research","tech",...], max_articles?: 20, store?: true}
+        Returns: {status, articles, categories}
+        """
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+        data = request.get_json(silent=True) or {}
+        categories = data.get("categories", ["ai_research"])
+        max_articles = data.get("max_articles", 20)
+        store = data.get("store", True)
+
+        pipeline = get_workspace_pipeline()
+        try:
+            run = pipeline.run_stages(
+                [{"name": "fetch_news"}],
+                topic=f"News fetch: {', '.join(categories)}",
+                categories=categories,
+                max_articles=max_articles,
+                store_articles=store,
+            )
+            return jsonify(run.to_dict())
+        except Exception as exc:
+            logger.error("workspace news fetch failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/workspace/news/digest", methods=["POST"])
+    def workspace_news_digest_route():
+        """Run the full news pipeline: fetch → research → store.
+
+        Body: {topic: str, sources?: [url,...]}
+        Returns: Pipeline run result.
+        """
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+        data = request.get_json(silent=True) or {}
+        topic = data.get("topic", "latest AI news")
+        sources = data.get("sources")
+
+        pipeline = get_workspace_pipeline()
+        try:
+            run = pipeline.news_digest(topic=topic, sources=sources)
+            return jsonify(run.to_dict())
+        except Exception as exc:
+            logger.error("workspace news digest failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
     return app
 
 
