@@ -1291,6 +1291,32 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _argus_nlm_distil_callback,
     )
+    daemon.register(
+        "auto-embedding",
+        "Auto-Embed — batch-embed new Nexus entries and Q&A pairs into ChromaDB vector store",
+        "every_4h",
+        _auto_embedding_callback,
+    )
+
+
+def _auto_embedding_callback() -> Dict[str, Any]:
+    """Batch-embed new Nexus entries and Q&A pairs into the vector store."""
+    try:
+        from engine.nexus.embedding_hooks import (
+            batch_embed_nexus_entries,
+            batch_embed_qa_entries,
+        )
+        entries_result = batch_embed_nexus_entries(limit=500)
+        qa_result = batch_embed_qa_entries(limit=500)
+        return {
+            "entries_embedded": entries_result.get("embedded", 0),
+            "entries_skipped": entries_result.get("skipped", 0),
+            "qa_embedded": qa_result.get("embedded", 0),
+            "qa_skipped": qa_result.get("skipped", 0),
+        }
+    except Exception as exc:
+        logger.error("Auto-embedding task failed: %s", exc)
+        return {"error": str(exc)}
 
 
 def _cdp_mine_callback()-> Dict[str, Any]:

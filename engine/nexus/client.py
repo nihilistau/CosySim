@@ -284,7 +284,11 @@ class NexusClient:
             logger.warning("NexusEntryCreate validation failed: %s", exc)
             return None
         result = self._post("/api/entries", payload)
-        return result.get("data", {}).get("id") if result.get("ok") else None
+        entry_id = result.get("data", {}).get("id") if result.get("ok") else None
+        if entry_id:
+            from engine.nexus.embedding_hooks import auto_embed_entry
+            auto_embed_entry(entry_id, content, content_type, category, tags)
+        return entry_id
     
     def get_entry(self, entry_id: str) -> Optional[NexusEntry]:
         result = self._get(f"/api/entries/{entry_id}")
@@ -586,7 +590,11 @@ class NexusClient:
             "category": category, "tags": normalized_tags,
             "quality_score": quality_score,
         })
-        return result.get("data", {}).get("id") if result.get("ok") else None
+        qa_id = result.get("data", {}).get("id") if result.get("ok") else None
+        if qa_id:
+            from engine.nexus.embedding_hooks import auto_embed_qa
+            auto_embed_qa(qa_id, question, answer, category)
+        return qa_id
 
     # ─── Research Sessions (v0.50b) ──────────────────────────
 
