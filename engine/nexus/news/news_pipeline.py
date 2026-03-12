@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from engine.nexus.news.news_models import NewsDigest, NewsItem
 from engine.nexus.news.dedup_filter import DedupFilter
 from engine.nexus.news.rss_fetcher import RSSFetcher
-from engine.nexus.news.source_registry import get_all_categories, get_questions
+from engine.nexus.news_sources import get_all_categories, get_questions
 from engine.nexus.client import get_nexus_client
 
 logger = logging.getLogger(__name__)

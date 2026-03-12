@@ -668,14 +668,28 @@ def _metrics_collect_callback() -> Dict[str, Any]:
 
 
 def _training_sync_callback() -> Dict[str, Any]:
-    """Sync Nexus Q&A into the training flywheel."""
+    """Sync Nexus Q&A into the training flywheel and export if threshold met."""
     from engine.nexus.training_flywheel import get_training_flywheel
     flywheel = get_training_flywheel()
     result = flywheel.sync_from_nexus()
     stats = flywheel.stats()
+
+    export_result: Dict[str, Any] = {}
+    unexported = stats.get("unexported", 0)
+    if unexported >= 50:
+        export_result = flywheel.export_jsonl(min_quality=0.7)
+        logger.info(
+            "training-sync exported %d examples to %s",
+            export_result.get("count", 0),
+            export_result.get("file", ""),
+        )
+
     return {
         "synced": result.get("synced", 0),
         "total_examples": stats.get("total_examples", 0),
+        "unexported": unexported,
+        "exported_count": export_result.get("count", 0),
+        "exported_file": export_result.get("file", ""),
     }
 
 
