@@ -276,14 +276,21 @@ class TestSummary:
         """summary reports correct counts."""
         registry = WorkspaceRPCRegistry()
         s = registry.summary()
-        assert s["sections_loaded"] == 6
-        assert s["total_operations"] >= 22  # 5+2+1+2+2+10 = 22 minimum
+        assert s["sections_loaded"] == 16
+        assert s["total_operations"] >= 50  # 16 sections, 50 operations from HAR mining
 
     def test_summary_section_names(self):
         """summary includes all section names."""
         registry = WorkspaceRPCRegistry()
         s = registry.summary()
-        for name in ["workspace_gemini", "sheets_gemini", "cloud_search", "docs_gemini", "drive_gemini", "workspace_support"]:
+        expected = [
+            "workspace_gemini", "sheets_gemini", "cloud_search",
+            "docs_gemini", "drive_gemini", "workspace_support",
+            "drive_v2internal", "sheets_extended", "people_stack",
+            "experiments", "feedback", "workspace_analytics",
+            "addons", "ogads", "consent", "growth_promos",
+        ]
+        for name in expected:
             assert name in s["sections"]
 
 
@@ -309,3 +316,204 @@ class TestFactory:
         r1 = get_workspace_registry()
         r2 = get_workspace_registry(force_reload=True)
         assert r2 is not None
+
+
+# ──── New Section Tests (v1.19 HAR Expansion) ─────────────────────────────────
+
+
+class TestDriveV2InternalSection:
+    """Tests for the drive_v2internal section."""
+
+    def test_section_loaded(self):
+        """drive_v2internal section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("drive_v2internal")
+        assert "meta" in section
+        assert "operations" in section
+
+    def test_meta_fields(self):
+        """drive_v2internal meta has correct values."""
+        registry = WorkspaceRPCRegistry()
+        meta = registry.get_meta("drive_v2internal")
+        assert meta["service_name"] == "DriveV2Internal"
+        assert "clients6.google.com" in meta["base_url"]
+        assert meta["auth_method"] == "api_key_query_param_plus_sapisidhash"
+
+    def test_has_9_operations(self):
+        """drive_v2internal has 9 operations."""
+        registry = WorkspaceRPCRegistry()
+        ops = registry.get_operations("drive_v2internal")
+        assert len(ops) == 9
+
+    def test_upload_file_operation(self):
+        """upload_file operation is defined with correct path."""
+        registry = WorkspaceRPCRegistry()
+        op = registry.get_operation("drive_v2internal", "upload_file")
+        assert op is not None
+        assert "/upload/drive/v2internal/files" in op["path"]
+
+    def test_get_permissions_operation(self):
+        """get_permissions operation is defined."""
+        registry = WorkspaceRPCRegistry()
+        op = registry.get_operation("drive_v2internal", "get_permissions")
+        assert op is not None
+        assert "permissions" in op["path"]
+
+    def test_api_keys_in_meta(self):
+        """drive_v2internal meta contains API key catalog."""
+        registry = WorkspaceRPCRegistry()
+        meta = registry.get_meta("drive_v2internal")
+        assert "api_keys" in meta
+        assert "files_upload" in meta["api_keys"]
+        assert "permissions" in meta["api_keys"]
+
+
+class TestSheetsExtendedSection:
+    """Tests for the sheets_extended section."""
+
+    def test_section_loaded(self):
+        """sheets_extended section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("sheets_extended")
+        assert "meta" in section
+
+    def test_has_4_operations(self):
+        """sheets_extended has 4 operations."""
+        registry = WorkspaceRPCRegistry()
+        ops = registry.get_operations("sheets_extended")
+        assert len(ops) == 4
+
+    def test_save_operation(self):
+        """save operation is defined."""
+        registry = WorkspaceRPCRegistry()
+        op = registry.get_operation("sheets_extended", "save")
+        assert op is not None
+        assert "save" in op["path"]
+
+
+class TestPeopleStackSection:
+    """Tests for the people_stack section."""
+
+    def test_section_loaded(self):
+        """people_stack section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("people_stack")
+        assert "meta" in section
+
+    def test_meta_fields(self):
+        """people_stack meta has correct values."""
+        registry = WorkspaceRPCRegistry()
+        meta = registry.get_meta("people_stack")
+        assert meta["service_name"] == "PeopleStack"
+        assert meta["protocol"] == "grpc_web_json"
+
+    def test_has_3_operations(self):
+        """people_stack has 3 operations."""
+        registry = WorkspaceRPCRegistry()
+        ops = registry.get_operations("people_stack")
+        assert len(ops) == 3
+
+    def test_autocomplete_operation(self):
+        """autocomplete operation is defined with gRPC path."""
+        registry = WorkspaceRPCRegistry()
+        op = registry.get_operation("people_stack", "autocomplete")
+        assert op is not None
+        assert "Autocomplete" in op["path"]
+
+
+class TestExperimentsSection:
+    """Tests for the experiments section."""
+
+    def test_section_loaded(self):
+        """experiments section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("experiments")
+        assert "meta" in section
+
+    def test_get_experiment_flags(self):
+        """get_experiment_flags operation is defined."""
+        registry = WorkspaceRPCRegistry()
+        op = registry.get_operation("experiments", "get_experiment_flags")
+        assert op is not None
+        assert "GetExperimentFlags" in op["path"]
+
+
+class TestFeedbackSection:
+    """Tests for the feedback section."""
+
+    def test_section_loaded(self):
+        """feedback section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("feedback")
+        assert "meta" in section
+
+    def test_has_3_operations(self):
+        """feedback has 3 operations."""
+        registry = WorkspaceRPCRegistry()
+        ops = registry.get_operations("feedback")
+        assert len(ops) == 3
+
+
+class TestAnalyticsSection:
+    """Tests for the workspace_analytics section."""
+
+    def test_section_loaded(self):
+        """workspace_analytics section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("workspace_analytics")
+        assert "meta" in section
+
+    def test_has_2_operations(self):
+        """workspace_analytics has 2 operations."""
+        registry = WorkspaceRPCRegistry()
+        ops = registry.get_operations("workspace_analytics")
+        assert len(ops) == 2
+
+
+class TestAddonsSection:
+    """Tests for the addons section."""
+
+    def test_section_loaded(self):
+        """addons section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("addons")
+        assert "meta" in section
+
+    def test_list_installations_operation(self):
+        """list_installations operation is defined."""
+        registry = WorkspaceRPCRegistry()
+        op = registry.get_operation("addons", "list_installations")
+        assert op is not None
+        assert "ListInstallations" in op["path"]
+
+
+class TestConsentSection:
+    """Tests for the consent section."""
+
+    def test_section_loaded(self):
+        """consent section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("consent")
+        assert "meta" in section
+
+    def test_fetch_compiled_operation(self):
+        """fetch_compiled operation is defined."""
+        registry = WorkspaceRPCRegistry()
+        op = registry.get_operation("consent", "fetch_compiled")
+        assert op is not None
+
+
+class TestGrowthPromosSection:
+    """Tests for the growth_promos section."""
+
+    def test_section_loaded(self):
+        """growth_promos section is present."""
+        registry = WorkspaceRPCRegistry()
+        section = registry.get_section("growth_promos")
+        assert "meta" in section
+
+    def test_has_2_operations(self):
+        """growth_promos has 2 operations."""
+        registry = WorkspaceRPCRegistry()
+        ops = registry.get_operations("growth_promos")
+        assert len(ops) == 2

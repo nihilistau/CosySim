@@ -1398,12 +1398,57 @@ workspace_gemini:
           Docs (op=96):   body[0][3] = [null, null, null, [[[null, null, "prompt_text"]]]]
         Response is a single-line JSON array (not SSE chunks) with deeply nested text.
       parameters:
-        op_code: "61=init, 23=generate_sheets, 96=generate_docs, 16=continue"
+        op_code: "61=init, 23=generate_sheets, 96=generate_docs, 16=continue, 15=insert"
         context_code: "3=sheets, 1=docs (body[0][2][0])"
         session_id: "Format: goog_-NNNNNNNNNN (body[0][2][4])"
         document_id: "Spreadsheet/doc ID in doc reference (body[0][2][7+])"
         document_mime: "ritz=sheets, kix=docs"
         session_token: "Encrypted token ~1617 chars at body[0][8] (optional)"
+        tier_marker: "body[0][5][0] — [1]=Free, [2]=Pro (CLIENT-SIDE GATING!)"
+        viewport_size: "body[0][5][2][0][2] — viewport width in pixels (e.g. 1182)"
+        turn_number: "body[0][2][6] — string '0','1','2' for multi-turn tracking"
+        sheet_tab_info: "body[0][2][5] — array of [[tab_index, position, null, null, sheet_id, ...]]"
+        conversation_history: "body[0][2][9] — null on first turn, populated on follow-ups"
+      payload_map:
+        # Full positional map of the streamGenerate protobuf-JSON payload
+        # body = [[...outer...], [...context...]]
+        outer:
+          "[0]": "op_code — 61=init, 15=insert, 16=continue, 23=sheets_gen, 96=docs_gen"
+          "[1]": "null (reserved)"
+          "[2]": "context_array — [context_code, null, null, null, session_id, tab_info, turn_number, ...]"
+          "[2][0]": "context_code — 3=Sheets, 1=Docs"
+          "[2][4]": "session_id — 'goog_-NNNNNNNNNN'"
+          "[2][5]": "tab_info — [[tab_index, position, null, null, sheet_hex_id, null, null, null, active, flag]]"
+          "[2][5][0][4]": "sheet_hex_id — e.g. '616c29b4ceb3d1c4'"
+          "[2][6]": "turn_number — string '0','1','2'"
+          "[2][7]": "current_sheet_data — active cell/range data"
+          "[2][8]": "sheet_schema — column/row layout info"
+          "[2][9]": "conversation_history — null on first turn, populated on subsequent"
+          "[3]": "user_input — null on op=61, prompt text on op=15/16/23/96"
+          "[4]": "null (reserved)"
+          "[5]": "tier_config — [tier_marker, null, [[null, '1', viewport_size]]]"
+          "[5][0]": "tier_marker — 1=Free, 2=Pro (CLIENT-SIDE ONLY!)"
+          "[5][2][0][2]": "viewport_size — integer, e.g. 1182"
+          "[6]": "flag — always 1"
+        context_suffix:
+          "[0]": "context_code — 1=Docs, 3=Sheets (mirrors outer[2][0])"
+          "[1]": "null"
+          "[2]": "flag — always 1"
+      operation_codes:
+        61: "Initialize/prewarm — sent before first generation, no user content"
+        15: "Insert content — contains actual user prompt at position [3]"
+        16: "Continue/follow-up — multi-turn with history at position [2][9]"
+        23: "Generate (Sheets context) — full generation with Sheets document context"
+        96: "Generate (Docs context) — full generation with Docs document context"
+      tier_gating:
+        description: >
+          Tier selection is 100% client-side.  Free accounts CAN set [2] for Pro
+          tier by modifying the tier_marker at body[0][5][0].  No server-side
+          enforcement observed.  Pro tier unlocks higher token limits, advanced
+          model capabilities, and priority processing.
+        free_marker: 1
+        pro_marker: 2
+        position: "body[0][5][0]"
 
     get_settings:
       path: "/v1/genai/getSettings"
@@ -1425,6 +1470,40 @@ workspace_gemini:
         Payload: [ctx, language_code, [...optional_context...]].
         Returns gem definitions with names, descriptions, starter prompts, and
         colour schemes.  Known gems include: sentiment-analyzer, writing-editor.
+      parameters:
+        context_code: "body[0] — 3=Sheets, 1=Docs"
+        language_code: "body[1] — e.g. 'en', 'en-GB'"
+        optional_context: "body[2] — optional context array with sheet/doc info"
+      response_structure:
+        # Each gem in the response array:
+        gem_format:
+          "[0]": "gem_id — string e.g. 'writing-editor', 'brainstormer', '00fb8f6ce227' (custom)"
+          "[1]": "null"
+          "[2][0][2]": "gem_name — e.g. 'Writing editor', 'Brainstormer'"
+          "[2][1][2]": "gem_description — e.g. 'Elevate your writing...'"
+          "[2][2]": "sample_prompts — array of [null, null, 'prompt text']"
+          "[2][3][2][0]": "icon_name — e.g. 'edit_square', 'emoji_objects', '3p'"
+          "[2][3][3]": "light_theme_colors — [primary, secondary, text]"
+          "[2][3][4]": "dark_theme_colors — [primary, secondary, text]"
+          "[2][4]": "enabled_flag — 1=enabled, 0=disabled"
+          "[3][3]": "availability_flag — 1=available"
+      known_gems:
+        - id: "writing-editor"
+          name: "Writing editor"
+          description: "Elevate your writing. Get clear, constructive feedback."
+          icon: "edit_square"
+        - id: "brainstormer"
+          name: "Brainstormer"
+          description: "Find inspiration easily. Fresh ideas for parties, gifts, businesses."
+          icon: "emoji_objects"
+        - id: "copy-creator"
+          name: "Copy creator"
+          description: "Create compelling copy."
+          icon: null
+        - id: "custom_gems"
+          name: "User-created gems"
+          description: "Custom gems have hex IDs (e.g. '00fb8f6ce227') and user-defined names"
+          notes: "Custom gems are fully programmable — name, description, prompts, colors"
 
     quota_summary:
       path: "/v1/genai/quotaSummary"
@@ -1436,6 +1515,21 @@ workspace_gemini:
         Payload: [null, 1, [ctx]].
         Response: [[null,["total",null,"remaining",status,null,null,["reset_epoch"]],"used",[ctx],1],[]].
         Example: total=10000000, remaining=9999998, used="2", reset_epoch="1775026800".
+      parameters:
+        context_code: "body[2][0] — 3=Sheets, 1=Docs"
+        tier_flag: "body[1] — always 1 observed"
+      response_map:
+        "[0][1][0]": "total_quota — string '10000000' (10M!)"
+        "[0][1][2]": "remaining_quota — string e.g. '9999994'"
+        "[0][1][3]": "status — 1=active"
+        "[0][1][6][0]": "reset_timestamp — Unix epoch string e.g. '1775026800'"
+        "[0][2]": "used_count — string e.g. '6'"
+        "[0][3]": "context_code_echo — [3] or [1]"
+        "[0][4]": "flag — always 1"
+      quota_limits:
+        total: 10000000
+        reset_period: "daily (Unix epoch reset timestamp in response)"
+        notes: "10M requests per day — effectively unlimited for our use cases"
 
     update_settings:
       path: "/v1/genai/updateUserSettings"
@@ -1533,8 +1627,25 @@ cloud_search:
         query: "Natural language search query"
         page_size: 20
         request_options:
-          search_application_id: "HAR-extracted value"
-          client_id: "HAR-extracted value"
+          search_application_id: "searchapplications/docs_editor"
+          client_id: "DOCS_EDITOR"
+        content_type_filters:
+          all: "contenttype:(doc OR presentation OR spreadsheet OR pdf OR image)"
+          docs_only: "contenttype:doc"
+          sheets_only: "contenttype:spreadsheet"
+          slides_only: "contenttype:presentation"
+          pdfs_only: "contenttype:pdf"
+          images_only: "contenttype:image"
+      payload_template:
+        query: "  contenttype:(doc OR presentation OR spreadsheet OR pdf OR image)"
+        requestOptions:
+          searchApplicationId: "searchapplications/docs_editor"
+          clientId: "DOCS_EDITOR"
+      notes_extended: >
+        The query uses Workspace search syntax — supports contenttype filters,
+        creator/modifier filters, date ranges, and full-text search.
+        searchApplicationId and clientId are fixed values from the Workspace frontend.
+        Results include: title, URL, snippet, mimeType, lastModifiedTime, owners.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Google Docs Gemini — Document-specific AI endpoints
@@ -1632,8 +1743,27 @@ workspace_support:
         Called by Workspace apps before the first streamGenerate request.
         Pre-loads model weights and context.  Reduces first-request latency
         significantly.  Payload is a minimal protobuf-JSON array.
+        CRITICAL: context_code for prewarm differs from streamGenerate!
+        Prewarm uses 7=Sheets (NOT 3), and 1=Docs.
+      api_keys:
+        sheets: "AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU"
+        docs: "AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk"
       parameters:
-        context_code: "3=sheets, 1=docs"
+        context_code: "7=sheets (NOT 3!), 1=docs — differs from streamGenerate"
+      payload_map:
+        "[0]": "null"
+        "[1]": "null"
+        "[2]": "locale — e.g. 'en-GB'"
+        "[3]": "null"
+        "[4]": "context_code — 7=Sheets, 1=Docs"
+        "[5]": "document_title — [title_string]"
+        "[6]": "version — '6' (string)"
+        "[7]": "null"
+        "[8]": "document_id — spreadsheet/doc ID"
+        "[9]": "session_token — encrypted session token"
+      payload_template: >
+        [[null, null, "en-GB", null, 7, ["Sheet Title"], "6", null, "spreadsheet_id", "session_token"]]
+      response: "[] (empty — fire-and-forget, no meaningful response)"
 
     fetch_recommendation:
       host: "appsgrowthpromo-pa.clients6.google.com"
@@ -1717,3 +1847,837 @@ workspace_support:
       auth_method: "cookie_sapisidhash"
       category: automation
       description: "Apps Script UI integration for document automation"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Drive v2internal — Internal Drive API (elevated capabilities)
+# ═══════════════════════════════════════════════════════════════════════════════
+drive_v2internal:
+  meta:
+    service_name: "DriveV2Internal"
+    base_url: "https://clients6.google.com"
+    auth_method: "api_key_query_param_plus_sapisidhash"
+    protocol: "rest_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      Internal Drive v2 API — provides file CRUD, permissions management,
+      and upload capabilities.  Uses API keys in query params plus
+      SAPISIDHASH auth.  Different API keys for different operation types.
+      This is the INTERNAL API (v2internal) which exposes capabilities
+      not available in the public Drive v3 API.
+    api_keys:
+      files_upload: "AIzaSyBWdFphCtg4EBuxpHu9EhAjyIiY9C-4Uq4"
+      files_read: "AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc"
+      permissions: "AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc"
+    common_params:
+      supportsTeamDrives: true
+      includeTeamDriveItems: true
+      enforceSingleParent: true
+      supportsAllDrives: true
+
+  operations:
+    upload_file:
+      path: "/upload/drive/v2internal/files"
+      method: "POST"
+      api_key: "AIzaSyBWdFphCtg4EBuxpHu9EhAjyIiY9C-4Uq4"
+      category: upload
+      content_type: "multipart/related; boundary=..."
+      description: "Upload file to Drive with metadata (multipart)"
+      notes: >
+        Multipart upload — first part is JSON metadata, second is file content.
+        Returns full file metadata including alternateLink for browser access.
+        The reason=1523 param identifies the caller context (Sheets=1523).
+      parameters:
+        uploadType: "multipart"
+        fields: "alternateLink,title,id,mimeType,parents"
+        reason: "1523 (Sheets caller), other values for other contexts"
+        pinned: false
+      response_fields:
+        id: "Drive file ID"
+        title: "File name"
+        mimeType: "MIME type"
+        alternateLink: "Browser URL to open the file"
+        parents: "Parent folder(s)"
+
+    get_file:
+      path: "/drive/v2internal/files/{file_id}"
+      method: "GET"
+      api_key: "AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc"
+      category: read
+      description: "Get file metadata from Drive"
+      parameters:
+        file_id: "Drive file ID"
+        fields: "Comma-separated field mask — id,title,mimeType,modifiedDate,owners,capabilities"
+        supportsTeamDrives: true
+        includeTeamDriveItems: true
+
+    list_files:
+      path: "/drive/v2internal/files"
+      method: "GET"
+      api_key: "AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc"
+      category: list
+      description: "List/search files in Drive"
+      parameters:
+        q: "Search query — e.g. 'title contains \"report\"', 'mimeType = \"application/vnd.google-apps.spreadsheet\"'"
+        fields: "items(id,title,mimeType,modifiedDate),nextPageToken"
+        maxResults: 100
+        supportsTeamDrives: true
+        includeTeamDriveItems: true
+
+    get_permissions:
+      path: "/drive/v2internal/files/{file_id}/permissions"
+      method: "GET"
+      api_key: "AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc"
+      category: permissions
+      description: "List permissions on a Drive file"
+      parameters:
+        file_id: "Drive file ID"
+        fields: "items(emailAddress,role,type,id)"
+        supportsAllDrives: true
+
+    update_file:
+      path: "/drive/v2internal/files/{file_id}"
+      method: "PUT"
+      api_key: "AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc"
+      category: update
+      description: "Update file metadata (title, description, parents)"
+      parameters:
+        file_id: "Drive file ID"
+        fields: "id,title,modifiedDate"
+        supportsTeamDrives: true
+
+    copy_file:
+      path: "/drive/v2internal/files/{file_id}/copy"
+      method: "POST"
+      api_key: "AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc"
+      category: copy
+      description: "Copy a file in Drive (e.g. template duplication)"
+      parameters:
+        file_id: "Source file ID"
+        fields: "id,title,alternateLink"
+        body: "JSON with title, parents, description overrides"
+
+    trash_file:
+      path: "/drive/v2internal/files/{file_id}/trash"
+      method: "POST"
+      api_key: "AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc"
+      category: delete
+      description: "Move file to trash in Drive"
+      parameters:
+        file_id: "Drive file ID"
+
+    insert_permission:
+      path: "/drive/v2internal/files/{file_id}/permissions"
+      method: "POST"
+      api_key: "AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc"
+      category: permissions
+      description: "Add/modify sharing permissions on a Drive file"
+      parameters:
+        file_id: "Drive file ID"
+        sendNotificationEmails: false
+        supportsAllDrives: true
+        body_format: "JSON — {role, type, emailAddress, withLink}"
+      roles:
+        owner: "Full ownership transfer"
+        organizer: "Team Drive organizer"
+        fileOrganizer: "File organizer in Team Drive"
+        writer: "Can edit"
+        commenter: "Can comment"
+        reader: "Can view"
+
+    export_file:
+      path: "/drive/v2internal/files/{file_id}/export"
+      method: "GET"
+      api_key: "AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc"
+      category: export
+      description: "Export a Google Workspace file in a specified format"
+      parameters:
+        file_id: "Drive file ID (must be a Google Workspace file type)"
+        mimeType: "Target MIME type — text/plain, text/html, application/pdf, text/csv"
+      mime_types:
+        text: "text/plain"
+        html: "text/html"
+        pdf: "application/pdf"
+        csv: "text/csv"
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google Sheets Extended — Additional Sheets operations beyond Gemini
+# ═══════════════════════════════════════════════════════════════════════════════
+sheets_extended:
+  meta:
+    service_name: "GoogleSheetsExtended"
+    base_url: "https://docs.google.com"
+    auth_method: "cookie_sapisidhash"
+    protocol: "mixed_form_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      Extended Sheets operations discovered via HAR mining.  These are internal
+      endpoints that provide capabilities beyond the public Sheets v4 API.
+      Authentication is via session cookies + SAPISIDHASH.  Most use form-encoded
+      requests with internal proto-text format.
+
+  operations:
+    save:
+      path: "/spreadsheets/u/0/d/{spreadsheet_id}/save"
+      method: "POST"
+      category: write
+      content_type: "multipart/form-data"
+      description: "Save spreadsheet changes with commands bundle"
+      notes: >
+        Multipart form data — includes a commands JSON bundle with cell updates,
+        formatting changes, formula modifications, and sheet structure changes.
+        Used for batch write operations that bypass the public API limits.
+      parameters:
+        spreadsheet_id: "Target spreadsheet ID"
+        id: "Spreadsheet numeric ID"
+        sid: "Session ID"
+        vc: "Version counter — increments with each save"
+        c: "Change counter"
+        w: "Writer ID (format: xx-NNNNNNNNNNN)"
+        flr: "Flush revision number"
+        smv: "Sheet model version"
+        smb: "Sheet model build"
+        token: "CSRF token (from document load)"
+        ouid: "Owner user ID"
+
+    get_prefs:
+      path: "/spreadsheets/u/0/d/{spreadsheet_id}/prefs"
+      method: "POST"
+      category: config
+      content_type: "application/x-www-form-urlencoded"
+      description: "Get/set session preferences for spreadsheet editing"
+      notes: >
+        Sets or retrieves per-session editing preferences.  The body contains
+        JSON preferences in a form field.  Used to configure auto-recalc,
+        locale, timezone, and other session-level settings.
+      parameters:
+        spreadsheet_id: "Target spreadsheet ID"
+        prefs_body: "JSON object with preference keys"
+
+    external_data_batch:
+      path: "/spreadsheets/u/0/d/{spreadsheet_id}/externaldata/fetchData"
+      method: "POST"
+      category: enrichment
+      content_type: "application/x-www-form-urlencoded"
+      description: "Batch fetch external data for multiple cell ranges"
+      notes: >
+        Extended version of external_data_fetch supporting multiple ranges
+        and complex protobuf-text payloads.  Used by IMPORTDATA, IMPORTHTML,
+        IMPORTFEED, IMPORTXML and 'Fill with Gemini' enrichment.
+      parameters:
+        spreadsheet_id: "Target spreadsheet ID"
+        ranges: "Multiple cell ranges to fill"
+        data_sources: "Array of external data source configs"
+
+    get_revision_history:
+      path: "/spreadsheets/u/0/d/{spreadsheet_id}/revisions"
+      method: "GET"
+      category: history
+      description: "Get version history/revisions for a spreadsheet"
+      notes: >
+        Returns the revision history including timestamps, editors,
+        and change summaries.  Useful for audit trails and undo.
+      parameters:
+        spreadsheet_id: "Target spreadsheet ID"
+        maxResults: 100
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# People Stack — User/people services for Workspace collaboration
+# ═══════════════════════════════════════════════════════════════════════════════
+people_stack:
+  meta:
+    service_name: "PeopleStack"
+    base_url: "https://peoplestack-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    protocol: "grpc_web_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      PeopleStack provides user lookup, autocomplete, and collaboration
+      features used across all Google Workspace apps.  Uses gRPC-web
+      protocol (application/json+protobuf).  Two API keys observed for
+      different endpoint groups.
+
+  operations:
+    autocomplete:
+      path: "/$rpc/peoplestack.PeopleStackAutocompleteService/Autocomplete"
+      method: "POST"
+      api_key: "AIzaSyDPU3TWHmg0FmLJIrGonio1GD6KQVrPRz4"
+      category: search
+      description: "Autocomplete people/contacts for sharing and @mentions"
+      notes: >
+        Returns matching contacts as the user types.  Used in sharing dialogs,
+        @mention dropdowns, and collaborator assignment.  Results include name,
+        email, photo URL, and organizational info.
+      parameters:
+        query: "Partial name or email address"
+        max_results: 10
+        context: "Calling context — sharing, mention, assignment"
+
+    autocomplete_alt:
+      path: "/$rpc/peoplestack.PeopleStackAutocompleteService/Autocomplete"
+      method: "POST"
+      api_key: "AIzaSyBpa8DlAVbnBsgTphEHO_YL7uokzq4vqns"
+      category: search
+      description: "Alternative API key for people autocomplete (load balancing)"
+      notes: "Same endpoint, different key — likely for rate-limit distribution."
+
+    warmup:
+      path: "/$rpc/peoplestack.PeopleStackAutocompleteService/Warmup"
+      method: "POST"
+      api_key: "AIzaSyDPU3TWHmg0FmLJIrGonio1GD6KQVrPRz4"
+      category: performance
+      description: "Pre-warm people autocomplete service"
+      notes: >
+        Fire-and-forget call to pre-load contact data and ML models for
+        faster autocomplete responses.  Similar pattern to Gemini prewarm.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# People Stack Experiments — Feature flags and A/B testing
+# ═══════════════════════════════════════════════════════════════════════════════
+experiments:
+  meta:
+    service_name: "PeopleStackExperiments"
+    base_url: "https://peoplestack-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    protocol: "grpc_web_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      The experiments service exposes Google's internal feature flagging system.
+      GetExperimentFlags returns the full set of active experiments and their
+      states for the current user, which controls which Workspace features are
+      enabled.  This is EXTREMELY valuable for discovering gated features.
+
+  operations:
+    get_experiment_flags:
+      path: "/$rpc/peoplestackwebexperiments.PeopleStackExperimentsService/GetExperimentFlags"
+      method: "POST"
+      api_key: "AIzaSyABqJ85_R2irnKzMtGBL0iHuyFBi6Efk1w"
+      category: feature_flags
+      description: "Get all active experiment/feature flags for the current user"
+      notes: >
+        Returns a comprehensive set of feature flags that control which
+        Workspace features are enabled.  Flags include boolean toggles,
+        numeric thresholds, and string variants.  Useful for discovering
+        features before they're publicly announced.
+      known_flags:
+        isRoot: "Document/file root ownership flag"
+        isActive: "Account active state"
+        isCollaboratorAccount: "Shared/collaboration account status"
+        isFamilyLinkAccount: "Family link restriction flag"
+        isShared: "File sharing state"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Feedback Services — Survey and feedback collection
+# ═══════════════════════════════════════════════════════════════════════════════
+feedback:
+  meta:
+    service_name: "WorkspaceFeedback"
+    base_url: "https://scone-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    protocol: "rest_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      Google's internal feedback and survey system for Workspace apps.
+      Three separate API keys for different feedback contexts (startup,
+      in-session, and targeted).  Payloads control which surveys appear.
+
+  operations:
+    startup_config:
+      path: "/v1/survey/startup_config"
+      method: "POST"
+      api_key: "AIzaSyCB6OnnfuitFnaYWu4BvtGKaoLFk4cm-GE"
+      category: survey
+      description: "Fetch startup survey configuration"
+      notes: >
+        Called on app startup to determine if surveys should be shown.
+        Response includes survey configs, frequency caps, and targeting rules.
+
+    trigger_survey:
+      path: "/v1/survey/trigger"
+      method: "POST"
+      api_key: "AIzaSyD2io-Kkh49oO30SyPhbrurJXHMeUHhpOM"
+      category: survey
+      description: "Trigger a specific survey based on user action"
+      notes: >
+        Sends user action context to determine if a survey should be
+        triggered.  Returns survey content if eligibility criteria are met.
+
+    trigger_survey_alt:
+      path: "/v1/survey/trigger"
+      method: "POST"
+      api_key: "AIzaSyACu2NRukBwIrGYv8Dg1yKhfA8jVugGs2E"
+      category: survey
+      description: "Alternative survey trigger (different feedback context)"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Workspace Analytics — Activity tracking and telemetry
+# ═══════════════════════════════════════════════════════════════════════════════
+workspace_analytics:
+  meta:
+    service_name: "WorkspaceAnalytics"
+    base_url: "https://waa-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    api_key: "AIzaSyBGb5fGAyC-pRcRU6MUHb__b_vKha71HRE"
+    protocol: "grpc_web_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      Web App Activity (WAA) tracking service used across all Workspace apps.
+      Records user interactions, feature usage, and performance metrics.
+      Uses gRPC-web protocol.
+
+  operations:
+    ping:
+      path: "/$rpc/google.internal.waa.v1.Waa/Ping"
+      method: "POST"
+      category: telemetry
+      description: "Lightweight activity heartbeat ping"
+      notes: >
+        Periodic heartbeat sent during active sessions.  Records session
+        duration, active tab status, and basic interaction counts.
+
+    create:
+      path: "/$rpc/google.internal.waa.v1.Waa/Create"
+      method: "POST"
+      category: telemetry
+      description: "Create a new analytics session/event"
+      notes: >
+        Records structured events — feature usage, error encounters,
+        performance timings, and user flow transitions.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Add-ons Service — Workspace extensions and marketplace
+# ═══════════════════════════════════════════════════════════════════════════════
+addons:
+  meta:
+    service_name: "WorkspaceAddons"
+    base_url: "https://addons-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    protocol: "grpc_web_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      Manages Workspace add-on installations.  Two API keys observed,
+      likely for different permission contexts (user vs admin).
+
+  operations:
+    list_installations:
+      path: "/$rpc/google.internal.apps.addons.v1.AddOnService/ListInstallations"
+      method: "POST"
+      api_key: "AIzaSyAHUDTRUejznz_jO_ry16wnA0YCiSVEdWs"
+      category: extensions
+      description: "List all installed Workspace add-ons"
+      notes: >
+        Returns the full list of installed add-ons with their metadata,
+        permissions, and status.  Useful for understanding what extensions
+        are active and their capabilities.
+
+    list_installations_alt:
+      path: "/$rpc/google.internal.apps.addons.v1.AddOnService/ListInstallations"
+      method: "POST"
+      api_key: "AIzaSyCN_JjPef6gm_RblmK24Wxks1UPK1g9pMw"
+      category: extensions
+      description: "Alternative API key for add-on listing (admin context)"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OgAds Async Data — Cross-product data service
+# ═══════════════════════════════════════════════════════════════════════════════
+ogads:
+  meta:
+    service_name: "OgAdsAsyncData"
+    base_url: "https://ogads-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    api_key: "AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E"
+    protocol: "grpc_web_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      OneGoogle Async Data Service — provides cross-product data for
+      recommendations, suggestions, and integrated features across
+      Google's product surface.
+
+  operations:
+    get_async_data:
+      path: "/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData"
+      method: "POST"
+      category: data
+      description: "Fetch async data for cross-product integrations"
+      notes: >
+        Returns contextual data for recommendations, product suggestions,
+        and cross-sell/upsell prompts based on current user activity.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Consent Service — User data processing consent management
+# ═══════════════════════════════════════════════════════════════════════════════
+consent:
+  meta:
+    service_name: "WorkspaceConsent"
+    base_url: "https://workspaceui-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    api_key: "AIzaSyCkcC5gPzlgNSjZjziQc6bLO00y0vCRSrE"
+    protocol: "rest_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      Manages user consent for data processing in Workspace.
+      The udpConsent (User Data Processing Consent) endpoint controls
+      which AI features can process user data.
+
+  operations:
+    fetch_compiled:
+      path: "/udpConsent:fetchCompiled"
+      method: "POST"
+      category: consent
+      description: "Fetch compiled consent state for the current user"
+      notes: >
+        Returns the user's compiled consent state — which data processing
+        features they've consented to.  Used to gate AI features that
+        require explicit consent (e.g., AI training on user data).
+        Returns consent states for Gemini, Smart Compose, etc.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Growth Promos — Feature discovery and recommendations
+# ═══════════════════════════════════════════════════════════════════════════════
+growth_promos:
+  meta:
+    service_name: "AppsGrowthPromo"
+    base_url: "https://appsgrowthpromo-pa.clients6.google.com"
+    auth_method: "api_key_query_param"
+    api_key: "AIzaSyAdssGVZZ7gdCUguDajJZjJys9fvi2DEWM"
+    protocol: "rest_json"
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+    notes: >
+      Feature discovery and recommendation service — suggests AI features
+      and capabilities based on user context and activity.  Used by the
+      Workspace frontend to show "Try Gemini" prompts and feature highlights.
+
+  operations:
+    fetch_recommendation:
+      path: "/v1/promotion/FetchRecommendation"
+      method: "POST"
+      category: recommendation
+      description: "Fetch a single contextual feature recommendation"
+      notes: >
+        Returns the top recommendation for the current context.
+        Based on document type, user activity, and feature adoption state.
+
+    fetch_recommendations:
+      path: "/v1/promotion/FetchRecommendations"
+      method: "POST"
+      category: recommendation
+      description: "Batch fetch multiple feature recommendations"
+      notes: >
+        Returns multiple recommendations for the current context.
+        Can include recommendations for Gemini, Smart Fill, Smart Compose, etc.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# API Key Catalog — Complete mapping of discovered API keys to services
+# ═══════════════════════════════════════════════════════════════════════════════
+api_key_catalog:
+  meta:
+    description: >
+      Complete catalog of 21 unique API keys discovered via HAR mining.
+      Each key is tied to a specific service and operation group.
+      Keys are used in query parameters (?key=...) for authentication.
+    source: "argus_har_capture_2026-07 (docs-google-sheets-gemini x2, drive-google-gemini)"
+    last_verified: "2026-07-14"
+
+  keys:
+    # ── Workspace Gemini (core generation) ──
+    AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU:
+      service: "Workspace Gemini"
+      context: "Sheets"
+      endpoints:
+        - "streamGenerate"
+        - "getSettings"
+        - "listGems"
+        - "quotaSummary"
+        - "updateUserSettings"
+        - "prewarm (espresso)"
+      notes: "Primary Gemini key for Sheets context"
+
+    AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk:
+      service: "Workspace Gemini"
+      context: "Docs"
+      endpoints:
+        - "streamGenerate"
+        - "getSettings"
+        - "listGems"
+        - "quotaSummary"
+        - "updateUserSettings"
+        - "prewarm (espresso)"
+      notes: "Primary Gemini key for Docs context"
+
+    # ── Drive v2internal ──
+    AIzaSyBWdFphCtg4EBuxpHu9EhAjyIiY9C-4Uq4:
+      service: "Drive v2internal"
+      context: "File upload"
+      endpoints: ["upload_file"]
+      notes: "Upload-specific API key"
+
+    AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc:
+      service: "Drive v2internal"
+      context: "File CRUD"
+      endpoints: ["get_file", "list_files", "update_file", "copy_file", "trash_file", "export_file"]
+      notes: "Read/write operations key"
+
+    AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc:
+      service: "Drive v2internal"
+      context: "Permissions"
+      endpoints: ["get_permissions", "insert_permission"]
+      notes: "Permissions-specific key"
+
+    # ── Cloud Search ──
+    AIzaSyDuAie05b1MZ0lMd9XCQczokBQUf4qjkzM:
+      service: "Cloud Search"
+      context: "Cross-workspace search"
+      endpoints: ["query_search"]
+      notes: "Also requires SAPISIDHASH dual auth"
+
+    # ── People Stack ──
+    AIzaSyDPU3TWHmg0FmLJIrGonio1GD6KQVrPRz4:
+      service: "PeopleStack"
+      context: "Autocomplete primary"
+      endpoints: ["Autocomplete", "Warmup"]
+
+    AIzaSyBpa8DlAVbnBsgTphEHO_YL7uokzq4vqns:
+      service: "PeopleStack"
+      context: "Autocomplete alternate"
+      endpoints: ["Autocomplete"]
+      notes: "Load-balancing alternate key"
+
+    # ── Experiments ──
+    AIzaSyABqJ85_R2irnKzMtGBL0iHuyFBi6Efk1w:
+      service: "PeopleStack Experiments"
+      context: "Feature flags"
+      endpoints: ["GetExperimentFlags"]
+      notes: "Reveals all active feature flags and A/B test states"
+
+    # ── Feedback ──
+    AIzaSyCB6OnnfuitFnaYWu4BvtGKaoLFk4cm-GE:
+      service: "Workspace Feedback"
+      context: "Startup surveys"
+      endpoints: ["startup_config"]
+
+    AIzaSyD2io-Kkh49oO30SyPhbrurJXHMeUHhpOM:
+      service: "Workspace Feedback"
+      context: "In-session surveys"
+      endpoints: ["trigger"]
+
+    AIzaSyACu2NRukBwIrGYv8Dg1yKhfA8jVugGs2E:
+      service: "Workspace Feedback"
+      context: "Targeted surveys"
+      endpoints: ["trigger"]
+
+    # ── Analytics ──
+    AIzaSyBGb5fGAyC-pRcRU6MUHb__b_vKha71HRE:
+      service: "WAA Analytics"
+      context: "Activity tracking"
+      endpoints: ["Ping", "Create"]
+      notes: "Web App Activity telemetry"
+
+    # ── Growth Promos ──
+    AIzaSyAdssGVZZ7gdCUguDajJZjJys9fvi2DEWM:
+      service: "Growth Promos"
+      context: "Feature recommendations"
+      endpoints: ["FetchRecommendation", "FetchRecommendations"]
+
+    # ── Add-ons ──
+    AIzaSyAHUDTRUejznz_jO_ry16wnA0YCiSVEdWs:
+      service: "Add-ons"
+      context: "User installations"
+      endpoints: ["ListInstallations"]
+
+    AIzaSyCN_JjPef6gm_RblmK24Wxks1UPK1g9pMw:
+      service: "Add-ons"
+      context: "Admin installations"
+      endpoints: ["ListInstallations"]
+      notes: "Admin-context key"
+
+    # ── Consent ──
+    AIzaSyCkcC5gPzlgNSjZjziQc6bLO00y0vCRSrE:
+      service: "Workspace UI"
+      context: "Data consent"
+      endpoints: ["udpConsent:fetchCompiled"]
+
+    # ── OgAds ──
+    AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E:
+      service: "OgAds"
+      context: "Cross-product data"
+      endpoints: ["GetAsyncData"]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Auth Cookie Catalog — Required cookies for Google Workspace API access
+# ═══════════════════════════════════════════════════════════════════════════════
+auth_cookie_catalog:
+  meta:
+    description: >
+      37 unique authentication cookies observed in the Google auth chain.
+      This catalog documents which cookies are required for different
+      auth methods across Workspace services.
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+
+  required_for_sapisidhash:
+    description: "Cookies needed for SAPISIDHASH-based authentication (batchexecute, Drive, Sheets)"
+    cookies:
+      - "SAPISID"
+      - "SID"
+      - "HSID"
+      - "SSID"
+      - "APISID"
+      - "__Secure-1PSID"
+      - "__Secure-3PSID"
+    derivation: >
+      SAPISIDHASH = SHA1(timestamp + " " + SAPISID + " " + origin)
+      Header: Authorization: SAPISIDHASH <timestamp>_<hash>
+
+  session_cookies:
+    description: "Session and identity cookies"
+    primary:
+      - name: "SID"
+        scope: ".google.com"
+        purpose: "Primary session identifier"
+      - name: "HSID"
+        scope: ".google.com"
+        purpose: "HTTP-only session ID"
+      - name: "SSID"
+        scope: ".google.com"
+        purpose: "Secure-only session ID"
+      - name: "APISID"
+        scope: ".google.com"
+        purpose: "API session ID"
+      - name: "SAPISID"
+        scope: ".google.com"
+        purpose: "Secure API session ID — used for SAPISIDHASH derivation"
+    partitioned:
+      - name: "__Secure-1PSID"
+        purpose: "First-party partitioned SID"
+      - name: "__Secure-3PSID"
+        purpose: "Third-party partitioned SID"
+      - name: "__Secure-1PAPISID"
+        purpose: "First-party partitioned APISID"
+      - name: "__Secure-3PAPISID"
+        purpose: "Third-party partitioned APISID"
+    timestamps:
+      - name: "__Secure-1PSIDTS"
+        purpose: "First-party SID timestamp"
+      - name: "__Secure-3PSIDTS"
+        purpose: "Third-party SID timestamp"
+      - name: "__Secure-1PSIDCC"
+        purpose: "First-party SID consent cookie"
+      - name: "__Secure-3PSIDCC"
+        purpose: "Third-party SID consent cookie"
+      - name: "__Secure-1PSIDRTS"
+        purpose: "First-party SID refresh timestamp"
+      - name: "__Secure-3PSIDRTS"
+        purpose: "Third-party SID refresh timestamp"
+    service_specific:
+      - name: "NID"
+        scope: ".google.com"
+        purpose: "Google Account preferences and session"
+      - name: "OSID"
+        scope: "accounts.google.com"
+        purpose: "OAuth session ID"
+      - name: "__Host-1PLSID"
+        purpose: "Host-bound first-party login SID"
+      - name: "__Host-3PLSID"
+        purpose: "Host-bound third-party login SID"
+      - name: "__Secure-OSID"
+        purpose: "Secure OAuth session ID"
+      - name: "LSID"
+        scope: "accounts.google.com"
+        purpose: "Login session ID"
+      - name: "SIDCC"
+        scope: ".google.com"
+        purpose: "SID consent cookie"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Client-Side Gating Reference — Bypasses and controllable parameters
+# ═══════════════════════════════════════════════════════════════════════════════
+client_side_gating:
+  meta:
+    description: >
+      Comprehensive reference for client-side gating mechanisms discovered
+      across Google Workspace services.  These are parameters that control
+      feature access, tier limits, and model selection — all enforced
+      client-side only, meaning they can be modified freely.
+    source: "argus_har_capture_2026-07"
+    last_verified: "2026-07-14"
+
+  tier_markers:
+    description: >
+      Tier marker values that control access to Free vs Pro features.
+      All are client-side only — no server-side enforcement observed.
+    positions:
+      stream_generate: "body[0][5][0] — [1]=Free, [2]=Pro"
+      quota_summary: "body[2][0] — context code position"
+      nlm_batchexecute: "Varies by rpcid — see notebooklm.operations.*.parameters.tier_marker"
+    values:
+      1: "Free tier — basic model, lower token limits"
+      2: "Pro tier — advanced model, higher token limits, priority processing"
+    bypass_confirmed: true
+    notes: >
+      Setting [2] on a free account WORKS — the server respects the tier
+      marker value from the client payload without server-side validation.
+      This gives free accounts access to Pro-tier Gemini capabilities.
+
+  controllable_parameters:
+    response_length:
+      values: {4: "default", 1: "longer", 2: "shorter"}
+      position: "Varies by endpoint"
+      notes: "Controls response verbosity"
+
+    doc_type:
+      values: {2: "brief", 9: "deep/long-form"}
+      notes: "Controls document generation depth"
+
+    analysis_depth:
+      values: {1: "summary", 2: "detailed"}
+      notes: "Controls analysis thoroughness"
+
+    write_config:
+      format: "[[model_tier, quality_level]]"
+      values: {model_tier: "[1]=standard, [2]=pro", quality_level: "1=standard"}
+
+    source_config:
+      format: "[1, null*9, [1]]"
+      notes: "Source creation flags — first element enables, last array controls type"
+
+    guide_type:
+      values: {1: "Study Guide", 2: "FAQ", 3: "Briefing Doc", 4: "Table of Contents", 5: "Timeline"}
+
+    audio_type:
+      values: {1: "Deep Dive", 2: "Brief Overview", 3: "Critical Analysis", 4: "Debate"}
+
+    page_size:
+      default: 20
+      range: "1-100 (some endpoints)"
+      notes: "Configurable for listing operations"
+
+    share_level:
+      values: {0: "private", 1: "anyone_with_link"}
+
+    research_depth:
+      range: "1-10"
+      notes: "1=shallow, 10=exhaustive"
+
+  feature_flags:
+    source: "experiments.get_experiment_flags"
+    known:
+      isRoot: "Document/file root ownership"
+      isActive: "Account active state"
+      isCollaboratorAccount: "Shared/collaboration status"
+      isFamilyLinkAccount: "Family link restriction"
+      isShared: "File sharing state"
+    notes: >
+      Feature flags are returned by the PeopleStack Experiments service.
+      They control feature availability at the account and document level.
+      Monitoring these flags can reveal new features before public launch.
