@@ -1,8 +1,8 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.18b](https://img.shields.io/badge/version-1.18b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11721](https://img.shields.io/badge/tests-11%2C721-brightgreen.svg)]() [![Skills: 379](https://img.shields.io/badge/skills-379-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.18c](https://img.shields.io/badge/version-1.18c-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11737](https://img.shields.io/badge/tests-11%2C737-brightgreen.svg)]() [![Skills: 383](https://img.shields.io/badge/skills-383-0a7f5a.svg)]()
 
-> v1.18b — "SCHEDULER INTEGRATION" — Local-first multi-scene AI simulation framework
+> v1.18c — "CROSS-SERVICE CHAIN PROMPTS" — Local-first multi-scene AI simulation framework
 
 ## Overview
 
@@ -14,7 +14,7 @@ The framework features a **unified cyberpunk aesthetic** (neon_base template), *
 
 | Metric | Value |
 |--------|-------|
-| Version | **1.18b** — "SCHEDULER INTEGRATION" |
+| Version | **1.18c** — "CROSS-SERVICE CHAIN PROMPTS" |
 | Tests | **11,721 passing** / 345+ test files |
 | Scenes | **20** Flask scenes + 3 Streamlit apps |
 | Services | **12** launcher-managed services |
@@ -22,9 +22,9 @@ The framework features a **unified cyberpunk aesthetic** (neon_base template), *
 | MCP tools | **42** domain modules |
 | Interceptors | **26** auto-registered pipeline hooks |
 | Scheduler tasks | **61** autonomous recurring tasks |
-| Pipeline stages | **13** cross-service pipeline stages |
-| Pipeline templates | **9** orchestration templates |
-| Workspace skills | **19** Google Workspace skills |
+| Pipeline stages | **17** cross-service pipeline stages |
+| Pipeline templates | **17** orchestration templates |
+| Workspace skills | **23** Google Workspace skills |
 | Copilot agents | **19** specialized agent definitions |
 | Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news |
 
