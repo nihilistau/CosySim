@@ -220,7 +220,7 @@ class QAExpander:
                     results = nexus.search(term, limit=50)
                     all_entries.extend(results if isinstance(results, list) else [])
                 except Exception:
-                    pass
+                    logger.debug("Search failed for term '%s'", term, exc_info=True)
             # Deduplicate by ID
             seen: set = set()
             deduped: List[Dict[str, Any]] = []

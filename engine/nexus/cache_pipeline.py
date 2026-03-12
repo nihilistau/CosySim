@@ -348,7 +348,7 @@ class CachePipeline:
                         if isinstance(item, dict)
                     ]
             except Exception:
-                pass
+                logger.warning("Failed to load existing Q&A for dedup check", exc_info=True)
 
             # Upload pyramid layers 0-5
             uploaded = pyramid.upload_pyramid(
@@ -498,6 +498,7 @@ class CachePipeline:
             from engine.nexus.client import get_nexus_client
             client = get_nexus_client()
         except Exception:
+            logger.debug("Could not init NexusClient for dedup", exc_info=True)
             client = None
 
         seen_questions: set = set()
@@ -754,7 +755,7 @@ class CachePipeline:
                         if isinstance(item, dict)
                     ]
             except Exception:
-                pass
+                logger.warning("Failed to load existing Q&A for gap analysis", exc_info=True)
 
             gap_prompt = briefing.build_gap_prompt(all_questions)
             report = bridge.generate_report_with_prompt(notebook_id, gap_prompt)
@@ -1016,7 +1017,7 @@ class CachePipeline:
                 if self._normalise_question(existing_q) == self._normalise_question(question):
                     return True
         except Exception:
-            pass
+            logger.debug("Dedup check failed for question: %.60s", question, exc_info=True)
         return False
 
     def _upload_candidates_as_source(
