@@ -3,6 +3,36 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.18b] — "SCHEDULER INTEGRATION" — 2026-07
+
+Registered workspace pipeline templates as recurring scheduler tasks and created
+comprehensive documentation for the scheduler and workspace pipeline systems.
+
+### Added: Scheduler Tasks
+- `workspace-news-pipeline` (every 8h) — runs `news_pipeline` template: RSS → NLM → Sheets → Nexus
+- `workspace-news-to-knowledge` (daily) — runs `news_to_knowledge` template: full knowledge pipeline
+- `workspace-research-cycle` (every 12h) — processes queued research topics from Nexus
+- `workspace-pipeline-health` (every 6h) — checks client connectivity + stage health
+- Scheduler tasks: 57 → 61
+
+### Added: Smoke Test
+- `scripts/workspace_smoke_test.py` — end-to-end workspace pipeline validation
+  - 12 health tests (client availability, stages, templates, registry, scheduler, skills)
+  - 3 live API tests (getSettings, quotaSummary, listGems)
+  - CLI: `--quick` (health only), `--stage X` (single stage), `--json` (machine output)
+  - Auto-stores results in Nexus
+
+### Added: Documentation
+- `docs/WORKSPACE_PIPELINE.md` — pipeline architecture, stages, templates, usage
+- `docs/SCHEDULER.md` — task system, schedules, callbacks, CLI, categories
+- Updated `ROADMAP.md` — added v1.11b through v1.18b (8 missing versions)
+- Updated `README.md` — version 1.16b → 1.18b, updated all metrics
+
+### Tests
+- 7 new scheduler tests (44 total), task count 57→61
+- Full suite: 11,721 passed
+
+---
 ## [1.18a] — "PIPELINE STAGE EXPANSION" — 2026-07
 
 Added workspace_generate and fetch_news pipeline stages, bridging the standalone

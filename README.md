@@ -1,8 +1,8 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.16b](https://img.shields.io/badge/version-1.16b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11507](https://img.shields.io/badge/tests-11%2C507-brightgreen.svg)]() [![Skills: 377](https://img.shields.io/badge/skills-377-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.18b](https://img.shields.io/badge/version-1.18b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11721](https://img.shields.io/badge/tests-11%2C721-brightgreen.svg)]() [![Skills: 379](https://img.shields.io/badge/skills-379-0a7f5a.svg)]()
 
-> v1.16b — "EMBEDDING AUTO-WIRE" — Local-first multi-scene AI simulation framework
+> v1.18b — "SCHEDULER INTEGRATION" — Local-first multi-scene AI simulation framework
 
 ## Overview
 
@@ -14,14 +14,17 @@ The framework features a **unified cyberpunk aesthetic** (neon_base template), *
 
 | Metric | Value |
 |--------|-------|
-| Version | **1.16b** — "EMBEDDING AUTO-WIRE" |
-| Tests | **11,507 passing** / 345 test files |
+| Version | **1.18b** — "SCHEDULER INTEGRATION" |
+| Tests | **11,721 passing** / 345+ test files |
 | Scenes | **20** Flask scenes + 3 Streamlit apps |
 | Services | **12** launcher-managed services |
-| Skill packs | **38 packs / 373 skills** |
+| Skill packs | **38 packs / 379 skills** |
 | MCP tools | **42** domain modules |
 | Interceptors | **26** auto-registered pipeline hooks |
-| Scheduler tasks | **56** autonomous recurring tasks |
+| Scheduler tasks | **61** autonomous recurring tasks |
+| Pipeline stages | **13** cross-service pipeline stages |
+| Pipeline templates | **9** orchestration templates |
+| Workspace skills | **19** Google Workspace skills |
 | Copilot agents | **19** specialized agent definitions |
 | Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news |
 
