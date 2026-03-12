@@ -2,10 +2,11 @@
 
 Routes all queries through a confidence-scored pipeline:
   1. Q&A Cache (instant, high confidence)
-  2. FTS Knowledge Search (fast, medium confidence)
-  3. Nexus Smart Ask / NotebookLM-backed research
-  4. Direct NotebookLM unified ask (when smart ask cannot answer)
-  5. LLM Fallback (slow, variable confidence)
+  2. Vector Semantic Search (Gemini Embedding 2 + ChromaDB, high confidence)
+  3. FTS Knowledge Search (fast, medium confidence)
+  4. Nexus Smart Ask / NotebookLM-backed research
+  5. Direct NotebookLM unified ask (when smart ask cannot answer)
+  6. LLM Fallback (slow, variable confidence)
 
 NLM and LLM answers are automatically stored back in Nexus for future reuse,
 creating a self-improving knowledge loop that reduces expensive fallback calls
@@ -64,6 +65,7 @@ class RouterStats:
     """Cumulative router statistics."""
     total_queries: int = 0
     cache_hits: int = 0
+    vector_hits: int = 0
     search_hits: int = 0
     nlm_hits: int = 0
     llm_fallbacks: int = 0
@@ -74,12 +76,13 @@ class RouterStats:
     def hit_rate(self) -> float:
         if self.total_queries == 0:
             return 0.0
-        return (self.cache_hits + self.search_hits + self.nlm_hits) / self.total_queries
+        return (self.cache_hits + self.vector_hits + self.search_hits + self.nlm_hits) / self.total_queries
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "total_queries": self.total_queries,
             "cache_hits": self.cache_hits,
+            "vector_hits": self.vector_hits,
             "search_hits": self.search_hits,
             "nlm_hits": self.nlm_hits,
             "llm_fallbacks": self.llm_fallbacks,
@@ -93,18 +96,20 @@ class RouterStats:
 class NexusQueryRouter:
     """Routes queries through Nexus-first pipeline with LLM fallback.
 
-    The router implements a 5-tier lookup:
+    The router implements a 6-tier lookup:
       1. Q&A Cache — exact or fuzzy match on previously answered questions
-      2. FTS Search — synthesise answer from matching knowledge entries
-      3. Nexus Smart Ask — server-side cache → FTS → NotebookLM pipeline
-      4. Direct NotebookLM ask — use the unified backend before local GPU
-      5. LLM Fallback — send to LMStudio, store answer back in Nexus
+      2. Vector Search — semantic similarity via Gemini Embedding 2 + ChromaDB
+      3. FTS Search — synthesise answer from matching knowledge entries
+      4. Nexus Smart Ask — server-side cache → FTS → NotebookLM pipeline
+      5. Direct NotebookLM ask — use the unified backend before local GPU
+      6. LLM Fallback — send to LMStudio, store answer back in Nexus
 
     Over time, as more answers accumulate in Nexus, fewer LLM calls are needed.
     """
 
     # Confidence thresholds
     CACHE_CONFIDENCE = 0.90    # Q&A cache hit — very high confidence
+    VECTOR_CONFIDENCE = 0.82   # Strong vector search match
     SEARCH_HIGH = 0.75         # Strong search match
     SEARCH_MEDIUM = 0.50       # Decent search match
     SEARCH_LOW = 0.30          # Weak match
@@ -185,7 +190,14 @@ class NexusQueryRouter:
             self._store_local_cache(cache_key, result)
             return result
 
-        # Tier 2: FTS Knowledge Search
+        # Tier 2: Vector Semantic Search (Gemini Embedding 2 + ChromaDB)
+        result = self._try_vector_search(question)
+        if result and result.confidence >= min_confidence:
+            result.query_time_ms = (time.time() - start) * 1000
+            self._store_local_cache(cache_key, result)
+            return result
+
+        # Tier 3: FTS Knowledge Search
         result = self._try_fts_search(client, question, category)
         if result and result.confidence >= min_confidence:
             # Store as Q&A for faster future lookups
@@ -194,14 +206,14 @@ class NexusQueryRouter:
             self._store_local_cache(cache_key, result)
             return result
 
-        # Tier 3: Nexus Smart Ask (server-side pipeline)
+        # Tier 4: Nexus Smart Ask (server-side pipeline)
         result = self._try_nexus_ask(client, question, category, depth=depth)
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
             return result
 
-        # Tier 4: Direct NotebookLM ask
+        # Tier 5: Direct NotebookLM ask
         result = self._try_direct_nlm(client, question)
         if result and result.confidence >= min_confidence:
             self._store_qa(client, question, result.answer, category, tags, source_hint)
@@ -211,7 +223,7 @@ class NexusQueryRouter:
             self._store_local_cache(cache_key, result)
             return result
 
-        # Tier 5: LLM Fallback
+        # Tier 6: LLM Fallback
         if use_llm:
             result = self._llm_fallback(question, category, tags, source_hint)
             if result.answer and len(result.answer) >= self.MIN_ANSWER_LENGTH:
@@ -258,9 +270,67 @@ class NexusQueryRouter:
             logger.debug("Q&A cache lookup failed: %s", exc)
         return None
 
+    def _try_vector_search(self, question: str) -> Optional[QueryResult]:
+        """Tier 2: Semantic vector search via Gemini Embedding 2 + ChromaDB."""
+        try:
+            from engine.nexus.vector_store import get_vector_store
+
+            store = get_vector_store()
+            # Search across knowledge and QA collections
+            results = store.search_multi(
+                query=question,
+                collections=["knowledge", "qa", "code", "news"],
+                top_k=5,
+                min_score=0.5,
+            )
+
+            if not results:
+                return None
+
+            best = results[0]
+            if best.score < 0.6:
+                return None
+
+            answer = best.text
+            if not answer or len(answer) < self.MIN_ANSWER_LENGTH:
+                return None
+
+            # Build confidence from vector similarity score
+            confidence = min(best.score * 0.95, 0.92)
+
+            # Combine top results for richer answer
+            if len(results) > 1 and results[1].score > 0.55:
+                extra = results[1].text[:300]
+                if extra:
+                    answer += f"\n\nAlso relevant: {extra}"
+
+            with self._lock:
+                self._stats.vector_hits += 1
+                tokens_saved = self._estimate_tokens(answer)
+                self._stats.total_tokens_saved += tokens_saved
+
+            return QueryResult(
+                answer=answer,
+                source="vector",
+                confidence=confidence,
+                cached=True,
+                tokens_saved=tokens_saved,
+                sources=[r.entry_id for r in results[:3]],
+                metadata={
+                    "top_score": best.score,
+                    "collection": best.collection,
+                    "result_count": len(results),
+                },
+            )
+        except ImportError:
+            logger.debug("Vector store not available (chromadb not installed)")
+        except Exception as exc:
+            logger.debug("Vector search failed: %s", exc)
+        return None
+
     def _try_fts_search(self, client, question: str,
                         category: str = "") -> Optional[QueryResult]:
-        """Tier 2: Full-text search across knowledge entries."""
+        """Tier 3: Full-text search across knowledge entries."""
         try:
             results = client.search(question, limit=5)
             if not results:

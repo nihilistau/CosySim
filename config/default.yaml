@@ -773,6 +773,21 @@ nexus:
     state_path: "data/operator_inbox_state.json"
     auto_sync_schedule: "every_15m"
     plan_digest_limit: 10
+  embeddings:
+    enabled: true
+    provider: "gemini"           # "gemini" (primary), "local" (LMStudio), "auto"
+    model: "gemini-embedding-exp-03-07"  # Gemini Embedding 2
+    dimensions: 768              # MRL: 768 (fast), 1536 (balanced), 3072 (max quality)
+    local_model: ""              # LMStudio embedding model key (fallback)
+    cache_size: 10000            # In-memory embedding cache entries
+    batch_size: 100              # Max texts per batch API call
+    auto_embed: true             # Auto-embed new Nexus entries
+    normalize: true              # L2-normalize for MRL dimensions < 3072
+  vector_store:
+    enabled: true
+    persist_dir: "data/nexus_vectors"
+    default_top_k: 5
+    min_score: 0.5               # Minimum similarity for query results
 
 # GitHub Codespace remote execution
 codespace:

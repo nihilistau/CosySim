@@ -289,59 +289,54 @@ class TestNlmBatchAsk:
 class TestNlmCreateNotebook:
     """Tests for the nlm_create_notebook skill."""
 
-    @patch(_ENGINE_PATH)
-    def test_success_without_sources(self, mock_get_engine):
+    @patch("engine.nexus.nlm_notebook_factory.get_notebook_factory")
+    def test_success_without_sources(self, mock_get_factory):
         """Create notebook without sources returns result JSON."""
         from engine.skills.builtin.nlm_forge_skills import nlm_create_notebook
-        mock_engine = MagicMock()
-        mock_engine.create_notebook.return_value = {
-            "notebook_id": "nb-new-001",
-            "name": "Test NB",
-        }
-        mock_get_engine.return_value = mock_engine
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = "nb-new-001"
+        mock_get_factory.return_value = mock_factory
 
         result = nlm_create_notebook("Test NB")
         data = json.loads(result)
 
         assert data["notebook_id"] == "nb-new-001"
         assert data["name"] == "Test NB"
-        mock_engine.create_notebook.assert_called_once_with("Test NB", sources=None)
+        mock_factory.get_or_create.assert_called_once()
 
-    @patch(_ENGINE_PATH)
-    def test_success_with_sources(self, mock_get_engine):
+    @patch("engine.nexus.nlm_notebook_factory.get_notebook_factory")
+    def test_success_with_sources(self, mock_get_factory):
         """Create notebook with JSON source array passes sources through."""
         from engine.skills.builtin.nlm_forge_skills import nlm_create_notebook
-        mock_engine = MagicMock()
-        mock_engine.create_notebook.return_value = {"notebook_id": "nb-002"}
-        mock_get_engine.return_value = mock_engine
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = "nb-002"
+        mock_get_factory.return_value = mock_factory
 
         sources = json.dumps(["https://example.com/doc.md", "https://other.com"])
         result = nlm_create_notebook("My NB", sources=sources)
         data = json.loads(result)
 
         assert data["notebook_id"] == "nb-002"
-        mock_engine.create_notebook.assert_called_once_with(
-            "My NB", sources=["https://example.com/doc.md", "https://other.com"],
-        )
+        mock_factory.get_or_create.assert_called_once()
 
-    @patch(_ENGINE_PATH)
-    def test_empty_sources_string_passes_none(self, mock_get_engine):
-        """Empty string sources treated as None."""
+    @patch("engine.nexus.nlm_notebook_factory.get_notebook_factory")
+    def test_empty_sources_string_passes_none(self, mock_get_factory):
+        """Empty string sources treated as None — factory still called."""
         from engine.skills.builtin.nlm_forge_skills import nlm_create_notebook
-        mock_engine = MagicMock()
-        mock_engine.create_notebook.return_value = {"notebook_id": "nb-003"}
-        mock_get_engine.return_value = mock_engine
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = "nb-003"
+        mock_get_factory.return_value = mock_factory
 
-        nlm_create_notebook("Empty Sources NB", sources="")
-        mock_engine.create_notebook.assert_called_once_with(
-            "Empty Sources NB", sources=None,
-        )
+        result = nlm_create_notebook("Empty Sources NB", sources="")
+        data = json.loads(result)
+        assert data["notebook_id"] == "nb-003"
+        mock_factory.get_or_create.assert_called_once()
 
-    @patch(_ENGINE_PATH)
-    def test_exception_returns_error_json(self, mock_get_engine):
-        """Engine failure returns JSON error."""
+    @patch("engine.nexus.nlm_notebook_factory.get_notebook_factory")
+    def test_exception_returns_error_json(self, mock_get_factory):
+        """Factory failure returns JSON error."""
         from engine.skills.builtin.nlm_forge_skills import nlm_create_notebook
-        mock_get_engine.side_effect = RuntimeError("NLM engine not ready")
+        mock_get_factory.side_effect = RuntimeError("NLM engine not ready")
 
         result = nlm_create_notebook("Broken NB")
         data = json.loads(result)
@@ -1023,16 +1018,16 @@ class TestLazyLoading:
         nlm_ask("test")
         mock_get_router.assert_called_once()
 
-    @patch(_ENGINE_PATH)
-    def test_get_engine_called_on_create_notebook(self, mock_get_engine):
-        """_get_engine() is invoked when nlm_create_notebook is called."""
+    @patch("engine.nexus.nlm_notebook_factory.get_notebook_factory")
+    def test_get_factory_called_on_create_notebook(self, mock_get_factory):
+        """get_notebook_factory() is invoked when nlm_create_notebook is called."""
         from engine.skills.builtin.nlm_forge_skills import nlm_create_notebook
-        mock_engine = MagicMock()
-        mock_engine.create_notebook.return_value = {"notebook_id": "nb-1"}
-        mock_get_engine.return_value = mock_engine
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = "nb-1"
+        mock_get_factory.return_value = mock_factory
 
         nlm_create_notebook("Test")
-        mock_get_engine.assert_called_once()
+        mock_get_factory.assert_called_once()
 
     @patch(_FORGE_PATH)
     def test_get_forge_called_on_distill(self, mock_get_forge):

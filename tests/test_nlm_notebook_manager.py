@@ -26,7 +26,6 @@ def _make_manager(tmp_path, notebooks=None):
         mock_cfg.return_value = cfg
 
         engine = MagicMock()
-        engine.create_notebook.return_value = {"notebook_id": "nb-123", "name": "test"}
         engine.delete_notebook.return_value = {"ok": True}
         engine.add_source.return_value = {"ok": True}
         mock_eng_fn.return_value = engine
@@ -34,7 +33,11 @@ def _make_manager(tmp_path, notebooks=None):
         from engine.nexus.nlm_notebook_manager import NLMNotebookManager
         mgr = NLMNotebookManager(metadata_path=str(meta_path))
 
-    return mgr, engine, meta_path
+    # Factory mock: get_or_create returns a notebook ID string
+    factory = MagicMock()
+    factory.get_or_create.return_value = "nb-123"
+
+    return mgr, engine, meta_path, factory
 
 
 # ──── Tests ────
@@ -44,18 +47,18 @@ class TestEnsureNotebook:
 
     def test_creates_when_missing(self, tmp_path):
         """ensure_notebook creates a new notebook if slot doesn't exist."""
-        mgr, engine, meta_path = _make_manager(tmp_path)
+        mgr, engine, meta_path, factory = _make_manager(tmp_path)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory):
             result = mgr.ensure_notebook("cosysim-architecture")
 
         assert result["slot_name"] == "cosysim-architecture"
         assert result["notebook_id"] == "nb-123"
         assert result["source_count"] == 0
-        engine.create_notebook.assert_called_once()
+        factory.get_or_create.assert_called_once()
 
     def test_returns_existing(self, tmp_path):
-        """ensure_notebook returns existing entry without calling engine."""
+        """ensure_notebook returns existing entry without calling factory."""
         existing = {
             "cosysim-architecture": {
                 "slot_name": "cosysim-architecture",
@@ -66,28 +69,28 @@ class TestEnsureNotebook:
                 "last_asked": None,
             }
         }
-        mgr, engine, _ = _make_manager(tmp_path, notebooks=existing)
+        mgr, engine, _, factory = _make_manager(tmp_path, notebooks=existing)
 
         result = mgr.ensure_notebook("cosysim-architecture")
 
         assert result["notebook_id"] == "nb-existing"
-        engine.create_notebook.assert_not_called()
+        factory.get_or_create.assert_not_called()
 
     def test_returns_error_on_create_failure(self, tmp_path):
-        """ensure_notebook returns error dict when engine fails to create."""
-        mgr, engine, _ = _make_manager(tmp_path)
-        engine.create_notebook.return_value = {"error": "backend down"}
+        """ensure_notebook returns error dict when factory fails to create."""
+        mgr, engine, _, factory = _make_manager(tmp_path)
+        factory.get_or_create.return_value = None
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory):
             result = mgr.ensure_notebook("bad-slot")
 
         assert "error" in result
 
     def test_persists_metadata(self, tmp_path):
         """ensure_notebook saves metadata to disk."""
-        mgr, engine, meta_path = _make_manager(tmp_path)
+        mgr, engine, meta_path, factory = _make_manager(tmp_path)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory):
             mgr.ensure_notebook("cosysim-codebase")
 
         data = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -100,13 +103,13 @@ class TestSeedNotebook:
 
     def test_seed_notebook_adds_sources(self, tmp_path):
         """seed_notebook reads files and adds them as text sources."""
-        # Create a fake source file
         src_file = tmp_path / "test_source.md"
         src_file.write_text("# Hello", encoding="utf-8")
 
-        mgr, engine, _ = _make_manager(tmp_path)
+        mgr, engine, _, factory = _make_manager(tmp_path)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory), \
+             patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
             mgr.ensure_notebook("test-slot")
             result = mgr.seed_notebook("test-slot", [str(src_file)])
 
@@ -119,9 +122,10 @@ class TestSeedNotebook:
 
     def test_seed_notebook_handles_missing_file(self, tmp_path):
         """seed_notebook reports errors for files that don't exist."""
-        mgr, engine, _ = _make_manager(tmp_path)
+        mgr, engine, _, factory = _make_manager(tmp_path)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory), \
+             patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
             mgr.ensure_notebook("test-slot")
             result = mgr.seed_notebook("test-slot", ["/nonexistent/file.md"])
 
@@ -130,15 +134,15 @@ class TestSeedNotebook:
 
     def test_seed_from_docs(self, tmp_path):
         """seed_from_docs discovers .md files in docs/ and seeds them."""
-        # Create a fake docs directory
         docs_dir = tmp_path / "docs"
         docs_dir.mkdir()
         (docs_dir / "ARCHITECTURE.md").write_text("# Arch", encoding="utf-8")
         (docs_dir / "SKILLS.md").write_text("# Skills", encoding="utf-8")
 
-        mgr, engine, _ = _make_manager(tmp_path)
+        mgr, engine, _, factory = _make_manager(tmp_path)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine), \
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory), \
+             patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine), \
              patch("engine.nexus.nlm_notebook_manager._PROJECT_ROOT", tmp_path):
             mgr.ensure_notebook("cosysim-architecture")
             result = mgr.seed_from_docs()
@@ -150,7 +154,7 @@ class TestSeedNotebook:
         """seed_from_docs returns error when docs/ doesn't exist."""
         empty_root = tmp_path / "empty"
         empty_root.mkdir()
-        mgr, engine, _ = _make_manager(tmp_path)
+        mgr, engine, _, factory = _make_manager(tmp_path)
 
         with patch("engine.nexus.nlm_notebook_manager._PROJECT_ROOT", empty_root):
             result = mgr.seed_from_docs()
@@ -167,9 +171,10 @@ class TestSeedFromCode:
         code_file.parent.mkdir(parents=True)
         code_file.write_text("# config", encoding="utf-8")
 
-        mgr, engine, _ = _make_manager(tmp_path)
+        mgr, engine, _, factory = _make_manager(tmp_path)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine), \
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory), \
+             patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine), \
              patch("engine.nexus.nlm_notebook_manager._PROJECT_ROOT", tmp_path):
             mgr.ensure_notebook("cosysim-codebase")
             result = mgr.seed_from_code(paths=["engine/config.py"])
@@ -182,9 +187,9 @@ class TestResearch:
 
     def test_creates_research_notebook(self, tmp_path):
         """get_or_create_research creates a research-{topic} slot."""
-        mgr, engine, meta_path = _make_manager(tmp_path)
+        mgr, engine, meta_path, factory = _make_manager(tmp_path)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory):
             result = mgr.get_or_create_research("mcp-state")
 
         assert result["slot_name"] == "research-mcp-state"
@@ -208,21 +213,23 @@ class TestRotation:
                 "last_asked": None,
             }
         }
-        mgr, engine, _ = _make_manager(tmp_path, notebooks=existing)
+        mgr, engine, _, factory = _make_manager(tmp_path, notebooks=existing)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine), \
+             patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory):
             result = mgr.rotate_notebook("cosysim-architecture")
 
         engine.delete_notebook.assert_called_once_with("nb-old")
-        engine.create_notebook.assert_called_once()
+        factory.get_or_create.assert_called_once()
         assert result["notebook_id"] == "nb-123"
         assert result["source_count"] == 0
 
     def test_rotate_nonexistent_creates_new(self, tmp_path):
         """rotate_notebook on a missing slot just creates it."""
-        mgr, engine, _ = _make_manager(tmp_path)
+        mgr, engine, _, factory = _make_manager(tmp_path)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine), \
+             patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory):
             result = mgr.rotate_notebook("new-slot")
 
         engine.delete_notebook.assert_not_called()
@@ -244,7 +251,7 @@ class TestHealth:
                 "last_asked": None,
             }
         }
-        mgr, _, _ = _make_manager(tmp_path, notebooks=existing)
+        mgr, _, _, _ = _make_manager(tmp_path, notebooks=existing)
 
         report = mgr.health()
 
@@ -257,7 +264,7 @@ class TestHealth:
 
     def test_health_empty(self, tmp_path):
         """health() works with no managed notebooks."""
-        mgr, _, _ = _make_manager(tmp_path)
+        mgr, _, _, _ = _make_manager(tmp_path)
         report = mgr.health()
         assert report["total_slots"] == 0
         assert report["slots"] == []
@@ -287,7 +294,7 @@ class TestCleanupStale:
                 "last_asked": None,
             },
         }
-        mgr, engine, meta_path = _make_manager(tmp_path, notebooks=existing)
+        mgr, engine, meta_path, _ = _make_manager(tmp_path, notebooks=existing)
 
         with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
             removed = mgr.cleanup_stale(max_age_days=30)
@@ -313,7 +320,7 @@ class TestCleanupStale:
                 "last_asked": None,
             }
         }
-        mgr, engine, _ = _make_manager(tmp_path, notebooks=existing)
+        mgr, engine, _, _ = _make_manager(tmp_path, notebooks=existing)
 
         with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
             removed = mgr.cleanup_stale(max_age_days=30)
@@ -337,7 +344,7 @@ class TestListManaged:
                 "last_asked": None,
             }
         }
-        mgr, _, _ = _make_manager(tmp_path, notebooks=existing)
+        mgr, _, _, _ = _make_manager(tmp_path, notebooks=existing)
 
         managed = mgr.list_managed()
         assert len(managed) == 1
@@ -353,7 +360,7 @@ class TestThreadSafety:
 
     def test_concurrent_ensure_notebook(self, tmp_path):
         """Multiple threads calling ensure_notebook don't corrupt state."""
-        mgr, engine, meta_path = _make_manager(tmp_path)
+        mgr, engine, meta_path, factory = _make_manager(tmp_path)
         results: list = []
         errors: list = []
 
@@ -364,7 +371,7 @@ class TestThreadSafety:
             except Exception as exc:
                 errors.append(exc)
 
-        with patch("engine.nexus.nlm_notebook_manager.get_nlm_engine", return_value=engine):
+        with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory", return_value=factory):
             threads = [threading.Thread(target=worker, args=(f"slot-{i}",)) for i in range(10)]
             for t in threads:
                 t.start()

@@ -317,19 +317,26 @@ def test_export_training_sharegpt(forge, tmp_path):
 
 def test_build_topic(forge, mock_engine, mock_nexus):
     """Build topic creates notebook, adds sources, distills."""
-    result = forge.build_topic(
-        "MCP Framework", sources=["https://docs.example.com"],
-        question_count=2,
-    )
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory_fn:
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = "nb-test-123"
+        mock_factory_fn.return_value = mock_factory
+        result = forge.build_topic(
+            "MCP Framework", sources=["https://docs.example.com"],
+            question_count=2,
+        )
     assert result.operation == "build_topic"
     assert result.notebook_id == "nb-test-123"
-    assert mock_engine.create_notebook.called
+    assert mock_factory.get_or_create.called
 
 
 def test_build_topic_fail_create(forge, mock_engine):
     """Build topic handles notebook creation failure."""
-    mock_engine.create_notebook.return_value = {"error": "failed"}
-    result = forge.build_topic("Topic")
+    with patch("engine.nexus.nlm_notebook_factory.get_notebook_factory") as mock_factory_fn:
+        mock_factory = MagicMock()
+        mock_factory.get_or_create.return_value = None
+        mock_factory_fn.return_value = mock_factory
+        result = forge.build_topic("Topic")
     assert len(result.errors) > 0
 
 
