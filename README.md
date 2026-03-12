@@ -1,8 +1,8 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.02b](https://img.shields.io/badge/version-1.02b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 10720](https://img.shields.io/badge/tests-10%2C720-brightgreen.svg)]() [![Skills: 373](https://img.shields.io/badge/skills-373-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.12b](https://img.shields.io/badge/version-1.12b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11272](https://img.shields.io/badge/tests-11%2C272-brightgreen.svg)]() [![Skills: 373](https://img.shields.io/badge/skills-373-0a7f5a.svg)]()
 
-> v1.02b — "NEONCITY 2: THE LIVING CITY" — Local-first multi-scene AI simulation framework
+> v1.12b — "NLM PIPELINE HARDENING" — Local-first multi-scene AI simulation framework
 
 ## Overview
 

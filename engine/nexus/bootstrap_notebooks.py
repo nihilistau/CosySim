@@ -594,24 +594,23 @@ def _distill_qa_via_argus(notebook_url: str, questions: list[str], category: str
 
 
 def _get_or_create_notebook(name: str, description: str, state: dict) -> Optional[str]:
-    """Get existing notebook URL from state, or create a new one via NLM proxy."""
+    """Get existing notebook URL from state, or create via the centralised factory."""
     notebooks = state.get("notebooks", {})
     if name in notebooks:
         return notebooks[name]
 
-    logger.info("Creating NLM notebook: %s", name)
-    result = _nlm_post("/notebooks", {"title": name, "name": name, "description": description})
-    notebook_id = ""
-    if result:
-        notebook_id = str(result.get("notebook_id") or result.get("notebookId") or "").strip()
-    if result and (result.get("notebookUrl") or notebook_id):
-        url = str(result.get("notebookUrl") or f"https://notebooklm.google.com/notebook/{notebook_id}")
+    from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+    factory = get_notebook_factory()
+    notebook_id = factory.get_or_create(name, category="bootstrap")
+    if notebook_id:
+        url = f"https://notebooklm.google.com/notebook/{notebook_id}"
         notebooks[name] = url
         state["notebooks"] = notebooks
         logger.info("  Created: %s", url)
         return url
 
-    logger.warning("Failed to create notebook: %s — %s", name, result)
+    logger.warning("Failed to create notebook: %s", name)
     return None
 
 

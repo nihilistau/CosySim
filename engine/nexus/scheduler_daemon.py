@@ -554,6 +554,18 @@ def _news_fetch_callback() -> Dict[str, Any]:
     }
 
 
+def _news_nlm_retry_callback() -> Dict[str, Any]:
+    """Process the NLM distillation retry queue."""
+    try:
+        from engine.nexus.news_nlm_pipeline import get_news_nlm_pipeline
+
+        pipeline = get_news_nlm_pipeline()
+        return pipeline.process_retries(max_retries=3)
+    except Exception as exc:
+        logger.debug("News NLM retry processing skipped: %s", exc)
+        return {"skipped": True, "error": str(exc)}
+
+
 def _operator_inbox_sync_callback() -> Dict[str, Any]:
     """Promote pending operator inbox items into tasks and plan digests."""
     try:
@@ -972,6 +984,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "News Fetch & Digest",
         "every_8h",
         _news_fetch_callback,
+    )
+    daemon.register(
+        "news-nlm-retry",
+        "News NLM Retry Queue",
+        "every_8h",
+        _news_nlm_retry_callback,
     )
     daemon.register(
         "test-monitor",

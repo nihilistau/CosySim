@@ -668,11 +668,17 @@ class KnowledgeForge:
         if on_progress:
             on_progress("creating_notebook", 0, 3)
 
-        # 1. Create notebook
-        nb_result = self._engine.create_notebook(f"Knowledge: {topic}", sources=sources)
-        notebook_id = nb_result.get("notebook_id") or nb_result.get("id", "")
+        # 1. Create notebook via factory
+        from engine.nexus.nlm_notebook_factory import get_notebook_factory
+
+        factory = get_notebook_factory()
+        notebook_id = factory.get_or_create(
+            f"Knowledge: {topic}",
+            category="knowledge",
+            dedup_key=f"knowledge:{topic}",
+        )
         if not notebook_id:
-            result.errors.append(f"Failed to create notebook: {nb_result}")
+            result.errors.append("Failed to create notebook via factory")
             return result
         result.notebook_id = notebook_id
 

@@ -312,14 +312,18 @@ class TeacherPipeline:
             return self._notebook_cache[model_type]
 
         try:
-            from engine.nexus.nlm_notebook_manager import get_notebook_manager
-            mgr = get_notebook_manager()
+            from engine.nexus.nlm_notebook_factory import get_notebook_factory
 
+            factory = get_notebook_factory()
             title = f"CosySim Teacher: {model_type}"
-            sources = self._get_sources_for_model(model_type)
-            notebook_id = mgr.create_notebook(title=title, sources=sources)
-            self._notebook_cache[model_type] = notebook_id
-            logger.info("Created NLM notebook %s for %s", notebook_id, model_type)
+            notebook_id = factory.get_or_create(
+                title,
+                category="training",
+                dedup_key=f"training:{model_type}",
+            )
+            if notebook_id:
+                self._notebook_cache[model_type] = notebook_id
+                logger.info("Got NLM notebook %s for %s", notebook_id, model_type)
             return notebook_id
         except Exception as exc:
             logger.warning("NLM notebook creation failed: %s", exc)
