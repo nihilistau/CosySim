@@ -1,8 +1,8 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.19b](https://img.shields.io/badge/version-1.19b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11748](https://img.shields.io/badge/tests-11%2C748-brightgreen.svg)]() [![Skills: 387](https://img.shields.io/badge/skills-387-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.19c](https://img.shields.io/badge/version-1.19c-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11748](https://img.shields.io/badge/tests-11%2C748-brightgreen.svg)]() [![Skills: 391](https://img.shields.io/badge/skills-391-0a7f5a.svg)]()
 
-> v1.19a — "DEEP HAR API EXPLORATION" — Local-first multi-scene AI simulation framework
+> v1.19c — "COLAB PIPELINE INTEGRATION" — Local-first multi-scene AI simulation framework
 
 ## Overview
 
@@ -14,17 +14,17 @@ The framework features a **unified cyberpunk aesthetic** (neon_base template), *
 
 | Metric | Value |
 |--------|-------|
-| Version | **1.19b** — "DRIVE V2INTERNAL + SHEETS EXTENDED LIVE-WIRING" |
+| Version | **1.19c** — "COLAB PIPELINE INTEGRATION" |
 | Tests | **11,721 passing** / 345+ test files |
 | Scenes | **20** Flask scenes + 3 Streamlit apps |
 | Services | **12** launcher-managed services |
-| Skill packs | **38 packs / 387 skills** |
+| Skill packs | **38 packs / 391 skills** |
 | MCP tools | **42** domain modules |
 | Interceptors | **26** auto-registered pipeline hooks |
 | Scheduler tasks | **61** autonomous recurring tasks |
-| Pipeline stages | **21** cross-service pipeline stages |
-| Pipeline templates | **21** orchestration templates |
-| Workspace skills | **27** Google Workspace skills |
+| Pipeline stages | **24** cross-service pipeline stages |
+| Pipeline templates | **25** orchestration templates |
+| Workspace skills | **31** Google Workspace skills |
 | Workspace API ops | **50** operations across **29** YAML sections |
 | API keys cataloged | **16** keys across **12** Google services |
 | Client methods | **14** WorkspaceGeminiClient methods |

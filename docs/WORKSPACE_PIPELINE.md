@@ -1,9 +1,9 @@
 # Workspace Pipeline — Cross-Service Orchestrator
 
 > **Module:** `engine/nexus/workspace_pipeline.py`
-> **Version:** v1.19b
-> **Skills:** `engine/skills/builtin/workspace_skills.py` (27 skills)
-> **Tests:** `tests/test_workspace_pipeline.py` (74 tests)
+> **Version:** v1.19c
+> **Skills:** `engine/skills/builtin/workspace_skills.py` (31 skills)
+> **Tests:** `tests/test_workspace_pipeline.py` (88 tests)
 
 ## Overview
 
@@ -25,6 +25,9 @@ Input (topic/question/data)
   ├─→ drive_copy / drive_export ─→ v2internal file operations
   ├─→ drive_permissions ─→ list or set file access
   ├─→ sheet_revisions ─→ spreadsheet revision history
+  ├─→ colab_execute ─→ execute Python on GPU runtime
+  ├─→ colab_ask ─→ query Colab Gemini agent
+  ├─→ colab_build ─→ build notebook from task description
   └─→ nexus_store ─→ persist to Nexus KMS
 ```
 
@@ -33,23 +36,23 @@ Input (topic/question/data)
 ```
                     ┌─────────────────────────────────────────┐
                     │         WorkspacePipeline                │
-                    │    21 Stages • 21 Templates              │
+                    │    24 Stages • 25 Templates              │
                     └──────────┬──────────────────────────────┘
                                │
-         ┌─────────┬───────────┼───────────┬──────────┬────────┐
-         │         │           │           │          │        │
-    ┌────┴────┐ ┌──┴───┐ ┌────┴────┐ ┌────┴───┐ ┌───┴────┐ ┌─┴──────┐
-    │ Sheets  │ │ Docs │ │  Drive  │ │  NLM   │ │ Gemini │ │  News  │
-    │ Gemini  │ │Client│ │ Gemini  │ │ Engine │ │ Direct │ │Pipeline│
-    └────┬────┘ └──┬───┘ └────┬────┘ └────┬───┘ └───┬────┘ └─┬──────┘
-         │         │          │           │          │        │
-    ┌────┴─────────┴──────────┴───────────┴──────────┴────────┴───┐
-    │              WorkspaceGeminiClient + Account Pool            │
-    │     (appsgenaiserver-pa.clients6.google.com)                │
-    └─────────────────────────────────────────────────────────────┘
+         ┌─────────┬───────────┼───────────┬──────────┬────────┬────────┐
+         │         │           │           │          │        │        │
+    ┌────┴────┐ ┌──┴───┐ ┌────┴────┐ ┌────┴───┐ ┌───┴────┐ ┌─┴──────┐ ┌┴──────┐
+    │ Sheets  │ │ Docs │ │  Drive  │ │  NLM   │ │ Gemini │ │  News  │ │ Colab │
+    │ Gemini  │ │Client│ │ Gemini  │ │ Engine │ │ Direct │ │Pipeline│ │Client │
+    └────┬────┘ └──┬───┘ └────┬────┘ └────┬───┘ └───┬────┘ └─┬──────┘ └┬──────┘
+         │         │          │           │          │        │         │
+    ┌────┴─────────┴──────────┴───────────┴──────────┴────────┴─────────┴───┐
+    │              WorkspaceGeminiClient + ColabClient + Account Pool        │
+    │     (appsgenaiserver-pa / colab.clients6.google.com)                  │
+    └───────────────────────────────────────────────────────────────────────┘
 ```
 
-## Stage Registry (17 Stages)
+## Stage Registry (24 Stages)
 
 | Stage | Client | Description |
 |-------|--------|-------------|
@@ -74,9 +77,12 @@ Input (topic/question/data)
 | `drive_export` | GoogleDriveClient (v2internal) | Export files to text/html/pdf/csv/docx/xlsx |
 | `drive_permissions` | GoogleDriveClient (v2internal) | List or set file access permissions |
 | `sheet_revisions` | GoogleSheetsClient (extended) | Fetch spreadsheet revision history |
+| `colab_execute` | ColabClient | Execute Python code on GPU runtime |
+| `colab_ask` | ColabClient (Gemini agent) | Ask Colab's built-in AI assistant |
+| `colab_build` | ColabClient | Build a notebook from task description |
 | *(custom)* | User-defined | Register via `pipeline.register_stage()` |
 
-## Pipeline Templates (21 Templates)
+## Pipeline Templates (25 Templates)
 
 ### Core Templates (v1.17–v1.18a)
 
@@ -252,6 +258,40 @@ Best for: Tracking spreadsheet changes and edit history.
 pipeline.run("sheet_revision_audit", spreadsheet_id="xyz789", category="revision_audit")
 ```
 
+### Colab Templates (v1.19c)
+
+### `research_and_compute`
+NLM research → Colab GPU execution → Nexus storage.
+Best for: Research that needs computational validation or data processing.
+
+```python
+pipeline.run("research_and_compute", topic="matrix factorization", code="import numpy as np; print(np.linalg.svd(np.random.randn(3,3)))")
+```
+
+### `data_analysis`
+Sheets data → Colab GPU processing → Nexus storage.
+Best for: Large dataset analysis using GPU-accelerated Python.
+
+```python
+pipeline.run("data_analysis", sheet_id="abc123", code="import pandas as pd; df = pd.read_csv('data.csv'); print(df.describe())")
+```
+
+### `nlm_colab_loop`
+NLM research → Colab ask AI → Nexus storage.
+Best for: Iterative research combining NLM depth with Colab's Gemini agent.
+
+```python
+pipeline.run("nlm_colab_loop", topic="transformer architectures", question="What are the latest efficiency improvements?")
+```
+
+### `colab_build_and_store`
+Build Colab notebook from task → Nexus storage.
+Best for: Creating reusable Colab notebooks from natural-language task descriptions.
+
+```python
+pipeline.run("colab_build_and_store", task="Benchmark PyTorch vs TensorFlow on MNIST", category="benchmark")
+```
+
 ## Usage
 
 ### Python API
@@ -302,6 +342,10 @@ workspace_copy_file(file_id="abc123", title="Copy", role="reader")
 workspace_export_file(file_id="abc123", export_mime="text/plain")
 workspace_set_permissions(file_id="abc123", role="writer", perm_type="user", value="user@example.com")
 workspace_sheet_revisions(spreadsheet_id="xyz789")
+workspace_colab_execute(code="print('hello')", runtime_type="gpu")
+workspace_colab_ask(question="Explain transformers", context_text="neural networks")
+workspace_colab_build(task="Benchmark PyTorch MNIST", title="MNIST Benchmark")
+workspace_colab_pipeline(template="research_and_compute", topic="matrix ops", code="import numpy")
 ```
 
 ### REST API
@@ -323,6 +367,12 @@ POST /api/workspace/drive/copy          — Copy file (v2internal)
 POST /api/workspace/drive/export        — Export file (v2internal)
 POST /api/workspace/drive/permissions   — List/set file permissions
 POST /api/workspace/sheets/revisions    — Get spreadsheet revision history
+POST /api/colab/ask                     — Ask Colab Gemini agent
+POST /api/colab/execute                 — Execute Python on GPU runtime
+POST /api/colab/build                   — Build notebook from task
+GET  /api/colab/status                  — Colab service status
+POST /api/colab/pipeline                — Run Colab pipeline template
+GET  /api/colab/pipeline/status/<id>    — Check Colab pipeline run status
 ```
 
 ### Scheduler Tasks

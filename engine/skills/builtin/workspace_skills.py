@@ -761,3 +761,156 @@ def workspace_sheet_revisions(spreadsheet_id: str, max_results: int = 50) -> str
     except Exception as exc:
         logger.error("workspace_sheet_revisions failed: %s", exc)
         return json.dumps({"error": str(exc)})
+
+
+# ──── Colab Pipeline Skills (v1.19c) ─────────────────────────────────────────
+
+
+@skill(
+    pack="workspace",
+    description="Execute Python code in a Colab GPU runtime via the workspace pipeline",
+    category="SYSTEM",
+    cooldown=5.0,
+    cost=3.0,
+    tags=["colab", "gpu", "compute", "python"],
+)
+def workspace_colab_execute(code: str, timeout: int = 120) -> str:
+    """Execute Python code in a Google Colab GPU runtime.
+
+    The code runs in a real Colab kernel with GPU access.  Use this for
+    computationally expensive tasks, ML inference, data processing, or
+    anything requiring GPU acceleration.
+
+    Args:
+        code: Python source code to execute.
+        timeout: Execution timeout in seconds (default 120).
+
+    Returns:
+        JSON with ``output``, ``success``, and ``runtime_id`` keys.
+    """
+    from engine.integrations.colab_client import get_colab_client
+
+    try:
+        client = get_colab_client()
+        result = client.run_python(code, timeout=timeout)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_colab_execute failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Ask the Colab Gemini agent a question with optional code context",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=2.0,
+    tags=["colab", "gemini", "ai", "question"],
+)
+def workspace_colab_ask(prompt: str, context: str = "", timeout: int = 120) -> str:
+    """Ask the Colab Gemini agent a question.
+
+    Uses the full AI agent create → update → poll cycle for grounded
+    answers.  Provide code or notebook context for more precise responses.
+
+    Args:
+        prompt: The question or instruction to send to Gemini.
+        context: Optional code/notebook context for grounded answers.
+        timeout: Response timeout in seconds (default 120).
+
+    Returns:
+        JSON with ``answer`` and ``prompt`` keys.
+    """
+    from engine.integrations.colab_client import get_colab_client
+
+    try:
+        client = get_colab_client()
+        answer = client.ask(prompt, context=context, timeout=timeout)
+        return json.dumps({"answer": answer, "prompt": prompt})
+    except Exception as exc:
+        logger.error("workspace_colab_ask failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Build a complete Colab notebook from a task description",
+    category="SYSTEM",
+    cooldown=10.0,
+    cost=5.0,
+    tags=["colab", "notebook", "generate", "ai"],
+)
+def workspace_colab_build(task_description: str, timeout: int = 180) -> str:
+    """Build a Colab notebook from a task description.
+
+    Uses the Colab AI agent workflow to generate a complete notebook with
+    code cells, markdown, and outputs for the given task.
+
+    Args:
+        task_description: What the notebook should accomplish.
+        timeout: Max seconds to wait for completion (default 180).
+
+    Returns:
+        JSON with ``task_id``, ``status``, and ``notebook_content`` keys.
+    """
+    from engine.integrations.colab_client import get_colab_client
+    import time as _time
+
+    try:
+        client = get_colab_client()
+        task_id = client.create_task()
+        client.update_task(task_id, task_description)
+
+        deadline = _time.time() + timeout
+        notebook_content = None
+        while _time.time() < deadline:
+            result = client.query_task(task_id)
+            if result is not None:
+                notebook_content = result
+                break
+            _time.sleep(3)
+
+        if notebook_content is None:
+            return json.dumps({"task_id": task_id, "status": "timeout", "notebook_content": ""})
+        return json.dumps({"task_id": task_id, "status": "complete", "notebook_content": notebook_content})
+    except Exception as exc:
+        logger.error("workspace_colab_build failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Run a Colab-oriented workspace pipeline template",
+    category="SYSTEM",
+    cooldown=5.0,
+    cost=4.0,
+    tags=["colab", "pipeline", "workflow", "orchestration"],
+)
+def workspace_colab_pipeline(template: str, params: str = "{}") -> str:
+    """Run a Colab-oriented workspace pipeline template.
+
+    Available templates: research_and_compute, data_analysis,
+    nlm_colab_loop, colab_build_and_store.
+
+    Args:
+        template: Pipeline template name.
+        params: JSON string of parameters for the pipeline stages.
+
+    Returns:
+        JSON with ``results``, ``stage_count``, and ``errors`` keys.
+    """
+    from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+    colab_templates = {"research_and_compute", "data_analysis", "nlm_colab_loop", "colab_build_and_store"}
+    if template not in colab_templates:
+        return json.dumps({"error": f"Unknown template. Choose from: {sorted(colab_templates)}"})
+
+    try:
+        parsed_params = json.loads(params) if isinstance(params, str) else params
+        pipeline = get_workspace_pipeline()
+        results = pipeline.run(template, parsed_params)
+        errors = [r for r in results if "error" in r]
+        return json.dumps({"results": results, "stage_count": len(results), "errors": errors}, default=str)
+    except Exception as exc:
+        logger.error("workspace_colab_pipeline failed: %s", exc)
+        return json.dumps({"error": str(exc)})

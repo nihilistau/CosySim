@@ -1,8 +1,9 @@
 """Workspace Pipeline — cross-service orchestrator for Google Workspace + Nexus.
 
-Coordinates workflows across Google Docs, Sheets, Drive, NotebookLM, and Nexus
-to execute multi-stage knowledge pipelines.  Each pipeline is a named sequence
-of stages that move data between services, with Drive as the intermediate
+Coordinates workflows across Google Docs, Sheets, Drive, NotebookLM, Colab,
+and Nexus to execute multi-stage knowledge pipelines.  Each pipeline is a
+named sequence of stages that move data between services, with Drive as the
+intermediate
 storage / movement layer and Nexus as the final knowledge destination.
 
 Stages (17):
@@ -906,6 +907,114 @@ def _stage_sheet_revisions(
     return {"revisions": revisions, "count": len(revisions), "spreadsheet_id": spreadsheet_id}
 
 
+# ──── Colab Stages (v1.19c) ──────────────────────────────────────────────────
+
+
+def _stage_colab_execute(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute Python code in a Colab GPU runtime.
+
+    Params:
+        code: Python source code to execute.
+        timeout: Execution timeout in seconds (default 120).
+
+    Returns:
+        Dict with ``output``, ``success``, and ``runtime_id`` keys.
+    """
+    from engine.integrations.colab_client import get_colab_client
+
+    code = params.get("code") or context.get("code", "")
+    if not code:
+        return {"error": "No code provided", "success": False}
+
+    timeout = int(params.get("timeout", context.get("timeout", 120)))
+    try:
+        client = get_colab_client()
+        result = client.run_python(code, timeout=timeout)
+        return {
+            "output": result.get("output", ""),
+            "success": result.get("success", False),
+            "runtime_id": result.get("runtime_id", ""),
+            "execution_count": result.get("execution_count", 0),
+        }
+    except Exception as exc:
+        return {"error": str(exc), "success": False}
+
+
+def _stage_colab_ask(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Ask the Colab Gemini agent a question.
+
+    Params:
+        prompt: The question or instruction to send to Gemini.
+        context_text: Optional notebook/code context for grounded answers.
+        timeout: Response timeout in seconds (default 120).
+
+    Returns:
+        Dict with ``answer`` and ``prompt`` keys.
+    """
+    from engine.integrations.colab_client import get_colab_client
+
+    prompt = params.get("prompt") or context.get("prompt", "")
+    if not prompt:
+        return {"error": "No prompt provided", "answer": ""}
+
+    context_text = params.get("context_text") or context.get("context_text", "")
+    timeout = int(params.get("timeout", context.get("timeout", 120)))
+    try:
+        client = get_colab_client()
+        answer = client.ask(prompt, context=context_text, timeout=timeout)
+        return {"answer": answer, "prompt": prompt}
+    except Exception as exc:
+        return {"error": str(exc), "answer": ""}
+
+
+def _stage_colab_build(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a Colab notebook from a task description.
+
+    Uses the full Colab AI agent workflow: create_task → update_task → query_task
+    to generate a complete notebook for a given task.
+
+    Params:
+        task_description: What the notebook should do.
+        timeout: Max seconds to wait for task completion (default 180).
+
+    Returns:
+        Dict with ``notebook_content``, ``task_id``, and ``status`` keys.
+    """
+    from engine.integrations.colab_client import get_colab_client
+
+    description = params.get("task_description") or context.get("task_description", "")
+    if not description:
+        return {"error": "No task_description provided", "status": "failed"}
+
+    timeout = int(params.get("timeout", context.get("timeout", 180)))
+    try:
+        client = get_colab_client()
+
+        task_id = client.create_task()
+        client.update_task(task_id, description)
+
+        import time as _time
+        deadline = _time.time() + timeout
+        notebook_content = None
+        while _time.time() < deadline:
+            result = client.query_task(task_id)
+            if result is not None:
+                notebook_content = result
+                break
+            _time.sleep(3)
+
+        if notebook_content is None:
+            return {"task_id": task_id, "status": "timeout", "notebook_content": ""}
+
+        return {
+            "task_id": task_id,
+            "status": "complete",
+            "notebook_content": notebook_content,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "status": "failed"}
+
+
 # ──── Stage Registry ──────────────────────────────────────────────────────────
 
 STAGE_REGISTRY: Dict[str, Callable] = {
@@ -930,6 +1039,9 @@ STAGE_REGISTRY: Dict[str, Callable] = {
     "drive_export": _stage_drive_export,
     "drive_permissions": _stage_drive_permissions,
     "sheet_revisions": _stage_sheet_revisions,
+    "colab_execute": _stage_colab_execute,
+    "colab_ask": _stage_colab_ask,
+    "colab_build": _stage_colab_build,
 }
 
 
@@ -1085,6 +1197,36 @@ PIPELINE_TEMPLATES: Dict[str, List[Dict[str, Any]]] = {
         {"stage": "sheet_revisions", "params": {"max_results": 100}},
         {"stage": "gemini_enrich", "params": {"prompt": "Analyse these spreadsheet revisions: identify major changes, editors, and patterns"}, "optional": True},
         {"stage": "nexus_store", "params": {"category": "audit", "content_type": "note", "tags": ["revisions", "audit"]}},
+    ],
+
+    # ── Colab Pipeline Templates (v1.19c) ────────────────────────────────
+
+    "research_and_compute": [
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "colab_ask", "params": {"prompt": "Analyse the research findings and identify key claims that can be tested computationally"}},
+        {"stage": "colab_execute", "params": {}, "optional": True},
+        {"stage": "nexus_store", "params": {"category": "research", "content_type": "note", "tags": ["research", "computed", "colab"]}},
+    ],
+
+    "data_analysis": [
+        {"stage": "drive_search", "params": {}},
+        {"stage": "colab_execute", "params": {}},
+        {"stage": "create_sheet", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "analysis", "content_type": "document", "tags": ["data", "analysis", "colab"]}},
+    ],
+
+    "nlm_colab_loop": [
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "colab_ask", "params": {"prompt": "Verify these research claims and identify gaps or errors"}},
+        {"stage": "colab_execute", "params": {}, "optional": True},
+        {"stage": "gemini_enrich", "params": {"prompt": "Synthesise the research findings with the computational verification results"}, "optional": True},
+        {"stage": "nexus_store", "params": {"category": "research", "content_type": "note", "tags": ["verified", "nlm", "colab"]}},
+    ],
+
+    "colab_build_and_store": [
+        {"stage": "colab_build", "params": {}},
+        {"stage": "drive_upload", "params": {}, "optional": True},
+        {"stage": "nexus_store", "params": {"category": "code", "content_type": "code", "tags": ["notebook", "generated", "colab"]}},
     ],
 }
 

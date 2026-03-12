@@ -3,6 +3,42 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.19c] — "COLAB PIPELINE INTEGRATION" — 2026-07
+
+Integrates the Colab AI agent, GPU runtime, and notebook builder into the
+Workspace Pipeline as full pipeline stages, templates, MCP skills, and proxy
+routes — completing the cross-service rotation through all six Google services.
+
+### Added: Colab Pipeline Stages (21 → 24)
+- `colab_execute` — execute Python code on a Colab GPU runtime
+- `colab_ask` — query the Colab Gemini agent with optional code context
+- `colab_build` — build a complete notebook from a task description via AI agent
+
+### Added: Colab Pipeline Templates (21 → 25)
+- `research_and_compute` — NLM research → Colab execute → Nexus store
+- `data_analysis` — Create sheet → Colab execute → Gemini enrich → Nexus store
+- `nlm_colab_loop` — NLM research → Colab ask → NLM add source → Nexus store
+- `colab_build_and_store` — Colab build → Drive upload → Nexus store
+
+### Added: Colab Workspace Skills (27 → 31)
+- `workspace_colab_execute(code, timeout)` — run Python on GPU runtime
+- `workspace_colab_ask(prompt, context_text, timeout)` — ask Colab Gemini agent
+- `workspace_colab_build(task_description, timeout)` — build notebook from description
+- `workspace_colab_pipeline(template, params)` — run Colab pipeline templates
+
+### Added: Colab Proxy Routes (6 new)
+- `POST /api/colab/ask` — query Colab Gemini agent
+- `POST /api/colab/execute` — execute code on GPU runtime
+- `POST /api/colab/build` — build notebook from task description
+- `GET  /api/colab/status` — Colab service health check
+- `POST /api/colab/pipeline` — run a Colab pipeline template
+
+### Added: Tests
+- 14 new tests in `test_workspace_pipeline.py` (74 → 88)
+- `TestV119cStages` — 8 tests covering all Colab stages + error handling
+- `TestV119cTemplates` — 6 tests covering template structure and stage registration
+
+---
 ## [1.19b] — "DRIVE V2INTERNAL + SHEETS EXTENDED LIVE-WIRING" — 2026-07
 
 Live-wires the v2internal Drive API and extended Sheets API endpoints discovered

@@ -5001,6 +5001,142 @@ def create_nlm_proxy_app() -> Flask:
             logger.error("workspace sheets revisions failed: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    # ── Colab Proxy Routes (v1.19c) ──────────────────────────────────────
+
+    @app.route("/api/colab/ask", methods=["POST"])
+    def colab_ask_route():
+        """Ask the Colab Gemini agent a question.
+
+        Body: {prompt: str, context?: str, timeout?: int}
+        Returns: {answer: str, prompt: str}
+        """
+        from engine.integrations.colab_client import get_colab_client
+
+        data = request.get_json(force=True)
+        prompt = data.get("prompt")
+        if not prompt:
+            return jsonify({"error": "prompt required"}), 400
+
+        context_text = data.get("context", "")
+        timeout = int(data.get("timeout", 120))
+        try:
+            client = get_colab_client()
+            answer = client.ask(prompt, context=context_text, timeout=timeout)
+            return jsonify({"answer": answer, "prompt": prompt})
+        except Exception as exc:
+            logger.error("colab ask failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/colab/execute", methods=["POST"])
+    def colab_execute_route():
+        """Execute Python code in a Colab GPU runtime.
+
+        Body: {code: str, timeout?: int}
+        Returns: {output: str, success: bool, runtime_id: str}
+        """
+        from engine.integrations.colab_client import get_colab_client
+
+        data = request.get_json(force=True)
+        code = data.get("code")
+        if not code:
+            return jsonify({"error": "code required"}), 400
+
+        timeout = int(data.get("timeout", 120))
+        try:
+            client = get_colab_client()
+            result = client.run_python(code, timeout=timeout)
+            return jsonify(result)
+        except Exception as exc:
+            logger.error("colab execute failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/colab/build", methods=["POST"])
+    def colab_build_route():
+        """Build a Colab notebook from a task description.
+
+        Body: {task_description: str, timeout?: int}
+        Returns: {task_id: str, status: str, notebook_content: str}
+        """
+        from engine.integrations.colab_client import get_colab_client
+        import time as _time
+
+        data = request.get_json(force=True)
+        description = data.get("task_description")
+        if not description:
+            return jsonify({"error": "task_description required"}), 400
+
+        timeout = int(data.get("timeout", 180))
+        try:
+            client = get_colab_client()
+            task_id = client.create_task()
+            client.update_task(task_id, description)
+
+            deadline = _time.time() + timeout
+            notebook_content = None
+            while _time.time() < deadline:
+                result = client.query_task(task_id)
+                if result is not None:
+                    notebook_content = result
+                    break
+                _time.sleep(3)
+
+            if notebook_content is None:
+                return jsonify({"task_id": task_id, "status": "timeout", "notebook_content": ""})
+            return jsonify({"task_id": task_id, "status": "complete", "notebook_content": notebook_content})
+        except Exception as exc:
+            logger.error("colab build failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/colab/status", methods=["GET"])
+    def colab_status_route():
+        """Check Colab runtime status and user info.
+
+        Returns: {user_info: dict, assignments: list}
+        """
+        from engine.integrations.colab_client import get_colab_client
+
+        try:
+            client = get_colab_client()
+            user_info = client.get_user_info()
+            assignments = client.list_assignments()
+            return jsonify({
+                "user_info": user_info,
+                "assignments": assignments,
+                "active_runtimes": len(assignments),
+            })
+        except Exception as exc:
+            logger.error("colab status failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/colab/pipeline", methods=["POST"])
+    def colab_pipeline_route():
+        """Run a Colab-oriented workspace pipeline template.
+
+        Body: {template: str, params: dict}
+        Templates: research_and_compute, data_analysis, nlm_colab_loop, colab_build_and_store
+        Returns: {results: list, stage_count: int, errors: list}
+        """
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+        data = request.get_json(force=True)
+        template = data.get("template")
+        if not template:
+            return jsonify({"error": "template required"}), 400
+
+        colab_templates = {"research_and_compute", "data_analysis", "nlm_colab_loop", "colab_build_and_store"}
+        if template not in colab_templates:
+            return jsonify({"error": f"Unknown Colab template. Choose from: {sorted(colab_templates)}"}), 400
+
+        params = data.get("params", {})
+        try:
+            pipeline = get_workspace_pipeline()
+            results = pipeline.run(template, params)
+            errors = [r for r in results if "error" in r]
+            return jsonify({"results": results, "stage_count": len(results), "errors": errors})
+        except Exception as exc:
+            logger.error("colab pipeline failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
     return app
 
 
