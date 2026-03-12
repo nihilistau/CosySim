@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.19a** "DEEP HAR API EXPLORATION" ✅ | Last updated: 2026-07
+> Current: **v1.19b** "DRIVE V2INTERNAL + SHEETS EXTENDED LIVE-WIRING" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,15 +10,26 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.19a — "DEEP HAR API EXPLORATION" ✅
+## Current Shipped State: v1.19b — "DRIVE V2INTERNAL + SHEETS EXTENDED LIVE-WIRING" ✅
 
-**Baseline: 20 scenes, 61 scheduler tasks, 23 workspace skills, 11,737 tests, 17 pipeline stages, 17 templates, 50 workspace API ops across 29 YAML sections.**
+**Baseline: 20 scenes, 61 scheduler tasks, 27 workspace skills, 11,748 tests, 21 pipeline stages, 21 templates, 50 workspace API ops across 29 YAML sections.**
 
-The v1.19a sprint delivers exhaustive API surface mining from Google Workspace HAR
-captures. 25 new YAML sections with full payload maps, parameter positions, tier
-gating documentation, bypass catalogs, 16 API keys across 12 services, and 8 new
-WorkspaceGeminiClient methods including pro-tier generation, PeopleStack search,
-experiment flag reading, and Espresso pre-warming.
+The v1.19b sprint live-wires the Drive v2internal and Sheets extended APIs discovered
+during v1.19a HAR mining into production client methods, pipeline stages, MCP skills,
+and proxy routes. 6 Drive v2internal methods, 4 Sheets extended methods, 4 new pipeline
+stages, 4 new templates, 4 new skills, and 4 new proxy routes — all tested.
+
+---
+
+## Shipped: v1.19b — "DRIVE V2INTERNAL + SHEETS EXTENDED LIVE-WIRING" ✅
+
+- [x] 6 Drive v2internal methods (copy, trash, export, permissions, metadata)
+- [x] 4 Sheets extended methods (batch_save, session_prefs, external_data, revisions)
+- [x] 4 new pipeline stages (drive_copy, drive_export, drive_permissions, sheet_revisions)
+- [x] 4 new pipeline templates (clone, export_distill, audit, revision_audit)
+- [x] 4 new MCP skills + 4 new proxy routes
+- [x] 74 workspace pipeline tests pass (11 new v1.19b tests)
+- [x] Full suite green (~11,748 passed)
 
 ---
 

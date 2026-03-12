@@ -607,3 +607,157 @@ def workspace_enrich(text: str, prompt: str = "Summarise into key takeaways") ->
     except Exception as exc:
         logger.error("workspace_enrich failed: %s", exc)
         return json.dumps({"error": str(exc)})
+
+
+# ──── v1.19b Drive v2internal & Sheets Extended Skills ────────────────────────
+
+
+@skill(
+    pack="workspace",
+    description="Copy a Google Drive file using v2internal API",
+    tags=["workspace", "drive", "copy", "v2internal"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_copy_file(file_id: str, title: str = "", parent_id: str = "") -> str:
+    """Copy a Google Drive file.
+
+    Creates a duplicate of the given file with optional title and
+    destination folder overrides.  Uses the Drive v2internal copy
+    endpoint which supports team drives and all file types.
+
+    Args:
+        file_id: Source file ID to copy.
+        title: Title for the copy (defaults to "Copy of ...").
+        parent_id: Destination folder ID (optional).
+
+    Returns:
+        JSON with the new file ``id``, ``title``, and ``alternateLink``.
+    """
+    from engine.integrations.google_drive_client import get_drive_client
+
+    try:
+        client = get_drive_client()
+        result = client.v2_copy_file(
+            file_id=file_id,
+            title=title or None,
+            parent_id=parent_id or None,
+        )
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_copy_file failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Export a Google Workspace file to text, PDF, CSV, etc.",
+    tags=["workspace", "drive", "export", "v2internal"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_export_file(file_id: str, fmt: str = "text") -> str:
+    """Export a Google Workspace file to a different format.
+
+    Supports: ``text``, ``html``, ``pdf``, ``csv``, ``docx``, ``xlsx``.
+    Text-based formats return decoded content; binary formats return
+    base64-encoded data.
+
+    Args:
+        file_id: File ID to export.
+        fmt: Target format shortcut or full MIME type.
+
+    Returns:
+        JSON with ``content``, ``size``, ``mime_type``, and ``is_text``.
+    """
+    import base64
+
+    from engine.integrations.google_drive_client import get_drive_client
+
+    try:
+        client = get_drive_client()
+        content = client.v2_export_file(file_id, fmt)
+        is_text = fmt in ("text", "html", "csv", "text/plain", "text/html", "text/csv")
+        payload = {
+            "file_id": file_id,
+            "mime_type": fmt,
+            "size": len(content),
+            "is_text": is_text,
+            "content": content.decode("utf-8", errors="replace") if is_text else base64.b64encode(content).decode(),
+        }
+        return json.dumps(payload, default=str)
+    except Exception as exc:
+        logger.error("workspace_export_file failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Set or list permissions on a Google Drive file",
+    tags=["workspace", "drive", "permissions", "v2internal"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_set_permissions(
+    file_id: str,
+    role: str = "reader",
+    perm_type: str = "anyone",
+    email: str = "",
+) -> str:
+    """Set sharing permissions on a Google Drive file.
+
+    Creates a new permission entry.  Use ``perm_type='anyone'`` for link
+    sharing or ``perm_type='user'``/``'group'`` with an email address.
+
+    Args:
+        file_id: Target file ID.
+        role: Permission role — ``reader``, ``writer``, ``commenter``, ``owner``.
+        perm_type: Permission type — ``anyone``, ``user``, ``group``, ``domain``.
+        email: Email address (required for user/group types).
+
+    Returns:
+        JSON with the created permission object.
+    """
+    from engine.integrations.google_drive_client import get_drive_client
+
+    try:
+        client = get_drive_client()
+        result = client.v2_insert_permission(
+            file_id=file_id,
+            role=role,
+            perm_type=perm_type,
+            email=email or None,
+            with_link=True,
+            send_notification=False,
+        )
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_set_permissions failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Get revision history of a Google Sheets spreadsheet",
+    tags=["workspace", "sheets", "revisions", "history"],
+    category=SkillCategory.SYSTEM,
+)
+def workspace_sheet_revisions(spreadsheet_id: str, max_results: int = 50) -> str:
+    """Retrieve the revision history of a Google Sheets spreadsheet.
+
+    Returns revision metadata including editors, timestamps, and change
+    summaries.  Useful for auditing changes and tracking data lineage.
+
+    Args:
+        spreadsheet_id: Target spreadsheet ID.
+        max_results: Maximum number of revisions to return (default 50).
+
+    Returns:
+        JSON with ``revisions`` list and ``count``.
+    """
+    from engine.integrations.gsheets_client import get_sheets_client
+
+    try:
+        client = get_sheets_client()
+        revisions = client.get_revision_history(spreadsheet_id, max_results=max_results)
+        return json.dumps({"revisions": revisions, "count": len(revisions)}, default=str)
+    except Exception as exc:
+        logger.error("workspace_sheet_revisions failed: %s", exc)
+        return json.dumps({"error": str(exc)})

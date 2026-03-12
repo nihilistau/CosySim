@@ -4882,6 +4882,125 @@ def create_nlm_proxy_app() -> Flask:
             logger.error("workspace news digest failed: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    # ── v1.19b Drive v2internal & Sheets Extended Routes ─────────────────
+
+    @app.route("/api/workspace/drive/copy", methods=["POST"])
+    def workspace_drive_copy_route():
+        """Copy a Google Drive file via v2internal.
+
+        Body: {file_id: str, title?: str, parent_id?: str, description?: str}
+        Returns: New file metadata (id, title, alternateLink).
+        """
+        from engine.integrations.google_drive_client import get_drive_client
+
+        data = request.get_json(silent=True) or {}
+        file_id = data.get("file_id")
+        if not file_id:
+            return jsonify({"error": "file_id required"}), 400
+
+        try:
+            client = get_drive_client()
+            result = client.v2_copy_file(
+                file_id=file_id,
+                title=data.get("title"),
+                parent_id=data.get("parent_id"),
+                description=data.get("description"),
+            )
+            return jsonify(result)
+        except Exception as exc:
+            logger.error("workspace drive copy failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/workspace/drive/export", methods=["POST"])
+    def workspace_drive_export_route():
+        """Export a Google Workspace file to a different format.
+
+        Body: {file_id: str, mime_type?: str}
+        Returns: {content: str, size: int, mime_type: str, is_text: bool}
+        """
+        import base64
+
+        from engine.integrations.google_drive_client import get_drive_client
+
+        data = request.get_json(silent=True) or {}
+        file_id = data.get("file_id")
+        if not file_id:
+            return jsonify({"error": "file_id required"}), 400
+
+        mime_type = data.get("mime_type", "text")
+        try:
+            client = get_drive_client()
+            content = client.v2_export_file(file_id, mime_type)
+            is_text = mime_type in ("text", "html", "csv", "text/plain", "text/html", "text/csv")
+            payload = {
+                "file_id": file_id,
+                "mime_type": mime_type,
+                "size": len(content),
+                "is_text": is_text,
+                "content": content.decode("utf-8", errors="replace") if is_text else base64.b64encode(content).decode(),
+            }
+            return jsonify(payload)
+        except Exception as exc:
+            logger.error("workspace drive export failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/workspace/drive/permissions", methods=["POST"])
+    def workspace_drive_permissions_route():
+        """Manage Drive file permissions via v2internal.
+
+        Body: {file_id: str, action?: "list"|"set", role?: str,
+               perm_type?: str, email?: str}
+        Returns: Permission list or created permission.
+        """
+        from engine.integrations.google_drive_client import get_drive_client
+
+        data = request.get_json(silent=True) or {}
+        file_id = data.get("file_id")
+        if not file_id:
+            return jsonify({"error": "file_id required"}), 400
+
+        action = data.get("action", "list")
+        try:
+            client = get_drive_client()
+            if action == "set":
+                result = client.v2_insert_permission(
+                    file_id=file_id,
+                    role=data.get("role", "reader"),
+                    perm_type=data.get("perm_type", "anyone"),
+                    email=data.get("email"),
+                    with_link=data.get("with_link", True),
+                    send_notification=data.get("send_notification", False),
+                )
+                return jsonify({"permission": result, "action": "set"})
+            else:
+                perms = client.v2_get_permissions(file_id)
+                return jsonify({"permissions": perms, "action": "list", "count": len(perms)})
+        except Exception as exc:
+            logger.error("workspace drive permissions failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/workspace/sheets/revisions", methods=["GET"])
+    def workspace_sheets_revisions_route():
+        """Get revision history of a spreadsheet.
+
+        Query: ?spreadsheet_id=...&max_results=50
+        Returns: {revisions: [...], count: int}
+        """
+        from engine.integrations.gsheets_client import get_sheets_client
+
+        spreadsheet_id = request.args.get("spreadsheet_id")
+        if not spreadsheet_id:
+            return jsonify({"error": "spreadsheet_id required"}), 400
+
+        max_results = int(request.args.get("max_results", "50"))
+        try:
+            client = get_sheets_client()
+            revisions = client.get_revision_history(spreadsheet_id, max_results=max_results)
+            return jsonify({"revisions": revisions, "count": len(revisions)})
+        except Exception as exc:
+            logger.error("workspace sheets revisions failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
     return app
 
 

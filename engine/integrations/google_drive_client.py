@@ -23,11 +23,35 @@ logger = logging.getLogger(__name__)
 
 _DRIVE_BASE = "https://clients6.google.com/drive/v3"
 _DRIVE_V2_BASE = "https://clients6.google.com/drive/v2beta"
+_DRIVE_V2INT_BASE = "https://clients6.google.com/drive/v2internal"
+_DRIVE_V2INT_UPLOAD_BASE = "https://clients6.google.com/upload/drive/v2internal"
 _DRIVE_UPLOAD_BASE = "https://clients6.google.com/upload/drive/v3"
 _DRIVE_ORIGIN = "https://drive.google.com"
 _DRIVE_REFERER = "https://drive.google.com/"
 
 _FOLDER_MIME = "application/vnd.google-apps.folder"
+
+# v2internal API keys — different keys for different operation categories
+_V2INT_KEY_READ = "REDACTED-GOOGLE-API-KEY"
+_V2INT_KEY_UPLOAD = "REDACTED-GOOGLE-API-KEY"
+_V2INT_KEY_PERMS = "REDACTED-GOOGLE-API-KEY"
+
+_V2INT_COMMON_PARAMS: Dict[str, Any] = {
+    "supportsTeamDrives": "true",
+    "includeTeamDriveItems": "true",
+    "enforceSingleParent": "true",
+    "supportsAllDrives": "true",
+}
+
+# Export MIME type shortcuts
+_EXPORT_MIMES: Dict[str, str] = {
+    "text": "text/plain",
+    "html": "text/html",
+    "pdf": "application/pdf",
+    "csv": "text/csv",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -549,6 +573,288 @@ class GoogleDriveClient:
         except Exception as exc:
             logger.warning("Failed to set permission on %s: %s", file_id, exc)
             return False
+
+    # ──── Drive v2internal API ────────────────────────────────────────────────
+
+    def _v2int_params(
+        self,
+        api_key: str,
+        extra: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, str]:
+        """Build query params for v2internal requests.
+
+        Args:
+            api_key: The API key for this operation category.
+            extra: Additional params to merge in.
+
+        Returns:
+            Complete query params dict.
+        """
+        params: Dict[str, str] = {"key": api_key}
+        params.update(_V2INT_COMMON_PARAMS)
+        if extra:
+            params.update(extra)
+        return params
+
+    def v2_copy_file(
+        self,
+        file_id: str,
+        title: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Copy a file using the v2internal API.
+
+        Uses the internal copy endpoint which supports template duplication
+        and preserves sharing settings that the public API may not.
+
+        Args:
+            file_id: Source file ID to copy.
+            title: Title for the new copy. If None, uses original title.
+            parent_id: Parent folder ID for the copy.
+            description: Optional description for the copy.
+
+        Returns:
+            File metadata dict with id, title, alternateLink.
+        """
+        headers = self._get_headers({"Content-Type": "application/json"})
+        params = self._v2int_params(
+            _V2INT_KEY_READ,
+            {"fields": "id,title,alternateLink,mimeType,parents"},
+        )
+
+        body: Dict[str, Any] = {}
+        if title:
+            body["title"] = title
+        if parent_id:
+            body["parents"] = [{"id": parent_id}]
+        if description:
+            body["description"] = description
+
+        resp = self._session.post(
+            f"{_DRIVE_V2INT_BASE}/files/{file_id}/copy",
+            headers=headers,
+            params=params,
+            json=body,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        logger.info(
+            "Copied Drive file %s → %s (%s)",
+            file_id,
+            data.get("id"),
+            data.get("title"),
+        )
+        return data
+
+    def v2_trash_file(self, file_id: str) -> Dict[str, Any]:
+        """Move a file to trash using the v2internal API.
+
+        Unlike ``delete_file`` which permanently deletes, this moves the file
+        to the user's trash where it can be recovered within 30 days.
+
+        Args:
+            file_id: Drive file ID to trash.
+
+        Returns:
+            File metadata dict with labels.trashed = True.
+        """
+        headers = self._get_headers({"Content-Type": "application/json"})
+        params = self._v2int_params(_V2INT_KEY_READ)
+
+        resp = self._session.post(
+            f"{_DRIVE_V2INT_BASE}/files/{file_id}/trash",
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        logger.info("Trashed Drive file %s", file_id)
+        return data
+
+    def v2_export_file(
+        self,
+        file_id: str,
+        mime_type: str = "text/plain",
+    ) -> bytes:
+        """Export a Google Workspace file to a different format.
+
+        Only works on Google-native file types (Docs, Sheets, Slides).
+        For non-native files, use ``download_file`` instead.
+
+        The ``mime_type`` can be a shortcut name (text, html, pdf, csv,
+        docx, xlsx) or a full MIME type string.
+
+        Args:
+            file_id: Drive file ID (must be a Google Workspace file).
+            mime_type: Target format — a MIME type or shortcut name.
+
+        Returns:
+            Exported file content as bytes.
+        """
+        resolved_mime = _EXPORT_MIMES.get(mime_type, mime_type)
+        headers = self._get_headers()
+        params = self._v2int_params(
+            _V2INT_KEY_READ,
+            {"mimeType": resolved_mime},
+        )
+
+        resp = self._session.get(
+            f"{_DRIVE_V2INT_BASE}/files/{file_id}/export",
+            headers=headers,
+            params=params,
+            timeout=120,
+            stream=True,
+        )
+        resp.raise_for_status()
+        logger.debug(
+            "Exported Drive file %s as %s (%d bytes)",
+            file_id,
+            resolved_mime,
+            len(resp.content),
+        )
+        return resp.content
+
+    def v2_get_permissions(self, file_id: str) -> List[Dict[str, Any]]:
+        """List permissions on a file using the v2internal API.
+
+        Returns richer permission data than the public API, including
+        internal IDs and team drive membership info.
+
+        Args:
+            file_id: Drive file ID.
+
+        Returns:
+            List of permission dicts with emailAddress, role, type, id.
+        """
+        headers = self._get_headers({"Content-Type": "application/json"})
+        params = self._v2int_params(
+            _V2INT_KEY_PERMS,
+            {"fields": "items(emailAddress,role,type,id,domain,withLink)"},
+        )
+
+        resp = self._session.get(
+            f"{_DRIVE_V2INT_BASE}/files/{file_id}/permissions",
+            headers=headers,
+            params=params,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("items", [])
+        logger.debug("Got %d permissions for file %s", len(items), file_id)
+        return items
+
+    def v2_insert_permission(
+        self,
+        file_id: str,
+        role: str = "reader",
+        perm_type: str = "anyone",
+        email: Optional[str] = None,
+        with_link: bool = True,
+        send_notification: bool = False,
+    ) -> Dict[str, Any]:
+        """Add or modify sharing permissions using the v2internal API.
+
+        Supports all v2internal permission roles: owner, organizer,
+        fileOrganizer, writer, commenter, reader.
+
+        Args:
+            file_id: Drive file ID.
+            role: Permission role — owner, organizer, fileOrganizer,
+                writer, commenter, or reader.
+            perm_type: Permission type — user, group, domain, or anyone.
+            email: Email address (required when perm_type is user or group).
+            with_link: Whether the permission requires the link to access.
+            send_notification: Whether to send notification emails.
+
+        Returns:
+            Created permission dict.
+        """
+        headers = self._get_headers({"Content-Type": "application/json"})
+        params = self._v2int_params(
+            _V2INT_KEY_PERMS,
+            {"sendNotificationEmails": str(send_notification).lower()},
+        )
+
+        body: Dict[str, Any] = {
+            "role": role,
+            "type": perm_type,
+            "withLink": with_link,
+        }
+        if email and perm_type in ("user", "group"):
+            body["emailAddress"] = email
+
+        resp = self._session.post(
+            f"{_DRIVE_V2INT_BASE}/files/{file_id}/permissions",
+            headers=headers,
+            params=params,
+            json=body,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        logger.info(
+            "Inserted %s/%s permission on file %s",
+            role,
+            perm_type,
+            file_id,
+        )
+        return data
+
+    def v2_update_metadata(
+        self,
+        file_id: str,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        starred: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Update file metadata using the v2internal API.
+
+        Args:
+            file_id: Drive file ID.
+            title: New title for the file.
+            description: New description.
+            parent_id: Move file to this parent folder.
+            starred: Star or unstar the file.
+
+        Returns:
+            Updated file metadata dict.
+        """
+        headers = self._get_headers({"Content-Type": "application/json"})
+        params = self._v2int_params(
+            _V2INT_KEY_READ,
+            {"fields": "id,title,modifiedDate,description,labels"},
+        )
+
+        body: Dict[str, Any] = {}
+        if title is not None:
+            body["title"] = title
+        if description is not None:
+            body["description"] = description
+        if parent_id is not None:
+            body["parents"] = [{"id": parent_id}]
+        if starred is not None:
+            body["labels"] = {"starred": starred}
+
+        if not body:
+            logger.warning("v2_update_metadata called with no fields to update")
+            return self.get_file_metadata(file_id)
+
+        resp = self._session.put(
+            f"{_DRIVE_V2INT_BASE}/files/{file_id}",
+            headers=headers,
+            params=params,
+            json=body,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        logger.info("Updated metadata for Drive file %s", file_id)
+        return data
 
 
 # ──── Factory ─────────────────────────────────────────────────────────────────
