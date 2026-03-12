@@ -76,7 +76,7 @@ class TestMetaAccess:
         meta = registry.get_meta("workspace_gemini")
         assert meta["service_name"] == "AppsGenAIServer"
         assert "appsgenaiserver-pa" in meta["base_url"]
-        assert meta["auth_method"] == "api_key_query_param"
+        assert meta["auth_method"] == "api_key_query_param_plus_sapisidhash"
 
     def test_sheets_gemini_meta(self):
         """sheets_gemini meta has correct fields."""
@@ -199,9 +199,9 @@ class TestAuthMethod:
     """Tests for auth method lookup."""
 
     def test_workspace_gemini_auth(self):
-        """workspace_gemini uses api_key_query_param."""
+        """workspace_gemini uses api_key + SAPISIDHASH auth."""
         registry = WorkspaceRPCRegistry()
-        assert registry.get_auth_method("workspace_gemini") == "api_key_query_param"
+        assert registry.get_auth_method("workspace_gemini") == "api_key_query_param_plus_sapisidhash"
 
     def test_sheets_gemini_auth(self):
         """sheets_gemini uses cookie_sapisidhash."""
@@ -245,10 +245,11 @@ class TestCrossSectionQueries:
         assert registry.find_operation("does_not_exist") is None
 
     def test_get_parameters(self):
-        """get_parameters returns operation parameters."""
+        """get_parameters returns HAR-verified operation parameters."""
         registry = WorkspaceRPCRegistry()
         params = registry.get_parameters("workspace_gemini", "stream_generate")
-        assert "prompt" in params
+        assert "op_code" in params
+        assert "context_code" in params
 
     def test_get_parameters_empty(self):
         """get_parameters returns empty dict for no-param operations."""

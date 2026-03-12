@@ -149,17 +149,20 @@ class TestStreamingParser:
         assert "raw" in result
 
     def test_extract_text_from_dict(self, client):
-        """_extract_text extracts text from a dict chunk."""
+        """_extract_text extracts text from a dict chunk with readable content."""
         from engine.integrations.workspace_gemini_client import WorkspaceGeminiClient
-        result = WorkspaceGeminiClient._extract_text({"text": "test output"})
-        assert result == "test output"
+        result = WorkspaceGeminiClient._extract_text(
+            {"text": "This is a sufficiently long generated output text for testing"}
+        )
+        assert result == "This is a sufficiently long generated output text for testing"
 
     def test_extract_text_from_candidates(self, client):
         """_extract_text extracts text from candidates format."""
         from engine.integrations.workspace_gemini_client import WorkspaceGeminiClient
-        chunk = {"candidates": [{"content": {"parts": [{"text": "Hello"}]}}]}
+        long_text = "Hello from Gemini, this is a generated response with enough length"
+        chunk = {"candidates": [{"content": {"parts": [{"text": long_text}]}}]}
         result = WorkspaceGeminiClient._extract_text(chunk)
-        assert result == "Hello"
+        assert result == long_text
 
     def test_extract_text_empty_dict(self, client):
         """_extract_text returns empty string for no text."""
@@ -297,10 +300,10 @@ class TestQuotaSummary:
     """Tests for the quota_summary method."""
 
     def test_quota_summary_returns_usage(self, client):
-        """quota_summary returns usage information."""
+        """quota_summary returns parsed quota from protobuf-JSON array."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.text = '{"daily_used": 5, "daily_limit": 100}'
+        mock_resp.text = '[[null,["10000000",null,"9999998",1,null,null,["1775026800"]],"2",[3],1],[]]'
         mock_resp.raise_for_status = MagicMock()
 
         with patch("engine.integrations.workspace_gemini_client.get_account_pool") as mock_pool, \
@@ -308,7 +311,9 @@ class TestQuotaSummary:
             mock_pool.return_value.get_cookie_header.return_value = "SID=abc"
             result = client.quota_summary()
             assert isinstance(result, dict)
-            assert result["daily_used"] == 5
+            assert result["total"] == 10000000
+            assert result["remaining"] == 9999998
+            assert result["used"] == "2"
 
     def test_quota_summary_error_returns_error_dict(self, client):
         """quota_summary returns error dict on failure."""

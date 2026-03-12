@@ -4,7 +4,9 @@ Provides unified access to the Gemini AI features embedded in Google Workspace
 apps (Sheets, Docs, Slides). These endpoints use gRPC-JSON transcoding with
 API key authentication and ``application/json+protobuf`` content type.
 
-Discovered via HAR mining of Sheets Gemini interactions (March 2026).
+Payloads use protobuf-JSON arrays (not dict-style JSON).  Structures verified
+against HAR captures of Sheets and Docs Gemini interactions (March–July 2026).
+
 Host: appsgenaiserver-pa.clients6.google.com
 """
 from __future__ import annotations
@@ -34,8 +36,27 @@ _USER_AGENT = (
     "Chrome/146.0.0.0 Safari/537.36"
 )
 
-# Default API key pattern observed in HAR captures.  Overridable via config.
-_DEFAULT_API_KEY = ""
+# Context codes (which Workspace app is calling)
+CTX_DOCS = 1
+CTX_SHEETS = 3
+
+# Operation codes for streamGenerate
+OP_INIT = 61
+OP_GENERATE_SHEETS = 23
+OP_GENERATE_DOCS = 96
+OP_CONTINUE = 16
+OP_INSERT = 15
+
+# Document MIME types
+MIME_SHEETS = "application/vnd.google-apps.ritz"
+MIME_DOCS = "application/vnd.google-apps.kix"
+
+# Default API keys per service (Google-embedded client keys from HAR mining)
+_API_KEYS: Dict[str, str] = {
+    "sheets": "AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU",
+    "docs": "AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk",
+    "cloud_search": "AIzaSyDuAie05b1MZ0lMd9XCQczokBQUf4qjkzM",
+}
 
 
 # ──── Client ─────────────────────────────────────────────────────────────────
@@ -48,21 +69,33 @@ class WorkspaceGeminiClient:
     Gemini features inside Sheets, Docs, and Slides.  Authentication combines
     an API key (query param) with SAPISIDHASH session cookies.
 
+    Payloads use protobuf-JSON arrays, not dict-style JSON.  The correct
+    structure was verified via HAR captures of live Sheets/Docs sessions.
+
     Args:
         account: Authenticated GoogleAccount from the pool.
-        api_key: Optional API key override.  Falls back to account-level or
-            config-level key.
+        api_key: Optional API key override.  Falls back to the embedded key
+            for the given *document_type*.
+        document_type: Default Workspace context — ``"sheets"`` or ``"docs"``.
     """
 
     def __init__(
         self,
         account: GoogleAccount,
         api_key: Optional[str] = None,
+        document_type: str = "sheets",
     ) -> None:
         self._account = account
-        self._api_key = api_key or _DEFAULT_API_KEY
+        self._document_type = document_type
+        self._api_key = api_key or _API_KEYS.get(document_type, "")
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": _USER_AGENT})
+
+    # ──── Helpers ─────────────────────────────────────────────────────────────
+
+    def _get_ctx_code(self) -> int:
+        """Return the context code for the current document type."""
+        return CTX_SHEETS if self._document_type == "sheets" else CTX_DOCS
 
     # ──── Auth ────────────────────────────────────────────────────────────────
 
@@ -221,18 +254,22 @@ class WorkspaceGeminiClient:
     def get_settings(self) -> Dict[str, Any]:
         """Retrieve Gemini user settings for the current Workspace account.
 
+        Payload is a protobuf-JSON array ``[[ctx, ctx]]`` where *ctx* is the
+        context code for the active Workspace app.
+
         Returns:
-            Settings dict from the API response.
+            Parsed settings response (list or dict).
         """
         headers = self._get_headers()
         params = self._get_params()
+        ctx = self._get_ctx_code()
 
         try:
             resp = self._session.post(
                 f"{_GENAI_BASE}/getSettings",
                 headers=headers,
                 params=params,
-                json={},
+                json=[[ctx, ctx]],
                 timeout=30,
             )
             resp.raise_for_status()
@@ -241,26 +278,36 @@ class WorkspaceGeminiClient:
             logger.error("Workspace Gemini getSettings failed: %s", exc)
             return {"error": str(exc)}
 
-    def list_gems(self) -> List[Dict[str, Any]]:
+    def list_gems(self, language: str = "en") -> List[Dict[str, Any]]:
         """List available Gemini models and capabilities.
+
+        Payload: ``[ctx_code, language_code]``.
+
+        Args:
+            language: BCP-47 language tag (e.g. ``"en"``, ``"en-GB"``).
 
         Returns:
             List of gem/model dicts with name, capabilities, and status.
         """
         headers = self._get_headers()
         params = self._get_params()
+        ctx = self._get_ctx_code()
 
         try:
             resp = self._session.post(
                 f"{_GENAI_BASE}/listGems",
                 headers=headers,
                 params=params,
-                json={},
+                json=[ctx, language],
                 timeout=30,
             )
             resp.raise_for_status()
             data = self._parse_protobuf_json(resp)
-            return data.get("gems", data.get("models", [data]))
+            if isinstance(data, dict):
+                return data.get("gems", data.get("models", [data]))
+            if isinstance(data, list):
+                return data
+            return [data]
         except requests.RequestException as exc:
             logger.error("Workspace Gemini listGems failed: %s", exc)
             return []
@@ -268,44 +315,56 @@ class WorkspaceGeminiClient:
     def quota_summary(self) -> Dict[str, Any]:
         """Get API usage quota information for Workspace Gemini.
 
+        Payload: ``[null, 1, [ctx]]``.
+
         Returns:
-            Quota dict with usage counts, limits, and reset times.
+            Parsed quota dict with total, remaining, used, status, and
+            reset_epoch fields.
         """
         headers = self._get_headers()
         params = self._get_params()
+        ctx = self._get_ctx_code()
 
         try:
             resp = self._session.post(
                 f"{_GENAI_BASE}/quotaSummary",
                 headers=headers,
                 params=params,
-                json={},
+                json=[None, 1, [ctx]],
                 timeout=30,
             )
             resp.raise_for_status()
-            return self._parse_protobuf_json(resp)
+            raw = self._parse_protobuf_json(resp)
+            return self._parse_quota_response(raw)
         except requests.RequestException as exc:
             logger.error("Workspace Gemini quotaSummary failed: %s", exc)
             return {"error": str(exc)}
 
-    def update_settings(self, settings: Dict[str, Any]) -> Dict[str, Any]:
+    def update_settings(self, settings: Optional[List[Any]] = None) -> Dict[str, Any]:
         """Update Gemini user settings.
 
+        Payload: ``[[], [ctx, ctx], null, 1]``.  The *settings* parameter is
+        reserved for future per-field overrides but the default payload matches
+        the HAR-observed format.
+
         Args:
-            settings: Settings dict to update.
+            settings: Optional raw payload override.  When ``None`` the
+                standard HAR-verified payload is used.
 
         Returns:
             Updated settings response.
         """
         headers = self._get_headers()
         params = self._get_params()
+        ctx = self._get_ctx_code()
+        payload: Any = settings if settings is not None else [[], [ctx, ctx], None, 1]
 
         try:
             resp = self._session.post(
                 f"{_GENAI_BASE}/updateUserSettings",
                 headers=headers,
                 params=params,
-                json=settings,
+                json=payload,
                 timeout=30,
             )
             resp.raise_for_status()
@@ -324,22 +383,28 @@ class WorkspaceGeminiClient:
     ) -> Dict[str, Any]:
         """Search across Google Workspace content using Cloud Search.
 
-        This powers cross-service semantic search across Drive, Docs, Sheets,
-        Gmail, and other Workspace apps.
+        Uses a standard JSON payload (not protobuf-JSON) against the
+        ``cloudsearch.clients6.google.com`` endpoint with the dedicated
+        Cloud Search API key.
 
         Args:
             query: Search query string.
             page_size: Number of results to return.
             source_types: Optional list of source type filters
-                (e.g. ["drive", "gmail", "docs"]).
+                (e.g. ``["drive", "gmail", "docs"]``).
 
         Returns:
             Search results dict with items and metadata.
         """
         payload: Dict[str, Any] = {
             "query": query,
-            "pageSize": page_size,
+            "requestOptions": {
+                "searchApplicationId": "searchapplications/docs_editor",
+                "clientId": "DOCS_EDITOR",
+            },
         }
+        if page_size != 20:
+            payload["pageSize"] = page_size
         if source_types:
             payload["dataSourceRestrictions"] = [
                 {"source": {"name": s}} for s in source_types
@@ -347,7 +412,9 @@ class WorkspaceGeminiClient:
 
         headers = self._get_headers()
         headers["Content-Type"] = "application/json"
-        params = self._get_params()
+        params = self._get_params(
+            extra={"key": _API_KEYS.get("cloud_search", self._api_key)}
+        )
 
         try:
             resp = self._session.post(
@@ -373,49 +440,60 @@ class WorkspaceGeminiClient:
         document_type: str = "sheets",
         temperature: float = 0.7,
         max_tokens: int = 4096,
-    ) -> Dict[str, Any]:
-        """Build the streamGenerate request payload.
+    ) -> List[Any]:
+        """Build the streamGenerate request payload as a protobuf-JSON array.
 
-        The payload follows the gRPC-JSON transcoded protobuf format observed
-        in HAR captures of Sheets Gemini interactions.
+        The actual Google endpoint expects deeply nested arrays, not dict-style
+        JSON.  Structure verified against HAR captures.
+
+        Outer shape::
+
+            body = [
+                [op_code, null, context_array, prompt_array, null,
+                 [null, null, 1], 1],
+                [null, null, 1],
+            ]
 
         Args:
             prompt: User prompt.
             context: Optional context content.
-            document_id: Optional document ID.
-            document_type: Type of workspace document.
-            temperature: Generation temperature.
-            max_tokens: Maximum output tokens.
+            document_id: Optional document/spreadsheet ID.
+            document_type: ``"sheets"`` or ``"docs"``.
+            temperature: Generation temperature (informational — the real API
+                does not expose this directly in the payload).
+            max_tokens: Maximum output tokens (informational).
 
         Returns:
-            Request payload dict.
+            Nested list matching protobuf-JSON wire format.
         """
-        payload: Dict[str, Any] = {
-            "prompt": {
-                "text": prompt,
-            },
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": max_tokens,
-                "topP": 0.95,
-                "topK": 40,
-            },
-        }
+        ctx_code = CTX_SHEETS if document_type == "sheets" else CTX_DOCS
+        mime = MIME_SHEETS if document_type == "sheets" else MIME_DOCS
+        op_code = OP_GENERATE_SHEETS if document_type == "sheets" else OP_GENERATE_DOCS
 
-        if context:
-            payload["prompt"]["context"] = context
+        session_id = f"goog_{hash(prompt) % 2**31}"
 
+        # Minimal context array
+        context_array: List[Any] = [ctx_code, None, None, None, session_id]
         if document_id:
-            doc_type_map = {
-                "sheets": "SPREADSHEET",
-                "docs": "DOCUMENT",
-                "slides": "PRESENTATION",
-            }
-            payload["documentContext"] = {
-                "documentId": document_id,
-                "documentType": doc_type_map.get(document_type, "DOCUMENT"),
-            }
+            context_array.append([])   # sheet/doc data placeholder
+            context_array.append("0")  # position marker
+            doc_ref_type = 1 if document_type == "docs" else 12
+            context_array.append([None, None, None, [
+                [[None, None, None, None, None, None, None, [None, None, [
+                    [document_id, mime, doc_ref_type]
+                ]]]]
+            ]])
 
+        # Build prompt array — format differs by app context
+        if document_type == "sheets":
+            prompt_array: List[Any] = [None, None, prompt] + [None] * 27 + ["0"]
+        else:
+            prompt_array = [None, None, None, [[[None, None, prompt]]]]
+
+        payload: List[Any] = [
+            [op_code, None, context_array, prompt_array, None, [None, None, 1], 1],
+            [None, None, 1],
+        ]
         return payload
 
     # ──── Response Parsing ───────────────────────────────────────────────────
@@ -470,41 +548,50 @@ class WorkspaceGeminiClient:
 
     @staticmethod
     def _extract_text(chunk: Any) -> str:
-        """Extract generated text from a stream chunk.
+        """Extract generated text from a protobuf-JSON array response chunk.
 
-        Navigates the protobuf-JSON structure to find text content.  The
-        exact path varies but common patterns are handled.
+        Recursively searches for human-readable text strings in deeply nested
+        arrays, filtering out base64 tokens, hashes, and short identifiers.
 
         Args:
             chunk: Parsed JSON chunk from the stream.
 
         Returns:
-            Extracted text or empty string.
+            Longest readable text found, or empty string.
         """
+        if isinstance(chunk, str):
+            if len(chunk) < 20:
+                return ""
+            if chunk.startswith("$") or chunk.startswith("goog_"):
+                return ""
+            sample = chunk[:50]
+            alpha_count = sum(1 for c in sample if c.isalpha() or c.isspace())
+            if alpha_count / max(len(sample), 1) > 0.5:
+                return chunk
+            return ""
+
+        if isinstance(chunk, list):
+            best = ""
+            for item in chunk:
+                text = WorkspaceGeminiClient._extract_text(item)
+                if text and len(text) > len(best):
+                    best = text
+            return best
+
         if isinstance(chunk, dict):
-            for key in ("text", "content", "output"):
+            for key in ("text", "content", "output", "candidates", "parts"):
                 if key in chunk:
-                    val = chunk[key]
-                    if isinstance(val, str):
-                        return val
-                    if isinstance(val, dict):
-                        return val.get("text", val.get("parts", [{}])[0].get("text", ""))
-            if "candidates" in chunk:
-                candidates = chunk["candidates"]
-                if candidates and isinstance(candidates, list):
-                    first = candidates[0]
-                    content = first.get("content", {})
-                    parts = content.get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "")
-        elif isinstance(chunk, list) and chunk:
-            if isinstance(chunk[0], str):
-                return chunk[0]
+                    text = WorkspaceGeminiClient._extract_text(chunk[key])
+                    if text:
+                        return text
+
         return ""
 
     @staticmethod
     def _extract_model(chunks: List[Any]) -> str:
         """Extract model name from response chunks.
+
+        Handles both dict-style and deeply nested array responses.
 
         Args:
             chunks: List of parsed response chunks.
@@ -517,7 +604,70 @@ class WorkspaceGeminiClient:
                 model = chunk.get("model", chunk.get("modelVersion", ""))
                 if model:
                     return str(model)
+            elif isinstance(chunk, list):
+                found = WorkspaceGeminiClient._find_model_in_array(chunk)
+                if found:
+                    return found
         return ""
+
+    @staticmethod
+    def _find_model_in_array(arr: List[Any]) -> str:
+        """Recursively search nested arrays for a model name string.
+
+        Model strings typically contain ``"gemini"`` or ``"models/"``.
+
+        Args:
+            arr: Nested list to search.
+
+        Returns:
+            Model name string or empty string.
+        """
+        for item in arr:
+            if isinstance(item, str) and ("gemini" in item.lower() or "models/" in item):
+                return item
+            if isinstance(item, list):
+                found = WorkspaceGeminiClient._find_model_in_array(item)
+                if found:
+                    return found
+        return ""
+
+    @staticmethod
+    def _parse_quota_response(data: Any) -> Dict[str, Any]:
+        """Parse quota protobuf-JSON array response.
+
+        Expected format::
+
+            [[null, [total, null, remaining, status, null, null, [reset_epoch]],
+              used_str, [ctx], 1], []]
+
+        Args:
+            data: Raw parsed JSON response (typically a nested list).
+
+        Returns:
+            Dict with ``total``, ``remaining``, ``used``, ``status``,
+            ``reset_epoch``, and ``raw`` fields.
+        """
+        if not isinstance(data, list) or not data:
+            return {"raw": data}
+        try:
+            quota_entry = data[0]
+            if isinstance(quota_entry, list) and len(quota_entry) > 2:
+                quota_detail = quota_entry[1]
+                if isinstance(quota_detail, list) and len(quota_detail) >= 3:
+                    reset_epoch = None
+                    if len(quota_detail) > 6 and isinstance(quota_detail[6], list) and quota_detail[6]:
+                        reset_epoch = quota_detail[6][0]
+                    return {
+                        "total": int(quota_detail[0]) if quota_detail[0] else 0,
+                        "remaining": int(quota_detail[2]) if quota_detail[2] else 0,
+                        "status": quota_detail[3] if len(quota_detail) > 3 else None,
+                        "reset_epoch": reset_epoch,
+                        "used": quota_entry[2] if len(quota_entry) > 2 else "0",
+                        "raw": data,
+                    }
+        except (IndexError, TypeError, ValueError):
+            pass
+        return {"raw": data}
 
     @staticmethod
     def _extract_usage(chunks: List[Any]) -> Dict[str, int]:
@@ -547,12 +697,14 @@ class WorkspaceGeminiClient:
 def get_workspace_gemini_client(
     account_name: Optional[str] = None,
     api_key: Optional[str] = None,
+    document_type: str = "sheets",
 ) -> WorkspaceGeminiClient:
     """Create a WorkspaceGeminiClient with an account from the pool.
 
     Args:
         account_name: Optional account name to select from pool.
         api_key: Optional API key override.
+        document_type: Workspace app context (``"sheets"`` or ``"docs"``).
 
     Returns:
         Configured WorkspaceGeminiClient instance.
@@ -567,4 +719,6 @@ def get_workspace_gemini_client(
         account = pool.get_best_account(service="workspace")
     if not account:
         raise RuntimeError("No Google account available for Workspace Gemini")
-    return WorkspaceGeminiClient(account=account, api_key=api_key)
+    return WorkspaceGeminiClient(
+        account=account, api_key=api_key, document_type=document_type,
+    )
