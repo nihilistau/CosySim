@@ -1,7 +1,16 @@
-"""ARGUS configuration — all known baselines, targets, and constants."""
+"""ARGUS configuration — all known baselines, targets, and constants.
+
+Baselines (NLM_RPCIDS, GEMINI_RPCIDS, AISTUDIO_METHODS, etc.) are derived
+dynamically from config/nlm_rpcids.yaml at import time. Hardcoded fallbacks
+are kept inline for graceful degradation if the YAML is missing or corrupt.
+"""
 from __future__ import annotations
 
-from typing import Dict, List
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 from scripts.argus.paths import (
     CAPTURES_DIR,
@@ -13,6 +22,115 @@ from scripts.argus.paths import (
     ROOT,
     SSLKEYS_PATH,
 )
+
+_logger = logging.getLogger(__name__)
+_YAML_PATH = Path(__file__).resolve().parents[2] / "config" / "nlm_rpcids.yaml"
+
+
+def _load_yaml_registry() -> Optional[Dict[str, Any]]:
+    """Load the YAML registry, returning None on failure."""
+    try:
+        with open(_YAML_PATH, encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    except Exception as exc:
+        _logger.warning("ARGUS config: failed to load YAML registry: %s", exc)
+        return None
+
+
+def _derive_nlm_rpcids(data: Dict[str, Any]) -> Dict[str, str]:
+    """Extract {rpcid: method_name} from YAML NLM operations."""
+    result: Dict[str, str] = {}
+    for op_name, op_def in data.get("operations", {}).items():
+        if not isinstance(op_def, dict):
+            continue
+        rpcid = op_def.get("rpcid")
+        if rpcid:
+            name = op_def.get("service_method") or op_def.get("description", op_name)
+            result[rpcid] = name
+    return result
+
+
+def _derive_gemini_rpcids(data: Dict[str, Any]) -> Dict[str, str]:
+    """Extract {rpcid: name} from YAML Gemini section."""
+    result: Dict[str, str] = {}
+    for rpcid, info in data.get("gemini", {}).get("rpcids", {}).items():
+        if isinstance(info, dict):
+            name = info.get("name") or info.get("description", rpcid)
+        elif info is None:
+            name = rpcid
+        else:
+            name = str(info)
+        result[rpcid] = name
+    return result
+
+
+def _derive_aistudio_methods(data: Dict[str, Any]) -> List[str]:
+    """Extract method name list from YAML AI Studio section."""
+    methods = data.get("aistudio", {}).get("methods", {})
+    return sorted(methods.keys())
+
+
+def _derive_colab_methods(data: Dict[str, Any]) -> Dict[str, str]:
+    """Extract {method: service} from YAML Colab section."""
+    result: Dict[str, str] = {}
+    for method, info in data.get("colab", {}).get("methods", {}).items():
+        service = "Unknown"
+        if isinstance(info, dict):
+            service = info.get("service", "ColabService")
+        result[method] = service
+    return result
+
+
+def _derive_appscript_rpcids(data: Dict[str, Any]) -> Dict[str, str]:
+    """Extract {rpcid: method_name} from YAML Apps Script section."""
+    result: Dict[str, str] = {}
+    for op_name, op_def in data.get("appscript", {}).get("operations", {}).items():
+        if not isinstance(op_def, dict):
+            continue
+        rpcid = op_def.get("rpcid")
+        if rpcid:
+            name = op_def.get("service_method") or op_def.get("description", op_name)
+            result[rpcid] = name
+    return result
+
+
+def _derive_workspace_services(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Extract all workspace service sections as {section: {op_name: op_def}}."""
+    ws_prefixes = (
+        "workspace_", "sheets_", "docs_", "drive_", "cloud_", "people_",
+    )
+    result: Dict[str, Dict[str, Any]] = {}
+    for key in data:
+        if any(key.startswith(p) for p in ws_prefixes):
+            section = data[key]
+            if isinstance(section, dict):
+                for ops_key in ("operations", "methods", "rpcids", "endpoints"):
+                    if ops_key in section and isinstance(section[ops_key], dict):
+                        result[key] = section[ops_key]
+                        break
+    return result
+
+
+def _derive_nlm_grpc(data: Dict[str, Any]) -> Dict[str, str]:
+    """Extract NLM gRPC methods from YAML."""
+    result: Dict[str, str] = {}
+    for method, info in data.get("nlm_grpc", {}).get("methods", {}).items():
+        service = "LabsTailwindOrchestrationService"
+        if isinstance(info, dict):
+            service = info.get("service", service)
+        result[method] = service
+    return result
+
+
+def _derive_heap_discovered(data: Dict[str, Any]) -> Dict[str, str]:
+    """Extract heap-discovered methods from YAML."""
+    result: Dict[str, str] = {}
+    for method, info in data.get("nlm_heap_discovered", {}).get("methods", {}).items():
+        service = "Unknown"
+        if isinstance(info, dict):
+            service = info.get("service", service)
+        result[method] = service
+    return result
 
 # ──── Chrome CDP ────
 CDP_HOST = "localhost"
@@ -53,8 +171,11 @@ TARGETS: Dict[str, Dict] = {
     },
 }
 
-# ──── Known NLM rpcids (24 decoded) ────
-NLM_RPCIDS: Dict[str, str] = {
+# ──── Load YAML registry and derive baselines ────
+_yaml_data = _load_yaml_registry()
+
+# Hardcoded fallbacks used when YAML is missing/corrupt
+_NLM_RPCIDS_FALLBACK: Dict[str, str] = {
     "wIlBFe": "ListNotebooks",
     "VqhFhd": "CreateNotebook",
     "kVoZqc": "DeleteNotebook",
@@ -69,7 +190,7 @@ NLM_RPCIDS: Dict[str, str] = {
     "GzgSEd": "GetChatHistory",
     "GfmCOc": "DeleteChatHistory",
     "xqEXEf": "GenerateGuide",
-    "sqTeoe": "GetAudioOverview",         # also used for GetAudioOverviewOptions
+    "sqTeoe": "GetAudioOverview",
     "VfAZjd": "GetNotebookAnalysis",
     "dI5Y8":  "ShareNotebook",
     "jzEKsc": "GetSharedNotebook",
@@ -80,10 +201,9 @@ NLM_RPCIDS: Dict[str, str] = {
     "DYBcR":  "GetLocalePreferences",
 }
 
-# ──── Known Gemini rpcids (17 decoded) ────
-GEMINI_RPCIDS: Dict[str, str] = {
-    "boaYGb": "ProxyUnaryCall",           # returns thoughtSignature
-    "NXpLKc": "GetLinkedNotebooks",      # Gemini-NLM bridge
+_GEMINI_RPCIDS_FALLBACK: Dict[str, str] = {
+    "boaYGb": "ProxyUnaryCall",
+    "NXpLKc": "GetLinkedNotebooks",
     "jKHnxe": "GenerateContent",
     "r7Bvze": "StreamGenerateContent",
     "mMEAEd": "CountTokens",
@@ -99,86 +219,86 @@ GEMINI_RPCIDS: Dict[str, str] = {
     "jPv1oc": "GetCachedContent",
     "ozz5Z":  "GetFeatureFlags",
     "DYBcR":  "GetLocalePreferences",
-    # ──── Discovered live by ARGUS crawler 2026-03-05 ────
-    "MaZiqc": "Unknown",      # captured in live conversation turn
-    "maGuAc": "Unknown",      # captured in live conversation turn
-    "o30O0e": "Unknown",      # captured in live conversation turn
-    "qpEbW":  "Unknown",      # captured in live conversation turn
-    "L5adhe": "Unknown",      # captured repeatedly — likely heartbeat/session
-    "aPya6c": "Unknown",      # captured in live conversation turn
-    "CNgdBe": "Unknown",      # captured in live conversation turn
-    "ku4Jyf": "Unknown",      # captured in live conversation turn
+    "MaZiqc": "Unknown",
+    "maGuAc": "Unknown",
+    "o30O0e": "Unknown",
+    "qpEbW":  "Unknown",
+    "L5adhe": "Unknown",
+    "aPya6c": "Unknown",
+    "CNgdBe": "Unknown",
+    "ku4Jyf": "Unknown",
 }
 
-# ──── Known AI Studio methods (136 decoded) ────
-AISTUDIO_METHODS: List[str] = [
-    # Content generation
-    "GenerateContent", "StreamGenerateContent", "BidiGenerateContent",
-    "CountTokens", "EmbedContent", "BatchEmbedContents",
-    # Applets
-    "CreateApplet", "GetApplet", "ListApplets", "UpdateApplet", "DeleteApplet",
-    "DeployApplet", "UndeployApplet", "UpsertAppletSecret", "CloneApplet",
-    # Datasets (undocumented)
-    "CreateDataset", "GetDataset", "ListDatasets", "UpdateDataset", "DeleteDataset",
-    "ImportDatasetItems", "ExportDatasetItems", "AnnotateDataset",
-    # GitHub integration (undocumented)
-    "CreateGitHubRepository", "SyncGitHubRepository", "GetGitHubRepository",
-    # Image/Video (undocumented)
-    "GenerateImage", "GenerateVideo", "StreamExtractVideoFrames",
-    "UpscaleImage", "EditImage", "GenerateImageFromText",
-    # Speech (undocumented)
-    "GeminiSpeechToText", "TextToSpeech", "StreamSpeechToText",
-    # Code/Build (undocumented)
-    "DownloadBuildArtifacts", "StreamCodeAssistantOfflineGeneration",
-    "FetchPiperFile", "StreamLogs",
-    # Cloud infra (undocumented)
-    "GenerateCloudApiKey", "CreateCloudProject", "ListCloudProjects",
-    "GetBillingInfo", "CheckQuota",
-    # Tuning
-    "CreateTunedModel", "GetTunedModel", "ListTunedModels",
-    "UpdateTunedModel", "DeleteTunedModel", "GenerateTunedContent",
-    # Models
-    "GetModel", "ListModels", "GetModelCard", "ListModelCards", "GetModelCapabilities",
-    # Files
-    "CreateFile", "GetFile", "ListFiles", "DeleteFile", "DownloadFile",
-    # Cached content
-    "CreateCachedContent", "GetCachedContent", "ListCachedContents",
-    "UpdateCachedContent", "DeleteCachedContent",
-    # Prompts / apps
-    "CreatePrompt", "GetPrompt", "ListPrompts", "UpdatePrompt", "DeletePrompt",
-    "CreateApp", "GetApp", "ListApps", "UpdateApp", "DeleteApp",
-    # Corpus / retrieval
-    "CreateCorpus", "GetCorpus", "ListCorpora", "UpdateCorpus", "DeleteCorpus",
-    "CreateDocument", "GetDocument", "ListDocuments", "DeleteDocument",
-    "CreateChunk", "GetChunk", "ListChunks", "UpdateChunk", "DeleteChunk",
-    "QueryCorpus", "QueryDocument",
-    # Operations
-    "GetOperation", "ListOperations", "CancelOperation", "DeleteOperation",
-    # User/settings
-    "GetUserSettings", "UpdateUserSettings", "GetUsageMetadata",
-    # Notifications
-    "ListNotifications", "MarkNotificationRead", "DismissNotification",
-    # Collaboration
-    "SharePrompt", "GetSharedPrompt", "ListSharedPrompts",
-    # Batch
-    "CreateBatchJob", "GetBatchJob", "ListBatchJobs", "CancelBatchJob",
-    # Safety
-    "CheckSafety", "GetSafetySettings", "UpdateSafetySettings",
-    # Code Assistant (from HAR 2026-03-05)
-    "CodeAssistantOffline", "StreamCodeAssistantOfflineGenerationUpload",
-    "GetCodeAssistantSnapshot", "LoadCodeAssistantInteractionHistory",
-    "ListCodeAssistantConfigurations", "ListCodeAssistantFeatures",
-    "ListCodeAssistantOfflineGenerations", "ListCodeGenSuggestionCards",
-    "GenerateCodeAssistantSuggestionChips",
-    # User / account (from HAR 2026-03-05)
-    "GenerateAccessToken", "GetLoggingContext", "GetUserPreferences",
-    "ListCloudApiKeys", "ListPromos", "ListUnsetAppletSecrets",
-    "ListRecentApplets", "StoreRecentApplet",
-    # Projects (from HAR 2026-03-05)
-    "ListImportedProjects", "ProvisionAndInitializeApplet",
-    # Misc (from HAR 2026-03-05)
-    "FetchMetricTimeSeries", "Log", "SaveApplet",
-]
+# Derive from YAML, fall back to hardcoded
+NLM_RPCIDS: Dict[str, str] = _derive_nlm_rpcids(_yaml_data) if _yaml_data else _NLM_RPCIDS_FALLBACK
+GEMINI_RPCIDS: Dict[str, str] = _derive_gemini_rpcids(_yaml_data) if _yaml_data else _GEMINI_RPCIDS_FALLBACK
+AISTUDIO_METHODS: List[str] = _derive_aistudio_methods(_yaml_data) if _yaml_data else []
+COLAB_METHODS: Dict[str, str] = _derive_colab_methods(_yaml_data) if _yaml_data else {}
+APPSCRIPT_RPCIDS: Dict[str, str] = _derive_appscript_rpcids(_yaml_data) if _yaml_data else {}
+WORKSPACE_OPERATIONS: Dict[str, Dict[str, Any]] = _derive_workspace_services(_yaml_data) if _yaml_data else {}
+NLM_GRPC_METHODS: Dict[str, str] = _derive_nlm_grpc(_yaml_data) if _yaml_data else {}
+HEAP_DISCOVERED_METHODS: Dict[str, str] = _derive_heap_discovered(_yaml_data) if _yaml_data else {}
+
+# Merge hardcoded fallback into YAML-derived to catch any rpcids that
+# appear in HAR captures but haven't been added to YAML yet
+if _yaml_data:
+    for rpcid, name in _NLM_RPCIDS_FALLBACK.items():
+        NLM_RPCIDS.setdefault(rpcid, name)
+    for rpcid, name in _GEMINI_RPCIDS_FALLBACK.items():
+        GEMINI_RPCIDS.setdefault(rpcid, name)
+
+if not AISTUDIO_METHODS:
+    AISTUDIO_METHODS = [
+        "GenerateContent", "StreamGenerateContent", "BidiGenerateContent",
+        "CountTokens", "EmbedContent", "BatchEmbedContents",
+        "CreateApplet", "GetApplet", "ListApplets", "UpdateApplet", "DeleteApplet",
+        "DeployApplet", "UndeployApplet", "UpsertAppletSecret", "CloneApplet",
+        "CreateDataset", "GetDataset", "ListDatasets", "UpdateDataset", "DeleteDataset",
+        "ImportDatasetItems", "ExportDatasetItems", "AnnotateDataset",
+        "CreateGitHubRepository", "SyncGitHubRepository", "GetGitHubRepository",
+        "GenerateImage", "GenerateVideo", "StreamExtractVideoFrames",
+        "UpscaleImage", "EditImage", "GenerateImageFromText",
+        "GeminiSpeechToText", "TextToSpeech", "StreamSpeechToText",
+        "DownloadBuildArtifacts", "StreamCodeAssistantOfflineGeneration",
+        "FetchPiperFile", "StreamLogs",
+        "GenerateCloudApiKey", "CreateCloudProject", "ListCloudProjects",
+        "GetBillingInfo", "CheckQuota",
+        "CreateTunedModel", "GetTunedModel", "ListTunedModels",
+        "UpdateTunedModel", "DeleteTunedModel", "GenerateTunedContent",
+        "GetModel", "ListModels", "GetModelCard", "ListModelCards", "GetModelCapabilities",
+        "CreateFile", "GetFile", "ListFiles", "DeleteFile", "DownloadFile",
+        "CreateCachedContent", "GetCachedContent", "ListCachedContents",
+        "UpdateCachedContent", "DeleteCachedContent",
+        "CreatePrompt", "GetPrompt", "ListPrompts", "UpdatePrompt", "DeletePrompt",
+        "CreateApp", "GetApp", "ListApps", "UpdateApp", "DeleteApp",
+        "CreateCorpus", "GetCorpus", "ListCorpora", "UpdateCorpus", "DeleteCorpus",
+        "CreateDocument", "GetDocument", "ListDocuments", "DeleteDocument",
+        "CreateChunk", "GetChunk", "ListChunks", "UpdateChunk", "DeleteChunk",
+        "QueryCorpus", "QueryDocument",
+        "GetOperation", "ListOperations", "CancelOperation", "DeleteOperation",
+        "GetUserSettings", "UpdateUserSettings", "GetUsageMetadata",
+        "ListNotifications", "MarkNotificationRead", "DismissNotification",
+        "SharePrompt", "GetSharedPrompt", "ListSharedPrompts",
+        "CreateBatchJob", "GetBatchJob", "ListBatchJobs", "CancelBatchJob",
+        "CheckSafety", "GetSafetySettings", "UpdateSafetySettings",
+        "CodeAssistantOffline", "StreamCodeAssistantOfflineGenerationUpload",
+        "GetCodeAssistantSnapshot", "LoadCodeAssistantInteractionHistory",
+        "ListCodeAssistantConfigurations", "ListCodeAssistantFeatures",
+        "ListCodeAssistantOfflineGenerations", "ListCodeGenSuggestionCards",
+        "GenerateCodeAssistantSuggestionChips",
+        "GenerateAccessToken", "GetLoggingContext", "GetUserPreferences",
+        "ListCloudApiKeys", "ListPromos", "ListUnsetAppletSecrets",
+        "ListRecentApplets", "StoreRecentApplet",
+        "ListImportedProjects", "ProvisionAndInitializeApplet",
+        "FetchMetricTimeSeries", "Log", "SaveApplet",
+    ]
+
+_logger.debug(
+    "ARGUS baselines loaded: NLM=%d, Gemini=%d, AIS=%d, Colab=%d, AppScript=%d, Workspace=%d sections, gRPC=%d, Heap=%d",
+    len(NLM_RPCIDS), len(GEMINI_RPCIDS), len(AISTUDIO_METHODS),
+    len(COLAB_METHODS), len(APPSCRIPT_RPCIDS), len(WORKSPACE_OPERATIONS),
+    len(NLM_GRPC_METHODS), len(HEAP_DISCOVERED_METHODS),
+)
 
 # ──── Feature flag probe range ────
 FLAG_ID_RANGE = range(300, 1500)   # enumerate these via ozz5Z (GetFeatureFlags)

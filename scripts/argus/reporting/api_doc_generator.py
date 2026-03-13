@@ -2,17 +2,20 @@
 
 Reads from:
     - ``data/argus/registry.json`` — endpoint registry
-    - ``scripts/argus/config.py`` — baselines
+    - ``scripts/argus/config.py`` — baselines (8 service categories)
     - Captured crawl results (passed in)
 
 Writes:
     - ``docs/NLM_API_REFERENCE.md``
     - ``docs/GEMINI_API_REFERENCE.md``
     - ``docs/AISTUDIO_API_REFERENCE.md``
+    - ``docs/COLAB_API_REFERENCE.md``
+    - ``docs/APPSCRIPT_API_REFERENCE.md``
+    - ``docs/WORKSPACE_API_REFERENCE.md``
+    - ``docs/ARGUS_API_CATALOG.md`` (unified cross-service catalog)
 """
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,8 +23,13 @@ from typing import Any, Dict, List, Optional
 
 from scripts.argus.config import (
     AISTUDIO_METHODS,
+    APPSCRIPT_RPCIDS,
+    COLAB_METHODS,
     GEMINI_RPCIDS,
+    HEAP_DISCOVERED_METHODS,
+    NLM_GRPC_METHODS,
     NLM_RPCIDS,
+    WORKSPACE_OPERATIONS,
 )
 from scripts.argus.discovery.endpoint_registry import get_registry
 
@@ -31,14 +39,106 @@ DOCS_DIR = Path("docs")
 _NOW = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+# ──── Helpers ────
+
+def _method_prefix(method: str) -> str:
+    """Extract a verb prefix from a gRPC method name for grouping."""
+    for prefix in [
+        "List", "Get", "Create", "Update", "Delete", "Stream",
+        "Generate", "Count", "Batch", "Import", "Export", "Tune",
+        "Execute", "Run", "Set", "Enable", "Disable", "Fetch",
+        "Query", "Search", "Check", "Start", "Stop", "Cancel",
+    ]:
+        if method.startswith(prefix):
+            return prefix
+    return "Other"
+
+
+def _entry_line(label: str, entry: Dict[str, Any], baseline_set: Any) -> List[str]:
+    """Build markdown lines for a single rpcid/method entry."""
+    seen_count = entry.get("seen", 0)
+    last_seen = entry.get("last", "never")
+    status = "✅" if seen_count > 0 else "⚠️ not yet observed"
+    return [
+        f"- **Status:** {status}",
+        f"- **Times observed:** {seen_count}",
+        f"- **Last seen:** {last_seen}",
+        "",
+    ]
+
+
+def _baseline_count(baseline: Any) -> int:
+    """Count total operations, handling nested Workspace dicts."""
+    if not isinstance(baseline, dict):
+        return 0
+    first_val = next(iter(baseline.values()), None) if baseline else None
+    if isinstance(first_val, dict) and not any(
+        k in first_val for k in ("rpcid", "service", "path", "description", "seen")
+    ):
+        return sum(len(v) for v in baseline.values() if isinstance(v, dict))
+    return len(baseline)
+
+
+def _flat_baseline_keys(baseline: Any) -> set:
+    """Return flat set of operation keys for membership testing."""
+    if not isinstance(baseline, dict):
+        return set()
+    first_val = next(iter(baseline.values()), None) if baseline else None
+    if isinstance(first_val, dict) and not any(
+        k in first_val for k in ("rpcid", "service", "path", "description", "seen")
+    ):
+        keys: set = set()
+        for section_ops in baseline.values():
+            if isinstance(section_ops, dict):
+                keys.update(section_ops.keys())
+        return keys
+    return set(baseline.keys())
+
+
+def _discovery_section(
+    reg_section: Dict[str, Any], baseline: Dict[str, Any], kind_label: str
+) -> List[str]:
+    """Build a 'New Discoveries' section for items not in baseline."""
+    new_items = [
+        (key, d) for key, d in reg_section.items()
+        if key not in baseline and d.get("seen", 0) > 0
+    ]
+    if not new_items:
+        return []
+    lines = ["---", "", f"## 🆕 New Discoveries ({kind_label}, not in baseline)", ""]
+    for key, d in sorted(new_items):
+        name = d.get("name", d.get("service", key))
+        lines += [
+            f"### `{key}` — {name}",
+            "",
+            f"- **First seen:** {d.get('first', '?')}",
+            f"- **Times seen:** {d.get('seen', 1)}",
+            "",
+        ]
+    return lines
+
+
+# ──── Main Generator ────
+
 class ApiDocGenerator:
-    """Generates Markdown API reference files from ARGUS discoveries."""
+    """Generates Markdown API reference files from ARGUS discoveries.
+
+    Covers 8 service categories:
+        NLM, Gemini, AI Studio, Colab, Apps Script, Workspace,
+        NLM gRPC, and heap-discovered methods.
+    """
+
+    def _get_context(self) -> tuple:
+        """Shared registry fetch."""
+        registry = get_registry()
+        return registry.get_stats(), registry.get_full_data()
+
+    # ──── NLM ────
 
     def generate_nlm_reference(self) -> str:
         """Generate ``docs/NLM_API_REFERENCE.md`` content."""
-        registry = get_registry()
-        stats = registry.get_stats()
-        reg_data = registry.get_full_data()
+        stats, reg_data = self._get_context()
+        section = reg_data.get("nlm_rpcids", {})
 
         lines: List[str] = [
             "# NotebookLM API Reference",
@@ -63,58 +163,27 @@ class ApiDocGenerator:
         ]
 
         for rpcid, name in sorted(NLM_RPCIDS.items(), key=lambda x: x[1]):
-            entry = reg_data["nlm_rpcids"].get(rpcid, {})
-            seen_count = entry.get("seen", 0)
-            last_seen = entry.get("last", "never")
-            status = "✅" if seen_count > 0 else "⚠️ not yet observed"
+            entry = section.get(rpcid, {})
+            lines += [f"### `{rpcid}` — {name}", ""]
+            lines += _entry_line(name, entry, NLM_RPCIDS)
 
-            lines += [
-                f"### `{rpcid}` — {name}",
-                "",
-                f"- **Status:** {status}",
-                f"- **Times observed:** {seen_count}",
-                f"- **Last seen:** {last_seen}",
-                "",
-            ]
-
-        # New discoveries section
-        new_nlm = [
-            (rpcid, d) for rpcid, d in reg_data["nlm_rpcids"].items()
-            if rpcid not in NLM_RPCIDS and d.get("seen", 0) > 0
-        ]
-        if new_nlm:
-            lines += [
-                "---",
-                "",
-                "## 🆕 New Discoveries (not in baseline)",
-                "",
-            ]
-            for rpcid, d in sorted(new_nlm):
-                lines += [
-                    f"### `{rpcid}`",
-                    "",
-                    f"- **First seen:** {d.get('first', '?')}",
-                    f"- **Times seen:** {d.get('seen', 1)}",
-                    "",
-                ]
+        lines += _discovery_section(section, NLM_RPCIDS, "NLM")
 
         lines += [
-            "---",
-            "",
-            "## Feature Flags",
-            "",
+            "---", "",
+            "## Feature Flags", "",
             "Feature flags are fetched via rpcid `ozz5Z` (GetFeatureFlags).",
-            "See `data/argus/feature_flags.json` for the probed flag ID map.",
-            "",
+            "See `data/argus/feature_flags.json` for the probed flag ID map.", "",
         ]
 
         return "\n".join(lines)
 
+    # ──── Gemini ────
+
     def generate_gemini_reference(self) -> str:
         """Generate ``docs/GEMINI_API_REFERENCE.md`` content."""
-        registry = get_registry()
-        stats = registry.get_stats()
-        reg_data = registry.get_full_data()
+        stats, reg_data = self._get_context()
+        section = reg_data.get("gemini_rpcids", {})
 
         lines: List[str] = [
             "# Gemini API Reference (Internal)",
@@ -122,42 +191,28 @@ class ApiDocGenerator:
             f"> Auto-generated by ARGUS on {_NOW}",
             f"> Coverage: {stats['gemini_rpcids_seen']}/{stats['gemini_rpcids_total']} rpcids observed",
             "",
-            "## Protocol",
-            "",
-            "**Endpoint:** `https://gemini.google.com/_/BardFrontendService/data/batchexecute`",
-            "",
-            "**Format:** Same as NLM batchexecute",
-            "",
-            "**Special:** `NXpLKc` bridges to NLM ListLinkedNotebooks",
-            "",
-            "---",
-            "",
-            "## RPC Methods",
-            "",
+            "## Protocol", "",
+            "**Endpoint:** `https://gemini.google.com/_/BardFrontendService/data/batchexecute`", "",
+            "**Format:** Same as NLM batchexecute", "",
+            "**Special:** `NXpLKc` bridges to NLM ListLinkedNotebooks", "",
+            "---", "",
+            "## RPC Methods", "",
         ]
 
         for rpcid, name in sorted(GEMINI_RPCIDS.items(), key=lambda x: x[1]):
-            entry = reg_data["gemini_rpcids"].get(rpcid, {})
-            seen_count = entry.get("seen", 0)
-            last_seen = entry.get("last", "never")
-            status = "✅" if seen_count > 0 else "⚠️"
+            entry = section.get(rpcid, {})
+            lines += [f"### `{rpcid}` — {name}", ""]
+            lines += _entry_line(name, entry, GEMINI_RPCIDS)
 
-            lines += [
-                f"### `{rpcid}` — {name}",
-                "",
-                f"- **Status:** {status}",
-                f"- **Times observed:** {seen_count}",
-                f"- **Last seen:** {last_seen}",
-                "",
-            ]
-
+        lines += _discovery_section(section, GEMINI_RPCIDS, "Gemini")
         return "\n".join(lines)
+
+    # ──── AI Studio ────
 
     def generate_aistudio_reference(self) -> str:
         """Generate ``docs/AISTUDIO_API_REFERENCE.md`` content."""
-        registry = get_registry()
-        stats = registry.get_stats()
-        reg_data = registry.get_full_data()
+        stats, reg_data = self._get_context()
+        section = reg_data.get("aistudio_methods", {})
 
         lines: List[str] = [
             "# AI Studio (MakerSuite) API Reference",
@@ -165,23 +220,16 @@ class ApiDocGenerator:
             f"> Auto-generated by ARGUS on {_NOW}",
             f"> Coverage: {stats['aistudio_methods_seen']}/{stats['aistudio_methods_total']} methods observed",
             "",
-            "## Protocol",
-            "",
-            "**Endpoint:** `https://alkalimakersuite-pa.clients6.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService/{Method}`",
-            "",
-            "**Auth:** `Authorization: SAPISIDHASH <ts>_<sha1>` + session cookies",
-            "",
-            "**SAPISIDHASH:** `sha1('{ts} {SAPISID} https://aistudio.google.com')`",
-            "",
-            "**Format:** gRPC-web with binary proto encoding OR JSON mode",
-            "",
-            "---",
-            "",
-            "## Methods",
-            "",
+            "## Protocol", "",
+            "**Endpoint:** `https://alkalimakersuite-pa.clients6.google.com/$rpc/"
+            "google.internal.alkali.applications.makersuite.v1.MakerSuiteService/{Method}`", "",
+            "**Auth:** `Authorization: SAPISIDHASH <ts>_<sha1>` + session cookies", "",
+            "**SAPISIDHASH:** `sha1('{ts} {SAPISID} https://aistudio.google.com')`", "",
+            "**Format:** gRPC-web with binary proto encoding OR JSON mode", "",
+            "---", "",
+            "## Methods", "",
         ]
 
-        # Group methods by prefix
         method_groups: Dict[str, List[str]] = {}
         for method in sorted(AISTUDIO_METHODS):
             prefix = _method_prefix(method)
@@ -190,18 +238,216 @@ class ApiDocGenerator:
         for prefix, methods in sorted(method_groups.items()):
             lines += [f"### {prefix} Operations", ""]
             for method in methods:
-                entry = reg_data["aistudio_methods"].get(method, {})
+                entry = section.get(method, {})
                 seen_count = entry.get("seen", 0)
                 status = "✅" if seen_count > 0 else "⚠️"
                 lines += [
-                    f"#### `{method}` {status}",
-                    "",
+                    f"#### `{method}` {status}", "",
                     f"- **Times observed:** {seen_count}",
-                    f"- **Last seen:** {entry.get('last', 'never')}",
-                    "",
+                    f"- **Last seen:** {entry.get('last', 'never')}", "",
                 ]
 
         return "\n".join(lines)
+
+    # ──── Colab ────
+
+    def generate_colab_reference(self) -> str:
+        """Generate ``docs/COLAB_API_REFERENCE.md`` content."""
+        stats, reg_data = self._get_context()
+        section = reg_data.get("colab_methods", {})
+
+        lines: List[str] = [
+            "# Google Colab API Reference",
+            "",
+            f"> Auto-generated by ARGUS on {_NOW}",
+            f"> Coverage: {stats['colab_methods_seen']}/{stats['colab_methods_total']} methods observed",
+            "",
+            "## Protocol", "",
+            "**Endpoint:** `https://colab.research.google.com/$rpc/google.internal.colab.v1.{Service}/{Method}`", "",
+            "**Auth:** Session cookies + `X-Goog-AuthUser` header", "",
+            "**Format:** gRPC-web binary proto", "",
+            "---", "",
+            "## Services", "",
+        ]
+
+        svc_groups: Dict[str, List[str]] = {}
+        for method, svc in sorted(COLAB_METHODS.items()):
+            svc_groups.setdefault(svc, []).append(method)
+
+        for svc, methods in sorted(svc_groups.items()):
+            lines += [f"### {svc}", ""]
+            for method in sorted(methods):
+                entry = section.get(method, {})
+                seen_count = entry.get("seen", 0)
+                status = "✅" if seen_count > 0 else "⚠️"
+                lines += [
+                    f"#### `{method}` {status}", "",
+                    f"- **Service:** {svc}",
+                    f"- **Times observed:** {seen_count}",
+                    f"- **Last seen:** {entry.get('last', 'never')}", "",
+                ]
+
+        lines += _discovery_section(section, COLAB_METHODS, "Colab")
+        return "\n".join(lines)
+
+    # ──── Apps Script ────
+
+    def generate_appscript_reference(self) -> str:
+        """Generate ``docs/APPSCRIPT_API_REFERENCE.md`` content."""
+        stats, reg_data = self._get_context()
+        section = reg_data.get("appscript_rpcids", {})
+
+        lines: List[str] = [
+            "# Google Apps Script API Reference",
+            "",
+            f"> Auto-generated by ARGUS on {_NOW}",
+            f"> Coverage: {stats['appscript_rpcids_seen']}/{stats['appscript_rpcids_total']} rpcids observed",
+            "",
+            "## Protocol", "",
+            "**Endpoint:** `https://script.google.com/_/AppsMakerFrontendUi/data/batchexecute`", "",
+            "**Format:** Same batchexecute f.req encoding as NLM/Gemini", "",
+            "**Auth:** Session cookies + SAPISID hash", "",
+            "---", "",
+            "## RPC Methods", "",
+        ]
+
+        for rpcid, name in sorted(APPSCRIPT_RPCIDS.items(), key=lambda x: x[1]):
+            entry = section.get(rpcid, {})
+            lines += [f"### `{rpcid}` — {name}", ""]
+            lines += _entry_line(name, entry, APPSCRIPT_RPCIDS)
+
+        lines += _discovery_section(section, APPSCRIPT_RPCIDS, "Apps Script")
+        return "\n".join(lines)
+
+    # ──── Workspace ────
+
+    def generate_workspace_reference(self) -> str:
+        """Generate ``docs/WORKSPACE_API_REFERENCE.md`` content."""
+        stats, reg_data = self._get_context()
+        section = reg_data.get("workspace_operations", {})
+
+        lines: List[str] = [
+            "# Google Workspace Gemini API Reference",
+            "",
+            f"> Auto-generated by ARGUS on {_NOW}",
+            f"> Coverage: {stats['workspace_operations_seen']}/{stats['workspace_operations_total']} operations observed",
+            "",
+            "## Protocol", "",
+            "**Hosts:** `appsgenaiserver-pa.clients6.google.com`, `docs.google.com`, "
+            "`sheets.google.com`, `drive.google.com`, etc.", "",
+            "**Auth:** API key + session cookies OR SAPISIDHASH", "",
+            "**Format:** REST JSON, gRPC-JSON transcoding, or batchexecute", "",
+            "---", "",
+        ]
+
+        for sec_name, ops in sorted(WORKSPACE_OPERATIONS.items()):
+            pretty = sec_name.replace("_", " ").title()
+            lines += [f"## {pretty}", ""]
+            if not isinstance(ops, dict):
+                lines += [f"*(non-dict section: {type(ops).__name__})*", ""]
+                continue
+            for op_name, op_detail in sorted(ops.items()):
+                entry = section.get(op_name, {})
+                seen_count = entry.get("seen", 0)
+                status = "✅" if seen_count > 0 else "⚠️"
+                desc = op_detail.get("description", "") if isinstance(op_detail, dict) else ""
+                lines += [
+                    f"### `{op_name}` {status}", "",
+                    f"- **Section:** {sec_name}",
+                    f"- **Description:** {desc}" if desc else "",
+                    f"- **Times observed:** {seen_count}",
+                    f"- **Last seen:** {entry.get('last', 'never')}", "",
+                ]
+            lines.append("")
+        return "\n".join(lines)
+
+    # ──── Unified Catalog ────
+
+    def generate_unified_catalog(self) -> str:
+        """Generate ``docs/ARGUS_API_CATALOG.md`` — cross-service summary."""
+        stats, reg_data = self._get_context()
+
+        services = [
+            ("NotebookLM (batchexecute)", "nlm_rpcids", NLM_RPCIDS),
+            ("Gemini (BardChatUi)", "gemini_rpcids", GEMINI_RPCIDS),
+            ("AI Studio (MakerSuite gRPC)", "aistudio_methods", AISTUDIO_METHODS),
+            ("Google Colab (gRPC)", "colab_methods", COLAB_METHODS),
+            ("Apps Script (batchexecute)", "appscript_rpcids", APPSCRIPT_RPCIDS),
+            ("Workspace Gemini (mixed)", "workspace_operations", WORKSPACE_OPERATIONS),
+            ("NLM gRPC (proto)", "nlm_grpc_methods", NLM_GRPC_METHODS),
+            ("Heap-Discovered (unconfirmed)", "heap_discovered", HEAP_DISCOVERED_METHODS),
+        ]
+
+        total_baseline = sum(_baseline_count(b) for _, _, b in services)
+        total_seen = sum(
+            sum(1 for d in reg_data.get(sec, {}).values() if d.get("seen", 0) > 0)
+            for _, sec, _ in services
+        )
+        total_new = sum(
+            sum(1 for k, d in reg_data.get(sec, {}).items()
+                if k not in _flat_baseline_keys(bl) and d.get("seen", 0) > 0)
+            for _, sec, bl in services
+        )
+
+        lines: List[str] = [
+            "# ARGUS Unified API Catalog",
+            "",
+            f"> Auto-generated by ARGUS on {_NOW}",
+            "",
+            f"**Total baseline operations:** {total_baseline}",
+            f"**Observed in crawls:** {total_seen}",
+            f"**New discoveries:** {total_new}",
+            "",
+            "## Service Summary",
+            "",
+            "| Service | Baseline | Seen | New | Coverage |",
+            "|---------|----------|------|-----|----------|",
+        ]
+
+        for label, sec_key, baseline in services:
+            sec_data = reg_data.get(sec_key, {})
+            bl_count = _baseline_count(baseline)
+            seen = sum(1 for d in sec_data.values() if d.get("seen", 0) > 0)
+            new = sum(1 for k, d in sec_data.items()
+                      if k not in _flat_baseline_keys(baseline) and d.get("seen", 0) > 0)
+            pct = f"{(seen / bl_count * 100):.0f}%" if bl_count > 0 else "—"
+            lines.append(f"| {label} | {bl_count} | {seen} | {new} | {pct} |")
+
+        lines += [
+            "",
+            "## Account Tiers",
+            "",
+            "| Account | Tier | Notes |",
+            "|---------|------|-------|",
+            "| nihilistcod | Free | Can set `[2]` tier marker (client-side gating) |",
+            "| knack112358 | Pro | Full Pro tier access |",
+            "",
+            "## Per-Service Reference Docs",
+            "",
+            "- [NLM API Reference](NLM_API_REFERENCE.md)",
+            "- [Gemini API Reference](GEMINI_API_REFERENCE.md)",
+            "- [AI Studio API Reference](AISTUDIO_API_REFERENCE.md)",
+            "- [Colab API Reference](COLAB_API_REFERENCE.md)",
+            "- [Apps Script API Reference](APPSCRIPT_API_REFERENCE.md)",
+            "- [Workspace API Reference](WORKSPACE_API_REFERENCE.md)",
+            "",
+            "## gRPC Service Paths",
+            "",
+            "```",
+            "AI Studio:  google.internal.alkali.applications.makersuite.v1.MakerSuiteService/{Method}",
+            "Applets:    google.alkali.boq.makersuite.makersuiteappletcontrol.proto."
+            "MakersuiteAppletControlService/{Method}",
+            "Colab AI:   google.internal.colab.v1.AIService/{Method}",
+            "Colab RT:   google.internal.colab.v1.RuntimeService/{Method}",
+            "NLM gRPC:   google.internal.labs.tailwind.orchestration.v1."
+            "LabsTailwindOrchestrationService/{Method}",
+            "```",
+            "",
+        ]
+
+        return "\n".join(lines)
+
+    # ──── Write All ────
 
     def write_all(self) -> List[Path]:
         """Write all API reference docs to docs/."""
@@ -212,6 +458,10 @@ class ApiDocGenerator:
             (DOCS_DIR / "NLM_API_REFERENCE.md", self.generate_nlm_reference()),
             (DOCS_DIR / "GEMINI_API_REFERENCE.md", self.generate_gemini_reference()),
             (DOCS_DIR / "AISTUDIO_API_REFERENCE.md", self.generate_aistudio_reference()),
+            (DOCS_DIR / "COLAB_API_REFERENCE.md", self.generate_colab_reference()),
+            (DOCS_DIR / "APPSCRIPT_API_REFERENCE.md", self.generate_appscript_reference()),
+            (DOCS_DIR / "WORKSPACE_API_REFERENCE.md", self.generate_workspace_reference()),
+            (DOCS_DIR / "ARGUS_API_CATALOG.md", self.generate_unified_catalog()),
         ]
         for path, content in pairs:
             path.write_text(content, encoding="utf-8")
@@ -221,8 +471,21 @@ class ApiDocGenerator:
         return written
 
 
+# ──── Diff Reporter ────
+
 class DiffReporter:
     """Compares current registry vs previous scan and produces a diff report."""
+
+    _SECTIONS = [
+        ("nlm_rpcids", "NLM rpcids"),
+        ("gemini_rpcids", "Gemini rpcids"),
+        ("aistudio_methods", "AI Studio methods"),
+        ("colab_methods", "Colab methods"),
+        ("appscript_rpcids", "Apps Script rpcids"),
+        ("workspace_operations", "Workspace operations"),
+        ("nlm_grpc_methods", "NLM gRPC methods"),
+        ("heap_discovered", "Heap-discovered methods"),
+    ]
 
     def __init__(self, current: Dict[str, Any], previous: Optional[Dict[str, Any]] = None) -> None:
         self._current = current
@@ -237,45 +500,19 @@ class DiffReporter:
             "",
         ]
 
-        # New NLM rpcids
-        curr_nlm = set(self._current.get("nlm_rpcids", {}).keys())
-        prev_nlm = set(self._previous.get("nlm_rpcids", {}).keys())
-        new_nlm = curr_nlm - prev_nlm
-        if new_nlm:
-            lines += ["## 🆕 New NLM rpcids", ""]
-            for r in sorted(new_nlm):
-                lines.append(f"- `{r}`")
-            lines.append("")
+        found_any = False
+        for section_key, label in self._SECTIONS:
+            curr_keys = set(self._current.get(section_key, {}).keys())
+            prev_keys = set(self._previous.get(section_key, {}).keys())
+            new_keys = curr_keys - prev_keys
+            if new_keys:
+                found_any = True
+                lines += [f"## 🆕 New {label}", ""]
+                for key in sorted(new_keys):
+                    lines.append(f"- `{key}`")
+                lines.append("")
 
-        # New Gemini rpcids
-        curr_gem = set(self._current.get("gemini_rpcids", {}).keys())
-        prev_gem = set(self._previous.get("gemini_rpcids", {}).keys())
-        new_gem = curr_gem - prev_gem
-        if new_gem:
-            lines += ["## 🆕 New Gemini rpcids", ""]
-            for r in sorted(new_gem):
-                lines.append(f"- `{r}`")
-            lines.append("")
-
-        # New AI Studio methods
-        curr_ais = set(self._current.get("aistudio_methods", {}).keys())
-        prev_ais = set(self._previous.get("aistudio_methods", {}).keys())
-        new_ais = curr_ais - prev_ais
-        if new_ais:
-            lines += ["## 🆕 New AI Studio methods", ""]
-            for m in sorted(new_ais):
-                lines.append(f"- `{m}`")
-            lines.append("")
-
-        if not new_nlm and not new_gem and not new_ais:
+        if not found_any:
             lines.append("No new discoveries in this scan. Baseline unchanged.")
 
         return "\n".join(lines)
-
-
-def _method_prefix(method: str) -> str:
-    for prefix in ["List", "Get", "Create", "Update", "Delete", "Stream",
-                   "Generate", "Count", "Batch", "Import", "Export", "Tune"]:
-        if method.startswith(prefix):
-            return prefix
-    return "Other"
