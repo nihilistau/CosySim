@@ -197,8 +197,8 @@ def test_source_registry_curated_questions():
 def test_source_registry_all_categories():
     from engine.nexus.news_sources import get_all_categories
     cats = get_all_categories()
-    assert "ai_research" in cats
-    assert "tech" in cats
+    assert "ai_ml" in cats
+    assert "science" in cats
     assert len(cats) >= 3
 
 
