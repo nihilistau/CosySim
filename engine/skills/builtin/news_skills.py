@@ -5,6 +5,7 @@ from typing import Optional
 
 from engine.nexus.client import get_nexus_client
 from engine.nexus.news.news_pipeline import get_news_pipeline
+from engine.nexus.news_sources import get_news_registry, get_distillation_categories
 from engine.skills.skill import skill
 
 logger = logging.getLogger(__name__)
@@ -19,14 +20,41 @@ logger = logging.getLogger(__name__)
 def fetch_news(category: str = "ai_research", limit: int = 5) -> str:
     """Get latest news headlines for a category.
 
+    Accepts both YAML source categories (ai_ml, python, security, etc.) and
+    distillation super-categories (ai_research, tech, world, science).
+
     Args:
-        category: News category (ai_research, tech, world, science)
-        limit: Maximum headlines to return
+        category: News category or super-category name.
+        limit: Maximum headlines to return.
 
     Returns:
-        Formatted news digest string
+        Formatted news digest string.
     """
-    return get_news_pipeline().get_latest_digest(category, limit=limit)
+    registry = get_news_registry()
+
+    # Search by the requested category directly first
+    try:
+        client = get_nexus_client()
+        results = client.search(f"news {category}", category="news", limit=limit)
+
+        # If nothing found and it's a super-category, search mapped source categories
+        if not results:
+            source_cats = registry.get_source_categories_for_super(category)
+            for src_cat in source_cats:
+                hits = client.search(f"news {src_cat}", category="news", limit=limit)
+                if hits:
+                    results = hits
+                    break
+
+        if results:
+            lines = [f"## Latest {category.replace('_', ' ').title()} News\n"]
+            for r in results[:limit]:
+                lines.append(f"**{r.get('title', 'Unknown')}**\n{r.get('content', '')[:200]}\n")
+            return "\n".join(lines)
+    except Exception as exc:
+        logger.warning("fetch_news error: %s", exc)
+
+    return f"No news digest available for {category}"
 
 
 @skill(
@@ -149,9 +177,6 @@ def news_insight(topic: str) -> str:
         return f"[NEWS INSIGHT — {topic.upper()}]\n\nIntel unavailable: {exc}"
 
 
-_NEWS_CATEGORIES = ("ai_research", "tech", "world", "science")
-
-
 @skill(
     pack="news",
     description="Generate a 300-word structured digest for a news category from Nexus Q&A cache",
@@ -162,28 +187,39 @@ def summarize_news_category(category: str = "ai_research") -> str:
     """Return a structured 300-word news digest for a whole category.
 
     Pulls all Q&A pairs tagged to *category* from the Nexus cache, synthesises
-    them into a ranked digest, and returns a formatted brief. Categories:
-    ``ai_research``, ``tech``, ``world``, ``science``.
+    them into a ranked digest, and returns a formatted brief. Categories are
+    loaded dynamically from ``config/news_sources.yaml`` distillation config.
 
     Args:
-        category: News category to summarise.
+        category: Distillation super-category to summarise.
 
     Returns:
         Formatted category digest, or "no intelligence" message.
     """
     cat = category.lower().strip()
-    if cat not in _NEWS_CATEGORIES:
+    valid_cats = get_distillation_categories()
+    if not valid_cats:
+        valid_cats = ["ai_research", "tech", "world", "science"]
+    if cat not in valid_cats:
         return (
             f"[NEWS DIGEST — UNKNOWN CATEGORY '{category}']\n\n"
-            f"Valid categories: {', '.join(_NEWS_CATEGORIES)}"
+            f"Valid categories: {', '.join(valid_cats)}"
         )
     try:
         client = get_nexus_client()
+        registry = get_news_registry()
 
-        # Pull up to 10 Q&A entries tagged to this news category
-        results = client.search(f"news {cat}", category="news", limit=10)
+        # Search by super-category name AND all its mapped source categories
+        results = client.search(f"news {cat}", category="news", limit=10) or []
+        source_cats = registry.get_source_categories_for_super(cat)
+        for src_cat in source_cats:
+            if len(results) >= 10:
+                break
+            hits = client.search(f"news {src_cat}", category="news", limit=5) or []
+            for h in hits:
+                if h not in results:
+                    results.append(h)
         if not results:
-            # Wider search without category filter
             results = client.search(cat, limit=8) or []
 
         if not results:

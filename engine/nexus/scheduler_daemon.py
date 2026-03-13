@@ -2016,52 +2016,23 @@ def _colab_pipeline_sync_callback() -> Dict[str, Any]:
 def _news_distill_nlm_callback() -> Dict[str, Any]:
     """Every hour: distill news articles into Nexus Q&A via NotebookLM notebooks.
 
-    Per category (ai_research/tech/world/science):
-    - Fetches latest news items from Nexus for the category
+    Per distillation super-category (ai_research/tech/world/science):
+    - Looks up which YAML source categories map to this super-category
+    - Fetches latest news items from Nexus for ALL mapped source categories
     - Adds article summaries as a text source to the NLM notebook
-    - Asks 5 targeted questions via NLM (Gemini-backed)
+    - Asks targeted questions (from YAML config) via NLM (Gemini-backed)
     - Stores Q&A pairs in Nexus under category='news'
     """
-    # Permanent NLM notebook IDs per news category
-    _NLM_NOTEBOOKS: Dict[str, str] = {
-        "ai_research": "24221492-0531-4305-bdef-33a5425f6302",
-        "tech": "9504cf8c-b111-4f53-92e0-0833ece14264",
-        "world": "f0a6c72f-4fcb-40a1-8d32-b217a12166fe",
-        "science": "3622eae6-d105-42bb-870c-605d652b919d",
-    }
-    _QUESTIONS: Dict[str, List[str]] = {
-        "ai_research": [
-            "What are the most significant LLM or AI research breakthroughs in this digest?",
-            "What fine-tuning or training techniques are being highlighted?",
-            "Which AI agent or multi-agent developments stand out?",
-            "What local inference or edge-AI trends are emerging?",
-            "Summarise the 3 most actionable insights for AI developers.",
-        ],
-        "tech": [
-            "What are the biggest technology product or platform developments?",
-            "Which hardware or infrastructure trends are notable?",
-            "What open-source technology releases or updates are significant?",
-            "What security or privacy developments should developers watch?",
-            "Summarise the 3 most impactful tech stories in bullet points.",
-        ],
-        "world": [
-            "What are the most consequential geopolitical developments?",
-            "Which economic or trade policy changes are notable?",
-            "What conflicts or diplomatic events stand out?",
-            "How might these world events impact technology or business?",
-            "Summarise the 3 most important world news items in bullet points.",
-        ],
-        "science": [
-            "What are the most exciting scientific research breakthroughs?",
-            "Which emerging technologies have near-term practical applications?",
-            "What space, climate, or energy science developments are significant?",
-            "How might these science developments affect AI or computing?",
-            "Summarise the 3 most impactful science stories in bullet points.",
-        ],
-    }
+    from engine.nexus.news_sources import get_news_registry
+    registry = get_news_registry()
+
+    # Load distillation config from YAML
+    super_cats = registry.get_distillation_categories()
+    if not super_cats:
+        return {"status": "skipped", "reason": "No distillation super_categories in YAML config"}
 
     total_qa = 0
-    errors = []
+    errors: List[str] = []
 
     try:
         from engine.nexus.client import get_nexus_client
@@ -2076,26 +2047,41 @@ def _news_distill_nlm_callback() -> Dict[str, Any]:
     except Exception:
         nlm_available = False
 
-    for cat, notebook_id in _NLM_NOTEBOOKS.items():
+    for cat in super_cats:
+        notebook_id = registry.get_nlm_notebook_id(cat)
+        if not notebook_id:
+            errors.append(f"{cat}: no NLM notebook ID configured")
+            continue
+
         try:
-            # Fetch recent news items from Nexus for this category
-            results = client.search(f"news {cat}", limit=10)
-            if not results:
-                # No articles yet — ask generic questions about the category
-                results = []
+            # Find all YAML source categories that map to this super-category
+            source_cats = registry.get_source_categories_for_super(cat)
 
-            # Build article summaries text
+            # Fetch recent news items from Nexus for ALL mapped source categories
             summaries: List[str] = []
-            for item in results[:6]:
-                title = item.get("title", "Untitled")
-                content = item.get("content", "")[:500]
-                summaries.append(f"## {title}\n{content}")
+            for src_cat in source_cats:
+                results = client.search(f"news {src_cat}", limit=6)
+                for item in results[:4]:
+                    title = item.get("title", "Untitled")
+                    content = item.get("content", "")[:500]
+                    summaries.append(f"## {title}\n{content}")
 
-            questions = _QUESTIONS.get(cat, [f"What are the key {cat} developments?"])
+            # Also search by super-category name (catches items stored under old names)
+            if cat not in source_cats:
+                fallback_results = client.search(f"news {cat}", limit=6)
+                for item in fallback_results[:3]:
+                    title = item.get("title", "Untitled")
+                    content = item.get("content", "")[:500]
+                    summaries.append(f"## {title}\n{content}")
+
+            questions = registry.get_distillation_questions(cat)
 
             if nlm_available and summaries:
                 # Inject article digest as a new text source into the notebook
-                digest = f"# News Digest: {cat.upper()} — {__import__('datetime').datetime.utcnow().strftime('%Y-%m-%d %H:%M')}\n\n"
+                digest = (
+                    f"# News Digest: {cat.upper()} — "
+                    f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}\n\n"
+                )
                 digest += "\n\n---\n\n".join(summaries)
                 try:
                     nlm.add_source(notebook_id, "text", digest)
@@ -2126,7 +2112,7 @@ def _news_distill_nlm_callback() -> Dict[str, Any]:
         "status": "ok",
         "qa_pairs_stored": total_qa,
         "nlm_used": nlm_available,
-        "categories": list(_NLM_NOTEBOOKS.keys()),
+        "categories": super_cats,
     }
     if errors:
         result["errors"] = errors
