@@ -4,6 +4,42 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.26] — "PIPELINE ENGINE v2" — 2026-07
+
+Adds a full meta-stage dispatch engine to WorkspacePipeline, enabling advanced
+execution patterns: retry with backoff, conditional branching, parallel
+execution, for-each iteration, sub-pipeline composition, and context validation.
+
+### Added
+- **`_dispatch_stage()`** — unified router that handles all stage types (normal
+  stages + 4 meta-stage types: conditional, parallel, for_each, sub-pipeline)
+- **Retry/backoff**: stages can declare `retry`, `backoff` (exponential/linear),
+  `retry_delay`, and `fallback` executor — automatic retries with configurable
+  delay strategy
+- **Conditional branching**: `{"if": "expr", "then": [...], "else": [...]}`
+  with `_evaluate_condition()` supporting operators: `>`, `<`, `>=`, `<=`,
+  `==`, `!=`, `contains`, `not_contains`, `startswith`, `endswith`, `matches`
+- **Parallel execution**: `{"parallel": [[...], [...]], "merge": "all|first|concat"}`
+  using `ThreadPoolExecutor` with `copy.deepcopy()` branch isolation and
+  `allow_partial` for fault tolerance
+- **For-each iteration**: `{"for_each": "key", "as": "var", "stages": [...]}`
+  with `max_items` cap and optional `"parallel": true` for concurrent iteration
+- **Sub-pipeline composition**: `{"run_pipeline": "template_name", "params": {}}`
+  recursively calls `run()` with template lookup and optional context passing
+- **Context validation**: `input_requires` on any stage — validates required
+  context keys exist before execution, with `optional` flag for soft skip
+- **`_stage_label()`** — human-readable labels for meta-stages in logs and
+  template listings
+- **`_cast_value()`** — auto-casts condition operands (int, float, bool, null)
+- 67 new v2 test methods across 12 test classes
+
+### Changed
+- Refactored `run()` to delegate all stage execution through `_dispatch_stage()`
+  instead of an inline stage loop — cleaner, extensible, consistent error handling
+- `list_templates()` uses `_stage_label()` for meta-stage descriptions
+
+---
+
 ## [1.25] — "NEWS PIPELINE HARDENING" — 2026-07
 
 Hardens the news pipeline with four improvements that eliminate crash paths,

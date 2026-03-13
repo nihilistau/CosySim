@@ -1021,3 +1021,747 @@ class TestV119cTemplates:
                 assert step["stage"] in STAGE_REGISTRY, (
                     f"Stage {step['stage']} in template {tpl_name} not in STAGE_REGISTRY"
                 )
+
+
+# ──── Pipeline v2: Meta-Stage Engine Tests (v1.26) ────────────────────────────
+
+
+class TestStageLabel:
+    """Tests for _stage_label helper."""
+
+    def test_normal_stage(self):
+        """Returns stage name for normal stages."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        assert wp._stage_label({"stage": "nexus_store"}) == "nexus_store"
+
+    def test_conditional_stage(self):
+        """Returns if:condition for conditional stages."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        assert wp._stage_label({"if": "articles_count > 5"}) == "if:articles_count > 5"
+
+    def test_parallel_stage(self):
+        """Returns parallel:N_branches for parallel stages."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        label = wp._stage_label({"parallel": [[], [], []]})
+        assert label == "parallel:3_branches"
+
+    def test_for_each_stage(self):
+        """Returns for_each:key for loop stages."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        assert wp._stage_label({"for_each": "articles"}) == "for_each:articles"
+
+    def test_sub_pipeline_stage(self):
+        """Returns sub:template for sub-pipeline stages."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        assert wp._stage_label({"run_pipeline": "research_and_distill"}) == "sub:research_and_distill"
+
+    def test_unknown_stage(self):
+        """Returns 'unknown' for unrecognised stage defs."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        assert wp._stage_label({"weird": True}) == "unknown"
+
+
+class TestCastValue:
+    """Tests for _cast_value static method."""
+
+    def test_int(self):
+        assert WorkspacePipeline._cast_value("42") == 42
+
+    def test_float(self):
+        assert WorkspacePipeline._cast_value("3.14") == 3.14
+
+    def test_bool_true(self):
+        assert WorkspacePipeline._cast_value("true") is True
+
+    def test_bool_false(self):
+        assert WorkspacePipeline._cast_value("False") is False
+
+    def test_none(self):
+        assert WorkspacePipeline._cast_value("None") is None
+
+    def test_null(self):
+        assert WorkspacePipeline._cast_value("null") is None
+
+    def test_string(self):
+        assert WorkspacePipeline._cast_value("hello") == "hello"
+
+    def test_quoted_string(self):
+        assert WorkspacePipeline._cast_value("'hello'") == "hello"
+
+
+class TestValidateInputs:
+    """Tests for _validate_inputs method."""
+
+    def test_no_requirements(self):
+        """Returns None when no input_requires specified."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        assert wp._validate_inputs({"stage": "test"}, {"a": 1}) is None
+
+    def test_requirements_met(self):
+        """Returns None when all required keys present."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        result = wp._validate_inputs(
+            {"stage": "test", "input_requires": ["a", "b"]},
+            {"a": 1, "b": 2, "c": 3},
+        )
+        assert result is None
+
+    def test_requirements_missing(self):
+        """Returns error string when keys are missing."""
+        wp = WorkspacePipeline.__new__(WorkspacePipeline)
+        result = wp._validate_inputs(
+            {"stage": "test", "input_requires": ["a", "b", "x"]},
+            {"a": 1},
+        )
+        assert result is not None
+        assert "b" in result
+        assert "x" in result
+
+
+class TestEvaluateCondition:
+    """Tests for _evaluate_condition method."""
+
+    def setup_method(self):
+        self.wp = WorkspacePipeline.__new__(WorkspacePipeline)
+
+    def test_truthy_present(self):
+        """Truthy check passes for present non-falsy values."""
+        assert self.wp._evaluate_condition("count", {"count": 5}) is True
+
+    def test_truthy_missing(self):
+        """Truthy check fails for missing keys."""
+        assert self.wp._evaluate_condition("count", {}) is False
+
+    def test_truthy_zero(self):
+        """Truthy check fails for zero."""
+        assert self.wp._evaluate_condition("count", {"count": 0}) is False
+
+    def test_truthy_empty_string(self):
+        """Truthy check fails for empty string."""
+        assert self.wp._evaluate_condition("val", {"val": ""}) is False
+
+    def test_equals_int(self):
+        assert self.wp._evaluate_condition("count == 5", {"count": 5}) is True
+
+    def test_equals_string(self):
+        assert self.wp._evaluate_condition("name == test", {"name": "test"}) is True
+
+    def test_not_equals(self):
+        assert self.wp._evaluate_condition("count != 5", {"count": 3}) is True
+
+    def test_greater_than(self):
+        assert self.wp._evaluate_condition("count > 10", {"count": 15}) is True
+
+    def test_greater_than_false(self):
+        assert self.wp._evaluate_condition("count > 10", {"count": 5}) is False
+
+    def test_greater_equal(self):
+        assert self.wp._evaluate_condition("count >= 10", {"count": 10}) is True
+
+    def test_less_than(self):
+        assert self.wp._evaluate_condition("count < 10", {"count": 5}) is True
+
+    def test_less_equal(self):
+        assert self.wp._evaluate_condition("count <= 10", {"count": 10}) is True
+
+    def test_contains(self):
+        assert self.wp._evaluate_condition("text contains hello", {"text": "say hello there"}) is True
+
+    def test_contains_missing(self):
+        assert self.wp._evaluate_condition("text contains hello", {"text": "goodbye"}) is False
+
+    def test_contains_none(self):
+        assert self.wp._evaluate_condition("text contains hello", {}) is False
+
+    def test_in_list(self):
+        assert self.wp._evaluate_condition("status in [active, pending]", {"status": "active"}) is True
+
+    def test_in_list_miss(self):
+        assert self.wp._evaluate_condition("status in [active, pending]", {"status": "done"}) is False
+
+    def test_not_negation(self):
+        assert self.wp._evaluate_condition("not empty_key", {"empty_key": ""}) is True
+
+    def test_not_negation_truthy(self):
+        assert self.wp._evaluate_condition("not present", {"present": True}) is False
+
+
+class TestRetryExecution:
+    """Tests for retry/backoff stage execution."""
+
+    def test_succeeds_first_try(self):
+        """Stage with retry succeeds on first attempt without delay."""
+        wp = get_workspace_pipeline()
+        calls = []
+
+        def fake_exec(params, context):
+            calls.append(1)
+            return {"result": "ok"}
+
+        stages = [{"stage": "nexus_store", "retry": 3, "backoff": "linear", "retry_delay": 0.01}]
+
+        with patch.object(wp, "_get_executor", return_value=fake_exec):
+            run = wp.run("test_retry_ok", stages=stages, topic="test")
+        assert run.status == PipelineStatus.COMPLETED
+        assert len(calls) == 1
+
+    def test_retries_on_failure(self):
+        """Stage retries the configured number of times."""
+        wp = get_workspace_pipeline()
+        attempts = []
+
+        def flaky_exec(params, context):
+            attempts.append(1)
+            if len(attempts) < 3:
+                raise RuntimeError("transient failure")
+            return {"result": "recovered"}
+
+        stages = [{"stage": "nexus_store", "retry": 3, "backoff": "linear", "retry_delay": 0.01}]
+
+        with patch.object(wp, "_get_executor", return_value=flaky_exec):
+            run = wp.run("test_retry_recover", stages=stages, topic="test")
+        assert run.status == PipelineStatus.COMPLETED
+        assert len(attempts) == 3
+
+    def test_exhausted_retries_fail(self):
+        """Pipeline fails when all retries are exhausted."""
+        wp = get_workspace_pipeline()
+
+        def always_fail(params, context):
+            raise RuntimeError("permanent failure")
+
+        stages = [{"stage": "nexus_store", "retry": 2, "backoff": "exponential", "retry_delay": 0.01}]
+
+        with patch.object(wp, "_get_executor", return_value=always_fail):
+            run = wp.run("test_retry_exhaust", stages=stages, topic="test")
+        assert run.status == PipelineStatus.FAILED
+        assert "permanent failure" in run.error
+
+    def test_fallback_stage(self):
+        """Fallback stage runs after retries are exhausted."""
+        wp = get_workspace_pipeline()
+        used = {"primary": 0, "fallback": 0}
+
+        def primary_fail(params, context):
+            used["primary"] += 1
+            raise RuntimeError("primary fails")
+
+        def fallback_ok(params, context):
+            used["fallback"] += 1
+            return {"result": "from_fallback"}
+
+        stages = [
+            {"stage": "nlm_research", "retry": 1, "retry_delay": 0.01,
+             "backoff": "linear", "fallback": "nexus_store"},
+        ]
+
+        def mock_get_executor(name):
+            if name == "nlm_research":
+                return primary_fail
+            if name == "nexus_store":
+                return fallback_ok
+            return None
+
+        with patch.object(wp, "_get_executor", side_effect=mock_get_executor):
+            run = wp.run("test_fallback", stages=stages, topic="test")
+        assert run.status == PipelineStatus.COMPLETED
+        assert used["primary"] == 2  # 1 initial + 1 retry
+        assert used["fallback"] == 1
+        assert run.stages[0].metadata.get("fallback_used") == "nexus_store"
+
+
+class TestConditionalExecution:
+    """Tests for conditional (if/then/else) meta-stages."""
+
+    def test_then_branch(self):
+        """Executes then branch when condition is true."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"branch": "then_ran"}
+
+        stages = [
+            {"if": "has_data", "then": [{"stage": "nexus_store"}], "else": []}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_cond_then", stages=stages, has_data=True)
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.final_output.get("branch") == "then_ran"
+
+    def test_else_branch(self):
+        """Executes else branch when condition is false."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"branch": "else_ran"}
+
+        stages = [
+            {"if": "has_data", "then": [{"stage": "create_doc"}],
+             "else": [{"stage": "nexus_store"}]}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_cond_else", stages=stages)  # has_data not set → falsy
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.final_output.get("branch") == "else_ran"
+
+    def test_empty_branch(self):
+        """Empty branch is a no-op."""
+        wp = get_workspace_pipeline()
+
+        stages = [
+            {"if": "missing_key", "then": [{"stage": "nexus_store"}]}
+        ]
+
+        run = wp.run("test_cond_empty", stages=stages, topic="test")
+        assert run.status == PipelineStatus.COMPLETED
+
+    def test_comparison_condition(self):
+        """Condition with comparison operator works."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"executed": True}
+
+        stages = [
+            {"if": "count > 5", "then": [{"stage": "nexus_store"}]}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_cond_cmp", stages=stages, count=10)
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.final_output.get("executed") is True
+
+
+class TestParallelExecution:
+    """Tests for parallel branch execution."""
+
+    def test_two_branches(self):
+        """Two parallel branches execute and merge."""
+        wp = get_workspace_pipeline()
+        executed = []
+
+        def mock_exec_a(params, context):
+            executed.append("a")
+            return {"from_a": True}
+
+        def mock_exec_b(params, context):
+            executed.append("b")
+            return {"from_b": True}
+
+        stages = [
+            {"parallel": [
+                [{"stage": "create_doc"}],
+                [{"stage": "create_sheet"}],
+            ], "merge": "all"}
+        ]
+
+        call_count = [0]
+        def mock_get_executor(name):
+            call_count[0] += 1
+            if name == "create_doc":
+                return mock_exec_a
+            if name == "create_sheet":
+                return mock_exec_b
+            return None
+
+        with patch.object(wp, "_get_executor", side_effect=mock_get_executor):
+            run = wp.run("test_parallel", stages=stages, topic="test")
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.final_output.get("from_a") is True
+        assert run.final_output.get("from_b") is True
+        assert run.final_output.get("_parallel_branches") == 2
+
+    def test_merge_first(self):
+        """merge='first' only uses results from first branch."""
+        wp = get_workspace_pipeline()
+
+        def exec_a(params, context):
+            return {"source": "branch_0"}
+
+        def exec_b(params, context):
+            return {"source": "branch_1"}
+
+        stages = [
+            {"parallel": [
+                [{"stage": "create_doc"}],
+                [{"stage": "create_sheet"}],
+            ], "merge": "first"}
+        ]
+
+        def mock_get_executor(name):
+            if name == "create_doc":
+                return exec_a
+            return exec_b
+
+        with patch.object(wp, "_get_executor", side_effect=mock_get_executor):
+            run = wp.run("test_merge_first", stages=stages, topic="test")
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.final_output.get("source") == "branch_0"
+
+    def test_allow_partial(self):
+        """allow_partial=True allows some branches to fail."""
+        wp = get_workspace_pipeline()
+
+        def exec_ok(params, context):
+            return {"ok": True}
+
+        def exec_fail(params, context):
+            raise RuntimeError("branch_fail")
+
+        stages = [
+            {"parallel": [
+                [{"stage": "create_doc"}],
+                [{"stage": "create_sheet"}],
+            ], "merge": "all", "allow_partial": True}
+        ]
+
+        def mock_get_executor(name):
+            if name == "create_doc":
+                return exec_ok
+            return exec_fail
+
+        with patch.object(wp, "_get_executor", side_effect=mock_get_executor):
+            run = wp.run("test_partial", stages=stages, topic="test")
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.final_output.get("ok") is True
+
+    def test_fail_without_allow_partial(self):
+        """Without allow_partial, a branch failure fails the pipeline."""
+        wp = get_workspace_pipeline()
+
+        def exec_fail(params, context):
+            raise RuntimeError("branch_boom")
+
+        stages = [
+            {"parallel": [
+                [{"stage": "create_doc"}],
+            ], "merge": "all", "allow_partial": False}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=exec_fail):
+            run = wp.run("test_no_partial", stages=stages, topic="test")
+        assert run.status == PipelineStatus.FAILED
+
+
+class TestForEachExecution:
+    """Tests for for_each loop execution."""
+
+    def test_iterates_over_list(self):
+        """for_each iterates over each item in collection."""
+        wp = get_workspace_pipeline()
+        processed = []
+
+        def mock_exec(params, context):
+            processed.append(context.get("item"))
+            return {"item_output": context.get("item")}
+
+        stages = [
+            {"for_each": "items", "as": "item",
+             "stages": [{"stage": "nexus_store"}]}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_foreach", stages=stages, items=["a", "b", "c"])
+        assert run.status == PipelineStatus.COMPLETED
+        assert len(processed) == 3
+        assert run.final_output.get("items_count") == 3
+
+    def test_max_items_cap(self):
+        """for_each respects max_items safety cap."""
+        wp = get_workspace_pipeline()
+        processed = []
+
+        def mock_exec(params, context):
+            processed.append(1)
+            return {}
+
+        stages = [
+            {"for_each": "items", "as": "item", "max_items": 2,
+             "stages": [{"stage": "nexus_store"}]}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_foreach_cap", stages=stages, items=list(range(10)))
+        assert run.status == PipelineStatus.COMPLETED
+        assert len(processed) == 2
+
+    def test_empty_collection(self):
+        """for_each with empty collection is a no-op."""
+        wp = get_workspace_pipeline()
+
+        stages = [
+            {"for_each": "items", "as": "item",
+             "stages": [{"stage": "nexus_store"}]}
+        ]
+
+        run = wp.run("test_foreach_empty", stages=stages, items=[])
+        assert run.status == PipelineStatus.COMPLETED
+
+    def test_missing_collection(self):
+        """for_each with missing key is a no-op."""
+        wp = get_workspace_pipeline()
+
+        stages = [
+            {"for_each": "missing_key", "as": "item",
+             "stages": [{"stage": "nexus_store"}]}
+        ]
+
+        run = wp.run("test_foreach_missing", stages=stages, topic="test")
+        assert run.status == PipelineStatus.COMPLETED
+
+    def test_parallel_for_each(self):
+        """for_each with parallel=True runs items concurrently."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"item_output": context.get("item")}
+
+        stages = [
+            {"for_each": "items", "as": "item", "parallel": True,
+             "stages": [{"stage": "nexus_store"}]}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_foreach_par", stages=stages, items=["x", "y"])
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.final_output.get("items_count") == 2
+
+
+class TestSubPipeline:
+    """Tests for sub-pipeline composition."""
+
+    def test_runs_named_template(self):
+        """Sub-pipeline executes a named template."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"generated": True}
+
+        # Use a known template
+        stages = [
+            {"run_pipeline": "generate_and_store", "params": {"topic": "AI"},
+             "pass_context": True}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_subpipe", stages=stages)
+        assert run.status == PipelineStatus.COMPLETED
+        assert "sub_generate_and_store_run_id" in run.final_output
+        assert run.final_output.get("sub_generate_and_store_status") == "completed"
+
+    def test_unknown_template_fails(self):
+        """Sub-pipeline with unknown template fails the parent."""
+        wp = get_workspace_pipeline()
+
+        stages = [
+            {"run_pipeline": "nonexistent_template_xyz"}
+        ]
+
+        run = wp.run("test_subpipe_fail", stages=stages)
+        assert run.status == PipelineStatus.FAILED
+
+    def test_pass_context_false(self):
+        """pass_context=False sends only params to sub-pipeline."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"sub_result": True}
+
+        stages = [
+            {"run_pipeline": "generate_and_store",
+             "params": {"topic": "isolated"},
+             "pass_context": False}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_subpipe_no_ctx", stages=stages, extra_key="should_not_pass")
+        assert run.status == PipelineStatus.COMPLETED
+
+
+class TestContextValidation:
+    """Tests for input_requires context validation."""
+
+    def test_valid_context(self):
+        """Stage runs when all required keys are present."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"stored": True}
+
+        stages = [
+            {"stage": "nexus_store", "input_requires": ["topic"]}
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_valid_ctx", stages=stages, topic="AI")
+        assert run.status == PipelineStatus.COMPLETED
+
+    def test_missing_required_key_fails(self):
+        """Stage fails when required keys are missing."""
+        wp = get_workspace_pipeline()
+
+        stages = [
+            {"stage": "nexus_store", "input_requires": ["topic", "content"]}
+        ]
+
+        run = wp.run("test_missing_ctx", stages=stages)
+        assert run.status == PipelineStatus.FAILED
+        assert "Missing required" in run.error
+
+    def test_optional_stage_skipped(self):
+        """Optional stage with missing keys is skipped, not failed."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"stored": True}
+
+        stages = [
+            {"stage": "nexus_store", "input_requires": ["missing_key"], "optional": True},
+            {"stage": "create_doc"},
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run("test_optional_skip", stages=stages, topic="AI")
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.stages[0].status == StageStatus.SKIPPED
+
+
+class TestDispatchStage:
+    """Tests for the central _dispatch_stage method."""
+
+    def test_dispatches_normal_stage(self):
+        """Normal stage is dispatched to executor."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"dispatched": True}
+
+        run = PipelineRun(run_id="test", pipeline_name="test")
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            result = wp._dispatch_stage(
+                {"stage": "nexus_store"}, {"topic": "AI"}, run, "test"
+            )
+        assert result.get("dispatched") is True
+        assert len(run.stages) == 1
+        assert run.stages[0].status == StageStatus.COMPLETED
+
+    def test_dispatches_conditional(self):
+        """Conditional stage is dispatched correctly."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {"cond_ran": True}
+
+        run = PipelineRun(run_id="test", pipeline_name="test")
+        stage_def = {"if": "flag", "then": [{"stage": "nexus_store"}]}
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            result = wp._dispatch_stage(stage_def, {"flag": True}, run, "test")
+        assert result.get("cond_ran") is True
+
+    def test_unknown_stage_type_raises(self):
+        """Unknown stage type raises RuntimeError."""
+        wp = get_workspace_pipeline()
+        run = PipelineRun(run_id="test", pipeline_name="test")
+
+        with pytest.raises(RuntimeError, match="Unknown stage type"):
+            wp._dispatch_stage({"weird": True}, {}, run, "test")
+
+    def test_optional_failure_skips(self):
+        """Optional stage that raises is skipped."""
+        wp = get_workspace_pipeline()
+
+        def fail_exec(params, context):
+            raise RuntimeError("kaboom")
+
+        run = PipelineRun(run_id="test", pipeline_name="test")
+        with patch.object(wp, "_get_executor", return_value=fail_exec):
+            result = wp._dispatch_stage(
+                {"stage": "nexus_store", "optional": True},
+                {"topic": "AI"}, run, "test",
+            )
+        assert run.stages[0].status == StageStatus.SKIPPED
+        assert result.get("topic") == "AI"  # original context preserved
+
+    def test_records_timing(self):
+        """Dispatch records duration_ms on stage result."""
+        wp = get_workspace_pipeline()
+
+        def mock_exec(params, context):
+            return {}
+
+        run = PipelineRun(run_id="test", pipeline_name="test")
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            wp._dispatch_stage({"stage": "nexus_store"}, {}, run, "test")
+        assert run.stages[0].duration_ms >= 0
+
+
+class TestV2PipelineIntegration:
+    """Integration tests combining multiple v2 features."""
+
+    def test_mixed_pipeline(self):
+        """Pipeline with normal, conditional, and for_each stages."""
+        wp = get_workspace_pipeline()
+        log = []
+
+        def mock_exec(params, context):
+            log.append(context.get("pipeline_name", "?"))
+            return {"step_done": True}
+
+        stages = [
+            {"stage": "nexus_store"},
+            {"if": "step_done", "then": [{"stage": "create_doc"}]},
+            {"for_each": "items", "as": "item",
+             "stages": [{"stage": "nexus_store"}], "max_items": 2},
+        ]
+
+        with patch.object(wp, "_get_executor", return_value=mock_exec):
+            run = wp.run(
+                "test_mixed", stages=stages,
+                topic="AI", items=["x", "y"],
+            )
+        assert run.status == PipelineStatus.COMPLETED
+        # 1 normal + 1 conditional parent + 1 cond inner + 1 foreach parent + 2 foreach items
+        assert len(run.stages) >= 4
+
+    def test_retry_then_conditional(self):
+        """Retry stage followed by conditional branching."""
+        wp = get_workspace_pipeline()
+        attempts = [0]
+
+        def flaky(params, context):
+            attempts[0] += 1
+            if attempts[0] < 2:
+                raise RuntimeError("fail once")
+            return {"recovered": True}
+
+        def simple(params, context):
+            return {"final": True}
+
+        stages = [
+            {"stage": "nlm_research", "retry": 2, "retry_delay": 0.01},
+            {"if": "recovered", "then": [{"stage": "nexus_store"}]},
+        ]
+
+        def mock_get(name):
+            if name == "nlm_research":
+                return flaky
+            return simple
+
+        with patch.object(wp, "_get_executor", side_effect=mock_get):
+            run = wp.run("test_retry_cond", stages=stages, topic="AI")
+        assert run.status == PipelineStatus.COMPLETED
+        assert run.final_output.get("final") is True
+
+    def test_list_templates_handles_meta_stages(self):
+        """list_templates works with templates containing meta-stages."""
+        wp = get_workspace_pipeline()
+        templates = wp.list_templates()
+        # All existing templates should still be listed
+        assert len(templates) >= 35
+        for name, labels in templates.items():
+            assert isinstance(labels, list)
+            for label in labels:
+                assert isinstance(label, str)
