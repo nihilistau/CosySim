@@ -258,14 +258,14 @@ news:
       quality_score: 0.8
       max_items: 10
 
-    - id: changelog_news
-      name: "Changelog - News"
+    - id: hacker_news_best
+      name: "Hacker News - Best"
       type: rss
-      url: "https://changelog.com/news.rss"
+      url: "https://hnrss.org/best"
       category: open_source
       enabled: true
-      quality_score: 0.8
-      max_items: 8
+      quality_score: 0.85
+      max_items: 10
 
     # ── Python ────────────────────────────────────────────────────────────
     - id: reddit_python
@@ -289,7 +289,7 @@ news:
     - id: python_insider
       name: "Python Insider (Official Blog)"
       type: rss
-      url: "https://feeds.feedburner.com/PythonInsider"
+      url: "https://blog.python.org/feeds/posts/default?alt=rss"
       category: python
       enabled: true
       quality_score: 0.95
@@ -352,10 +352,10 @@ news:
       max_items: 8
 
     # ── World News ─────────────────────────────────────────────────────────
-    - id: reuters_top
-      name: "Reuters - Top News"
+    - id: guardian_world
+      name: "The Guardian - World"
       type: rss
-      url: "https://feeds.reuters.com/reuters/topNews"
+      url: "https://www.theguardian.com/world/rss"
       category: world
       enabled: true
       quality_score: 0.9
@@ -370,10 +370,10 @@ news:
       quality_score: 0.9
       max_items: 10
 
-    - id: ap_news
-      name: "AP News - Top Stories"
+    - id: npr_news
+      name: "NPR - Top Stories"
       type: rss
-      url: "https://rsshub.app/apnews/topics/apf-topnews"
+      url: "https://feeds.npr.org/1001/rss.xml"
       category: world
       enabled: true
       quality_score: 0.85
