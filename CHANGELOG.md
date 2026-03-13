@@ -4,6 +4,55 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.29] — "SELF-IMPROVEMENT EXECUTION ENGINE" — 2026-07
+
+Closes the critical execution loop gap: the system now **executes** experiment
+proposals, evaluates models against live traffic, triggers corrective actions on
+anomalies, and tracks the measured impact of every system change. 4 new modules,
+20 MCP skills, 257 new tests.
+
+### Added
+- **ExperimentExecutor** (`engine/nexus/experiment_executor.py`) — full
+  experiment lifecycle management: reads proposals from ExperimentProposer,
+  captures baselines, runs treatment variants, collects metrics, performs
+  statistical analysis (paired t-test, Cohen's d effect size), auto-promotes
+  winning experiments (p < 0.05), auto-rolls back losers, stores full audit
+  trail in Nexus. States: PENDING → BASELINE → RUNNING → COLLECTING →
+  ANALYZING → COMPLETED/FAILED/ROLLED_BACK.
+- **OnlineEvaluator** (`engine/nexus/online_evaluator.py`) — production model
+  evaluation with 3 modes: shadow (run candidate alongside production), canary
+  (route N% traffic to candidate), A/B test (split traffic equally). 6-rule
+  auto_check() for automated promotion/rollback decisions. DPO preference data
+  auto-forwarded to TrainingFlywheel. Hourly evaluation sweeps.
+- **ImpactTracker** (`engine/nexus/impact_tracker.py`) — records every system
+  change (config, model promotion, experiment, code deploy, knowledge update,
+  parameter tune, scheduler change), captures before/after metric snapshots,
+  computes impact scores with statistical significance, generates attribution
+  reports showing which changes had the biggest effect.
+- **AnomalyTrigger** (`engine/observability/anomaly_trigger.py`) — bridges
+  AnomalyDetector events to SchedulerDaemon corrective actions. 8 built-in
+  trigger rules (CPU spike, memory leak, accuracy drop, latency spike, error
+  rate surge, cache degradation, query failure burst, knowledge quality drop).
+  Configurable cooldowns, callback chaining via wire_detector(), SQLite
+  persistence of trigger firings.
+- **20 MCP self-improvement skills** (`engine/skills/builtin/self_improvement_skills.py`) —
+  `run_experiment`, `list_experiments`, `experiment_status`, `cancel_experiment`,
+  `experiment_results`, `start_shadow_eval`, `start_canary_eval`, `start_ab_eval`,
+  `check_evaluation`, `list_evaluations`, `promote_candidate`, `record_change`,
+  `get_impact`, `impact_report`, `list_changes`, `register_trigger`,
+  `list_triggers`, `trigger_history`, `remove_trigger`, `self_improvement_status`
+- **4 scheduler tasks**: `experiment-run` (daily), `online-eval-sweep` (hourly),
+  `impact-summary` (weekly), `anomaly-trigger-check` (every 5 min)
+- 257 tests across 5 new test files — all passing
+
+### Fixed
+- **8 scheduler count assertions** — updated from 68→72 across test files for
+  4 new v1.29 scheduler tasks
+- **Keyword-arg extraction** — fixed task ID extraction in 8 test files to
+  handle both positional and keyword argument patterns in `daemon.register()`
+
+---
+
 ## [1.28] — "UNIFIED MODULAR MONITORING" — 2026-07
 
 Adds a complete unified modular monitoring system that composes the existing

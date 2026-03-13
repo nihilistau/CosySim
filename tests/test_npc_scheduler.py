@@ -278,7 +278,7 @@ class TestNPCWorldTickTask:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [call.args[0] if call.args else call.kwargs.get("task_id") for call in daemon.register.call_args_list]
         assert "npc-world-tick" in task_ids
 
     def test_npc_world_tick_callback_runs(self) -> None:

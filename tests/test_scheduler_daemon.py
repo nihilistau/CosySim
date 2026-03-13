@@ -313,14 +313,14 @@ class TestBuiltinTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 68
+        assert daemon.register.call_count == 72
 
     def test_doc_sync_task_registered(self) -> None:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [call.args[0] if call.args else call.kwargs.get("task_id") for call in daemon.register.call_args_list]
         assert "doc-sync" in task_ids
 
     def test_operator_inbox_sync_task_registered(self) -> None:
@@ -328,7 +328,7 @@ class TestBuiltinTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [call.args[0] if call.args else call.kwargs.get("task_id") for call in daemon.register.call_args_list]
         assert "operator-inbox-sync" in task_ids
 
     def test_control_notebook_flywheel_task_registered(self) -> None:
@@ -336,7 +336,7 @@ class TestBuiltinTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [call.args[0] if call.args else call.kwargs.get("task_id") for call in daemon.register.call_args_list]
         assert "control-notebook-flywheel" in task_ids
 
     def test_control_notebook_flywheel_callback_runs_followup(self) -> None:
@@ -407,7 +407,7 @@ class TestWorkspacePipelineTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [call.args[0] if call.args else call.kwargs.get("task_id") for call in daemon.register.call_args_list]
         assert "workspace-news-pipeline" in task_ids
 
     def test_workspace_news_to_knowledge_task_registered(self) -> None:
@@ -416,7 +416,7 @@ class TestWorkspacePipelineTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [call.args[0] if call.args else call.kwargs.get("task_id") for call in daemon.register.call_args_list]
         assert "workspace-news-to-knowledge" in task_ids
 
     def test_workspace_research_cycle_task_registered(self) -> None:
@@ -425,7 +425,7 @@ class TestWorkspacePipelineTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [call.args[0] if call.args else call.kwargs.get("task_id") for call in daemon.register.call_args_list]
         assert "workspace-research-cycle" in task_ids
 
     def test_workspace_pipeline_health_task_registered(self) -> None:
@@ -434,7 +434,7 @@ class TestWorkspacePipelineTasks:
 
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [call.args[0] for call in daemon.register.call_args_list]
+        task_ids = [call.args[0] if call.args else call.kwargs.get("task_id") for call in daemon.register.call_args_list]
         assert "workspace-pipeline-health" in task_ids
 
     def test_news_pipeline_callback_runs_template(self) -> None:
