@@ -4,6 +4,52 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.28] — "UNIFIED MODULAR MONITORING" — 2026-07
+
+Adds a complete unified modular monitoring system that composes the existing
+3-layer monitoring (ProcessMonitor, SystemMonitor, MetricsCollector) with 5 new
+analysis modules, a unified orchestrator facade, dashboard API, and 14 MCP
+skills. Closes 5 of 7 HIGH/CRITICAL gaps from the gap analysis.
+
+### Added
+- **PackTracker** (`engine/observability/pack_tracker.py`) — skill pack
+  execution tracking with PID/CPU cross-referencing, SkillRegistry hook,
+  hourly rollup aggregation, pack summary and history queries
+- **AnomalyDetector** (`engine/observability/anomaly_detector.py`) — statistical
+  anomaly detection with z-score, IQR (interquartile range), and MAD (median
+  absolute deviation) methods, configurable thresholds, SQLite persistence
+- **CorrelationEngine** (`engine/observability/correlation_engine.py`) — metric
+  correlation analysis with Pearson and Spearman coefficients, significance
+  testing, correlation matrix generation, top-K strongest correlations
+- **TrendPredictor** (`engine/observability/trend_predictor.py`) — linear
+  regression trend prediction with background analysis thread, slope/intercept
+  calculation, confidence intervals, forecast generation
+- **AlertRouter** (`engine/observability/alert_router.py`) — severity-based
+  alert routing with configurable escalation chains, suppression windows,
+  routing rules, and SQLite routing log
+- **UnifiedMonitor** (`engine/observability/unified_monitor.py`) — top-level
+  orchestrator facade that composes all 3 existing monitoring layers + 5 new
+  analysis modules into a single start/stop lifecycle with unified metric
+  fan-out via `_feed_all()`
+- **UnifiedDashboard** (`engine/observability/unified_dashboard.py`) — dashboard
+  API with time-range queries, widget data generation, period comparison,
+  system health overview, per-module status
+- **14 MCP monitoring skills** (`engine/skills/builtin/monitoring_skills.py`) —
+  `monitoring_overview`, `anomaly_scan`, `correlation_check`, `trend_forecast`,
+  `pack_activity`, `alert_summary`, `dashboard_snapshot`, `metric_health`,
+  `process_cross_ref`, `system_baseline`, `monitoring_start`, `monitoring_stop`,
+  `alert_route_config`, `monitoring_report`
+- **7 scheduler tasks** for monitoring modules (anomaly scan, correlation
+  refresh, trend analysis, pack rollup, alert escalation check, dashboard
+  snapshot, unified health check)
+- 453 tests across 8 new test files — all passing
+
+### Fixed
+- **News pipeline test** — updated category assertions (`ai_research`→`ai_ml`,
+  `tech`→`science`) to match actual registered categories
+- **7 scheduler count assertions** — updated from 61→67/68 across test files
+  to account for new monitoring scheduler tasks
+
 ## [1.27] — "SYSTEM PROCESS MONITOR" — 2026-07
 
 Adds a complete system process monitoring subsystem with classification, git
