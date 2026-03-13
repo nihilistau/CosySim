@@ -3,6 +3,73 @@
 All notable changes to CosySim are documented here.
 
 ---
+
+## [1.23] — "NEWS SYSTEM CONSOLIDATION" — 2026-07
+
+Fixed a critical bug where news fetch and distillation used mismatched category
+names, causing all NLM distillation to silently find zero articles. All news
+configuration is now YAML-driven with proper category mapping.
+
+### Fixed
+- **Critical bug**: `_news_fetch_callback` stored articles under YAML categories
+  (ai_ml, local_inference, etc.) but `_news_distill_nlm_callback` searched under
+  different super-category names (ai_research, tech, world, science) — categories
+  never matched, distillation always found nothing
+- Removed all hardcoded NEWS_SOURCES_BY_CATEGORY and CURATED_QUESTIONS dicts
+
+### Added
+- `config/news_sources.yaml` distillation section: category_mapping (8→4),
+  curated questions (5×4 categories), NLM notebook UUIDs, super_categories list
+- "world" news category with 3 RSS sources (Reuters, BBC World, AP News)
+- ~10 new YAML-driven registry methods: `get_distillation_config()`,
+  `get_category_mapping()`, `get_distillation_categories()`,
+  `get_distillation_questions()`, `get_nlm_notebook_id()`,
+  `get_source_categories_for_super()`, `list_categories()`,
+  `get_sources_as_rss_dicts()`
+- Rewired scheduler callback, news skills, and NLM pipeline to use YAML config
+
+---
+
+## [1.22] — "NLM gRPC METHODS" — 2026-07
+
+Added gRPC-web transport layer for 24 heap-discovered NLM methods, expanding
+the direct client from 2 transport layers to 3.
+
+### Added: gRPC Transport Layer
+- `_grpc_call()` — generic gRPC-web caller with retry, CDP token refresh,
+  graceful 404 handling for methods not yet live
+- `_parse_grpc_response()` — 3-strategy parser (wrb.fr → raw JSON → raw text)
+- 24 public methods across 8 categories:
+  - **Artifacts** (5): list, get, create, update, delete
+  - **Sources** (8): list, get, add, remove, pin, unpin, update_metadata, refresh
+  - **Projects** (4): list, get, create, delete
+  - **Chat** (2): get_history, clear_history
+  - **Notes** (1): list_notes
+  - **Account** (1): get_account_info
+  - **Moderation** (1): check_content
+  - **Suggestions** (2): get, submit_feedback
+
+### Added: gRPC MCP Skills
+- `engine/skills/builtin/nlm_grpc_skills.py` — 14 @skill(pack="nlm_grpc") functions
+
+### Added: gRPC Proxy Routes
+- 24 GRPC_* constants and 14 `/api/grpc/*` Flask routes in nlm_live_proxy.py
+
+---
+
+## [1.21c] — "DEEP HAR ENRICHMENT" — 2026-07
+
+Parsed 5 new HAR/JS/WASM files and expanded the unified API registry.
+
+### Added
+- Parsed: NLM gold HAR (11 rpcids confirmed), Sheets Gemini jackpot HAR
+  (14 streamGenerate calls), postshellbase JS (446 methods, 419 API strings),
+  gbar toolbar JS, calcworker WASM binary
+- YAML expansion: 95 AI Studio methods, 12 AppletControl methods, 5 workspace
+  gRPC services, streamGenerate templates, BigQuery ops, Sheets REST endpoints
+- Registry grown to 302 operations across 34+ top-level sections (version 5.0)
+
+---
 ## [1.21b] — "AI STUDIO + APPS SCRIPT WIRING" — 2026-07
 
 Full live-wiring of AI Studio and Apps Script into the proxy layer, skill system,
