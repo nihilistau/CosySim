@@ -374,7 +374,8 @@ def test_news_pipeline_store_items_to_nexus(mock_nexus, dedup_db):
         NewsItem("Title", "https://a.com/1", "Summary", datetime.now(timezone.utc), "Src", "tech"),
     ]
     pipeline = NewsPipeline(db_path=dedup_db)
-    count = pipeline.store_items_to_nexus(items)
+    with patch("engine.nexus.news.news_pipeline._nexus_reachable", return_value=True):
+        count = pipeline.store_items_to_nexus(items)
     assert count == 1
     mock_nexus.add_entry.assert_called_once()
 
@@ -382,7 +383,8 @@ def test_news_pipeline_store_items_to_nexus(mock_nexus, dedup_db):
 def test_news_pipeline_store_qa_to_nexus(mock_nexus, dedup_db):
     from engine.nexus.news.news_pipeline import NewsPipeline
     pipeline = NewsPipeline(db_path=dedup_db)
-    result = pipeline.store_qa_to_nexus("Question?", "Answer.", "tech")
+    with patch("engine.nexus.news.news_pipeline._nexus_reachable", return_value=True):
+        result = pipeline.store_qa_to_nexus("Question?", "Answer.", "tech")
     assert result is True
     mock_nexus.add_qa.assert_called_once()
 

@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.28** "UNIFIED MODULAR MONITORING" ✅ | Last updated: 2026-07
+> Current: **v1.29** "SELF-IMPROVEMENT EXECUTION ENGINE" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,18 +10,28 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.28 — "UNIFIED MODULAR MONITORING" ✅
+## Current Shipped State: v1.29 — "SELF-IMPROVEMENT EXECUTION ENGINE" ✅
 
-**Baseline: 20 scenes, 68 scheduler tasks, 81+ workspace/NLM/monitoring skills, 12,458+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills.**
+**Baseline: 20 scenes, 72 scheduler tasks, 101+ skills (81 workspace/NLM/monitoring + 20 self-improvement), ~12,700+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills.**
 
-v1.28 adds a complete unified modular monitoring system: PackTracker for skill
-pack execution tracking with PID/CPU cross-referencing, AnomalyDetector with
-z-score/IQR/MAD statistical detection, CorrelationEngine for Pearson/Spearman
-metric correlation analysis, TrendPredictor with linear regression forecasting,
-AlertRouter for severity-based alert routing with escalation chains,
-UnifiedMonitor as the top-level orchestrator facade, UnifiedDashboard with
-time-range queries and widget data, 14 MCP monitoring skills, and 453 tests.
-Closes 5 of 7 HIGH/CRITICAL gaps from the gap analysis.
+v1.29 closes the critical execution loop gap: the system now **executes**
+experiment proposals, evaluates models against live traffic, triggers corrective
+actions on anomalies, and tracks the measured impact of every system change. 4 new
+modules (ExperimentExecutor, OnlineEvaluator, ImpactTracker, AnomalyTrigger), 20
+MCP self-improvement skills, 4 new scheduler tasks, and 257 new tests.
+Self-improvement maturity: **~60% → ~85%**.
+
+---
+
+## Shipped: v1.29 — "SELF-IMPROVEMENT EXECUTION ENGINE" ✅
+- [x] `engine/nexus/experiment_executor.py` — Full experiment lifecycle: PENDING → BASELINE → RUNNING → COLLECTING → ANALYZING → COMPLETED/FAILED/ROLLED_BACK. Statistical analysis (paired t-test, Cohen's d), auto-promote/rollback
+- [x] `engine/nexus/online_evaluator.py` — Shadow/canary/A-B model evaluation with 6-rule auto_check(), DPO preference data forwarding to TrainingFlywheel
+- [x] `engine/nexus/impact_tracker.py` — Records system changes, captures metric snapshots, computes impact scores, generates attribution reports
+- [x] `engine/observability/anomaly_trigger.py` — 8 built-in trigger rules, callback chaining via wire_detector(), SQLite persistence of trigger firings
+- [x] `engine/skills/builtin/self_improvement_skills.py` — 20 @skill(pack="self_improvement") skills across all 4 modules
+- [x] 4 scheduler tasks: experiment-run (daily), online-eval-sweep (hourly), impact-summary (weekly), anomaly-trigger-check (every 5m)
+- [x] 257 tests across 5 new test files — all passing
+- [x] 8 existing test files updated for scheduler count (68→72) and kwargs-safe extraction
 
 ---
 

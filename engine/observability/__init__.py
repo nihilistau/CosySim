@@ -29,6 +29,14 @@ from engine.observability.anomaly_detector import (
     MetricConfig,
     get_anomaly_detector,
 )
+from engine.observability.anomaly_trigger import (
+    AnomalyTrigger,
+    TriggerFiring,
+    TriggerPattern,
+    TriggerRule,
+    get_anomaly_trigger,
+    register_anomaly_trigger_tasks,
+)
 from engine.observability.correlation_engine import (
     CorrelationEngine,
     CorrelationResult,
@@ -60,6 +68,7 @@ __all__ = [
     "AlertRule",
     "AnomalyDetector",
     "AnomalyEvent",
+    "AnomalyTrigger",
     "CorrelationEngine",
     "CorrelationResult",
     "DashboardWidget",
@@ -74,10 +83,14 @@ __all__ = [
     "TimeRange",
     "TrainingCapture",
     "TrendPredictor",
+    "TriggerFiring",
+    "TriggerPattern",
+    "TriggerRule",
     "UnifiedDashboard",
     "UnifiedMonitor",
     "get_alert_router",
     "get_anomaly_detector",
+    "get_anomaly_trigger",
     "get_correlation_engine",
     "get_metrics_collector",
     "get_metrics_db",
@@ -85,4 +98,5 @@ __all__ = [
     "get_trend_predictor",
     "get_unified_dashboard",
     "get_unified_monitor",
+    "register_anomaly_trigger_tasks",
 ]

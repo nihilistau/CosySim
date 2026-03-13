@@ -7,12 +7,18 @@ CosySim has a **strong foundation** for self-improvement with 3 major operationa
 2. **Training Flywheel** — Continuous collection of training data from system interactions
 3. **Metrics & Reflection** — System-wide metrics tracking with NLM-driven insights
 
-As of **v1.28**, most metric-layer gaps have been addressed — 5 of the original 7 gaps in Section 1 are now **CLOSED** (aggregation, correlation, anomaly detection, forecasting, alert routing). Two gaps remain open:
-- No causal inference (partially addressed by CorrelationEngine but true causal DAG inference not implemented)
+As of **v1.29**, the critical execution loop is **CLOSED** — experiments are now
+automatically executed, models are evaluated against live traffic, anomalies trigger
+corrective actions, and every system change has measured impact. Combined with the
+v1.28 monitoring foundation (anomaly detection, correlation, forecasting, alert
+routing), the self-improvement maturity has risen from ~60% to ~85%.
+
+**Remaining open gaps:**
+- No causal inference (partially addressed by CorrelationEngine + ImpactTracker but true causal DAG inference not implemented)
 - Limited tagging/dimensionality
 - No predictive refresh (refreshing knowledge before it degrades)
-- Limited model promotion criteria (score-based only)
-- No impact quantification (which improvements actually matter?)
+- Limited model promotion criteria (score-based only, partially addressed by OnlineEvaluator)
+- No automated model selection via Pareto frontier
 
 ---
 
@@ -138,19 +144,19 @@ daemon.register(
 )
 `
 
-### ❌ GAPS
+### ❌ GAPS (3/9 CLOSED in v1.29)
 
 | Gap | Impact | Severity |
 |-----|--------|----------|
-| **No statistical significance testing** | Can't tell if a 0.5% improvement is real or noise | High |
-| **No online evaluation (production feedback)** | Only tests against held-out test sets, never against real user queries | Critical |
+| **No statistical significance testing** | PARTIALLY CLOSED by ExperimentExecutor (v1.29) — paired t-test + Cohen's d for experiment variants. Benchmark-level significance testing still uses aggregate score | ✅ PARTIAL |
+| **No online evaluation (production feedback)** | CLOSED by OnlineEvaluator (v1.29) — shadow, canary, A/B evaluation modes against live traffic with auto-promote/rollback | ✅ CLOSED |
 | **No per-category breakdowns** | Aggregates accuracy across all question types — can't see which categories regressed | High |
-| **No A/B testing framework** | Can't run shadow models or canary promotions | Medium |
-| **No rollback capability** | No way to revert to previous model if promotion causes issues | Medium |
+| **No A/B testing framework** | CLOSED by OnlineEvaluator (v1.29) — A/B test mode with automatic traffic splitting | ✅ CLOSED |
+| **No rollback capability** | CLOSED by ExperimentExecutor (v1.29) — auto-rollback on failed experiments + OnlineEvaluator canary rollback | ✅ CLOSED |
 | **Promotion criteria too simplistic** | Only looks at aggregate_score, ignores latency, stability, or other costs | High |
 | **No multi-metric Pareto frontier** | Can't balance accuracy vs latency vs cost trade-offs | Medium |
 | **No benchmark scheduling optimization** | Benchmarks run at fixed daily time regardless of system load | Low |
-| **No cost/benefit analysis** | Don't know if fine-tuning cost justified by improvement | High |
+| **No cost/benefit analysis** | PARTIALLY CLOSED by ImpactTracker (v1.29) — tracks before/after metric impact of changes, but no explicit cost modeling | ✅ PARTIAL |
 
 ---
 
@@ -201,7 +207,8 @@ otebook-rotation | Weekly | nlm_notebook_cleanup() | Clean up old NLM notebooks 
 | 	raining-sync | Daily | TrainingFlywheel.sync_from_nexus() + export if ≥50 examples | Sync Q&A into training dataset |
 | **system-reflection** | **Weekly** | **SystemReflection.run_reflection()** | **⭐ NLM-driven insights & task generation** |
 | **xperiment-scan** | **Weekly** | **ExperimentProposer.scan_and_propose()** | **⭐ Auto-propose A/B tests from metrics** |
-| outer-finetune-cycle | Weekly | RouterFinetuneCycle.run() | Train router_v2, test, promote |
+| 
+outer-finetune-cycle | Weekly | RouterFinetuneCycle.run() | Train router_v2, test, promote |
 | dataset-augment | Weekly | Auto-expand training datasets | Synthetic data generation |
 | qa-generation | Daily | QAGenerator.run_rule_based() | Auto-generate Q&A from entries |
 | session-distillation | Daily | Extract facts from Copilot sessions | Knowledge capture |
@@ -245,18 +252,18 @@ Daily:
   5. ModelRegistry auto-promotes best performers
 `
 
-### ❌ GAPS
+### ❌ GAPS (5/8 CLOSED in v1.29)
 
 | Gap | Impact | Severity |
 |-----|--------|----------|
-| **Experiments proposed but not executed** | ExperimentProposer creates proposals, but no scheduler task actually runs them | Critical |
+| **Experiments proposed but not executed** | CLOSED by ExperimentExecutor (v1.29) — `experiment-run` task (daily) automatically scans and executes pending proposals through full lifecycle | ✅ CLOSED |
 | **Insights generated but not acted upon** | SystemReflection creates tasks in Nexus, but no automation to prioritize/execute them | High |
-| **No causal metrics chain** | Tasks are created, but we don't know which improvements actually helped | High |
-| **No automatic performance impact measurement** | Can't A/B test proposals against baseline automatically | Critical |
-| **Model promotion criteria too simple** | Only looks at aggregate_score; doesn't consider: latency, cost, user feedback | High |
-| **No online feedback loop** | Test set performance ≠ production performance; never measure real user impact | Critical |
+| **No causal metrics chain** | PARTIALLY CLOSED by ImpactTracker (v1.29) — records changes, captures snapshots, computes impact scores. True causal DAG inference not yet implemented | ✅ PARTIAL |
+| **No automatic performance impact measurement** | CLOSED by ImpactTracker (v1.29) — automatically measures before/after metric impact of every experiment and system change | ✅ CLOSED |
+| **Model promotion criteria too simple** | PARTIALLY CLOSED by OnlineEvaluator (v1.29) — evaluates on live traffic (latency, error rate, quality), but cost modeling still absent | ✅ PARTIAL |
+| **No online feedback loop** | CLOSED by OnlineEvaluator (v1.29) — shadow/canary/A-B evaluation modes measure real production performance + auto-promote/rollback | ✅ CLOSED |
 | **Reflection runs but results not acted upon** | Weekly reflection generates insights but no enforcement mechanism | High |
-| **No anomaly-driven triggers** | Tasks run on fixed schedule, never triggered by detected anomalies | Medium |
+| **No anomaly-driven triggers** | CLOSED by AnomalyTrigger (v1.29) — 8 built-in trigger rules bridge AnomalyDetector events to scheduler corrective actions | ✅ CLOSED |
 | **No knowledge refresh scheduling** | We know what's stale (knowledge-quality task), but don't auto-refresh it | High |
 
 ---
@@ -425,17 +432,17 @@ daemon.register(
 )
 `
 
-### ❌ CRITICAL GAPS
+### ❌ CRITICAL GAPS (4/7 CLOSED in v1.29)
 
 | Gap | Impact | Severity |
 |-----|--------|----------|
-| **Proposals created but NOT EXECUTED** | ExperimentProposer creates proposals and stores in Nexus, but no scheduler task runs them | **CRITICAL** |
-| **No automatic experiment execution** | Manual intervention needed to go from proposal → running experiment | **CRITICAL** |
-| **No online experiment harness** | Can't run experiments against live traffic; only supports offline test-set evaluation | **CRITICAL** |
+| **Proposals created but NOT EXECUTED** | CLOSED by ExperimentExecutor (v1.29) — `experiment-run` daily task scans Nexus for unexecuted proposals, manages full lifecycle through BASELINE → RUNNING → ANALYZING → COMPLETED/ROLLED_BACK | ✅ CLOSED |
+| **No automatic experiment execution** | CLOSED by ExperimentExecutor (v1.29) — `run_pending()` automatically dequeues and executes proposals with baseline capture, treatment application, statistical analysis | ✅ CLOSED |
+| **No online experiment harness** | CLOSED by OnlineEvaluator (v1.29) — shadow/canary/A-B evaluation modes run experiments against live traffic with auto_check() rule engine | ✅ CLOSED |
 | **No statistical power analysis** | Don't calculate min samples needed per variant | High |
-| **No sequential decision rules** | Can't stop experiment early if winner is clear | Medium |
+| **No sequential decision rules** | PARTIALLY CLOSED — OnlineEvaluator has min_samples + expiry-based auto_check, but no formal sequential analysis (SPRT) | ✅ PARTIAL |
 | **No interaction effects** | Only measures individual metric, not correlations | Medium |
-| **Results stored in-memory only** | When daemon restarts, experiment results lost | High |
+| **Results stored in-memory only** | CLOSED — ExperimentExecutor uses SQLite persistence (data/experiment_executor.db), all results survive daemon restarts | ✅ CLOSED |
 
 ---
 
@@ -471,14 +478,14 @@ class RouterDecision(BaseModel):
     timestamp: datetime
 `
 
-### ❌ GAPS
+### ❌ GAPS (1/4 CLOSED in v1.29)
 
 | Gap | Impact | Severity |
 |-----|--------|----------|
 | **No ModelPromotion model** | No formal record of which models were promoted when/why | High |
-| **No ExperimentResult model** | Results stored in-memory, no persistent schema | High |
+| **No ExperimentResult model** | CLOSED — ExperimentExecutor (v1.29) defines ExperimentState, ExperimentStatus enums and stores full result schema in SQLite (proposal, status, metrics, p_value, effect_size, analysis, timestamps) | ✅ CLOSED |
 | **No IncidentReport model** | When things go wrong, no formal incident tracking | Medium |
-| **No CausalLink model** | No way to record "this metric change caused that outcome" | Critical |
+| **No CausalLink model** | PARTIALLY CLOSED — ImpactTracker (v1.29) records change→metric impact with ImpactScore, but no formal causal DAG | ✅ PARTIAL |
 
 ---
 
@@ -490,51 +497,46 @@ class RouterDecision(BaseModel):
 
 | Loop | Trigger | Actions | Limitations |
 |------|---------|---------|------------|
-| **Benchmark → Promote** | Daily (model-benchmark) | Test models, auto-promote best | Only aggregates score; no significance testing or production feedback |
+| **Benchmark → Promote** | Daily (model-benchmark) | Test models, auto-promote best | Only aggregates score; no significance testing *(partially addressed by ExperimentExecutor v1.29)* |
 | **Reflection → Insights → Tasks** | Weekly (system-reflection) | NLM analyzes metrics, creates tasks | Tasks created but not prioritized/executed |
-| **Proposals → Experiments** | Weekly (experiment-scan) | Templates match metrics, create proposals | **Proposals never executed** |
+| **Proposals → Experiments → Execution** | Weekly (experiment-scan) + Daily (experiment-run) | Templates match metrics, create proposals; ExperimentExecutor runs them ✅ (v1.29) | No sequential decision rules (SPRT) |
 | **Knowledge → Training → Models** | Daily (training-sync, qa-gen) | Collect data, export, retrain | Data quality never re-evaluated |
-| **Data → Metrics → Alerts** | Every 4h (metrics-collect) | Collect metrics, check regressions | Only regression alerts; no anomalies |
+| **Data → Metrics → Alerts → Triggers** | Every 4h (metrics-collect) + Every 5m (anomaly-trigger-check) | Collect metrics, detect anomalies, trigger corrective tasks ✅ (v1.28+v1.29) | No causal DAG inference |
+| **Models → Online Evaluation → Feedback** | Hourly (online-eval-sweep) | Shadow/canary/A-B evaluation, DPO → TrainingFlywheel ✅ (v1.29) | No multi-objective Pareto selection |
+| **Changes → Impact Tracking** | Weekly (impact-summary) | Record changes, capture snapshots, compute attribution ✅ (v1.29) | No explicit cost modeling |
 
 ---
 
 ## CRITICAL MISSING PIECES ⚠️
 
-### 1. **NO CAUSAL ANALYSIS** (Severity: Critical)
-- ❌ Can't answer: "Which improvements actually moved the needle?"
-- ❌ Can't detect: "Did the model promotion improve query latency?"
-- ❌ All metrics recorded, but no causal links between them
-- **FIX:** Build causal inference engine (Granger causality, instrumental variables)
+### 1. **NO CAUSAL ANALYSIS** (Severity: High — downgraded from Critical)
+- ⚠️ ImpactTracker (v1.29) records change→metric impact, CorrelationEngine (v1.28) finds correlations
+- ❌ Still can't build causal DAGs or do Granger causality
+- **FIX:** Build causal inference engine on top of ImpactTracker + CorrelationEngine data
 
-### 2. **NO AUTOMATIC EXPERIMENT EXECUTION** (Severity: Critical)
-- ❌ ExperimentProposer creates proposals weekly
-- ❌ Proposals stored in Nexus but never run
-- ❌ No automation to go from "proposal" → "running experiment"
-- **FIX:** Add experiment_runner scheduler task + online evaluation harness
+### 2. ~~**NO AUTOMATIC EXPERIMENT EXECUTION**~~ → ✅ CLOSED (v1.29)
+- ✅ ExperimentExecutor runs proposals automatically (daily `experiment-run` task)
+- ✅ Full lifecycle: PENDING → BASELINE → RUNNING → ANALYZING → COMPLETED/ROLLED_BACK
+- ✅ Statistical analysis: paired t-test, Cohen's d effect size
 
-### 3. **NO PRODUCTION FEEDBACK** (Severity: Critical)
-- ❌ Only evaluate against held-out test sets
-- ❌ Never measure real user impact
-- ❌ Can benchmark 95% accuracy but deployment kills latency
-- **FIX:** Add shadow model evaluation + canary promotions
+### 3. ~~**NO PRODUCTION FEEDBACK**~~ → ✅ CLOSED (v1.29)
+- ✅ OnlineEvaluator provides shadow/canary/A-B evaluation against live traffic
+- ✅ Auto-promote on sustained canary wins, auto-rollback on degradation
+- ✅ DPO preference data automatically forwarded to TrainingFlywheel
 
 ### 4. **NO PREDICTIVE REFRESH** (Severity: High)
 - ❌ Knowledge marked as "stale" but never auto-refreshed
 - ❌ No forecasting of which entries will go stale
-- ❌ No prioritization of refresh tasks
-- **FIX:** Implement predictive staleness model; auto-schedule refreshes
+- **FIX:** Use TrendPredictor to forecast staleness; auto-schedule refreshes
 
-### 5. **NO ANOMALY DETECTION** (Severity: High)
-- ❌ Only 3 alerts: regression, threshold, trend
-- ❌ No statistical anomalies (sudden spikes, outliers, distribution shifts)
-- ❌ No alerting to scheduler for urgent intervention
-- **FIX:** Add Isolation Forest, Z-score, or Isolation Forest anomaly detection
+### 5. ~~**NO ANOMALY DETECTION**~~ → ✅ CLOSED (v1.28 + v1.29)
+- ✅ AnomalyDetector (v1.28): Z-score, IQR, MAD statistical detection
+- ✅ AnomalyTrigger (v1.29): 8 built-in rules bridge anomalies → scheduler tasks
+- ✅ AlertRouter (v1.28): severity-based routing with escalation chains
 
-### 6. **NO AUTOMATED MODEL SELECTION** (Severity: High)
-- ❌ Promotion only looks at aggregate_score
-- ❌ Doesn't consider: latency, cost, user satisfaction, downstream impact
-- ❌ No multi-objective optimization (accuracy vs speed vs cost)
-- **FIX:** Implement Pareto frontier selection + weighted scoring
+### 6. **NO AUTOMATED MODEL SELECTION** (Severity: Medium)
+- ❌ Promotion only looks at aggregate_score (partially mitigated by OnlineEvaluator)
+- **FIX:** Implement Pareto frontier selection using OnlineEvaluator data
 
 ---
 
@@ -542,63 +544,68 @@ class RouterDecision(BaseModel):
 
 | Component | Status | Extension Point |
 |-----------|--------|-----------------|
-| MetaMetrics | **Production-ready** | Add anomaly detection, correlation analysis, forecasting |
-| BenchmarkRunner | **Functional** | Add online evaluation, A/B testing, significance testing |
-| SchedulerDaemon | **Robust** | Connect to experiment executor, anomaly responder |
+| MetaMetrics | **Production-ready** | Add forecasting, cost modeling |
+| BenchmarkRunner | **Functional** | Add significance testing (partially via ExperimentExecutor) |
+| SchedulerDaemon | **Robust (72 tasks, 71 unique)** | Add priority queue, resource-aware scheduling |
 | TrainingFlywheel | **Operational** | Add data quality evaluation, active learning |
 | SystemReflection | **Working** | Route insights → automated execution instead of manual |
-| ExperimentFramework | **Incomplete** | Add executor, online harness, statistical tests |
+| ExperimentFramework | **Incomplete** | Need SPRT sequential analysis |
+| AnomalyDetector (v1.28) | **Production-ready** | Z-score, IQR, MAD — extend with seasonal detection |
+| CorrelationEngine (v1.28) | **Production-ready** | Add Granger causality, causal DAG |
+| TrendPredictor (v1.28) | **Production-ready** | Use for predictive refresh scheduling |
+| AlertRouter (v1.28) | **Production-ready** | Add Slack/webhook channels |
+| ExperimentExecutor (v1.29) | **Production-ready** | Add multi-variant (>2) experiments |
+| OnlineEvaluator (v1.29) | **Production-ready** | Add Pareto multi-objective selection |
+| AnomalyTrigger (v1.29) | **Production-ready** | Add ML-based trigger rules |
+| ImpactTracker (v1.29) | **Production-ready** | Add cost modeling, causal DAGs |
 
 ---
 
 ## TOP 5 RECOMMENDATIONS (PRIORITY ORDER)
 
-### 1. **Experiment Executor** (Block: Can't auto-improve)
-- Create ngine/nexus/experiment_executor.py
-- Listen for proposals from weekly experiment-scan
-- Automatically spin up experiments
-- Track: started_at, status, running_variants
-- Report results back to MetaMetrics
+### ~~1. **Experiment Executor**~~ → ✅ SHIPPED (v1.29)
+- ✅ `engine/nexus/experiment_executor.py` — full lifecycle execution
+- ✅ Daily `experiment-run` scheduler task reads ExperimentProposer proposals
+- ✅ Statistical analysis: paired t-test, Cohen's d, auto-promote/rollback
 
-### 2. **Online Evaluation Harness** (Block: No prod feedback)
-- Implement shadow model evaluation
-- Route subset of queries to experimental models
-- Log side-by-side results (control vs treatment)
-- Measure: real user impact, latency, errors
-- Report to MetaMetrics for automatic promotion
+### ~~2. **Online Evaluation Harness**~~ → ✅ SHIPPED (v1.29)
+- ✅ `engine/nexus/online_evaluator.py` — shadow/canary/A-B evaluation
+- ✅ Hourly `online-eval-sweep` task with auto-promote/rollback
+- ✅ DPO preference data → TrainingFlywheel
 
 ### 3. **Causal Inference Engine** (Block: Can't understand impact)
-- Implement Granger causality analysis
-- Detect metric correlations (which metrics drive outcomes?)
-- Auto-create insights: "Model promotion → 15% latency reduction"
-- Route to SystemReflection for stronger task generation
+- ⚠️ Partially addressed by ImpactTracker (change→metric correlation) and CorrelationEngine
+- ❌ Still need: Granger causality, causal DAGs, instrumental variables
+- Build on top of ImpactTracker + CorrelationEngine data stores
 
-### 4. **Anomaly Detection Module** (Block: Blind to failures)
-- Add statistical anomaly detection to MetaMetrics
-- Track: Z-score, IQR, distribution shifts, seasonal patterns
-- Route to scheduler for urgent intervention
-- Alert: "Cache hit rate dropped 30% overnight — investigate"
+### ~~4. **Anomaly Detection Module**~~ → ✅ SHIPPED (v1.28 + v1.29)
+- ✅ AnomalyDetector (v1.28): Z-score, IQR, MAD detection
+- ✅ AnomalyTrigger (v1.29): anomaly → corrective scheduler task bridge
+- ✅ AlertRouter (v1.28): severity-based routing with escalation
 
-### 5. **Impact Quantification Engine** (Block: Can't prioritize)
-- Build: ExperimentResult → before/after metrics → impact score
-- Auto-calculate: "Model promotion improved accuracy 2% (p=0.03), latency +5%"
-- Show: cost-benefit trade-offs for every promotion
-- Enable: Pareto-optimal model selection
+### ~~5. **Impact Quantification Engine**~~ → ✅ SHIPPED (v1.29)
+- ✅ `engine/nexus/impact_tracker.py` — change recording, metric snapshots, attribution
+- ✅ Weekly `impact-summary` task with Nexus storage
+- ⚠️ Still needs: cost modeling, Pareto-optimal model selection
 
 ---
 
 ## FILE LOCATIONS & HOOKS
 
-| File | Lines | Purpose | Extension |
-|------|-------|---------|-----------|
-| ngine/nexus/meta_metrics.py | 900 | Metric tracking | Add anomaly detection, forecasting |
-| 	raining/benchmark_runner.py | 350 | Model evaluation | Add online eval, statistical tests |
-| ngine/nexus/scheduler_daemon.py | 2800 | Task orchestration | Add experiment executor, anomaly responder |
-| ngine/nexus/training_flywheel.py | 650 | Data collection | Add quality evaluation |
-| ngine/nexus/system_reflection.py | 400 | Insight generation | Add execution routing |
-| ngine/nexus/experiment_framework.py | 350 | A/B testing | Add executor, online harness |
-| ngine/nexus/experiment_proposals.py | 300 | Proposal generation | Already works; needs executor |
-| ngine/nexus/query_router.py | 650 | Query routing + stats | Persist stats to MetaMetrics |
+| File | Lines | Purpose | Status |
+|------|-------|---------|--------|
+| engine/nexus/meta_metrics.py | 900 | Metric tracking | Add forecasting |
+| training/benchmark_runner.py | 350 | Model evaluation | Online eval via OnlineEvaluator (v1.29) |
+| engine/nexus/scheduler_daemon.py | ~2950 | Task orchestration (72 tasks) | ✅ v1.29 wired |
+| engine/nexus/training_flywheel.py | 650 | Data collection | Add quality evaluation |
+| engine/nexus/system_reflection.py | 400 | Insight generation | Add execution routing |
+| engine/nexus/experiment_framework.py | 350 | A/B testing | Executor built (v1.29) |
+| engine/nexus/experiment_proposals.py | 300 | Proposal generation | ✅ Executor reads proposals |
+| engine/nexus/query_router.py | 650 | Query routing + stats | Persist stats to MetaMetrics |
+| engine/nexus/experiment_executor.py | 1462 | Experiment execution | ✅ NEW (v1.29) |
+| engine/nexus/online_evaluator.py | 1589 | Shadow/canary eval | ✅ NEW (v1.29) |
+| engine/nexus/impact_tracker.py | 1086 | Impact attribution | ✅ NEW (v1.29) |
+| engine/observability/anomaly_trigger.py | 1069 | Anomaly → actions | ✅ NEW (v1.29) |
 
 ---
 

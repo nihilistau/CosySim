@@ -1366,6 +1366,31 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         _stall_detection_callback,
     )
 
+    # ──── v1.29 Self-Improvement Execution Loop ────
+    try:
+        from engine.nexus.experiment_executor import register_experiment_tasks
+        register_experiment_tasks(daemon)
+    except Exception as exc:
+        logger.debug("ExperimentExecutor registration skipped: %s", exc)
+
+    try:
+        from engine.nexus.online_evaluator import register_online_eval_tasks
+        register_online_eval_tasks(daemon)
+    except Exception as exc:
+        logger.debug("OnlineEvaluator registration skipped: %s", exc)
+
+    try:
+        from engine.nexus.impact_tracker import register_impact_tasks
+        register_impact_tasks(daemon)
+    except Exception as exc:
+        logger.debug("ImpactTracker registration skipped: %s", exc)
+
+    try:
+        from engine.observability.anomaly_trigger import register_anomaly_trigger_tasks
+        register_anomaly_trigger_tasks(daemon)
+    except Exception as exc:
+        logger.debug("AnomalyTrigger registration skipped: %s", exc)
+
 
 def _auto_embedding_callback() -> Dict[str, Any]:
     """Batch-embed new Nexus entries and Q&A pairs into the vector store."""

@@ -497,7 +497,7 @@ class TestSchedulerTaskCount:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        task_ids = [c.args[0] for c in daemon.register.call_args_list]
+        task_ids = [c.args[0] if c.args else c.kwargs.get("task_id") for c in daemon.register.call_args_list]
         assert "daily-challenge-seed" in task_ids
 
     def test_builtin_task_count_is_39(self):
@@ -506,6 +506,6 @@ class TestSchedulerTaskCount:
         from engine.nexus.scheduler_daemon import _register_builtin_tasks
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
-        assert daemon.register.call_count == 68
+        assert daemon.register.call_count == 72
 
 
