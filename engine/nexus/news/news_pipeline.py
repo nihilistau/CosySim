@@ -6,6 +6,7 @@ fetch counts, dedup ratios, store success/failure, and cycle duration.
 from __future__ import annotations
 
 import logging
+import socket
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +30,24 @@ def _record(name: str, value: float, tags: Optional[Dict] = None) -> None:
         get_meta_metrics().record(name, value, tags)
     except Exception:
         pass
+
+
+def _nexus_reachable(timeout: float = 2.0) -> bool:
+    """Quick TCP check — is the Nexus port accepting connections?
+
+    Returns True if the socket connects within *timeout* seconds.
+    This avoids 30-second urlopen hangs when Nexus is offline.
+    """
+    try:
+        from engine.port_registry import get_port_registry
+        port = get_port_registry().get_port("nexus")
+    except Exception:
+        port = 8700
+    try:
+        with socket.create_connection(("localhost", port), timeout=timeout):
+            return True
+    except (OSError, ConnectionRefusedError, TimeoutError):
+        return False
 
 
 class NewsPipeline:
@@ -76,7 +95,16 @@ class NewsPipeline:
     # ──── Storage Stage ────
 
     def store_items_to_nexus(self, items: List[NewsItem]) -> int:
-        """Store raw news items to Nexus. Returns count stored."""
+        """Store raw news items to Nexus. Returns count stored.
+
+        Performs a fast TCP reachability check before attempting storage
+        to avoid blocking for minutes when Nexus is offline.
+        """
+        if not _nexus_reachable():
+            logger.warning("Nexus not reachable, skipping storage of %d items", len(items))
+            _record("news.store.failed", float(len(items)))
+            return 0
+
         try:
             client = get_nexus_client()
         except Exception as exc:
@@ -109,6 +137,9 @@ class NewsPipeline:
 
     def store_qa_to_nexus(self, question: str, answer: str, category: str) -> bool:
         """Store a distilled Q&A pair to Nexus."""
+        if not _nexus_reachable():
+            logger.warning("Nexus not reachable, skipping Q&A storage")
+            return False
         try:
             client = get_nexus_client()
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -137,6 +168,8 @@ class NewsPipeline:
 
     def get_latest_digest(self, category: str, limit: int = 5) -> str:
         """Get latest news for a category as formatted text."""
+        if not _nexus_reachable():
+            return f"No news digest available for {category} (Nexus offline)"
         try:
             client = get_nexus_client()
             results = client.search(f"news {category}", category="news", limit=limit)
