@@ -583,6 +583,26 @@ observability:
     error_rate:
       yellow: 0.05
       red: 0.15
+  process_monitoring:
+    scan_interval_seconds: 60
+    stall_threshold_seconds: 300
+    categories:
+      - git
+      - python
+      - lmstudio
+      - node
+      - chrome
+      - comfyui
+    alerts:
+      worker_count:
+        yellow: 50
+        red: 100
+      memory_mb:
+        yellow: 8000
+        red: 11000
+      stalled_count:
+        yellow: 1
+        red: 3
 
 # Training data pipeline
 training:

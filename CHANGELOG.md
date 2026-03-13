@@ -4,6 +4,45 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.27] — "SYSTEM PROCESS MONITOR" — 2026-07
+
+Adds a complete system process monitoring subsystem with classification, git
+operation detection, stall detection, tracked operations, system snapshots,
+CLI interface, MCP skills, and full observability integration.
+
+### Added
+- **`engine/system/` package** — new top-level system monitoring package
+- **ProcessMonitor** singleton — scans running processes via psutil with
+  category classification (Python, Node, Git, Chrome, LMStudio, ComfyUI, etc.)
+- **Git operation detection** — identifies push/pull/fetch/clone/gc/repack from
+  command-line patterns, tracks phase (negotiating, counting, compressing,
+  writing, resolving)
+- **Stall detection** — dual-sample CPU measurement with configurable interval,
+  verdicts: stalled (δ<0.001), slow (δ<0.1), active
+- **Tracked operations** — manual operation tracking with name, PID set,
+  category, metadata, elapsed time, and completion status
+- **System snapshots** — comprehensive system state capture (CPU, memory, disk,
+  GPU, processes, git ops, tracked ops, top consumers)
+- **CLI**: `python -m engine.system` with `--watch`, `--git`, `--pid`, `--top`,
+  `--track`, `--stall`, `--lmstudio`, `--python`, `--json`, `--record`
+- **10 MCP skills** in `process_monitor_skills.py`: `process_list`,
+  `git_operation_status`, `process_tree`, `system_resource_snapshot`,
+  `track_operation`, `untrack_operation`, `list_tracked_operations`,
+  `stall_check`, `lmstudio_processes`, `python_workers`
+- **MetricsDB integration**: `process_snapshots` table with 2 indexes, 3 new
+  methods (`record_process_snapshot`, `get_process_history`,
+  `prune_process_snapshots`)
+- **MetricsCollector integration**: `_collect_processes()` method wired into
+  tick loop, 3 process AlertRules (worker count, stalled count, git operations)
+- **Alert node mapping**: process/worker/stall metrics → "process" node in
+  alert routing
+- **3 scheduler tasks**: `process-snapshot` (5min), `git-operation-check`
+  (2min), `stall-detection` (10min)
+- **Config**: `observability.process_monitoring` section in default.yaml
+- 48 tests across 12 test classes — all passing
+
+---
+
 ## [1.26] — "PIPELINE ENGINE v2" — 2026-07
 
 Adds a full meta-stage dispatch engine to WorkspacePipeline, enabling advanced

@@ -1,12 +1,44 @@
 # CosySim Roadmap
 
-> Current: **v1.21b** "AI STUDIO + APPS SCRIPT WIRING" ✅ | Last updated: 2026-07
+> Current: **v1.27** "SYSTEM PROCESS MONITOR" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
 CosySim is a **meta-system** — a playground for designing, testing, benchmarking, and evolving AI agent interactions. Every scene is a self-contained experiment combining agents, state, game logic, and UI. The framework exists so that agents (and humans) can methodically explore what works, feed results back into the system, and continuously improve.
 
 The system's ultimate goal: **inhabit itself** — AI agents that maintain, improve, and expand CosySim autonomously, guided by Nexus knowledge, NotebookLM intelligence, and fine-tuned local models.
+
+---
+
+## Current Shipped State: v1.27 — "SYSTEM PROCESS MONITOR" ✅
+
+**Baseline: 20 scenes, 67 scheduler tasks, 67+ workspace/NLM skills, 11,891+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor MCP skills.**
+
+v1.27 adds a complete system process monitoring subsystem: ProcessMonitor
+singleton with psutil-based process scanning, category classification (12
+categories), git operation detection (6 op types with phase tracking), stall
+detection (dual-sample CPU delta), tracked operations, system snapshots, CLI
+interface, 10 MCP skills, MetricsDB persistence, MetricsCollector tick-loop
+integration, 3 scheduler tasks, and 48 tests.
+
+---
+
+## Shipped: v1.27 — "SYSTEM PROCESS MONITOR" ✅
+
+- [x] `engine/system/` package — ProcessMonitor, ProcessInfo, GitOperation, TrackedOperation, StallInfo
+- [x] Category classification — 12 categories via name + cmdline pattern matching
+- [x] Git operation detection — push/pull/fetch/clone/gc/repack from cmdline patterns
+- [x] Stall detection — dual-sample CPU measurement, stalled/slow/active verdicts
+- [x] Tracked operations — manual tracking with PID sets, metadata, elapsed time
+- [x] System snapshots — CPU, memory, disk, GPU, processes, git ops, tracked ops, top consumers
+- [x] CLI: `python -m engine.system` with 10+ flags
+- [x] 10 MCP skills for agent access
+- [x] MetricsDB: `process_snapshots` table + 3 methods
+- [x] MetricsCollector: `_collect_processes()` wired into tick loop + 3 AlertRules
+- [x] Alert routing: process/worker/stall → "process" node
+- [x] 3 scheduler tasks: snapshot (5min), git check (2min), stall detection (10min)
+- [x] Config: `observability.process_monitoring` section
+- [x] 48/48 tests passing
 
 ---
 

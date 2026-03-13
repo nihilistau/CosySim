@@ -94,6 +94,7 @@ class MetricsCollector:
         # Snapshot cache (latest)
         self._last_system: Dict[str, Any] = {}
         self._last_pipeline_summary: Dict[str, Any] = {}
+        self._last_process_snapshot: Dict[str, Any] = {}
 
     @property
     def running(self) -> bool:
@@ -115,6 +116,10 @@ class MetricsCollector:
     @property
     def last_pipeline_summary(self) -> Dict[str, Any]:
         return dict(self._last_pipeline_summary)
+
+    @property
+    def last_process_snapshot(self) -> Dict[str, Any]:
+        return dict(self._last_process_snapshot)
 
     def start(self) -> None:
         """Start the background collection thread."""
@@ -209,6 +214,7 @@ class MetricsCollector:
             try:
                 self._collect_system()
                 self._collect_pipeline_summary()
+                self._collect_processes()
                 alerts = self._alert_engine.evaluate()
                 if alerts:
                     self._emit("metric_alerts", [
@@ -221,6 +227,7 @@ class MetricsCollector:
                 if self._prune_counter >= 60:
                     self._prune_counter = 0
                     self._db.prune_system_metrics(self._retention_hours)
+                    self._db.prune_process_snapshots(self._retention_hours)
 
             except Exception as exc:
                 logger.debug("MetricsCollector tick error: %s", exc)
@@ -274,6 +281,50 @@ class MetricsCollector:
         except Exception:
             logger.debug("Suppressed exception", exc_info=True)
 
+    def _collect_processes(self) -> None:
+        """Collect process monitor snapshot and persist."""
+        try:
+            from engine.system.process_monitor import get_process_monitor
+            pm = get_process_monitor()
+            snap = pm.system_snapshot()
+
+            proc_count = snap.get("total_processes", 0)
+            git_count = len(snap.get("git_operations", []))
+            tracked_count = len(snap.get("tracked_operations", []))
+            stalled_count = len(snap.get("stalled", []))
+            cpu_seconds = snap.get("total_cpu_seconds", 0.0)
+            mem_mb = snap.get("total_memory_mb", 0.0)
+
+            import json
+            self._db.record_process_snapshot(
+                category="all",
+                process_count=proc_count,
+                total_cpu_seconds=cpu_seconds,
+                total_memory_mb=mem_mb,
+                git_op_count=git_count,
+                tracked_op_count=tracked_count,
+                stalled_count=stalled_count,
+                snapshot_json=json.dumps(snap, default=str),
+            )
+
+            self._last_process_snapshot = {
+                "process_count": proc_count,
+                "git_op_count": git_count,
+                "tracked_op_count": tracked_count,
+                "stalled_count": stalled_count,
+                "cpu_seconds": cpu_seconds,
+                "memory_mb": mem_mb,
+            }
+
+            self._alert_engine.feed("process", "worker_count", proc_count)
+            self._alert_engine.feed("process", "memory_mb", mem_mb)
+            self._alert_engine.feed("process", "stalled_count", stalled_count)
+
+            self._emit("metric_processes", self._last_process_snapshot)
+
+        except Exception as exc:
+            logger.debug("Process snapshot failed: %s", exc)
+
     # ── Helpers ──────────────────────────────────────────────────────
 
     def _on_alert(self, alert: Alert) -> None:
@@ -302,4 +353,7 @@ class MetricsCollector:
             AlertRule(node="system", metric="ram_pct", yellow=85, red=95),
             AlertRule(node="pipeline", metric="avg_latency_ms", yellow=500, red=2000),
             AlertRule(node="pipeline", metric="kill_rate", yellow=0.1, red=0.3),
+            AlertRule(node="process", metric="worker_count", yellow=50, red=100),
+            AlertRule(node="process", metric="memory_mb", yellow=8000, red=11000),
+            AlertRule(node="process", metric="stalled_count", yellow=1, red=3),
         ]

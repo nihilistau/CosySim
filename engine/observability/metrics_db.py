@@ -6,6 +6,7 @@ SQLite tables for:
 - ``pipeline_metrics`` — per-request pipeline performance data
 - ``alerts`` — alert state change history
 - ``training_candidates`` — captured examples for Gemma fine-tuning
+- ``process_snapshots`` — periodic process monitor snapshots
 
 Thread-safe singleton — call ``get_metrics_db()`` from anywhere.
 """
@@ -107,6 +108,22 @@ CREATE TABLE IF NOT EXISTS training_candidates (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tc_dataset ON training_candidates(dataset, exported);
+
+CREATE TABLE IF NOT EXISTS process_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL,
+    category TEXT,
+    process_count INTEGER DEFAULT 0,
+    total_cpu_seconds REAL DEFAULT 0.0,
+    total_memory_mb REAL DEFAULT 0.0,
+    git_op_count INTEGER DEFAULT 0,
+    tracked_op_count INTEGER DEFAULT 0,
+    stalled_count INTEGER DEFAULT 0,
+    snapshot_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ps_ts ON process_snapshots(ts);
+CREATE INDEX IF NOT EXISTS idx_ps_category ON process_snapshots(category);
 """
 
 
@@ -372,6 +389,64 @@ class MetricsDB:
                 "FROM training_candidates GROUP BY dataset"
             )
             return {row["dataset"]: dict(row) for row in cur.fetchall()}
+
+    # ── Process snapshots ────────────────────────────────────────────
+
+    def record_process_snapshot(
+        self,
+        category: str = "all",
+        process_count: int = 0,
+        total_cpu_seconds: float = 0.0,
+        total_memory_mb: float = 0.0,
+        git_op_count: int = 0,
+        tracked_op_count: int = 0,
+        stalled_count: int = 0,
+        snapshot_json: str = "",
+    ) -> None:
+        """Record a process monitor snapshot."""
+        with self._cursor() as cur:
+            cur.execute(
+                "INSERT INTO process_snapshots "
+                "(ts, category, process_count, total_cpu_seconds, total_memory_mb, "
+                "git_op_count, tracked_op_count, stalled_count, snapshot_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    time.time(), category, process_count, total_cpu_seconds,
+                    total_memory_mb, git_op_count, tracked_op_count,
+                    stalled_count, snapshot_json,
+                ),
+            )
+
+    def get_process_history(self, seconds: float = 300, category: str = "") -> List[Dict]:
+        """Get process snapshots from the last N seconds.
+
+        Args:
+            seconds: Lookback window in seconds.
+            category: Optional category filter (empty = all).
+
+        Returns:
+            List of snapshot dicts ordered by timestamp.
+        """
+        cutoff = time.time() - seconds
+        with self._cursor() as cur:
+            if category:
+                cur.execute(
+                    "SELECT * FROM process_snapshots WHERE ts > ? AND category = ? ORDER BY ts",
+                    (cutoff, category),
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM process_snapshots WHERE ts > ? ORDER BY ts",
+                    (cutoff,),
+                )
+            return [dict(row) for row in cur.fetchall()]
+
+    def prune_process_snapshots(self, max_age_hours: float = 24) -> int:
+        """Delete process snapshots older than max_age_hours."""
+        cutoff = time.time() - (max_age_hours * 3600)
+        with self._cursor() as cur:
+            cur.execute("DELETE FROM process_snapshots WHERE ts < ?", (cutoff,))
+            return cur.rowcount
 
 
 # Valid pipeline_metrics column names for record_pipeline()
