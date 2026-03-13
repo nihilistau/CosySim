@@ -1,12 +1,14 @@
 """Direct NotebookLM HTTP client — reverse-engineered from HAR/CDP analysis.
 
 Runs direct private-RPC HTTP calls after browser-attached auth/session capture
-has established fresh NotebookLM cookies and session metadata. Two endpoint
+has established fresh NotebookLM cookies and session metadata. Three endpoint
 families:
 
 1. GenerateFreeFormStreamed — multi-turn notebook chat (ask / ask_streaming)
 2. batchexecute — all studio operations: create_note, generate_audio,
    add_source, generate_flashcards, generate_mind_map, export_to_sheets, etc.
+3. gRPC-web — heap-discovered operations via the LabsTailwindOrchestrationService
+   path: artifact CRUD, source mutations, prompt suggestions, chat sessions, etc.
 
 Gemini 3.0 is fully multimodal. Every source can be: text, URL, YouTube link,
 image (jpg/png/webp/gif), audio (mp3/wav/ogg/m4a), video (mp4/mov/webm), or PDF.
@@ -14,7 +16,7 @@ Feed ComfyUI output, NLM-generated audio, screenshots, charts — anything — b
 as sources for the next call. Recursive self-improvement is the architecture.
 
 Endpoints confirmed from notebooklm.google.com-complete-new.har (2026-06).
-rpcid registry: data/nlm_rpc_registry.json v4.0
+rpcid registry: config/nlm_rpcids.yaml v5.0 (302 operations)
 """
 from __future__ import annotations
 
@@ -52,6 +54,13 @@ _NLM_RPC_ENDPOINT = f"{_NLM_BASE}/_/LabsTailwindUi/data/batchexecute"
 
 # Legacy alias kept for any code that referenced the old constant name
 _NLM_ENDPOINT = _NLM_CHAT_ENDPOINT
+
+# gRPC-web service path for heap-discovered operations (24 methods)
+_GRPC_SERVICE_PATH = (
+    "google.internal.labs.tailwind.orchestration.v1."
+    "LabsTailwindOrchestrationService"
+)
+_NLM_GRPC_ENDPOINT = f"{_NLM_BASE}/_/LabsTailwindUi/data/{_GRPC_SERVICE_PATH}"
 
 _NLM_ORIGIN = "https://notebooklm.google.com"
 _USER_AGENT = (
@@ -964,6 +973,171 @@ class NLMDirectClient:
             except (json.JSONDecodeError, IndexError, TypeError):
                 continue
         logger.debug("Could not parse rpc response for %s, raw length=%d", rpc_id, len(raw))
+        return None
+
+    # ──── Generic gRPC-web caller (heap-discovered methods) ───────────────────
+
+    def _grpc_call(
+        self,
+        method_name: str,
+        payload: Any,
+        notebook_id: Optional[str] = None,
+        timeout: int = 60,
+        _retried: bool = False,
+    ) -> Any:
+        """Call a heap-discovered NLM operation via the gRPC-web endpoint.
+
+        Uses the same auth (cookies + at token), session params (bl, f.sid),
+        and ``f.req`` body format as batchexecute, but the URL encodes the
+        full gRPC service path + method name instead of an rpcid.
+
+        These methods were discovered via Chrome DevTools heap snapshots and
+        have NOT been confirmed in HAR traffic.  Expect graceful failures
+        (404, 400, 500) — all are logged and return ``None``.
+
+        Args:
+            method_name: gRPC method name (e.g. ``'CreateArtifact'``).
+            payload: Python object — will be JSON-serialised as the inner payload.
+            notebook_id: Optional notebook UUID for scoped operations.
+            timeout: HTTP request timeout in seconds.
+
+        Returns:
+            Parsed response data (list/dict/str), or ``None`` on any failure.
+        """
+        bl, f_sid = self._get_page_params()
+        self._reqid += 100000
+
+        url = (
+            f"{_NLM_GRPC_ENDPOINT}/{method_name}"
+            f"?bl={urllib.parse.quote(bl)}"
+            f"&f.sid={urllib.parse.quote(str(f_sid))}"
+            f"&hl=en-US"
+            f"&_reqid={self._reqid}"
+            f"&rt=c"
+        )
+        if notebook_id:
+            url += f"&source-path={urllib.parse.quote(f'/notebook/{notebook_id}')}"
+
+        payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        outer = [None, payload_json]
+        outer_json = json.dumps(outer, ensure_ascii=False, separators=(",", ":"))
+
+        body_dict: Dict[str, str] = {"f.req": outer_json}
+        if self._at_token:
+            body_dict["at"] = self._at_token
+        body = urllib.parse.urlencode(body_dict)
+
+        source_path = f"/notebook/{notebook_id}" if notebook_id else "/"
+        headers = self._get_headers(source_path=source_path)
+
+        try:
+            resp = self._session.post(url, headers=headers, data=body, timeout=timeout)
+        except requests.RequestException as exc:
+            logger.warning("gRPC-web %s network error: %s", method_name, exc)
+            return None
+
+        if resp.status_code in (404, 501):
+            logger.info(
+                "gRPC-web %s returned %d — method may not be live yet",
+                method_name,
+                resp.status_code,
+            )
+            return None
+
+        if resp.status_code in (400, 401, 403) and not _retried:
+            logger.warning(
+                "gRPC-web %s returned HTTP %d; attempting CDP token refresh",
+                method_name,
+                resp.status_code,
+            )
+            self._clear_session_params()
+            if not self._refresh_from_cdp():
+                logger.warning("CDP refresh unavailable for gRPC retry")
+            return self._grpc_call(
+                method_name,
+                payload,
+                notebook_id=notebook_id,
+                timeout=timeout,
+                _retried=True,
+            )
+
+        if resp.status_code >= 400:
+            logger.warning(
+                "gRPC-web %s returned HTTP %d (body=%s)",
+                method_name,
+                resp.status_code,
+                resp.text[:500],
+            )
+            return None
+
+        return self._parse_grpc_response(resp.text, method_name)
+
+    def _parse_grpc_response(self, raw: str, method_name: str) -> Any:
+        """Parse a gRPC-web response using multiple strategies.
+
+        Strategy order:
+        1. wrb.fr format (same as batchexecute) — NLM may wrap gRPC in this
+        2. Raw JSON array/object — direct gRPC-JSON transcoding
+        3. Raw text — if nothing else works, return trimmed text
+
+        Args:
+            raw: Raw response body string.
+            method_name: Method name for logging context.
+
+        Returns:
+            Parsed response data, or ``None`` if empty/unparseable.
+        """
+        if not raw or not raw.strip():
+            logger.debug("gRPC-web %s returned empty response", method_name)
+            return None
+
+        stripped = raw.replace(")]}'", "").strip()
+
+        # Strategy 1: wrb.fr chunked format (most likely)
+        for line in stripped.splitlines():
+            line = line.strip()
+            if not line or line.isdigit() or not line.startswith("["):
+                continue
+            try:
+                parsed = json.loads(line)
+                for item in parsed:
+                    if (
+                        isinstance(item, list)
+                        and len(item) >= 3
+                        and item[0] == "wrb.fr"
+                        and item[2]
+                    ):
+                        inner = json.loads(item[2])
+                        logger.debug(
+                            "gRPC-web %s parsed via wrb.fr (inner type=%s)",
+                            method_name,
+                            type(inner).__name__,
+                        )
+                        return inner
+            except (json.JSONDecodeError, IndexError, TypeError):
+                continue
+
+        # Strategy 2: direct JSON (gRPC-JSON transcoding)
+        try:
+            result = json.loads(stripped)
+            logger.debug(
+                "gRPC-web %s parsed as direct JSON (type=%s)",
+                method_name,
+                type(result).__name__,
+            )
+            return result
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 3: return raw text if non-empty
+        if len(stripped) > 0:
+            logger.debug(
+                "gRPC-web %s returned unparseable text (len=%d), returning raw",
+                method_name,
+                len(stripped),
+            )
+            return stripped[:10000]
+
         return None
 
     # ──── Source management ────────────────────────────────────────────────────
@@ -2162,6 +2336,441 @@ class NLMDirectClient:
                 logger.debug("Locale preference parsing partial failure for raw=%s", raw)
                 return {"locale": str(raw[0]) if raw else "en"}
         return {"locale": "en"}
+
+    # ──── gRPC-web heap-discovered methods — Artifacts ─────────────────────────
+
+    def create_artifact(
+        self,
+        notebook_id: str,
+        artifact_type: str = "note",
+        title: str = "",
+        content: str = "",
+    ) -> Optional[Dict[str, Any]]:
+        """Create a new artifact in a notebook (heap-discovered: CreateArtifact).
+
+        Args:
+            notebook_id: Notebook UUID.
+            artifact_type: Artifact type string (e.g. ``'note'``, ``'summary'``).
+            title: Display title for the artifact.
+            content: Initial content body.
+
+        Returns:
+            Parsed response with artifact metadata, or ``None``.
+        """
+        payload = [notebook_id, artifact_type, title, content]
+        return self._grpc_call("CreateArtifact", payload, notebook_id=notebook_id)
+
+    def derive_artifact(
+        self,
+        notebook_id: str,
+        source_artifact_id: str,
+        derivation_type: str = "summary",
+    ) -> Optional[Dict[str, Any]]:
+        """Derive a new artifact from an existing one (heap-discovered: DeriveArtifact).
+
+        Args:
+            notebook_id: Notebook UUID.
+            source_artifact_id: ID of the artifact to derive from.
+            derivation_type: Type of derivation (e.g. ``'summary'``, ``'expansion'``).
+
+        Returns:
+            Parsed response with derived artifact metadata, or ``None``.
+        """
+        payload = [notebook_id, source_artifact_id, derivation_type]
+        return self._grpc_call("DeriveArtifact", payload, notebook_id=notebook_id)
+
+    def generate_artifact(
+        self,
+        notebook_id: str,
+        prompt: str,
+        artifact_type: str = "note",
+    ) -> Optional[Dict[str, Any]]:
+        """Generate an artifact from a prompt (heap-discovered: GenerateArtifact).
+
+        Args:
+            notebook_id: Notebook UUID.
+            prompt: Generation prompt / instructions.
+            artifact_type: Desired artifact type.
+
+        Returns:
+            Parsed response with generated artifact, or ``None``.
+        """
+        payload = [notebook_id, prompt, artifact_type]
+        return self._grpc_call("GenerateArtifact", payload, notebook_id=notebook_id)
+
+    def get_artifact_user_state(
+        self,
+        notebook_id: str,
+        artifact_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Get user-specific state for an artifact (heap-discovered: GetArtifactUserState).
+
+        Args:
+            notebook_id: Notebook UUID.
+            artifact_id: Artifact ID.
+
+        Returns:
+            User state data (read status, bookmarks, etc.), or ``None``.
+        """
+        payload = [notebook_id, artifact_id]
+        return self._grpc_call("GetArtifactUserState", payload, notebook_id=notebook_id)
+
+    def upsert_artifact_user_state(
+        self,
+        notebook_id: str,
+        artifact_id: str,
+        state: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Update user-specific state for an artifact (heap-discovered: UpsertArtifactUserState).
+
+        Args:
+            notebook_id: Notebook UUID.
+            artifact_id: Artifact ID.
+            state: State dict to upsert (e.g. ``{"read": true, "pinned": true}``).
+
+        Returns:
+            Updated state confirmation, or ``None``.
+        """
+        payload = [notebook_id, artifact_id, state]
+        return self._grpc_call("UpsertArtifactUserState", payload, notebook_id=notebook_id)
+
+    # ──── gRPC-web heap-discovered methods — Sources ──────────────────────────
+
+    def check_source_freshness(
+        self,
+        notebook_id: str,
+        source_ids: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Check if sources are stale (heap-discovered: CheckSourceFreshness).
+
+        Args:
+            notebook_id: Notebook UUID.
+            source_ids: Optional list of specific source IDs. If ``None``,
+                checks all sources in the notebook.
+
+        Returns:
+            Freshness status for each source, or ``None``.
+        """
+        payload = [notebook_id, source_ids or []]
+        return self._grpc_call("CheckSourceFreshness", payload, notebook_id=notebook_id)
+
+    def discover_sources_async(
+        self,
+        notebook_id: str,
+        query: str,
+        max_results: int = 10,
+    ) -> Optional[Dict[str, Any]]:
+        """Start async source discovery (heap-discovered: DiscoverSourcesAsync).
+
+        Searches the web or linked services for relevant sources to add.
+
+        Args:
+            notebook_id: Notebook UUID.
+            query: Search query for source discovery.
+            max_results: Maximum number of sources to discover.
+
+        Returns:
+            Job ID and initial status, or ``None``.
+        """
+        payload = [notebook_id, query, max_results]
+        return self._grpc_call("DiscoverSourcesAsync", payload, notebook_id=notebook_id)
+
+    def discover_sources_manifold(
+        self,
+        notebook_id: str,
+        query: str,
+        sources: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Discover sources via manifold search (heap-discovered: DiscoverSourcesManifold).
+
+        Args:
+            notebook_id: Notebook UUID.
+            query: Discovery query string.
+            sources: Optional list of source types/channels to search.
+
+        Returns:
+            Discovered source candidates, or ``None``.
+        """
+        payload = [notebook_id, query, sources or []]
+        return self._grpc_call("DiscoverSourcesManifold", payload, notebook_id=notebook_id)
+
+    def cancel_discover_sources_job(
+        self,
+        notebook_id: str,
+        job_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Cancel a running source discovery job (heap-discovered: CancelDiscoverSourcesJob).
+
+        Args:
+            notebook_id: Notebook UUID.
+            job_id: Discovery job ID from ``discover_sources_async()``.
+
+        Returns:
+            Cancellation confirmation, or ``None``.
+        """
+        payload = [notebook_id, job_id]
+        return self._grpc_call("CancelDiscoverSourcesJob", payload, notebook_id=notebook_id)
+
+    def finish_discover_sources_run(
+        self,
+        notebook_id: str,
+        job_id: str,
+        accept_source_ids: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Finish a source discovery run, optionally accepting sources (heap-discovered: FinishDiscoverSourcesRun).
+
+        Args:
+            notebook_id: Notebook UUID.
+            job_id: Discovery job ID.
+            accept_source_ids: IDs of discovered sources to accept/add.
+
+        Returns:
+            Finalization result, or ``None``.
+        """
+        payload = [notebook_id, job_id, accept_source_ids or []]
+        return self._grpc_call("FinishDiscoverSourcesRun", payload, notebook_id=notebook_id)
+
+    def mutate_source(
+        self,
+        notebook_id: str,
+        source_id: str,
+        mutations: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Apply mutations to a source (heap-discovered: MutateSource).
+
+        Args:
+            notebook_id: Notebook UUID.
+            source_id: Source ID to mutate.
+            mutations: Mutation dict (e.g. ``{"title": "New Title"}``).
+
+        Returns:
+            Updated source metadata, or ``None``.
+        """
+        payload = [notebook_id, source_id, mutations]
+        return self._grpc_call("MutateSource", payload, notebook_id=notebook_id)
+
+    def refresh_source(
+        self,
+        notebook_id: str,
+        source_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Refresh a source to re-fetch content (heap-discovered: RefreshSource).
+
+        Args:
+            notebook_id: Notebook UUID.
+            source_id: Source ID to refresh.
+
+        Returns:
+            Refresh status, or ``None``.
+        """
+        payload = [notebook_id, source_id]
+        return self._grpc_call("RefreshSource", payload, notebook_id=notebook_id)
+
+    def delete_sources_bulk(
+        self,
+        notebook_id: str,
+        source_ids: List[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Bulk-delete sources from a notebook (heap-discovered: DeleteSources).
+
+        Args:
+            notebook_id: Notebook UUID.
+            source_ids: List of source IDs to delete.
+
+        Returns:
+            Deletion confirmation, or ``None``.
+        """
+        payload = [notebook_id, source_ids]
+        return self._grpc_call("DeleteSources", payload, notebook_id=notebook_id)
+
+    # ──── gRPC-web heap-discovered methods — Projects ─────────────────────────
+
+    def mutate_project(
+        self,
+        notebook_id: str,
+        mutations: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Apply mutations to a project/notebook (heap-discovered: MutateProject).
+
+        Args:
+            notebook_id: Notebook UUID.
+            mutations: Mutation dict (e.g. ``{"title": "New Name"}``).
+
+        Returns:
+            Updated project metadata, or ``None``.
+        """
+        payload = [notebook_id, mutations]
+        return self._grpc_call("MutateProject", payload, notebook_id=notebook_id)
+
+    def delete_projects(
+        self,
+        project_ids: List[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Bulk-delete projects/notebooks (heap-discovered: DeleteProjects).
+
+        Args:
+            project_ids: List of notebook UUIDs to delete.
+
+        Returns:
+            Deletion confirmation, or ``None``.
+        """
+        payload = [project_ids]
+        return self._grpc_call("DeleteProjects", payload)
+
+    def list_featured_projects(self) -> Optional[List[Any]]:
+        """List featured/template projects (heap-discovered: ListFeaturedProjects).
+
+        Returns:
+            List of featured project metadata, or ``None``.
+        """
+        payload = []
+        return self._grpc_call("ListFeaturedProjects", payload)
+
+    def update_featured_notebook_status(
+        self,
+        notebook_id: str,
+        status: str = "featured",
+    ) -> Optional[Dict[str, Any]]:
+        """Update the featured status of a notebook (heap-discovered: UpdateFeaturedNotebookStatus).
+
+        Args:
+            notebook_id: Notebook UUID.
+            status: New status string (e.g. ``'featured'``, ``'unfeatured'``).
+
+        Returns:
+            Status update confirmation, or ``None``.
+        """
+        payload = [notebook_id, status]
+        return self._grpc_call("UpdateFeaturedNotebookStatus", payload, notebook_id=notebook_id)
+
+    # ──── gRPC-web heap-discovered methods — Chat ─────────────────────────────
+
+    def delete_chat_turns(
+        self,
+        notebook_id: str,
+        turn_ids: List[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Delete specific chat turns from a notebook (heap-discovered: DeleteChatTurns).
+
+        Args:
+            notebook_id: Notebook UUID.
+            turn_ids: List of turn IDs to delete.
+
+        Returns:
+            Deletion confirmation, or ``None``.
+        """
+        payload = [notebook_id, turn_ids]
+        return self._grpc_call("DeleteChatTurns", payload, notebook_id=notebook_id)
+
+    def list_chat_sessions(
+        self,
+        notebook_id: str,
+    ) -> Optional[List[Any]]:
+        """List chat sessions in a notebook (heap-discovered: ListChatSessions).
+
+        Args:
+            notebook_id: Notebook UUID.
+
+        Returns:
+            List of chat session metadata, or ``None``.
+        """
+        payload = [notebook_id]
+        return self._grpc_call("ListChatSessions", payload, notebook_id=notebook_id)
+
+    # ──── gRPC-web heap-discovered methods — Notes ────────────────────────────
+
+    def mutate_note(
+        self,
+        notebook_id: str,
+        note_id: str,
+        mutations: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Apply mutations to a notebook note (heap-discovered: MutateNote).
+
+        Args:
+            notebook_id: Notebook UUID.
+            note_id: Note ID to mutate.
+            mutations: Mutation dict (e.g. ``{"content": "Updated text"}``).
+
+        Returns:
+            Updated note metadata, or ``None``.
+        """
+        payload = [notebook_id, note_id, mutations]
+        return self._grpc_call("MutateNote", payload, notebook_id=notebook_id)
+
+    # ──── gRPC-web heap-discovered methods — Account ──────────────────────────
+
+    def get_or_create_account(self) -> Optional[Dict[str, Any]]:
+        """Get or create the NLM account record (heap-discovered: GetOrCreateAccount).
+
+        Returns:
+            Account metadata including tier, quotas, preferences, or ``None``.
+        """
+        payload = []
+        return self._grpc_call("GetOrCreateAccount", payload)
+
+    # ──── gRPC-web heap-discovered methods — Moderation ───────────────────────
+
+    def report_content(
+        self,
+        notebook_id: str,
+        content_id: str,
+        reason: str = "inappropriate",
+        details: str = "",
+    ) -> Optional[Dict[str, Any]]:
+        """Report content for moderation (heap-discovered: ReportContent).
+
+        Args:
+            notebook_id: Notebook UUID.
+            content_id: ID of the content to report.
+            reason: Report reason category.
+            details: Optional additional details.
+
+        Returns:
+            Report confirmation, or ``None``.
+        """
+        payload = [notebook_id, content_id, reason, details]
+        return self._grpc_call("ReportContent", payload, notebook_id=notebook_id)
+
+    # ──── gRPC-web heap-discovered methods — Suggestions ──────────────────────
+
+    def generate_prompt_suggestions(
+        self,
+        notebook_id: str,
+        context: str = "",
+        count: int = 5,
+    ) -> Optional[List[str]]:
+        """Generate prompt suggestions for a notebook (heap-discovered: GeneratePromptSuggestions).
+
+        Args:
+            notebook_id: Notebook UUID.
+            context: Optional context to guide suggestion generation.
+            count: Number of suggestions to generate.
+
+        Returns:
+            List of suggested prompts, or ``None``.
+        """
+        payload = [notebook_id, context, count]
+        return self._grpc_call("GeneratePromptSuggestions", payload, notebook_id=notebook_id)
+
+    def generate_report_suggestions(
+        self,
+        notebook_id: str,
+        report_type: str = "summary",
+        context: str = "",
+    ) -> Optional[List[str]]:
+        """Generate report suggestions for a notebook (heap-discovered: GenerateReportSuggestions).
+
+        Args:
+            notebook_id: Notebook UUID.
+            report_type: Type of report to suggest (e.g. ``'summary'``, ``'analysis'``).
+            context: Optional context to guide suggestions.
+
+        Returns:
+            List of suggested report topics/structures, or ``None``.
+        """
+        payload = [notebook_id, report_type, context]
+        return self._grpc_call("GenerateReportSuggestions", payload, notebook_id=notebook_id)
 
 
 # ──── Factory ─────────────────────────────────────────────────────────────────

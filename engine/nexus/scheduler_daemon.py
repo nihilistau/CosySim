@@ -992,6 +992,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         _news_nlm_retry_callback,
     )
     daemon.register(
+        "news-distill-nlm",
+        "News NLM Distillation",
+        "every_8h",
+        _news_distill_nlm_callback,
+    )
+    daemon.register(
         "test-monitor",
         "Test Suite Monitor",
         "daily",
