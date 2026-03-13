@@ -1323,6 +1323,18 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "every_6h",
         _workspace_pipeline_health_callback,
     )
+    daemon.register(
+        "benchmark-flush",
+        "Flush in-memory benchmarks to MetaMetrics SQLite persistence",
+        "every_5m",
+        _benchmark_flush_callback,
+    )
+    daemon.register(
+        "copilot-auto-repair",
+        "Detect Copilot drift and auto-repair via CopilotSelfConfig sync",
+        "daily",
+        _copilot_auto_repair_callback,
+    )
 
 
 def _auto_embedding_callback() -> Dict[str, Any]:
@@ -1535,6 +1547,59 @@ def _workspace_pipeline_health_callback() -> Dict[str, Any]:
         return health
     except Exception as exc:
         logger.error("Pipeline health check failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _benchmark_flush_callback() -> Dict[str, Any]:
+    """Flush in-memory benchmark data to MetaMetrics SQLite persistence."""
+    try:
+        from engine.logging.benchmark import flush_to_meta_metrics
+
+        flushed = flush_to_meta_metrics(clear=False)
+        return {
+            "metrics_flushed": len(flushed),
+            "details": {k: round(v, 2) for k, v in flushed.items()},
+        }
+    except Exception as exc:
+        logger.error("Benchmark flush failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _copilot_auto_repair_callback() -> Dict[str, Any]:
+    """Detect Copilot drift and auto-repair via CopilotSelfConfig sync."""
+    try:
+        from engine.nexus.copilot_validation import auto_repair
+
+        result = auto_repair()
+
+        # Store repair report in Nexus
+        if result.get("actions"):
+            try:
+                from engine.nexus.client import get_nexus_client
+
+                client = get_nexus_client()
+                client.add_entry(
+                    title=(
+                        f"Copilot Auto-Repair: "
+                        f"{result.get('before_issues', '?')} → "
+                        f"{result.get('after_issues', '?')} issues"
+                    ),
+                    content=json.dumps(result, default=str),
+                    content_type="history",
+                    category="system",
+                )
+            except Exception:
+                pass
+
+        return {
+            "before_issues": result.get("before_issues", 0),
+            "after_issues": result.get("after_issues", 0),
+            "repaired": result.get("repaired", False),
+            "actions": result.get("actions", []),
+            "message": result.get("message", ""),
+        }
+    except Exception as exc:
+        logger.error("Copilot auto-repair failed: %s", exc)
         return {"error": str(exc)}
 
 

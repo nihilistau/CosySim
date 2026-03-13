@@ -3,6 +3,47 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.20b] — "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" — 2026-07
+
+Benchmark-to-MetaMetrics persistence bridge, BENCHMARK_METRICS category,
+Copilot auto-repair with drift classification, and two new scheduler tasks
+for continuous system health.
+
+### Added: Benchmark → MetaMetrics Flush
+- `flush_to_meta_metrics(clear=False)` in `engine/logging/benchmark.py`
+- Computes aggregate stats from `_store` and `_kpi_store`
+- Writes 10 `benchmark.*` metrics: ops.count, ops.types, ops.total_ms,
+  ops.avg_ms, ops.p95_ms, llm.count, llm.total_tokens, llm.avg_latency_ms,
+  llm.tokens_per_sec, llm.first_token_ms
+- Lazy MetaMetrics import to avoid circular dependencies
+
+### Added: BENCHMARK_METRICS Category (MetaMetrics)
+- 10 benchmark-specific metric names registered in `engine/nexus/meta_metrics.py`
+- Included in `ALL_METRIC_NAMES` for dashboard/trend visibility
+- `collect_benchmark_metrics()` method wired into `collect_all()` pipeline
+- `dashboard()` now renders 7 sections (was 5): Knowledge, Inference, Task,
+  Test, System, News, Benchmark
+
+### Added: Copilot Auto-Repair
+- `auto_repair(project_root, dry_run=False)` in `engine/nexus/copilot_validation.py`
+- Classifies issues by type: content_drift, type_drift, tags_drift,
+  missing_entry, seed_state, hook_integrity, runtime_health
+- Routes to correct sync method: instructions, agents, hooks, or full sync
+- Re-validates after repair and returns before/after comparison
+- Supports `dry_run` mode for impact preview
+
+### Added: Scheduler Tasks (61 → 63)
+- `benchmark-flush` (every 5 min) — periodic benchmark data persistence
+- `copilot-auto-repair` (daily) — automated Copilot control plane drift repair
+- Both tasks store results/reports in Nexus
+
+### Added: Tests (23 new)
+- 11 benchmark flush tests: metric keys, counts, clear/preserve, empty stores,
+  record_batch call, error handling, registration, dashboard section
+- 12 copilot auto-repair tests: no-issues path, dry-run, instruction/agent/hook/
+  full-sync routing, combined issues, result shape, error handling
+
+---
 ## [1.20a] — "NEWS INTELLIGENCE HARDENING" — 2026-07
 
 Production-grade hardening of the news intelligence pipeline with SQLite-backed

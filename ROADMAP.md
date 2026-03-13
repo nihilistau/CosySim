@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.20a** "NEWS INTELLIGENCE HARDENING" ✅ | Last updated: 2026-07
+> Current: **v1.20b** "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,15 +10,27 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.20a — "NEWS INTELLIGENCE HARDENING" ✅
+## Current Shipped State: v1.20b — "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" ✅
 
-**Baseline: 20 scenes, 61 scheduler tasks, 31 workspace skills, 11,748+ tests, 24 pipeline stages, 25 templates, 50 workspace API ops across 29 YAML sections.**
+**Baseline: 20 scenes, 63 scheduler tasks, 31 workspace skills, 11,771+ tests, 24 pipeline stages, 25 templates, 50 workspace API ops across 29 YAML sections, 7 MetaMetrics categories (55+ metrics).**
 
-The v1.20a sprint hardens the news intelligence pipeline for production:
-SQLite-backed dedup persistence, retry with exponential backoff, per-source
-circuit breakers, health tracking, and full MetaMetrics integration across
-every pipeline stage. Test coverage expanded from 7 → 31 tests with complete
-SQLite isolation.
+The v1.20b sprint bridges in-memory benchmark tracking to persistent MetaMetrics,
+adds automated Copilot control plane drift repair, and registers two new scheduler
+tasks for continuous self-improvement. MetaMetrics now covers 7 categories
+(Knowledge, Inference, Task, Test, System, News, Benchmark) with 55+ metric names.
+
+---
+
+## Shipped: v1.20b — "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" ✅
+
+- [x] `flush_to_meta_metrics()` bridges benchmark.py → MetaMetrics SQLite (10 metrics)
+- [x] BENCHMARK_METRICS category (10 metrics) in MetaMetrics, dashboard 5→7 sections
+- [x] `collect_benchmark_metrics()` wired into `collect_all()` pipeline
+- [x] `auto_repair()` in copilot_validation.py with drift classification → sync routing
+- [x] `benchmark-flush` scheduler task (every 5 min)
+- [x] `copilot-auto-repair` scheduler task (daily)
+- [x] 23 new tests (11 benchmark + 12 auto-repair), all pass
+- [x] Full suite green
 
 ---
 

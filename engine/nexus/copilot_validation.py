@@ -550,6 +550,131 @@ def run_copilot_validation(
     }
 
 
+def auto_repair(
+    *,
+    project_root: Optional[Path] = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Detect Copilot drift and auto-repair via CopilotSelfConfig sync.
+
+    Runs the full validation suite, classifies detected issues, and calls
+    the appropriate ``CopilotSelfConfig`` sync method for each category
+    of drift.  After repair it re-validates to confirm the fix.
+
+    Args:
+        project_root: Repo root (defaults to ``REPO_ROOT``).
+        dry_run: If *True*, diagnose but do not repair.
+
+    Returns:
+        Dict with ``before``, ``after``, ``repaired``, ``actions`` keys.
+    """
+    before = run_copilot_validation(project_root=project_root)
+
+    if before["ok"]:
+        return {
+            "before": before,
+            "after": before,
+            "repaired": False,
+            "actions": [],
+            "message": "No issues detected — nothing to repair.",
+        }
+
+    if dry_run:
+        return {
+            "before": before,
+            "after": None,
+            "repaired": False,
+            "actions": [],
+            "message": f"Dry-run: {before['issue_count']} issues detected.",
+        }
+
+    actions: List[str] = []
+    sync_cfg = get_copilot_config()
+
+    # Classify issues and decide which sync surfaces to invoke
+    need_instructions = False
+    need_agents = False
+    need_hooks = False
+    need_full_sync = False
+
+    for issue in before["sections"].get("nexus_sync", {}).get("issues", []):
+        code = issue.get("code", "")
+        source = issue.get("source", "")
+        if code in ("content_drift", "type_drift", "tags_drift", "missing_entry"):
+            if "agent" in source.lower() or "agents" in source.lower():
+                need_agents = True
+            elif "hook" in source.lower():
+                need_hooks = True
+            else:
+                need_instructions = True
+        elif code in ("seed_state_missing", "seed_state_stale"):
+            need_full_sync = True
+        elif code == "duplicate_exact_title":
+            need_full_sync = True
+
+    # Hook integrity issues → resync hooks
+    for issue in before["sections"].get("hook_integrity", {}).get("issues", []):
+        need_hooks = True
+
+    # Runtime health issues may need full resync
+    for issue in before["sections"].get("runtime_health", {}).get("issues", []):
+        code = issue.get("code", "")
+        if code in ("empty_config_surface", "onboarding_error"):
+            need_full_sync = True
+
+    # Apply repairs
+    try:
+        if need_full_sync:
+            sync_cfg.sync_all_to_nexus()
+            actions.append("sync_all_to_nexus")
+        else:
+            if need_instructions:
+                sync_cfg.sync_instructions_to_nexus()
+                actions.append("sync_instructions_to_nexus")
+            if need_agents:
+                sync_cfg.sync_agents_to_nexus()
+                actions.append("sync_agents_to_nexus")
+            if need_hooks:
+                sync_cfg.sync_hooks_to_nexus()
+                actions.append("sync_hooks_to_nexus")
+
+        # Reseed rules after any sync
+        if actions:
+            try:
+                from engine.nexus.seed_copilot_rules import seed_copilot_rules
+
+                seed_copilot_rules()
+                actions.append("seed_copilot_rules")
+            except Exception as exc:
+                logger.warning("Seed copilot rules failed during auto-repair: %s", exc)
+    except Exception as exc:
+        logger.error("Auto-repair sync failed: %s", exc)
+        return {
+            "before": before,
+            "after": None,
+            "repaired": False,
+            "actions": actions,
+            "error": str(exc),
+            "message": f"Repair failed: {exc}",
+        }
+
+    # Re-validate after repair
+    after = run_copilot_validation(project_root=project_root)
+
+    return {
+        "before": before,
+        "after": after,
+        "repaired": after["issue_count"] < before["issue_count"],
+        "actions": actions,
+        "before_issues": before["issue_count"],
+        "after_issues": after["issue_count"],
+        "message": (
+            f"Repaired: {before['issue_count']} → {after['issue_count']} issues "
+            f"({len(actions)} actions taken)"
+        ),
+    }
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI entry point for Copilot validation."""
     parser = argparse.ArgumentParser(description="Validate Copilot sync, hooks, and runtime health.")
