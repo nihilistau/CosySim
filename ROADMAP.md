@@ -10,13 +10,24 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.24 — "FEED HEALTH & RESILIENCE" ✅
+## Current Shipped State: v1.25 — "NEWS PIPELINE HARDENING" ✅
 
-**Baseline: 20 scenes, 63 scheduler tasks, 67+ workspace/NLM skills, 11,843+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics).**
+**Baseline: 20 scenes, 64 scheduler tasks, 67+ workspace/NLM skills, 11,843+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics).**
 
-v1.24 replaced 4 dead RSS feeds discovered during live end-to-end validation and added
-a Nexus reachability guard to prevent multi-minute hangs when Nexus is offline. The news
-pipeline now does a 2-second TCP check before attempting storage.
+v1.25 hardens the news pipeline with graceful embedding degradation, staggered
+scheduler intervals, proactive RSS feed health checks, and NLM notebook existence
+validation before distillation.
+
+---
+
+## Shipped: v1.25 — "NEWS PIPELINE HARDENING" ✅
+
+- [x] Embedding service returns `[]` instead of raising RuntimeError when all providers fail
+- [x] Added `check_all_feeds()` to RSSFetcher — probes all sources, auto-trips circuit-breaker, emits meta-metrics
+- [x] Staggered news scheduler intervals: fetch 8h, distill 6h, retry 12h, feed-health 12h
+- [x] Registered `feed-health` scheduler task (every 12h)
+- [x] Added NLM notebook existence validation in distill callback — skips with warning if notebook not found
+- [x] 211/211 focused tests passing
 
 ---
 

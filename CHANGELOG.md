@@ -4,6 +4,29 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.25] — "NEWS PIPELINE HARDENING" — 2026-07
+
+Hardens the news pipeline with four improvements that eliminate crash paths,
+stagger scheduler load, and validate external dependencies before use.
+
+### Changed
+- **Embedding service**: `embed()` and `embed_batch()` now return `[]` instead
+  of raising `RuntimeError` when all providers fail — eliminates noisy stack
+  traces during news storage when LMStudio is offline
+- **Scheduler intervals**: staggered news tasks to avoid simultaneous execution:
+  fetch every 8h, distill every 6h, retry every 12h
+- Registered new `feed-health` scheduler task (every 12h)
+
+### Added
+- `RSSFetcher.check_all_feeds()` — probes every RSS feed with lightweight
+  HEAD/GET, auto-trips circuit-breaker for dead feeds, emits meta-metrics
+  (news.health.alive/dead/tripped)
+- NLM notebook existence validation in `_news_distill_nlm_callback` — calls
+  `nlm.list_notebooks()` to verify notebook IDs before distillation; skips
+  super-category with warning if notebook not found
+
+---
+
 ## [1.24] — "FEED HEALTH & RESILIENCE" — 2026-07
 
 Live end-to-end validation of the news pipeline revealed 4 dead RSS feeds and
