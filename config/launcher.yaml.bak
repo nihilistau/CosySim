@@ -1,7 +1,7 @@
 scenes:
-  asset_studio:
+  arena:
     auto_start: false
-  bedroom:
+  asset_studio:
     auto_start: false
   casino:
     auto_start: false
@@ -19,10 +19,12 @@ scenes:
     auto_start: false
   intel_hub:
     auto_start: true
+  lab_break:
+    auto_start: false
   lounge:
     auto_start: false
   neoncity:
-    auto_start: false
+    auto_start: true
   penthouse:
     auto_start: false
   phone:
@@ -37,7 +39,11 @@ services:
   assets:
     auto_start: false
   bridge:
-    auto_start: false
+    auto_start: true
+  canvas:
+    auto_start: true
+  canvas_api:
+    auto_start: true
   creator:
     auto_start: false
   dashboard:
