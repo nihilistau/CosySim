@@ -160,6 +160,19 @@ NEWS_METRICS = [
     "news.cycle.duration_s",
 ]
 
+BENCHMARK_METRICS = [
+    "benchmark.ops.count",
+    "benchmark.ops.types",
+    "benchmark.ops.total_ms",
+    "benchmark.ops.avg_ms",
+    "benchmark.ops.p95_ms",
+    "benchmark.llm.count",
+    "benchmark.llm.total_tokens",
+    "benchmark.llm.avg_latency_ms",
+    "benchmark.llm.tokens_per_sec",
+    "benchmark.llm.first_token_ms",
+]
+
 ALL_METRIC_NAMES = (
     KNOWLEDGE_METRICS
     + INFERENCE_METRICS
@@ -167,6 +180,7 @@ ALL_METRIC_NAMES = (
     + TEST_METRICS
     + SYSTEM_METRICS
     + NEWS_METRICS
+    + BENCHMARK_METRICS
 )
 
 
@@ -488,6 +502,9 @@ class MetaMetrics:
             "tasks.completed",
             "tests.total",
             "tests.passed",
+            "benchmark.ops.count",
+            "benchmark.llm.count",
+            "benchmark.llm.tokens_per_sec",
         }
 
         for metric_name, baseline_val in baselines.items():
@@ -593,6 +610,8 @@ class MetaMetrics:
             ("Tasks", TASK_METRICS),
             ("Tests", TEST_METRICS),
             ("System", SYSTEM_METRICS),
+            ("News", NEWS_METRICS),
+            ("Benchmark", BENCHMARK_METRICS),
         ]
 
         for section_name, metric_names in sections:
@@ -744,6 +763,23 @@ class MetaMetrics:
 
         return result
 
+    def collect_benchmark_metrics(self) -> Dict[str, float]:
+        """Collect benchmark performance metrics.
+
+        Flushes in-memory benchmark data to persistent storage and returns
+        the collected values.
+
+        Returns:
+            Dict of benchmark metric names to values.
+        """
+        try:
+            from engine.logging.benchmark import flush_to_meta_metrics
+
+            return flush_to_meta_metrics(clear=False)
+        except Exception:
+            logger.debug("Benchmark flush unavailable — metrics set to 0")
+            return {}
+
     def collect_all(self) -> Dict[str, float]:
         """Collect and record ALL metric categories.
 
@@ -753,6 +789,7 @@ class MetaMetrics:
         all_metrics: Dict[str, float] = {}
         all_metrics.update(self.collect_system_metrics())
         all_metrics.update(self.collect_nexus_metrics())
+        all_metrics.update(self.collect_benchmark_metrics())
 
         batch = [(name, value) for name, value in all_metrics.items()]
         if batch:

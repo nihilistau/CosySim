@@ -207,6 +207,84 @@ def get_all_operations() -> List[str]:
         return sorted(set(list(_store.keys()) + list(_kpi_store.keys())))
 
 
+def flush_to_meta_metrics(*, clear: bool = False) -> Dict[str, float]:
+    """Flush in-memory benchmark data to MetaMetrics SQLite persistence.
+
+    Computes aggregate statistics from ``_store`` and ``_kpi_store`` and
+    writes them as ``benchmark.*`` metrics to MetaMetrics.  Optionally
+    clears the in-memory stores after a successful flush.
+
+    Args:
+        clear: If *True*, reset the in-memory stores after flushing.
+
+    Returns:
+        Dict mapping each recorded metric name to its value.
+    """
+    benchmarks = get_benchmarks()
+    llm_kpis = get_llm_kpis()
+    metrics: Dict[str, float] = {}
+
+    # Aggregate across all operations
+    total_ops = 0
+    total_calls = 0
+    total_latency = 0.0
+    all_avgs: List[float] = []
+    all_p95s: List[float] = []
+
+    for _op, stats in benchmarks.items():
+        total_ops += 1
+        total_calls += stats["count"]
+        total_latency += stats["total_ms"]
+        all_avgs.append(stats["avg_ms"])
+        all_p95s.append(stats["p95_ms"])
+
+    metrics["benchmark.ops.count"] = float(total_calls)
+    metrics["benchmark.ops.types"] = float(total_ops)
+    metrics["benchmark.ops.total_ms"] = round(total_latency, 2)
+    if all_avgs:
+        metrics["benchmark.ops.avg_ms"] = round(
+            sum(all_avgs) / len(all_avgs), 2
+        )
+        metrics["benchmark.ops.p95_ms"] = round(max(all_p95s), 2)
+    else:
+        metrics["benchmark.ops.avg_ms"] = 0.0
+        metrics["benchmark.ops.p95_ms"] = 0.0
+
+    # LLM KPIs
+    metrics["benchmark.llm.count"] = float(llm_kpis.get("count", 0))
+    metrics["benchmark.llm.total_tokens"] = float(
+        llm_kpis.get("total_tokens_in", 0)
+        + llm_kpis.get("total_tokens_out", 0)
+    )
+    metrics["benchmark.llm.avg_latency_ms"] = float(
+        llm_kpis.get("avg_latency_ms", 0)
+    )
+    metrics["benchmark.llm.tokens_per_sec"] = float(
+        llm_kpis.get("avg_tokens_per_sec", 0)
+    )
+    metrics["benchmark.llm.first_token_ms"] = float(
+        llm_kpis.get("avg_first_token_ms", 0)
+    )
+
+    if not metrics:
+        return metrics
+
+    try:
+        from engine.nexus.meta_metrics import get_meta_metrics
+
+        mm = get_meta_metrics()
+        batch = [(name, value) for name, value in metrics.items()]
+        mm.record_batch(batch)
+        logger.info("Flushed %d benchmark metrics to MetaMetrics", len(batch))
+    except Exception as exc:
+        logger.warning("Failed to flush benchmarks to MetaMetrics: %s", exc)
+
+    if clear:
+        reset_benchmarks()
+
+    return metrics
+
+
 def reset_benchmarks(operation: Optional[str] = None) -> None:
     """Clear benchmarks for one operation, or all if *operation* is None."""
     with _lock:
