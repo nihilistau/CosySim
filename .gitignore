@@ -57,6 +57,28 @@ pretrained_models
 *_pb2_grpc.py
 *_pb2.py
 *.tar
+
+# Model weights and training artifacts (large binaries)
+*.safetensors
+*.gguf
+*.onnx
+*.bin
+*.h5
+*.hdf5
+training/models/
+training/datasets/*.jsonl
+
+# Media binaries
+*.mp4
+*.mp3
+*.avi
+*.mov
+*.mkv
+*.webm
+*.flac
+*.ogg
+content/media/
+content/simulation/media/photo/
 # Security - API tokens and sensitive files
 .lmstudio_token
 *.token
@@ -70,6 +92,11 @@ conversation_history.db
 *.db
 *.sqlite
 *.sqlite3
+
+# SQLite WAL/SHM files
+*.db-wal
+*.db-shm
+*.db-journal
 
 # Logs and temporary files
 logs/
