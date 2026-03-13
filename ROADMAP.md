@@ -10,16 +10,23 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.23 — "NEWS SYSTEM CONSOLIDATION" ✅
+## Current Shipped State: v1.24 — "FEED HEALTH & RESILIENCE" ✅
 
 **Baseline: 20 scenes, 63 scheduler tasks, 67+ workspace/NLM skills, 11,843+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics).**
 
-v1.22–v1.23 added gRPC-web transport for 24 heap-discovered NLM methods, expanded the
-YAML registry to 302 operations (version 5.0), and fixed a critical news system bug where
-fetch and distillation used mismatched category names. All news config is now YAML-driven
-with proper category mapping (8 source → 4 super-categories).
+v1.24 replaced 4 dead RSS feeds discovered during live end-to-end validation and added
+a Nexus reachability guard to prevent multi-minute hangs when Nexus is offline. The news
+pipeline now does a 2-second TCP check before attempting storage.
 
 ---
+
+## Shipped: v1.24 — "FEED HEALTH & RESILIENCE" ✅
+
+- [x] Replaced 4 dead RSS feeds: Reuters→Guardian World, AP News→NPR, Changelog→HN Best, Python Insider→blog.python.org
+- [x] Added `_nexus_reachable()` TCP check (2s timeout) to news pipeline
+- [x] Guarded `store_items_to_nexus`, `store_qa_to_nexus`, `get_latest_digest` with reachability check
+- [x] Live end-to-end validation: 32 items fetched and stored across 8 categories
+- [x] 211/211 focused tests passing
 
 ## Shipped: v1.23 — "NEWS SYSTEM CONSOLIDATION" ✅
 

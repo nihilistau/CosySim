@@ -4,6 +4,24 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.24] — "FEED HEALTH & RESILIENCE" — 2026-07
+
+Live end-to-end validation of the news pipeline revealed 4 dead RSS feeds and
+a potential multi-minute hang when Nexus is offline during article storage.
+
+### Fixed
+- Replaced 4 dead RSS feeds:
+  - Reuters (`feeds.reuters.com` DNS failure) → The Guardian World
+  - AP News via RSSHub (403 Forbidden) → NPR Top Stories
+  - Changelog News (404) → Hacker News Best
+  - Python Insider FeedBurner (404) → blog.python.org
+- Added `_nexus_reachable()` 2-second TCP check to `store_items_to_nexus`,
+  `store_qa_to_nexus`, and `get_latest_digest` — prevents blocking for
+  minutes when Nexus server is offline (each `add_entry()` has 30s timeout
+  × 2 retries = 60s per item)
+
+---
+
 ## [1.23] — "NEWS SYSTEM CONSOLIDATION" — 2026-07
 
 Fixed a critical bug where news fetch and distillation used mismatched category
