@@ -1,19 +1,4 @@
-# CosySim launcher.yaml — auto_start overrides for control_plane_registry.py
-# Scenes and services listed here override the registry's built-in defaults.
-# Entries with auto_start: true launch automatically when the TUI starts.
-
 scenes:
-  # ── Auto-launch scenes ──
-  phone:
-    auto_start: true       # SIGNAL — primary comms
-  penthouse:
-    auto_start: true       # main interactive scene
-  intel_hub:
-    auto_start: true       # briefing / intel feeds
-  neoncity:
-    auto_start: true       # open-world city scene
-
-  # ── Manual-launch scenes ──
   arena:
     auto_start: false
   asset_studio:
@@ -32,40 +17,46 @@ scenes:
     auto_start: false
   heist:
     auto_start: false
+  intel_hub:
+    auto_start: true
   lab_break:
     auto_start: false
   lounge:
     auto_start: false
+  neoncity:
+    auto_start: true
+  penthouse:
+    auto_start: false
+  phone:
+    auto_start: true
   realm:
     auto_start: false
   tavern:
     auto_start: false
-
 services:
-  # ── Auto-launch services ──
-  hub:
-    auto_start: true       # CosySim Hub — central web UI
-  nexus_panel:
-    auto_start: true       # Nexus knowledge panel
-  nlm_proxy:
-    auto_start: true       # NotebookLM live proxy
-  system_control:
-    auto_start: true       # system control panel
-  bridge:
-    auto_start: true       # MCP bridge — inter-service comms
-  canvas:
-    auto_start: true       # Nexus Canvas (Node.js)
-  canvas_api:
-    auto_start: true       # Canvas API backend
-
-  # ── Manual-launch services ──
   admin:
     auto_start: false
   assets:
     auto_start: false
+  bridge:
+    auto_start: true
+  canvas:
+    auto_start: true
+  canvas_api:
+    auto_start: true
   creator:
     auto_start: false
   dashboard:
     auto_start: false
+  hub:
+    auto_start: true
+  nexus_panel:
+    auto_start: true
+  nlm_proxy:
+    auto_start: true
+  system_control:
+    auto_start: true
+  totally_nonexistent_scene_xyz:
+    auto_start: true
   tts:
     auto_start: false
