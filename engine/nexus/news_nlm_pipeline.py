@@ -304,7 +304,11 @@ class NewsNLMPipeline:
         logger.warning("Digest upload failed — no NLM path available for notebook %s", notebook_id)
         return False
 
-    def _run_distillation(self, notebook_id: str) -> List[Dict[str, str]]:
+    def _run_distillation(
+        self,
+        notebook_id: str,
+        questions: Optional[List[str]] = None,
+    ) -> List[Dict[str, str]]:
         """Run batch distillation questions against the news notebook.
 
         Strategy:
@@ -314,17 +318,19 @@ class NewsNLMPipeline:
 
         Args:
             notebook_id: NLM notebook containing today's news.
+            questions: Optional override questions. Defaults to DISTILLATION_QUESTIONS.
 
         Returns:
             List of {question, answer} dicts from NLM.
         """
+        active_questions = questions if questions else DISTILLATION_QUESTIONS
         results = None
 
         # Primary: NLMClient.ask_batch() from nlm_live_proxy (citations via CYK0Xb)
         proxy = self._get_nlm_proxy_client()
         if proxy:
             try:
-                results = proxy.ask_batch(notebook_id, DISTILLATION_QUESTIONS)
+                results = proxy.ask_batch(notebook_id, active_questions)
             except Exception as exc:
                 logger.debug("NLMClient.ask_batch failed: %s", exc)
 
@@ -332,7 +338,7 @@ class NewsNLMPipeline:
         if results is None:
             try:
                 hybrid = self._get_hybrid()
-                results = hybrid.ask_batch(notebook_id, DISTILLATION_QUESTIONS)
+                results = hybrid.ask_batch(notebook_id, active_questions)
             except Exception as exc:
                 logger.debug("Hybrid ask_batch failed: %s", exc)
                 return []
@@ -341,7 +347,7 @@ class NewsNLMPipeline:
             return []
 
         qa_pairs = []
-        for q, r in zip(DISTILLATION_QUESTIONS, results):
+        for q, r in zip(active_questions, results):
             if isinstance(r, dict):
                 answer = r.get("answer", "")
             else:
@@ -399,6 +405,8 @@ class NewsNLMPipeline:
         digest_text: Optional[str] = None,
         max_articles: int = 20,
         dry_run: bool = False,
+        questions: Optional[List[str]] = None,
+        category: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Run the full news NLM distillation pipeline.
 
@@ -407,6 +415,8 @@ class NewsNLMPipeline:
             digest_text: Pre-built digest text (overrides article building).
             max_articles: Cap on articles to include.
             dry_run: If True, build but don't upload or store.
+            questions: Optional category-specific questions (overrides generic).
+            category: Optional category label for tagging Q&A.
 
         Returns:
             Dict with keys: notebook_id, uploaded, qa_count, stored, error.
@@ -470,7 +480,7 @@ class NewsNLMPipeline:
         time.sleep(3)
 
         # 5. Run distillation
-        qa_pairs = self._run_distillation(notebook_id)
+        qa_pairs = self._run_distillation(notebook_id, questions=questions)
         result["qa_count"] = len(qa_pairs)
 
         if not qa_pairs and digest_text:

@@ -634,80 +634,166 @@ class NewsSourceRegistry:
             return child.text.strip()
         return ""
 
+    # ──── Distillation Config ─────────────────────────────────────────────
 
-# ──── Curated News Constants (consolidated from source_registry) ────────
+    def get_distillation_config(self) -> Dict[str, Any]:
+        """Return the distillation section from config.
 
-NEWS_SOURCES_BY_CATEGORY: Dict[str, List[Dict[str, str]]] = {
-    "ai_research": [
-        {"name": "Hugging Face Blog", "rss": "https://huggingface.co/blog/feed.xml"},
-        {"name": "Google AI Blog", "rss": "https://blog.google/technology/ai/rss"},
-        {"name": "OpenAI News", "rss": "https://openai.com/blog/rss.xml"},
-        {"name": "Towards Data Science", "rss": "https://towardsdatascience.com/feed"},
-        {"name": "The Batch", "rss": "https://read.deeplearning.ai/the-batch/rss"},
-    ],
-    "tech": [
-        {"name": "Hacker News", "rss": "https://hnrss.org/frontpage"},
-        {"name": "Ars Technica", "rss": "https://feeds.arstechnica.com/arstechnica/technology-lab"},
-        {"name": "The Verge", "rss": "https://www.theverge.com/rss/index.xml"},
-    ],
-    "world": [
-        {"name": "Reuters", "rss": "https://feeds.reuters.com/reuters/topNews"},
-        {"name": "BBC World", "rss": "http://feeds.bbci.co.uk/news/world/rss.xml"},
-    ],
-    "science": [
-        {"name": "Phys.org", "rss": "https://phys.org/rss-feed/"},
-        {"name": "New Scientist", "rss": "https://www.newscientist.com/feed/home/"},
-    ],
-}
+        Returns:
+            Dict with keys: category_mapping, questions, nlm_notebooks, super_categories.
+        """
+        with self._lock:
+            return dict(self._config.get("distillation", {}))
 
-CURATED_QUESTIONS: Dict[str, List[str]] = {
-    "ai_research": [
-        "What are the most significant AI research findings reported today?",
-        "Which papers or announcements could change how we build AI systems?",
-        "What are the key technical claims and are there limitations or caveats mentioned?",
-        "Which organisations are leading today's AI developments?",
-        "What should a developer building with LLMs know from today's news?",
-        "Are there any safety, ethics, or policy developments worth noting?",
-        "What open-source models or tools were announced or released?",
-        "What benchmarks or evaluations were published?",
-        "What is the overall sentiment — optimistic, cautious, or concerning?",
-        "Summarise today's AI news in 5 bullet points.",
-    ],
-    "tech": [
-        "What are the biggest tech stories today?",
-        "What developer tools, frameworks, or platforms were announced?",
-        "What security or privacy issues were reported?",
-        "What infrastructure or cloud developments were notable?",
-        "Summarise today's tech news in 5 bullet points.",
-    ],
-    "world": [
-        "What are the most significant global events today?",
-        "Are there any economic developments that could affect technology sectors?",
-        "What geopolitical events might affect international AI development?",
-        "Summarise today's world news in 5 bullet points.",
-    ],
-    "science": [
-        "What are the most important scientific breakthroughs reported today?",
-        "Are there any findings relevant to AI or computing?",
-        "What medical or biological discoveries were announced?",
-        "Summarise today's science news in 5 bullet points.",
-    ],
-}
+    def get_category_mapping(self) -> Dict[str, str]:
+        """Return mapping from YAML source categories to distillation super-categories.
+
+        Returns:
+            Dict mapping source category name to super-category name.
+        """
+        with self._lock:
+            return dict(self._config.get("distillation", {}).get("category_mapping", {}))
+
+    def get_distillation_categories(self) -> List[str]:
+        """Return the list of distillation super-categories.
+
+        Returns:
+            List of super-category names (e.g. ['ai_research', 'tech', 'world', 'science']).
+        """
+        with self._lock:
+            return list(self._config.get("distillation", {}).get("super_categories", []))
+
+    def get_distillation_questions(self, super_category: str) -> List[str]:
+        """Return distillation questions for a super-category.
+
+        Args:
+            super_category: One of the distillation super-categories.
+
+        Returns:
+            List of question strings, or a single generic fallback question.
+        """
+        with self._lock:
+            questions = self._config.get("distillation", {}).get("questions", {})
+            return list(questions.get(super_category, [f"What are the key {super_category} developments?"]))
+
+    def get_nlm_notebook_id(self, super_category: str) -> Optional[str]:
+        """Return the permanent NLM notebook ID for a super-category.
+
+        Args:
+            super_category: One of the distillation super-categories.
+
+        Returns:
+            Notebook UUID string, or None if not configured.
+        """
+        with self._lock:
+            notebooks = self._config.get("distillation", {}).get("nlm_notebooks", {})
+            return notebooks.get(super_category)
+
+    def get_source_categories_for_super(self, super_category: str) -> List[str]:
+        """Return which YAML source categories map to a given super-category.
+
+        Args:
+            super_category: Distillation super-category.
+
+        Returns:
+            List of source category names that roll up to this super-category.
+        """
+        mapping = self.get_category_mapping()
+        return [src_cat for src_cat, sup_cat in mapping.items() if sup_cat == super_category]
+
+    def list_categories(self) -> List[str]:
+        """Return all YAML source categories (deduplicated).
+
+        Returns:
+            Sorted list of source category names.
+        """
+        with self._lock:
+            cats = set()
+            for src in self._sources.values():
+                if src.category:
+                    cats.add(src.category)
+            return sorted(cats)
+
+    def get_sources_as_rss_dicts(self, category: Optional[str] = None) -> List[Dict[str, str]]:
+        """Return sources in the {name, rss} dict format expected by RSSFetcher.
+
+        Filters to RSS-type sources only (type 'rss'). Adapts 'url' key to 'rss'.
+
+        Args:
+            category: Optional category filter.
+
+        Returns:
+            List of dicts with 'name' and 'rss' keys.
+        """
+        sources = self.list_sources(category=category, enabled_only=True)
+        result: List[Dict[str, str]] = []
+        for src in sources:
+            if src.type == "rss":
+                result.append({"name": src.name, "rss": src.url})
+        return result
+
+
+# ──── Backward-Compatible Helper Functions ───────────────────────────────
+# These delegate to NewsSourceRegistry, replacing former hardcoded dicts.
 
 
 def get_sources(category: str) -> List[Dict[str, str]]:
-    """Get news sources for a category."""
-    return NEWS_SOURCES_BY_CATEGORY.get(category, [])
+    """Get news sources for a category in {name, rss} format.
+
+    For backward compatibility with RSSFetcher which expects 'rss' key.
+    Checks both YAML source categories and distillation super-categories.
+
+    Args:
+        category: Source category or super-category name.
+
+    Returns:
+        List of dicts with 'name' and 'rss' keys.
+    """
+    registry = get_news_registry()
+
+    # Direct YAML category match
+    sources = registry.get_sources_as_rss_dicts(category)
+    if sources:
+        return sources
+
+    # Check if it's a super-category — get all source categories that map to it
+    src_cats = registry.get_source_categories_for_super(category)
+    result: List[Dict[str, str]] = []
+    for src_cat in src_cats:
+        result.extend(registry.get_sources_as_rss_dicts(src_cat))
+    return result
 
 
 def get_questions(category: str) -> List[str]:
-    """Get curated distillation questions for a category."""
-    return CURATED_QUESTIONS.get(category, CURATED_QUESTIONS.get("tech", []))
+    """Get distillation questions for a category.
+
+    Checks distillation super-categories first, falls back to a generic question.
+
+    Args:
+        category: Distillation super-category name.
+
+    Returns:
+        List of question strings.
+    """
+    return get_news_registry().get_distillation_questions(category)
 
 
 def get_all_categories() -> List[str]:
-    """Get all available news categories."""
-    return list(NEWS_SOURCES_BY_CATEGORY.keys())
+    """Get all available source categories from YAML config.
+
+    Returns:
+        Sorted list of source category names.
+    """
+    return get_news_registry().list_categories()
+
+
+def get_distillation_categories() -> List[str]:
+    """Get distillation super-categories from YAML config.
+
+    Returns:
+        List of super-category names.
+    """
+    return get_news_registry().get_distillation_categories()
 
 
 # ──── Singleton ───────────────────────────────────────────────────────────
