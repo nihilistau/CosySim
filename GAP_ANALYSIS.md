@@ -7,10 +7,10 @@ CosySim has a **strong foundation** for self-improvement with 3 major operationa
 2. **Training Flywheel** — Continuous collection of training data from system interactions
 3. **Metrics & Reflection** — System-wide metrics tracking with NLM-driven insights
 
-However, there are **critical gaps** preventing true end-to-end autonomy:
-- No causal analysis (what metrics drive what outcomes?)
+As of **v1.28**, most metric-layer gaps have been addressed — 5 of the original 7 gaps in Section 1 are now **CLOSED** (aggregation, correlation, anomaly detection, forecasting, alert routing). Two gaps remain open:
+- No causal inference (partially addressed by CorrelationEngine but true causal DAG inference not implemented)
+- Limited tagging/dimensionality
 - No predictive refresh (refreshing knowledge before it degrades)
-- No anomaly detection (early warning before failures)
 - Limited model promotion criteria (score-based only)
 - No impact quantification (which improvements actually matter?)
 
@@ -50,16 +50,16 @@ However, there are **critical gaps** preventing true end-to-end autonomy:
 - .snapshot() — Latest value for every metric
 - .stats() — Total points, unique metrics, date range, alert count
 
-### ❌ GAPS
+### GAPS (5/7 CLOSED in v1.28)
 
 | Gap | Impact | Severity |
 |-----|--------|----------|
-| **No metric aggregation across time windows** | Can't easily answer "what's the 95th percentile?" or "what's the max over the week?" | Medium |
-| **No metric correlation analysis** | Can't detect: which metrics cause which outcomes? (e.g., cache hit rate → LLM calls) | High |
-| **No anomaly detection** | Only 3 alerts: regression, threshold, trend — no statistical anomalies (sudden spikes/drops) | High |
-| **No causal inference** | Can record "quality went down" but not "why" (root cause analysis) | High |
-| **No prediction/forecasting** | Can't predict future metric values or identify degrading trends early | Critical |
-| **No alert routing/escalation** | All alerts stored, none acted upon automatically | Medium |
+| **No metric aggregation across time windows** | CLOSED by UnifiedDashboard (v1.28) — time-range queries, period comparison, widget aggregation | ✅ CLOSED |
+| **No metric correlation analysis** | CLOSED by CorrelationEngine (v1.28) — Pearson/Spearman correlation with significance testing | ✅ CLOSED |
+| **No anomaly detection** | CLOSED by AnomalyDetector (v1.28) — z-score, IQR, MAD statistical anomaly detection | ✅ CLOSED |
+| **No causal inference** | Can record "quality went down" but not "why" (root cause analysis). Partially addressed by CorrelationEngine but true causal DAG inference not implemented | High |
+| **No prediction/forecasting** | CLOSED by TrendPredictor (v1.28) — linear regression forecasting with confidence intervals | ✅ CLOSED |
+| **No alert routing/escalation** | CLOSED by AlertRouter (v1.28) — severity-based routing with escalation chains | ✅ CLOSED |
 | **Limited tagging/dimensionality** | Can only tag individual metric points, not slice by model_type, agent_id, etc. | Medium |
 
 ---

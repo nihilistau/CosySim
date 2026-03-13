@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.27** "SYSTEM PROCESS MONITOR" ✅ | Last updated: 2026-07
+> Current: **v1.28** "UNIFIED MODULAR MONITORING" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,16 +10,35 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.27 — "SYSTEM PROCESS MONITOR" ✅
+## Current Shipped State: v1.28 — "UNIFIED MODULAR MONITORING" ✅
 
-**Baseline: 20 scenes, 67 scheduler tasks, 67+ workspace/NLM skills, 11,891+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor MCP skills.**
+**Baseline: 20 scenes, 68 scheduler tasks, 81+ workspace/NLM/monitoring skills, 12,458+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills.**
 
-v1.27 adds a complete system process monitoring subsystem: ProcessMonitor
-singleton with psutil-based process scanning, category classification (12
-categories), git operation detection (6 op types with phase tracking), stall
-detection (dual-sample CPU delta), tracked operations, system snapshots, CLI
-interface, 10 MCP skills, MetricsDB persistence, MetricsCollector tick-loop
-integration, 3 scheduler tasks, and 48 tests.
+v1.28 adds a complete unified modular monitoring system: PackTracker for skill
+pack execution tracking with PID/CPU cross-referencing, AnomalyDetector with
+z-score/IQR/MAD statistical detection, CorrelationEngine for Pearson/Spearman
+metric correlation analysis, TrendPredictor with linear regression forecasting,
+AlertRouter for severity-based alert routing with escalation chains,
+UnifiedMonitor as the top-level orchestrator facade, UnifiedDashboard with
+time-range queries and widget data, 14 MCP monitoring skills, and 453 tests.
+Closes 5 of 7 HIGH/CRITICAL gaps from the gap analysis.
+
+---
+
+## Shipped: v1.28 — "UNIFIED MODULAR MONITORING" ✅
+- [x] `engine/observability/pack_tracker.py` — PackTracker singleton: skill pack execution tracking, PID/CPU cross-referencing, hourly rollups, SkillRegistry hook
+- [x] `engine/observability/anomaly_detector.py` — AnomalyDetector: z-score, IQR, MAD methods with configurable thresholds, SQLite persistence
+- [x] `engine/observability/correlation_engine.py` — CorrelationEngine: Pearson/Spearman correlation analysis with significance testing
+- [x] `engine/observability/trend_predictor.py` — TrendPredictor: linear regression forecasting with background analysis thread
+- [x] `engine/observability/alert_router.py` — AlertRouter: severity-based routing with escalation chains, suppression windows, routing rules
+- [x] `engine/observability/unified_monitor.py` — UnifiedMonitor: top-level orchestrator facade composing all 3 existing layers + 5 new modules
+- [x] `engine/observability/unified_dashboard.py` — UnifiedDashboard: dashboard API with time-range queries, widget data, period comparison
+- [x] `engine/skills/builtin/monitoring_skills.py` — 14 @skill(pack="monitoring") MCP skills for agent access
+- [x] `engine/observability/__init__.py` — Updated with 15 class + 9 singleton exports
+- [x] 7 scheduler tasks registered for monitoring modules
+- [x] Fix news_pipeline test categories (ai_research→ai_ml, tech→science)
+- [x] Update 7 scheduler count assertions (61→67/68) for new monitoring tasks
+- [x] 453/453 new tests passing across 8 test files
 
 ---
 
@@ -42,7 +61,7 @@ integration, 3 scheduler tasks, and 48 tests.
 
 ---
 
-## Current Shipped State: v1.26 — "PIPELINE ENGINE v2" ✅
+## Shipped: v1.26 — "PIPELINE ENGINE v2" ✅
 
 **Baseline: 20 scenes, 64 scheduler tasks, 67+ workspace/NLM skills, 11,843+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics).**
 
