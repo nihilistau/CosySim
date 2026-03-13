@@ -116,6 +116,12 @@ class CoverageReport:
     last_run: str
     per_category: Dict[str, Dict[str, int]] = field(default_factory=dict)
     parameter_coverage: Dict[str, int] = field(default_factory=dict)
+    appscript_operations: int = 0
+    workspace_sections: int = 0
+    workspace_operations: int = 0
+    nlm_grpc_methods: int = 0
+    heap_discovered_methods: int = 0
+    per_service: Dict[str, int] = field(default_factory=dict)
 
 
 # ─── Registry Loader ─────────────────────────────────────────────────────────
@@ -151,6 +157,39 @@ class RegistryLoader:
         return self._data.get("colab", {}).get("methods", {})
 
     @property
+    def appscript_operations(self) -> Dict[str, Dict[str, Any]]:
+        """Apps Script batchexecute operations."""
+        ops = self._data.get("appscript", {}).get("operations", {})
+        return {k: v for k, v in ops.items() if isinstance(v, dict)}
+
+    @property
+    def nlm_grpc_methods(self) -> Dict[str, Dict[str, Any]]:
+        """NLM gRPC methods (discovered via gRPC-Web traffic)."""
+        return self._data.get("nlm_grpc", {}).get("methods", {})
+
+    @property
+    def heap_discovered_methods(self) -> Dict[str, Dict[str, Any]]:
+        """Methods discovered via V8 heap analysis."""
+        return self._data.get("nlm_heap_discovered", {}).get("methods", {})
+
+    @property
+    def workspace_sections(self) -> Dict[str, Dict[str, Any]]:
+        """All workspace service sections with their operations."""
+        _WS_KEYS = [
+            "workspace_gemini", "sheets_gemini", "cloud_search",
+            "docs_gemini", "drive_gemini", "workspace_support",
+            "drive_v2internal", "sheets_extended", "people_stack",
+            "workspace_analytics",
+        ]
+        result: Dict[str, Dict[str, Any]] = {}
+        for key in _WS_KEYS:
+            section = self._data.get(key, {})
+            ops = section.get("operations", section.get("methods", {}))
+            if ops and isinstance(ops, dict):
+                result[key] = {k: v for k, v in ops.items() if isinstance(v, dict)}
+        return result
+
+    @property
     def quota_events(self) -> Dict[str, Dict[str, Any]]:
         return self._data.get("quota_events", {})
 
@@ -177,8 +216,71 @@ class RegistryLoader:
         param = self.parameters.get(param_name, {})
         return param.get("options", {})
 
+    def get_all_services(self) -> Dict[str, Dict[str, Any]]:
+        """Return a flat map of all service sections and their operations.
+
+        Returns:
+            Dict mapping service name → {op_name: op_data} for every known
+            service in the registry (NLM, Gemini, AI Studio, Colab, Apps Script,
+            workspace sections, gRPC, heap-discovered).
+        """
+        services: Dict[str, Dict[str, Any]] = {
+            "nlm": self.operations,
+            "gemini": self.gemini_rpcids,
+            "aistudio": self.aistudio_methods,
+            "colab": self.colab_methods,
+            "appscript": self.appscript_operations,
+            "nlm_grpc": self.nlm_grpc_methods,
+            "heap_discovered": self.heap_discovered_methods,
+        }
+        for ws_key, ws_ops in self.workspace_sections.items():
+            services[ws_key] = ws_ops
+        return services
+
+    def get_all_testable(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """Return testable operations grouped by service.
+
+        An operation is testable if it has a ``rpcid`` (for batchexecute
+        services) or a ``service_method`` (for gRPC services) or a ``path``
+        (for REST services).
+
+        Returns:
+            Dict mapping service name → {op_name: op_data}.
+        """
+        def _has_endpoint(op: Dict[str, Any]) -> bool:
+            if not isinstance(op, dict):
+                return False
+            return bool(op.get("rpcid") or op.get("service_method") or op.get("path"))
+
+        result: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        for svc_name, ops in self.get_all_services().items():
+            testable = {k: v for k, v in ops.items() if _has_endpoint(v)}
+            if testable:
+                result[svc_name] = testable
+        return result
+
+    def get_service_operations(self, target: str) -> Dict[str, Dict[str, Any]]:
+        """Get operations for a specific service target.
+
+        Args:
+            target: One of nlm, gemini, aistudio, colab, appscript, workspace,
+                    nlm_grpc, heap_discovered, or a specific workspace section name.
+
+        Returns:
+            Dict of {op_name: op_data} for the target service.
+        """
+        if target == "workspace":
+            merged: Dict[str, Dict[str, Any]] = {}
+            for ws_key, ws_ops in self.workspace_sections.items():
+                for op_name, op_data in ws_ops.items():
+                    merged[f"{ws_key}.{op_name}"] = op_data
+            return merged
+
+        service_map = self.get_all_services()
+        return service_map.get(target, {})
+
     def build_coverage_report(self) -> CoverageReport:
-        """Build a coverage statistics report."""
+        """Build a coverage statistics report across all services."""
         ops = self.operations
         testable = self.get_testable_operations()
         heap_only = self.get_heap_only_operations()
@@ -204,6 +306,21 @@ class RegistryLoader:
         tested = len(testable)
         coverage = (tested / total * 100) if total > 0 else 0.0
 
+        ws = self.workspace_sections
+        ws_op_count = sum(len(v) for v in ws.values())
+
+        per_service: Dict[str, int] = {
+            "nlm": len(ops),
+            "gemini": len(self.gemini_rpcids),
+            "aistudio": len(self.aistudio_methods),
+            "colab": len(self.colab_methods),
+            "appscript": len(self.appscript_operations),
+            "nlm_grpc": len(self.nlm_grpc_methods),
+            "heap_discovered": len(self.heap_discovered_methods),
+        }
+        for ws_key, ws_ops in ws.items():
+            per_service[ws_key] = len(ws_ops)
+
         return CoverageReport(
             total_operations=total,
             tested_operations=tested,
@@ -218,6 +335,12 @@ class RegistryLoader:
             last_run=datetime.now(timezone.utc).isoformat(),
             per_category=per_cat,
             parameter_coverage=param_cov,
+            appscript_operations=len(self.appscript_operations),
+            workspace_sections=len(ws),
+            workspace_operations=ws_op_count,
+            nlm_grpc_methods=len(self.nlm_grpc_methods),
+            heap_discovered_methods=len(self.heap_discovered_methods),
+            per_service=per_service,
         )
 
 
@@ -706,22 +829,33 @@ class AutoExplorer:
         notebook_id: Optional[str] = None,
         categories: Optional[List[str]] = None,
         skip_notebook_ops: bool = False,
+        target: Optional[str] = None,
     ) -> CoverageReport:
-        """Run automated exploration of all testable operations.
+        """Run automated exploration of testable operations.
 
         Args:
             notebook_id: Notebook ID for operations that require one.
             categories: Only test these categories (None = all).
             skip_notebook_ops: Skip operations requiring a notebook ID.
+            target: Service target to explore (nlm, gemini, aistudio, colab,
+                    appscript, workspace, nlm_grpc, heap_discovered, or None
+                    for NLM-only legacy behaviour).
 
         Returns:
             CoverageReport with results.
         """
-        ops = self._loader.get_testable_operations()
+        if target and target != "nlm":
+            ops = self._loader.get_service_operations(target)
+            # Filter to testable only
+            ops = {k: v for k, v in ops.items()
+                   if isinstance(v, dict) and (v.get("rpcid") or v.get("service_method") or v.get("path"))}
+        else:
+            ops = self._loader.get_testable_operations()
+
         if categories:
             ops = {k: v for k, v in ops.items() if v.get("category") in categories}
 
-        logger.info("AutoExplorer: %d testable operations", len(ops))
+        logger.info("AutoExplorer: %d testable operations (target=%s)", len(ops), target or "nlm")
 
         for name, op in sorted(ops.items()):
             if skip_notebook_ops and op.get("requires_notebook"):
@@ -733,7 +867,8 @@ class AutoExplorer:
                 logger.info("Skipping %s (requires notebook, none provided)", name)
                 continue
 
-            logger.info("Testing %s (%s)...", name, op.get("rpcid", "?"))
+            rpcid = op.get("rpcid") or op.get("service_method") or op.get("path") or "?"
+            logger.info("Testing %s (%s)...", name, rpcid)
             result = self._tester.test_operation(name, notebook_id=nb)
             self._results.append(result)
             append_result(result)
@@ -831,6 +966,11 @@ def main() -> None:
                         help="Store full API catalog in Nexus")
     parser.add_argument("--skip-notebook-ops", action="store_true",
                         help="Skip operations requiring a notebook ID")
+    parser.add_argument("--target", type=str, default=None,
+                        choices=["nlm", "gemini", "aistudio", "colab",
+                                 "appscript", "workspace", "nlm_grpc",
+                                 "heap_discovered", "all"],
+                        help="Service target to explore (default: nlm)")
 
     args = parser.parse_args()
 
@@ -886,15 +1026,21 @@ def main() -> None:
     # Default: auto exploration
     explorer = AutoExplorer()
     categories = [args.category] if args.category else None
+    target = args.target if args.target != "all" else None
     report = explorer.run_full_exploration(
         notebook_id=args.notebook,
         categories=categories,
         skip_notebook_ops=args.skip_notebook_ops,
+        target=target,
     )
     print(f"\nCoverage: {report.coverage_pct}% ({report.tested_operations}/{report.total_operations})")
     print(f"Gemini: {report.gemini_rpcids} rpcids")
     print(f"AI Studio: {report.aistudio_methods} methods")
     print(f"Colab: {report.colab_methods} methods")
+    print(f"Apps Script: {report.appscript_operations} operations")
+    print(f"Workspace: {report.workspace_sections} sections, {report.workspace_operations} operations")
+    print(f"gRPC: {report.nlm_grpc_methods} methods")
+    print(f"Heap-discovered: {report.heap_discovered_methods} methods")
     print(f"Heap-only (unmapped): {report.heap_only_operations}")
 
 
