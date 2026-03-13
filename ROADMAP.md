@@ -10,13 +10,31 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.25 — "NEWS PIPELINE HARDENING" ✅
+## Current Shipped State: v1.26 — "PIPELINE ENGINE v2" ✅
 
 **Baseline: 20 scenes, 64 scheduler tasks, 67+ workspace/NLM skills, 11,843+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics).**
 
-v1.25 hardens the news pipeline with graceful embedding degradation, staggered
-scheduler intervals, proactive RSS feed health checks, and NLM notebook existence
-validation before distillation.
+v1.26 adds a full meta-stage engine to WorkspacePipeline: retry/backoff with
+exponential/linear strategies, conditional branching (if/then/else with 10+
+operators), parallel branch execution, for-each iteration with optional
+parallelism, sub-pipeline composition, and context validation — all dispatched
+through a unified `_dispatch_stage()` router.
+
+---
+
+## Shipped: v1.26 — "PIPELINE ENGINE v2" ✅
+
+- [x] `_dispatch_stage()` — unified router for all stage types (normal + 4 meta-stage types)
+- [x] Retry/backoff: configurable max retries, exponential/linear backoff, fallback executors
+- [x] Conditional branching: `if/then/else` with `_evaluate_condition()` supporting 10+ operators
+- [x] Parallel execution: `ThreadPoolExecutor`-based branch isolation with merge strategies (all/first/concat)
+- [x] For-each iteration: collection iteration with `max_items` cap, optional parallel execution
+- [x] Sub-pipeline composition: `run_pipeline` stages that recursively call `run()` with template lookup
+- [x] Context validation: `input_requires` pre-check with optional stage skip
+- [x] `_stage_label()` for human-readable meta-stage naming in logs and templates
+- [x] `_cast_value()` for auto-casting condition operands (int, float, bool, null)
+- [x] Refactored `run()` to use `_dispatch_stage()` instead of inline stage loop
+- [x] 155/155 pipeline tests passing (88 existing + 67 new v2 tests)
 
 ---
 

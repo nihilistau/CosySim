@@ -6,7 +6,7 @@ named sequence of stages that move data between services, with Drive as the
 intermediate
 storage / movement layer and Nexus as the final knowledge destination.
 
-Stages (17):
+Stages (30):
     nlm_research       — Research a topic via NotebookLM
     create_doc         — Create a Google Doc (optionally with Gemini content)
     create_sheet       — Create or populate a Google Sheet
@@ -24,6 +24,33 @@ Stages (17):
     sheets_to_doc      — Convert sheet data into a formatted document
     gemini_enrich      — Enrich/transform content using Workspace Gemini
     prewarm            — Pre-warm Gemini models for latency reduction
+    drive_copy         — Copy a Drive file to a new location
+    drive_export       — Export a Drive file to a specified format
+    drive_permissions  — Set permissions on a Drive file
+    sheet_revisions    — Manage Google Sheets revision history
+    colab_execute      — Execute a Colab notebook
+    colab_ask          — Ask Gemini about Colab outputs
+    colab_build        — Build a Colab notebook from prompt
+    aistudio_generate  — Generate content via AI Studio
+    aistudio_embed     — Generate embeddings via AI Studio
+    aistudio_create_applet — Create AI Studio applets
+    aistudio_generate_image — Generate images via AI Studio
+    appscript_run      — Run an Apps Script function
+    appscript_deploy   — Deploy an Apps Script project
+
+Pipeline Engine v2 Meta-Stages (v1.26):
+    Retry/Backoff — Stage-level retry with exponential/linear backoff
+        {"stage": "...", "retry": 3, "backoff": "exponential", "fallback": "alt_stage"}
+    Conditional — Branch based on context evaluation
+        {"if": "condition", "then": [...stages], "else": [...stages]}
+    Parallel — Execute branches concurrently via ThreadPoolExecutor
+        {"parallel": [[...branch1], [...branch2]], "merge": "all"}
+    Loop/Iteration — Iterate over context collections
+        {"for_each": "ctx_key", "as": "item", "stages": [...], "parallel": false}
+    Sub-Pipeline — Compose pipelines by calling templates recursively
+        {"run_pipeline": "template_name", "params": {...}}
+    Context Validation — Require context keys before stage execution
+        {"stage": "...", "input_requires": ["key1", "key2"]}
 
 Pipelines (17):
     research_and_distill   — NLM research → Sheets data → Nexus knowledge
@@ -47,12 +74,15 @@ Pipelines (17):
 
 from __future__ import annotations
 
+import copy
 import logging
+import re
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -1593,6 +1623,721 @@ class WorkspacePipeline:
         """Look up executor for a stage name."""
         return self._custom_stages.get(stage_name) or STAGE_REGISTRY.get(stage_name)
 
+    # ──── Pipeline v2: Meta-Stage Engine (v1.26) ─────────────────────────────
+
+    def _stage_label(self, stage_def: Dict[str, Any]) -> str:
+        """Derive a human-readable label for any stage definition.
+
+        Args:
+            stage_def: Stage definition dict.
+
+        Returns:
+            Stage label string.
+        """
+        if "stage" in stage_def:
+            return stage_def["stage"]
+        if "if" in stage_def:
+            return f"if:{stage_def['if']}"
+        if "for_each" in stage_def:
+            return f"for_each:{stage_def['for_each']}"
+        if "parallel" in stage_def:
+            count = len(stage_def["parallel"])
+            return f"parallel:{count}_branches"
+        if "run_pipeline" in stage_def:
+            return f"sub:{stage_def['run_pipeline']}"
+        return "unknown"
+
+    def _validate_inputs(
+        self,
+        stage_def: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Optional[str]:
+        """Check that required context keys are present before stage execution.
+
+        Args:
+            stage_def: Stage definition with optional ``input_requires``.
+            context: Current pipeline context dict.
+
+        Returns:
+            Error message if validation fails, None if OK.
+        """
+        required = stage_def.get("input_requires")
+        if not required:
+            return None
+        missing = [k for k in required if k not in context]
+        if missing:
+            return f"Missing required context keys: {', '.join(missing)}"
+        return None
+
+    def _evaluate_condition(
+        self,
+        condition: str,
+        context: Dict[str, Any],
+    ) -> bool:
+        """Evaluate a condition expression against the pipeline context.
+
+        Supported expressions::
+
+            key                — truthy check on context[key]
+            key == value       — equality check (value auto-cast)
+            key != value       — inequality check
+            key > value        — numeric greater than
+            key >= value       — numeric greater or equal
+            key < value        — numeric less than
+            key <= value       — numeric less or equal
+            key contains value — substring / membership check
+            key in [a,b,c]     — membership in list
+            not key            — falsy check on context[key]
+
+        Args:
+            condition: Condition string.
+            context: Pipeline context dict.
+
+        Returns:
+            Boolean result.
+        """
+        condition = condition.strip()
+
+        # Negation
+        if condition.startswith("not "):
+            inner = condition[4:].strip()
+            return not self._evaluate_condition(inner, context)
+
+        # Comparison operators (ordered longest-first to avoid prefix collisions)
+        operators: List[Tuple[str, str]] = [
+            (">=", ">="),
+            ("<=", "<="),
+            ("!=", "!="),
+            ("==", "=="),
+            (">", ">"),
+            ("<", "<"),
+            (" contains ", "contains"),
+            (" in ", "in"),
+        ]
+
+        for op, py_op in operators:
+            if op not in condition:
+                continue
+
+            parts = condition.split(op, 1)
+            key = parts[0].strip()
+            value_str = parts[1].strip()
+            ctx_val = context.get(key)
+
+            if py_op == "contains":
+                if ctx_val is None:
+                    return False
+                return value_str in str(ctx_val)
+
+            if py_op == "in":
+                list_match = re.match(r"\[(.+)\]", value_str)
+                if list_match:
+                    items = [v.strip().strip("'\"") for v in list_match.group(1).split(",")]
+                    return str(ctx_val) in items
+                return False
+
+            # Numeric or string comparison
+            compare_val = self._cast_value(value_str)
+            if py_op == "==":
+                return ctx_val == compare_val
+            if py_op == "!=":
+                return ctx_val != compare_val
+            try:
+                num_ctx = float(ctx_val) if ctx_val is not None else 0.0
+                num_cmp = float(compare_val) if compare_val is not None else 0.0
+                if py_op == ">":
+                    return num_ctx > num_cmp
+                if py_op == ">=":
+                    return num_ctx >= num_cmp
+                if py_op == "<":
+                    return num_ctx < num_cmp
+                if py_op == "<=":
+                    return num_ctx <= num_cmp
+            except (TypeError, ValueError):
+                return False
+            break
+
+        # Simple truthy check
+        return bool(context.get(condition))
+
+    @staticmethod
+    def _cast_value(value_str: str) -> Any:
+        """Cast a string value to its most natural Python type.
+
+        Args:
+            value_str: String representation.
+
+        Returns:
+            Casted value (int, float, bool, None, or str).
+        """
+        v = value_str.strip().strip("'\"")
+        if v.lower() == "true":
+            return True
+        if v.lower() == "false":
+            return False
+        if v.lower() in ("none", "null"):
+            return None
+        try:
+            return int(v)
+        except ValueError:
+            pass
+        try:
+            return float(v)
+        except ValueError:
+            pass
+        return v
+
+    def _execute_with_retry(
+        self,
+        executor: Callable,
+        stage_params: Dict[str, Any],
+        context: Dict[str, Any],
+        stage_def: Dict[str, Any],
+        stage_result: StageResult,
+        pipeline_name: str,
+    ) -> Any:
+        """Execute a stage with retry/backoff and optional fallback.
+
+        Retry behaviour is controlled by stage definition keys:
+            ``retry``       — max retry attempts (default 0 = no retry)
+            ``backoff``     — ``"linear"`` or ``"exponential"`` (default)
+            ``retry_delay`` — base delay in seconds (default 1.0)
+            ``fallback``    — name of a fallback stage to try on final failure
+
+        Args:
+            executor: Stage executor function.
+            stage_params: Merged stage parameters.
+            context: Pipeline context.
+            stage_def: Full stage definition dict.
+            stage_result: StageResult to update with retry metadata.
+            pipeline_name: Name of the enclosing pipeline.
+
+        Returns:
+            Stage output on success.
+
+        Raises:
+            Exception: If all retries and fallback are exhausted.
+        """
+        max_retries = stage_def.get("retry", 0)
+        backoff_type = stage_def.get("backoff", "exponential")
+        base_delay = stage_def.get("retry_delay", 1.0)
+        fallback_stage = stage_def.get("fallback")
+
+        last_error: Optional[Exception] = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                output = executor(stage_params, context)
+                if attempt > 0:
+                    stage_result.metadata["retries"] = attempt
+                    logger.info(
+                        "Pipeline %s stage '%s' succeeded on attempt %d",
+                        pipeline_name,
+                        stage_result.stage_name,
+                        attempt + 1,
+                    )
+                return output
+            except Exception as exc:
+                last_error = exc
+                if attempt < max_retries:
+                    if backoff_type == "exponential":
+                        delay = base_delay * (2 ** attempt)
+                    else:
+                        delay = base_delay * (attempt + 1)
+                    logger.warning(
+                        "Pipeline %s stage '%s' attempt %d/%d failed (%s), "
+                        "retrying in %.1fs",
+                        pipeline_name,
+                        stage_result.stage_name,
+                        attempt + 1,
+                        max_retries + 1,
+                        exc,
+                        delay,
+                    )
+                    time.sleep(delay)
+
+        # All retries exhausted — try fallback
+        if fallback_stage:
+            fallback_executor = self._get_executor(fallback_stage)
+            if fallback_executor:
+                logger.warning(
+                    "Pipeline %s stage '%s' exhausted %d attempts, "
+                    "falling back to '%s'",
+                    pipeline_name,
+                    stage_result.stage_name,
+                    max_retries + 1,
+                    fallback_stage,
+                )
+                stage_result.metadata["fallback_used"] = fallback_stage
+                stage_result.metadata["retries"] = max_retries
+                try:
+                    return fallback_executor(stage_params, context)
+                except Exception as fb_exc:
+                    logger.error(
+                        "Pipeline %s fallback stage '%s' also failed: %s",
+                        pipeline_name,
+                        fallback_stage,
+                        fb_exc,
+                    )
+                    raise fb_exc from last_error
+            else:
+                logger.error(
+                    "Pipeline %s fallback stage '%s' not found",
+                    pipeline_name,
+                    fallback_stage,
+                )
+
+        raise last_error  # type: ignore[misc]
+
+    def _execute_conditional(
+        self,
+        stage_def: Dict[str, Any],
+        context: Dict[str, Any],
+        run: PipelineRun,
+        pipeline_name: str,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Execute a conditional (if/then/else) meta-stage.
+
+        Stage definition format::
+
+            {
+                "if": "condition_expression",
+                "then": [... stage defs ...],
+                "else": [... stage defs ...]   # optional
+            }
+
+        Args:
+            stage_def: Conditional stage definition.
+            context: Pipeline context.
+            run: Parent pipeline run.
+            pipeline_name: Pipeline name for logging.
+            **kwargs: Original pipeline kwargs.
+
+        Returns:
+            Updated context dict from the chosen branch.
+        """
+        condition = stage_def["if"]
+        then_stages = stage_def.get("then", [])
+        else_stages = stage_def.get("else", [])
+
+        result = self._evaluate_condition(condition, context)
+        branch_name = "then" if result else "else"
+        branch_stages = then_stages if result else else_stages
+
+        logger.info(
+            "Pipeline %s conditional '%s' → %s branch (%d stages)",
+            pipeline_name,
+            condition,
+            branch_name,
+            len(branch_stages),
+        )
+
+        if not branch_stages:
+            return context
+
+        branch_ctx = dict(context)
+        for bstage in branch_stages:
+            branch_ctx = self._dispatch_stage(
+                bstage, branch_ctx, run, pipeline_name, **kwargs
+            )
+
+        return branch_ctx
+
+    def _execute_parallel(
+        self,
+        stage_def: Dict[str, Any],
+        context: Dict[str, Any],
+        run: PipelineRun,
+        pipeline_name: str,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Execute parallel branches concurrently via ThreadPoolExecutor.
+
+        Stage definition format::
+
+            {
+                "parallel": [
+                    [... stage defs for branch 1 ...],
+                    [... stage defs for branch 2 ...],
+                ],
+                "merge": "all" | "first" | "last",   # default "all"
+                "max_workers": 4,                      # default len(branches)
+                "allow_partial": false                  # default false
+            }
+
+        Each branch receives a deep copy of the context.  Results are merged
+        back according to the ``merge`` strategy.
+
+        Args:
+            stage_def: Parallel stage definition.
+            context: Pipeline context.
+            run: Parent pipeline run.
+            pipeline_name: Pipeline name for logging.
+            **kwargs: Original pipeline kwargs.
+
+        Returns:
+            Merged context dict from all branches.
+        """
+        branches = stage_def["parallel"]
+        merge_strategy = stage_def.get("merge", "all")
+        max_workers = stage_def.get("max_workers", len(branches))
+
+        logger.info(
+            "Pipeline %s parallel execution: %d branches (merge=%s)",
+            pipeline_name,
+            len(branches),
+            merge_strategy,
+        )
+
+        branch_results: List[Tuple[int, Dict[str, Any]]] = []
+
+        def _run_branch(
+            branch_idx: int,
+            branch_stages: List[Dict[str, Any]],
+        ) -> Tuple[int, Dict[str, Any]]:
+            branch_ctx = copy.deepcopy(context)
+            for bstage in branch_stages:
+                branch_ctx = self._dispatch_stage(
+                    bstage, branch_ctx, run, pipeline_name, **kwargs
+                )
+            return branch_idx, branch_ctx
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(_run_branch, i, branch): i
+                for i, branch in enumerate(branches)
+            }
+            for future in as_completed(futures):
+                try:
+                    idx, result_ctx = future.result()
+                    branch_results.append((idx, result_ctx))
+                except Exception as exc:
+                    branch_idx = futures[future]
+                    logger.error(
+                        "Pipeline %s parallel branch %d failed: %s",
+                        pipeline_name,
+                        branch_idx,
+                        exc,
+                    )
+                    if not stage_def.get("allow_partial", False):
+                        raise
+
+        branch_results.sort(key=lambda x: x[0])
+
+        merged = dict(context)
+        if merge_strategy == "first" and branch_results:
+            merged.update(branch_results[0][1])
+        elif merge_strategy == "last" and branch_results:
+            merged.update(branch_results[-1][1])
+        else:
+            for _, branch_ctx in branch_results:
+                for k, v in branch_ctx.items():
+                    if k not in context or v != context.get(k):
+                        merged[k] = v
+
+        merged["_parallel_branches"] = len(branch_results)
+        return merged
+
+    def _execute_for_each(
+        self,
+        stage_def: Dict[str, Any],
+        context: Dict[str, Any],
+        run: PipelineRun,
+        pipeline_name: str,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Execute stages for each item in a context collection.
+
+        Stage definition format::
+
+            {
+                "for_each": "context_key",
+                "as": "item_var",           # default "item"
+                "stages": [... stage defs ...],
+                "parallel": true/false,     # default false
+                "max_items": 100,           # safety cap
+                "max_workers": 8,           # for parallel mode
+                "allow_partial": false      # continue on item failure
+            }
+
+        Args:
+            stage_def: For-each stage definition.
+            context: Pipeline context.
+            run: Parent pipeline run.
+            pipeline_name: Pipeline name for logging.
+            **kwargs: Original pipeline kwargs.
+
+        Returns:
+            Context with ``{context_key}_results`` list and
+            ``{context_key}_count`` integer.
+        """
+        collection_key = stage_def["for_each"]
+        item_var = stage_def.get("as", "item")
+        loop_stages = stage_def.get("stages", [])
+        run_parallel = stage_def.get("parallel", False)
+        max_items = stage_def.get("max_items", 100)
+        allow_partial = stage_def.get("allow_partial", False)
+
+        collection = context.get(collection_key)
+        if not collection:
+            logger.warning(
+                "Pipeline %s for_each: key '%s' is empty or missing",
+                pipeline_name,
+                collection_key,
+            )
+            return context
+
+        if not isinstance(collection, (list, tuple)):
+            collection = [collection]
+
+        items = list(collection)[:max_items]
+        results_key = f"{collection_key}_results"
+
+        logger.info(
+            "Pipeline %s for_each over '%s': %d items (parallel=%s)",
+            pipeline_name,
+            collection_key,
+            len(items),
+            run_parallel,
+        )
+
+        def _process_item(idx: int, item: Any) -> Dict[str, Any]:
+            item_ctx = dict(context)
+            item_ctx[item_var] = item
+            item_ctx[f"{item_var}_index"] = idx
+            for lstage in loop_stages:
+                item_ctx = self._dispatch_stage(
+                    lstage, item_ctx, run, pipeline_name, **kwargs
+                )
+            return item_ctx
+
+        item_results: List[Any] = []
+
+        if run_parallel and len(items) > 1:
+            max_workers = stage_def.get("max_workers", min(len(items), 8))
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {
+                    pool.submit(_process_item, i, item): i
+                    for i, item in enumerate(items)
+                }
+                for future in as_completed(futures):
+                    try:
+                        result_ctx = future.result()
+                        item_results.append(
+                            result_ctx.get(f"{item_var}_output", result_ctx)
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "Pipeline %s for_each item %d failed: %s",
+                            pipeline_name,
+                            futures[future],
+                            exc,
+                        )
+                        if not allow_partial:
+                            raise
+                        item_results.append({"error": str(exc)})
+        else:
+            for i, item in enumerate(items):
+                try:
+                    result_ctx = _process_item(i, item)
+                    item_results.append(
+                        result_ctx.get(f"{item_var}_output", result_ctx)
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Pipeline %s for_each item %d failed: %s",
+                        pipeline_name,
+                        i,
+                        exc,
+                    )
+                    if not allow_partial:
+                        raise
+                    item_results.append({"error": str(exc)})
+
+        updated = dict(context)
+        updated[results_key] = item_results
+        updated[f"{collection_key}_count"] = len(item_results)
+        return updated
+
+    def _execute_sub_pipeline(
+        self,
+        stage_def: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Execute a named pipeline template as a sub-pipeline.
+
+        Stage definition format::
+
+            {
+                "run_pipeline": "template_name",
+                "params": {...},             # merged with parent context
+                "pass_context": true/false   # default true
+            }
+
+        Args:
+            stage_def: Sub-pipeline stage definition.
+            context: Parent pipeline context.
+
+        Returns:
+            Updated context with sub-pipeline outputs merged in.
+
+        Raises:
+            RuntimeError: If the sub-pipeline fails.
+        """
+        template_name = stage_def["run_pipeline"]
+        sub_params = stage_def.get("params", {})
+        pass_context = stage_def.get("pass_context", True)
+
+        merged_params: Dict[str, Any] = {}
+        if pass_context:
+            merged_params.update(context)
+        merged_params.update(sub_params)
+
+        # Remove internal keys to avoid confusion in sub-pipeline
+        for internal_key in ("run_id", "pipeline_name"):
+            merged_params.pop(internal_key, None)
+
+        logger.info(
+            "Pipeline sub-call: running '%s' template",
+            template_name,
+        )
+
+        sub_run = self.run(template_name, **merged_params)
+
+        updated = dict(context)
+        if sub_run.status == PipelineStatus.COMPLETED and sub_run.final_output:
+            if isinstance(sub_run.final_output, dict):
+                updated.update(sub_run.final_output)
+        updated[f"sub_{template_name}_run_id"] = sub_run.run_id
+        updated[f"sub_{template_name}_status"] = sub_run.status.value
+
+        if sub_run.status == PipelineStatus.FAILED:
+            raise RuntimeError(
+                f"Sub-pipeline '{template_name}' failed: {sub_run.error}"
+            )
+
+        return updated
+
+    def _dispatch_stage(
+        self,
+        stage_def: Dict[str, Any],
+        context: Dict[str, Any],
+        run: PipelineRun,
+        pipeline_name: str,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Dispatch a stage definition to the appropriate executor.
+
+        Handles both normal stages and v2 meta-stages (conditional, parallel,
+        for_each, sub-pipeline).  Normal stages support retry/backoff,
+        fallback, and input validation.
+
+        Args:
+            stage_def: Stage definition dict.
+            context: Current pipeline context.
+            run: Parent pipeline run (stage results are appended here).
+            pipeline_name: Pipeline name for logging.
+            **kwargs: Original pipeline kwargs.
+
+        Returns:
+            Updated context dict.
+
+        Raises:
+            RuntimeError: If a non-optional stage fails.
+        """
+        label = self._stage_label(stage_def)
+        stage_result = StageResult(stage_name=label)
+        run.stages.append(stage_result)
+
+        # Context validation
+        validation_error = self._validate_inputs(stage_def, context)
+        if validation_error:
+            stage_result.status = StageStatus.FAILED
+            stage_result.error = validation_error
+            if stage_def.get("optional", False):
+                stage_result.status = StageStatus.SKIPPED
+                logger.warning(
+                    "Pipeline %s stage '%s' skipped: %s",
+                    pipeline_name, label, validation_error,
+                )
+                return context
+            raise RuntimeError(
+                f"Stage '{label}' input validation failed: {validation_error}"
+            )
+
+        stage_result.status = StageStatus.RUNNING
+        t0 = time.time()
+
+        try:
+            # ── Meta-stage dispatch (order matters: for_each before parallel
+            #    because for_each stages may carry a "parallel" bool flag) ──
+            if "if" in stage_def:
+                result_ctx = self._execute_conditional(
+                    stage_def, context, run, pipeline_name, **kwargs
+                )
+            elif "for_each" in stage_def:
+                result_ctx = self._execute_for_each(
+                    stage_def, context, run, pipeline_name, **kwargs
+                )
+            elif "parallel" in stage_def:
+                result_ctx = self._execute_parallel(
+                    stage_def, context, run, pipeline_name, **kwargs
+                )
+            elif "run_pipeline" in stage_def:
+                result_ctx = self._execute_sub_pipeline(stage_def, context)
+            # ── Normal stage ──
+            elif "stage" in stage_def:
+                stage_name = stage_def["stage"]
+                stage_params = {**stage_def.get("params", {}), **kwargs}
+
+                executor = self._get_executor(stage_name)
+                if executor is None:
+                    raise RuntimeError(f"No executor for stage: {stage_name}")
+
+                if stage_def.get("retry", 0) > 0 or stage_def.get("fallback"):
+                    output = self._execute_with_retry(
+                        executor, stage_params, context,
+                        stage_def, stage_result, pipeline_name,
+                    )
+                else:
+                    output = executor(stage_params, context)
+
+                result_ctx = dict(context)
+                if isinstance(output, dict):
+                    result_ctx.update(output)
+                stage_result.output = output
+            else:
+                raise RuntimeError(f"Unknown stage type: {stage_def!r}")
+
+            stage_result.status = StageStatus.COMPLETED
+            stage_result.duration_ms = (time.time() - t0) * 1000
+
+            logger.info(
+                "Pipeline %s stage '%s' completed (%.0fms)",
+                pipeline_name, label, stage_result.duration_ms,
+            )
+            return result_ctx
+
+        except Exception as exc:
+            stage_result.status = StageStatus.FAILED
+            stage_result.error = str(exc)
+            stage_result.duration_ms = (time.time() - t0) * 1000
+
+            if stage_def.get("optional", False):
+                stage_result.status = StageStatus.SKIPPED
+                logger.warning(
+                    "Pipeline %s optional stage '%s' failed (skipped): %s",
+                    pipeline_name, label, exc,
+                )
+                return context
+
+            logger.error(
+                "Pipeline %s failed at stage '%s': %s",
+                pipeline_name, label, exc,
+            )
+            raise
+
     # ──── Pipeline Execution ──────────────────────────────────────────────
 
     def run(
@@ -1602,6 +2347,10 @@ class WorkspacePipeline:
         **kwargs: Any,
     ) -> PipelineRun:
         """Execute a pipeline by template name or custom stage list.
+
+        Supports both normal stages and v2 meta-stages (conditional,
+        parallel, for_each, sub-pipeline).  Normal stages support retry
+        with backoff, fallback executors, and context validation.
 
         If ``stages`` is provided, uses those stages directly.  Otherwise
         looks up the template by ``pipeline_name``.
@@ -1636,10 +2385,6 @@ class WorkspacePipeline:
             pipeline_name=pipeline_name,
             params=dict(kwargs),
         )
-
-        for stage_def in stages:
-            run.stages.append(StageResult(stage_name=stage_def["stage"]))
-
         self._runs[run_id] = run
         run.status = PipelineStatus.RUNNING
 
@@ -1656,61 +2401,16 @@ class WorkspacePipeline:
             len(stages),
         )
 
-        for idx, stage_def in enumerate(stages):
-            stage_name = stage_def["stage"]
-            stage_params = {**stage_def.get("params", {}), **kwargs}
-            stage_result = run.stages[idx]
-
-            executor = self._get_executor(stage_name)
-            if executor is None:
-                stage_result.status = StageStatus.FAILED
-                stage_result.error = f"No executor for stage: {stage_name}"
-                run.status = PipelineStatus.FAILED
-                run.error = stage_result.error
-                run.completed_at = time.time()
-                logger.error("Pipeline %s failed at stage %s: no executor", pipeline_name, stage_name)
-                return run
-
-            stage_result.status = StageStatus.RUNNING
-            t0 = time.time()
-
-            try:
-                output = executor(stage_params, context)
-                stage_result.output = output
-                stage_result.status = StageStatus.COMPLETED
-                stage_result.duration_ms = (time.time() - t0) * 1000
-
-                if isinstance(output, dict):
-                    context.update(output)
-
-                logger.info(
-                    "Pipeline %s stage %d/%d '%s' completed (%.0fms)",
-                    pipeline_name,
-                    idx + 1,
-                    len(stages),
-                    stage_name,
-                    stage_result.duration_ms,
+        try:
+            for stage_def in stages:
+                context = self._dispatch_stage(
+                    stage_def, context, run, pipeline_name, **kwargs
                 )
-            except Exception as exc:
-                stage_result.status = StageStatus.FAILED
-                stage_result.error = str(exc)
-                stage_result.duration_ms = (time.time() - t0) * 1000
-
-                if stage_def.get("optional", False):
-                    stage_result.status = StageStatus.SKIPPED
-                    logger.warning(
-                        "Pipeline %s optional stage '%s' failed (skipped): %s",
-                        pipeline_name,
-                        stage_name,
-                        exc,
-                    )
-                    continue
-
-                run.status = PipelineStatus.FAILED
-                run.error = f"Stage '{stage_name}' failed: {exc}"
-                run.completed_at = time.time()
-                logger.error("Pipeline %s failed at stage '%s': %s", pipeline_name, stage_name, exc)
-                return run
+        except Exception as exc:
+            run.status = PipelineStatus.FAILED
+            run.error = str(exc)
+            run.completed_at = time.time()
+            return run
 
         run.status = PipelineStatus.COMPLETED
         run.completed_at = time.time()
@@ -1721,7 +2421,7 @@ class WorkspacePipeline:
             pipeline_name,
             run_id,
             run.duration_ms,
-            len(stages),
+            len(run.stages),
         )
         return run
 
@@ -1759,13 +2459,14 @@ class WorkspacePipeline:
         return runs[:limit]
 
     def list_templates(self) -> Dict[str, List[str]]:
-        """List available pipeline templates and their stages.
+        """List available pipeline templates and their stage labels.
 
         Returns:
-            Dict of template_name → list of stage names.
+            Dict of template_name → list of stage labels (handles both
+            normal stages and v2 meta-stages).
         """
         return {
-            name: [s["stage"] for s in stages]
+            name: [self._stage_label(s) for s in stages]
             for name, stages in PIPELINE_TEMPLATES.items()
         }
 
