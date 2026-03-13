@@ -492,6 +492,50 @@ RPC_GET_AUDIO_OPTIONS = _rpc("get_audio_options", "sqTeoe")  # GET_AUDIO_OPTIONS
 RPC_GET_ARTIFACTS    = _rpc("get_artifacts", "gArtLc")   # GET_ARTIFACTS — [[2,...],nb_id,filter_str]. filter_str uses SQL-like syntax e.g. 'NOT artifact.status = "ARTIFACT_STATUS_SUGGESTED"'
 RPC_GET_SOURCE_SUMMARY = _rpc("get_source_summary", "tr032e") # GET_SOURCE_SUMMARY — [[[[source_id]]]]. Returns AI-generated markdown summary of a source. NEW — never seen in prior HARs.
 
+# ──── gRPC-web method names (heap-discovered) ──────────────────────────────
+# These use method NAMES (not rpcids) and are invoked via NLMDirectClient._grpc_call().
+# Discovered via CDP heap snapshot diffing across 3 sessions (2026-03 sprint).
+
+# Artifact operations
+GRPC_CREATE_ARTIFACT           = "CreateArtifact"
+GRPC_DERIVE_ARTIFACT           = "DeriveArtifact"
+GRPC_GENERATE_ARTIFACT         = "GenerateArtifact"
+GRPC_GET_ARTIFACT_USER_STATE   = "GetArtifactUserState"
+GRPC_UPSERT_ARTIFACT_USER_STATE = "UpsertArtifactUserState"
+
+# Source operations
+GRPC_CHECK_SOURCE_FRESHNESS    = "CheckSourceFreshness"
+GRPC_DISCOVER_SOURCES_ASYNC    = "DiscoverSourcesAsync"
+GRPC_DISCOVER_SOURCES_MANIFOLD = "DiscoverSourcesManifold"
+GRPC_CANCEL_DISCOVER_SOURCES   = "CancelDiscoverSourcesJob"
+GRPC_FINISH_DISCOVER_SOURCES   = "FinishDiscoverSourcesRun"
+GRPC_MUTATE_SOURCE             = "MutateSource"
+GRPC_REFRESH_SOURCE            = "RefreshSource"
+GRPC_DELETE_SOURCES_BULK       = "DeleteSources"
+
+# Project operations
+GRPC_MUTATE_PROJECT            = "MutateProject"
+GRPC_DELETE_PROJECTS           = "DeleteProjects"
+GRPC_LIST_FEATURED_PROJECTS    = "ListFeaturedProjects"
+GRPC_UPDATE_FEATURED_STATUS    = "UpdateFeaturedNotebookStatus"
+
+# Chat operations
+GRPC_DELETE_CHAT_TURNS         = "DeleteChatTurns"
+GRPC_LIST_CHAT_SESSIONS        = "ListChatSessions"
+
+# Notes
+GRPC_MUTATE_NOTE               = "MutateNote"
+
+# Account
+GRPC_GET_OR_CREATE_ACCOUNT     = "GetOrCreateAccount"
+
+# Moderation
+GRPC_REPORT_CONTENT            = "ReportContent"
+
+# Suggestions
+GRPC_GENERATE_PROMPT_SUGGESTIONS = "GeneratePromptSuggestions"
+GRPC_GENERATE_REPORT_SUGGESTIONS = "GenerateReportSuggestions"
+
 # ── Response Length Constants ────────────────────────────────────────────
 # Passed as second element of response-config arrays in several RPCs.
 # Controls how much detail NLM returns in the response payload.
@@ -5915,6 +5959,401 @@ def create_nlm_proxy_app() -> Flask:
             return jsonify({"info": info, "metadata": metadata})
         except Exception as exc:
             logger.error("appscript status failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ── gRPC-web proxy routes (heap-discovered NLM methods) ──────────────
+    # These routes delegate to NLMDirectClient which uses gRPC-web method
+    # names rather than batchexecute rpcids.
+
+    def _get_direct_client() -> Optional[Any]:
+        """Lazy-import and return an NLMDirectClient, or None."""
+        try:
+            from engine.integrations.nlm_direct_client import get_nlm_direct_client
+            return get_nlm_direct_client()
+        except Exception as exc:
+            logger.warning("Failed to get NLMDirectClient: %s", exc)
+            return None
+
+    def _no_direct_client():
+        return jsonify({
+            "error": "no_nlm_account",
+            "detail": (
+                "No NotebookLM account available for gRPC operations. "
+                "Import an account via the account pool first."
+            ),
+        }), 503
+
+    # ── Artifact routes ──────────────────────────────────────────────────
+
+    @app.route("/api/grpc/artifact/create", methods=["POST"])
+    def grpc_artifact_create():
+        """Create a new artifact in a notebook via gRPC CreateArtifact.
+
+        Body: {notebook_id, artifact_type?, title?, content?}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        try:
+            result = client.create_artifact(
+                notebook_id=notebook_id,
+                artifact_type=body.get("artifact_type", "note"),
+                title=body.get("title", ""),
+                content=body.get("content", ""),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc artifact create failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/grpc/artifact/generate", methods=["POST"])
+    def grpc_artifact_generate():
+        """Generate an artifact from a prompt via gRPC GenerateArtifact.
+
+        Body: {notebook_id, prompt, artifact_type?}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        prompt = body.get("prompt", "")
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        if not prompt:
+            return jsonify({"error": "prompt is required"}), 400
+        try:
+            result = client.generate_artifact(
+                notebook_id=notebook_id,
+                prompt=prompt,
+                artifact_type=body.get("artifact_type", "note"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc artifact generate failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ── Source routes ─────────────────────────────────────────────────────
+
+    @app.route("/api/grpc/source/freshness", methods=["POST"])
+    def grpc_source_freshness():
+        """Check source freshness via gRPC CheckSourceFreshness.
+
+        Body: {notebook_id, source_ids?}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        try:
+            result = client.check_source_freshness(
+                notebook_id=notebook_id,
+                source_ids=body.get("source_ids"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc source freshness failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/grpc/source/discover", methods=["POST"])
+    def grpc_source_discover():
+        """Start async source discovery via gRPC DiscoverSourcesAsync.
+
+        Body: {notebook_id, query, max_results?}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        query = body.get("query", "")
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        if not query:
+            return jsonify({"error": "query is required"}), 400
+        try:
+            result = client.discover_sources_async(
+                notebook_id=notebook_id,
+                query=query,
+                max_results=body.get("max_results", 10),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc source discover failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/grpc/source/refresh", methods=["POST"])
+    def grpc_source_refresh():
+        """Refresh a source via gRPC RefreshSource.
+
+        Body: {notebook_id, source_id}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        source_id = body.get("source_id", "")
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        if not source_id:
+            return jsonify({"error": "source_id is required"}), 400
+        try:
+            result = client.refresh_source(
+                notebook_id=notebook_id,
+                source_id=source_id,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc source refresh failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/grpc/source/mutate", methods=["POST"])
+    def grpc_source_mutate():
+        """Apply mutations to a source via gRPC MutateSource.
+
+        Body: {notebook_id, source_id, mutations}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        source_id = body.get("source_id", "")
+        mutations = body.get("mutations", {})
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        if not source_id:
+            return jsonify({"error": "source_id is required"}), 400
+        try:
+            result = client.mutate_source(
+                notebook_id=notebook_id,
+                source_id=source_id,
+                mutations=mutations,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc source mutate failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/grpc/source/delete-bulk", methods=["POST"])
+    def grpc_source_delete_bulk():
+        """Bulk-delete sources via gRPC DeleteSources.
+
+        Body: {notebook_id, source_ids}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        source_ids = body.get("source_ids", [])
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        if not source_ids:
+            return jsonify({"error": "source_ids is required"}), 400
+        try:
+            result = client.delete_sources_bulk(
+                notebook_id=notebook_id,
+                source_ids=source_ids,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc source delete-bulk failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ── Project routes ────────────────────────────────────────────────────
+
+    @app.route("/api/grpc/project/mutate", methods=["POST"])
+    def grpc_project_mutate():
+        """Apply mutations to a project/notebook via gRPC MutateProject.
+
+        Body: {notebook_id, mutations}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        mutations = body.get("mutations", {})
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        try:
+            result = client.mutate_project(
+                notebook_id=notebook_id,
+                mutations=mutations,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc project mutate failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ── Chat routes ───────────────────────────────────────────────────────
+
+    @app.route("/api/grpc/chat/sessions", methods=["POST"])
+    def grpc_chat_sessions():
+        """List chat sessions in a notebook via gRPC ListChatSessions.
+
+        Body: {notebook_id}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        try:
+            result = client.list_chat_sessions(
+                notebook_id=notebook_id,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc chat sessions failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/grpc/chat/delete-turns", methods=["POST"])
+    def grpc_chat_delete_turns():
+        """Delete specific chat turns via gRPC DeleteChatTurns.
+
+        Body: {notebook_id, turn_ids}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        turn_ids = body.get("turn_ids", [])
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        if not turn_ids:
+            return jsonify({"error": "turn_ids is required"}), 400
+        try:
+            result = client.delete_chat_turns(
+                notebook_id=notebook_id,
+                turn_ids=turn_ids,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc chat delete-turns failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ── Note routes ───────────────────────────────────────────────────────
+
+    @app.route("/api/grpc/note/mutate", methods=["POST"])
+    def grpc_note_mutate():
+        """Apply mutations to a note via gRPC MutateNote.
+
+        Body: {notebook_id, note_id, mutations}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        note_id = body.get("note_id", "")
+        mutations = body.get("mutations", {})
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        if not note_id:
+            return jsonify({"error": "note_id is required"}), 400
+        try:
+            result = client.mutate_note(
+                notebook_id=notebook_id,
+                note_id=note_id,
+                mutations=mutations,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc note mutate failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ── Account routes ────────────────────────────────────────────────────
+
+    @app.route("/api/grpc/account", methods=["GET"])
+    def grpc_account():
+        """Get or create the NLM account via gRPC GetOrCreateAccount.
+
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        try:
+            result = client.get_or_create_account()
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc account failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ── Suggestion routes ─────────────────────────────────────────────────
+
+    @app.route("/api/grpc/suggestions/prompts", methods=["POST"])
+    def grpc_suggestions_prompts():
+        """Generate prompt suggestions via gRPC GeneratePromptSuggestions.
+
+        Body: {notebook_id, context?, count?}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        try:
+            result = client.generate_prompt_suggestions(
+                notebook_id=notebook_id,
+                context=body.get("context", ""),
+                count=body.get("count", 5),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc suggestions prompts failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/grpc/suggestions/reports", methods=["POST"])
+    def grpc_suggestions_reports():
+        """Generate report suggestions via gRPC GenerateReportSuggestions.
+
+        Body: {notebook_id, report_type?, context?}
+        Returns: {result: ...}
+        """
+        client = _get_direct_client()
+        if client is None:
+            return _no_direct_client()
+        body = request.get_json(force=True, silent=True) or {}
+        notebook_id = body.get("notebook_id", "")
+        if not notebook_id:
+            return jsonify({"error": "notebook_id is required"}), 400
+        try:
+            result = client.generate_report_suggestions(
+                notebook_id=notebook_id,
+                report_type=body.get("report_type", "summary"),
+                context=body.get("context", ""),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("grpc suggestions reports failed: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
     return app
