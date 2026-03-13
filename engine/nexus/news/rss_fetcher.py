@@ -278,3 +278,92 @@ class RSSFetcher:
 
         all_items.sort(key=lambda x: x.published_at, reverse=True)
         return all_items[:limit]
+
+    def check_all_feeds(self) -> Dict[str, Any]:
+        """Probe every configured RSS feed and report health status.
+
+        Performs a lightweight HEAD-style fetch (timeout=5s, 1 retry) on
+        every source URL across all categories.  Dead feeds are auto-tripped
+        in the circuit-breaker so subsequent ``fetch_category`` calls skip
+        them until the cooldown expires.
+
+        Returns:
+            Summary dict with alive/dead/tripped counts and per-feed detail.
+        """
+        from engine.nexus.news_sources import get_news_registry
+
+        registry = get_news_registry()
+        categories = registry.get_categories()
+        alive: List[str] = []
+        dead: List[str] = []
+        tripped: List[str] = []
+        details: Dict[str, Dict[str, Any]] = {}
+
+        for cat in categories:
+            sources = get_sources(cat)
+            for source in sources:
+                url = source["rss"]
+                name = source.get("name", url)
+                health = self._get_health(url)
+
+                if health.is_tripped(self._max_failures, self._circuit_reset):
+                    tripped.append(name)
+                    details[name] = {
+                        "url": url,
+                        "category": cat,
+                        "status": "tripped",
+                        "consecutive_failures": health.consecutive_failures,
+                    }
+                    continue
+
+                xml = _fetch_url(url, timeout=5, max_retries=1)
+                if xml:
+                    health.record_success()
+                    alive.append(name)
+                    details[name] = {
+                        "url": url,
+                        "category": cat,
+                        "status": "alive",
+                    }
+                else:
+                    health.record_failure(f"Health-check failed ({cat})")
+                    dead.append(name)
+                    details[name] = {
+                        "url": url,
+                        "category": cat,
+                        "status": "dead",
+                        "consecutive_failures": health.consecutive_failures,
+                    }
+                    logger.warning(
+                        "Feed health-check FAILED: %s (%s) — %d consecutive failures",
+                        name,
+                        url,
+                        health.consecutive_failures,
+                    )
+
+                time.sleep(0.5)  # polite rate-limit between probes
+
+        # Emit aggregate metrics
+        try:
+            from engine.nexus.meta_metrics import get_meta_metrics
+            mm = get_meta_metrics()
+            mm.record("news.health.alive", float(len(alive)))
+            mm.record("news.health.dead", float(len(dead)))
+            mm.record("news.health.tripped", float(len(tripped)))
+        except Exception:
+            pass
+
+        logger.info(
+            "Feed health check: %d alive, %d dead, %d tripped",
+            len(alive),
+            len(dead),
+            len(tripped),
+        )
+        return {
+            "alive": len(alive),
+            "dead": len(dead),
+            "tripped": len(tripped),
+            "dead_feeds": dead,
+            "tripped_feeds": tripped,
+            "details": details,
+        }
