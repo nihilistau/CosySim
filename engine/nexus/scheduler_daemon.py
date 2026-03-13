@@ -988,14 +988,20 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     daemon.register(
         "news-nlm-retry",
         "News NLM Retry Queue",
-        "every_8h",
+        "every_12h",
         _news_nlm_retry_callback,
     )
     daemon.register(
         "news-distill-nlm",
         "News NLM Distillation",
-        "every_8h",
+        "every_6h",
         _news_distill_nlm_callback,
+    )
+    daemon.register(
+        "feed-health",
+        "RSS Feed Health Check",
+        "every_12h",
+        _feed_health_callback,
     )
     daemon.register(
         "test-monitor",
@@ -2053,6 +2059,28 @@ def _news_distill_nlm_callback() -> Dict[str, Any]:
             errors.append(f"{cat}: no NLM notebook ID configured")
             continue
 
+        # Validate NLM notebook exists before expensive operations
+        if nlm_available:
+            try:
+                nb_list = nlm.list_notebooks() or []
+                nb_ids = {nb.get("id", "") for nb in nb_list if isinstance(nb, dict)}
+                if notebook_id not in nb_ids:
+                    logger.warning(
+                        "NLM notebook %s for super-category '%s' not found "
+                        "(%d notebooks visible) — skipping distillation",
+                        notebook_id,
+                        cat,
+                        len(nb_ids),
+                    )
+                    errors.append(f"{cat}: notebook {notebook_id[:12]}… not found")
+                    continue
+            except Exception as exc:
+                logger.debug(
+                    "NLM notebook validation failed for '%s': %s — proceeding anyway",
+                    cat,
+                    exc,
+                )
+
         try:
             # Find all YAML source categories that map to this super-category
             source_cats = registry.get_source_categories_for_super(cat)
@@ -2123,6 +2151,18 @@ def _news_distill_nlm_callback() -> Dict[str, Any]:
         errors or "none",
     )
     return result
+
+
+def _feed_health_callback() -> Dict[str, Any]:
+    """Every 12h: probe all RSS feeds and report dead/tripped sources."""
+    try:
+        from engine.nexus.news.rss_fetcher import RSSFetcher
+        fetcher = RSSFetcher(rate_limit_seconds=0.5, timeout=5, max_retries=1)
+        report = fetcher.check_all_feeds()
+        return {"status": "ok", **report}
+    except Exception as exc:
+        logger.error("feed_health_callback failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
 
 
 def _npc_world_tick_callback() -> Dict[str, Any]:

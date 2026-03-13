@@ -423,10 +423,13 @@ class EmbeddingService:
         with self._lock:
             self._stats.errors += 1
         if last_exc:
-            raise RuntimeError(
-                f"All embedding providers failed. Last error: {last_exc}"
-            ) from last_exc
-        raise RuntimeError("No embedding providers configured")
+            logger.warning(
+                "All embedding providers failed (graceful skip). Last: %s",
+                last_exc,
+            )
+        else:
+            logger.warning("No embedding providers configured (graceful skip)")
+        return []
 
     def embed_batch(
         self, texts: List[str], purpose: str = "knowledge"
@@ -510,10 +513,13 @@ class EmbeddingService:
         with self._lock:
             self._stats.errors += 1
         if last_exc:
-            raise RuntimeError(
-                f"All providers failed for batch embed. Last: {last_exc}"
-            ) from last_exc
-        raise RuntimeError("No embedding providers configured")
+            logger.warning(
+                "All providers failed for batch embed (graceful skip). Last: %s",
+                last_exc,
+            )
+        else:
+            logger.warning("No embedding providers configured for batch (graceful skip)")
+        return []
 
     # ──── Similarity utilities ────────────────────────────────────────────
 
