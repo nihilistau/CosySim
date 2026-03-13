@@ -10,15 +10,47 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.21b — "AI STUDIO + APPS SCRIPT WIRING" ✅
+## Current Shipped State: v1.23 — "NEWS SYSTEM CONSOLIDATION" ✅
 
-**Baseline: 20 scenes, 63 scheduler tasks, 53 workspace skills, 11,843+ tests, 31 pipeline stages, 35 templates, 148 workspace API ops across 40+ YAML sections, 7 MetaMetrics categories (55+ metrics).**
+**Baseline: 20 scenes, 63 scheduler tasks, 67+ workspace/NLM skills, 11,843+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics).**
 
-The v1.21 sprints extended the unified Google Workspace cross-service pipeline to
-cover AI Studio (22 proxy routes, 13 skills) and Apps Script (10 proxy routes, 7 skills,
-full batchexecute client). The YAML registry expanded from 3216→3624 lines with 14 Apps
-Script rpcids, 2 NLM gRPC methods, and 24 heap-discovered operations. Pipeline stages
-grew 24→31 and templates 25→35 with full cross-service coverage.
+v1.22–v1.23 added gRPC-web transport for 24 heap-discovered NLM methods, expanded the
+YAML registry to 302 operations (version 5.0), and fixed a critical news system bug where
+fetch and distillation used mismatched category names. All news config is now YAML-driven
+with proper category mapping (8 source → 4 super-categories).
+
+---
+
+## Shipped: v1.23 — "NEWS SYSTEM CONSOLIDATION" ✅
+
+- [x] Fixed critical category mismatch bug between news fetch and distillation
+- [x] Added YAML-driven distillation config: category_mapping (8→4), curated questions (5×4), NLM notebook UUIDs
+- [x] Added "world" category with 3 RSS sources (Reuters, BBC World, AP News)
+- [x] Removed all hardcoded NEWS_SOURCES_BY_CATEGORY and CURATED_QUESTIONS dicts
+- [x] Added ~10 new registry methods to NewsSourceRegistry
+- [x] Rewired scheduler callback, news skills, and NLM pipeline to use YAML config
+- [x] 211/211 focused tests pass
+
+---
+
+## Shipped: v1.22 — "NLM gRPC METHODS" ✅
+
+- [x] Generic `_grpc_call()` transport layer with retry, CDP refresh, graceful 404 handling
+- [x] 3-strategy `_parse_grpc_response()` parser (wrb.fr → raw JSON → raw text)
+- [x] 24 public methods across 8 categories (Artifacts, Sources, Projects, Chat, Notes, Account, Moderation, Suggestions)
+- [x] 14 @skill(pack="nlm_grpc") MCP skills
+- [x] 24 GRPC_* constants and 14 /api/grpc/* Flask routes in proxy
+- [x] YAML registry expanded to 302 operations (version 5.0)
+- [x] 211/211 focused tests pass
+
+---
+
+## Shipped: v1.21c — "DEEP HAR ENRICHMENT" ✅
+
+- [x] Parsed 5 new HAR/JS/WASM files: NLM gold (11 rpcids), Sheets Gemini (14 streamGenerate), postshellbase (446 methods), gbar toolbar, calcworker WASM
+- [x] YAML expansion: 95 AI Studio methods, 12 AppletControl methods, 5 workspace gRPC services
+- [x] HAR enrichment: streamGenerate templates, gRPC endpoint, BigQuery ops, Sheets REST, JS modules
+- [x] Registry: 302 operations across 34+ top-level sections
 
 ---
 
