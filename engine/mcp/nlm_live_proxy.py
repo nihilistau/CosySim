@@ -5137,6 +5137,786 @@ def create_nlm_proxy_app() -> Flask:
             logger.error("colab pipeline failed: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    # ──── AI Studio Routes (v1.21b) ────
+
+    @app.route("/api/aistudio/generate", methods=["POST"])
+    def aistudio_generate_route():
+        """Generate content via AI Studio.
+
+        Body: {prompt: str, model?: str, temperature?: float, max_tokens?: int, system_instruction?: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        prompt = data.get("prompt")
+        if not prompt:
+            return jsonify({"error": "prompt required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.generate_content(
+                prompt,
+                model_name=data.get("model"),
+                temperature=data.get("temperature"),
+                max_tokens=data.get("max_tokens"),
+                system_instruction=data.get("system_instruction"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio generate failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/stream_generate", methods=["POST"])
+    def aistudio_stream_generate_route():
+        """Stream generated content via AI Studio.
+
+        Body: {model: str, contents: list, generation_config?: dict, safety_settings?: list, system_instruction?: str}
+        Returns: text/event-stream
+        """
+        from flask import Response
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        model = data.get("model")
+        contents = data.get("contents")
+        if not model or not contents:
+            return jsonify({"error": "model and contents required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            stream = client.stream_generate_content(
+                model,
+                contents,
+                generation_config=data.get("generation_config"),
+                safety_settings=data.get("safety_settings"),
+                system_instruction=data.get("system_instruction"),
+            )
+
+            def _generate():
+                try:
+                    for chunk in stream:
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                except Exception as inner_exc:
+                    yield f"data: {json.dumps({'error': str(inner_exc)})}\n\n"
+
+            return Response(_generate(), mimetype="text/event-stream")
+        except Exception as exc:
+            logger.error("aistudio stream generate failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/models", methods=["GET"])
+    def aistudio_models_route():
+        """List available AI Studio models.
+
+        Returns: {models: list}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        try:
+            client = get_aistudio_client()
+            models = client.list_models()
+            return jsonify({"models": models})
+        except Exception as exc:
+            logger.error("aistudio list models failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/count_tokens", methods=["POST"])
+    def aistudio_count_tokens_route():
+        """Count tokens for content via AI Studio.
+
+        Body: {model: str, contents: list}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        model = data.get("model")
+        contents = data.get("contents")
+        if not model or not contents:
+            return jsonify({"error": "model and contents required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.count_tokens(model, contents)
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio count tokens failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/embed", methods=["POST"])
+    def aistudio_embed_route():
+        """Generate embeddings via AI Studio.
+
+        Body: {model: str, content: str, task_type?: str, title?: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        model = data.get("model")
+        content = data.get("content")
+        if not model or not content:
+            return jsonify({"error": "model and content required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.embed_content(
+                model, content,
+                task_type=data.get("task_type"),
+                title=data.get("title"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio embed failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/batch_embed", methods=["POST"])
+    def aistudio_batch_embed_route():
+        """Batch embed content via AI Studio.
+
+        Body: {model: str, requests: [{content: str, task_type?: str, title?: str}]}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        model = data.get("model")
+        requests_list = data.get("requests")
+        if not model or not requests_list:
+            return jsonify({"error": "model and requests required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.batch_embed_contents(model, requests_list)
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio batch embed failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/enhance_prompt", methods=["POST"])
+    def aistudio_enhance_prompt_route():
+        """Enhance a prompt via AI Studio.
+
+        Body: {prompt: str, model?: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        prompt = data.get("prompt")
+        if not prompt:
+            return jsonify({"error": "prompt required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.enhance_prompt(prompt, model=data.get("model"))
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio enhance prompt failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/generate_image", methods=["POST"])
+    def aistudio_generate_image_route():
+        """Generate images via AI Studio.
+
+        Body: {prompt: str, model?: str, n?: int, size?: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        prompt = data.get("prompt")
+        if not prompt:
+            return jsonify({"error": "prompt required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.generate_image(
+                prompt,
+                model=data.get("model"),
+                n=data.get("n", 1),
+                size=data.get("size"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio generate image failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/generate_video", methods=["POST"])
+    def aistudio_generate_video_route():
+        """Generate video via AI Studio.
+
+        Body: {prompt: str, model?: str, duration?: int, aspect_ratio?: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        prompt = data.get("prompt")
+        if not prompt:
+            return jsonify({"error": "prompt required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.generate_video(
+                prompt,
+                model=data.get("model"),
+                duration=data.get("duration"),
+                aspect_ratio=data.get("aspect_ratio"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio generate video failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/tts", methods=["POST"])
+    def aistudio_tts_route():
+        """Text-to-speech via AI Studio.
+
+        Body: {text: str, voice?: str, model?: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        text = data.get("text")
+        if not text:
+            return jsonify({"error": "text required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.text_to_speech(
+                text,
+                voice=data.get("voice"),
+                model=data.get("model"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio tts failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/stt", methods=["POST"])
+    def aistudio_stt_route():
+        """Speech-to-text via AI Studio.
+
+        Body: {audio_data: str (base64), model?: str, language?: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        audio_data = data.get("audio_data")
+        if not audio_data:
+            return jsonify({"error": "audio_data required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.gemini_speech_to_text(
+                audio_data,
+                model=data.get("model"),
+                language=data.get("language"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio stt failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/prompts", methods=["GET"])
+    def aistudio_list_prompts_route():
+        """List saved AI Studio prompts.
+
+        Query: page_size?, page_token?
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        page_size = request.args.get("page_size", type=int)
+        page_token = request.args.get("page_token")
+        try:
+            client = get_aistudio_client()
+            result = client.list_prompts(
+                page_size=page_size,
+                page_token=page_token,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio list prompts failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/prompts", methods=["POST"])
+    def aistudio_create_prompt_route():
+        """Create a saved prompt in AI Studio.
+
+        Body: {display_name: str, prompt_data: dict}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        display_name = data.get("display_name")
+        prompt_data = data.get("prompt_data")
+        if not display_name or not prompt_data:
+            return jsonify({"error": "display_name and prompt_data required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.create_prompt(display_name, prompt_data)
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio create prompt failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/applets", methods=["GET"])
+    def aistudio_list_applets_route():
+        """List AI Studio applets.
+
+        Query: page_size?, page_token?
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        page_size = request.args.get("page_size", type=int)
+        page_token = request.args.get("page_token")
+        try:
+            client = get_aistudio_client()
+            result = client.list_applets(
+                page_size=page_size,
+                page_token=page_token,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio list applets failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/applets", methods=["POST"])
+    def aistudio_create_applet_route():
+        """Create an AI Studio applet.
+
+        Body: {display_name: str, code: str, model?: str, system_instruction?: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        display_name = data.get("display_name")
+        code = data.get("code")
+        if not display_name or not code:
+            return jsonify({"error": "display_name and code required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.create_applet(
+                display_name, code,
+                model=data.get("model"),
+                system_instruction=data.get("system_instruction"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio create applet failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/applets/deploy", methods=["POST"])
+    def aistudio_deploy_applet_route():
+        """Deploy an AI Studio applet.
+
+        Body: {applet_name: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        applet_name = data.get("applet_name")
+        if not applet_name:
+            return jsonify({"error": "applet_name required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.deploy_applet(applet_name)
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio deploy applet failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/files", methods=["GET"])
+    def aistudio_list_files_route():
+        """List files in AI Studio.
+
+        Query: page_size?, page_token?
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        page_size = request.args.get("page_size", type=int)
+        page_token = request.args.get("page_token")
+        try:
+            client = get_aistudio_client()
+            result = client.list_files(
+                page_size=page_size,
+                page_token=page_token,
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio list files failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/files", methods=["POST"])
+    def aistudio_create_file_route():
+        """Upload a file to AI Studio.
+
+        Body: {display_name: str, file_data: str (base64), mime_type: str}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        display_name = data.get("display_name")
+        file_data = data.get("file_data")
+        mime_type = data.get("mime_type")
+        if not display_name or not file_data or not mime_type:
+            return jsonify({"error": "display_name, file_data, and mime_type required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.create_file(display_name, file_data, mime_type)
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio create file failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/check_safety", methods=["POST"])
+    def aistudio_check_safety_route():
+        """Check content safety via AI Studio.
+
+        Body: {content: str, safety_settings?: list}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        content = data.get("content")
+        if not content:
+            return jsonify({"error": "content required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.check_safety(
+                content,
+                safety_settings=data.get("safety_settings"),
+            )
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio check safety failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/batch_job", methods=["POST"])
+    def aistudio_batch_job_route():
+        """Create a batch processing job in AI Studio.
+
+        Body: {model: str, input_config: dict, output_config: dict}
+        Returns: {result: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        data = request.get_json(force=True)
+        model = data.get("model")
+        input_config = data.get("input_config")
+        output_config = data.get("output_config")
+        if not model or not input_config or not output_config:
+            return jsonify({"error": "model, input_config, and output_config required"}), 400
+
+        try:
+            client = get_aistudio_client()
+            result = client.create_batch_job(model, input_config, output_config)
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("aistudio batch job failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/status", methods=["GET"])
+    def aistudio_status_route():
+        """Check AI Studio user status and quota.
+
+        Returns: {user_status: dict, quota: dict}
+        """
+        from engine.integrations.aistudio_client import get_aistudio_client
+
+        try:
+            client = get_aistudio_client()
+            user_status = client.check_user_status()
+            quota = client.check_quota()
+            return jsonify({"user_status": user_status, "quota": quota})
+        except Exception as exc:
+            logger.error("aistudio status failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/aistudio/pipeline", methods=["POST"])
+    def aistudio_pipeline_route():
+        """Run an AI Studio pipeline template.
+
+        Body: {template: str, params: dict}
+        Templates: generate_and_embed, safety_check_and_generate, batch_generate, prompt_enhance_and_run
+        Returns: {results: list, stage_count: int, errors: list}
+        """
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+        data = request.get_json(force=True)
+        template = data.get("template")
+        if not template:
+            return jsonify({"error": "template required"}), 400
+
+        aistudio_templates = {
+            "generate_and_embed", "safety_check_and_generate",
+            "batch_generate", "prompt_enhance_and_run",
+        }
+        if template not in aistudio_templates:
+            return jsonify({"error": f"Unknown AI Studio template. Choose from: {sorted(aistudio_templates)}"}), 400
+
+        params = data.get("params", {})
+        try:
+            pipeline = get_workspace_pipeline()
+            results = pipeline.run(template, params)
+            errors = [r for r in results if "error" in r]
+            return jsonify({"results": results, "stage_count": len(results), "errors": errors})
+        except Exception as exc:
+            logger.error("aistudio pipeline failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    # ──── Apps Script Routes (v1.21b) ────
+
+    @app.route("/api/appscript/executions", methods=["GET"])
+    def appscript_executions_route():
+        """List recent Apps Script executions.
+
+        Query params: project_id (required), max_results (default 50)
+        Returns: {executions: [...]}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        project_id = request.args.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+
+        max_results = int(request.args.get("max_results", 50))
+        try:
+            client = get_appscript_client()
+            executions = client.list_executions(project_id, max_results=max_results)
+            return jsonify({"executions": executions})
+        except Exception as exc:
+            logger.error("appscript list_executions failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/run", methods=["POST"])
+    def appscript_run_route():
+        """Run a function in an Apps Script project.
+
+        Body: {project_id: str, function_name: str, parameters?: list}
+        Returns: {result: ...}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        data = request.get_json(force=True)
+        project_id = data.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+        function_name = data.get("function_name")
+        if not function_name:
+            return jsonify({"error": "function_name required"}), 400
+
+        parameters = data.get("parameters")
+        try:
+            client = get_appscript_client()
+            result = client.run_function(project_id, function_name, parameters=parameters)
+            return jsonify({"result": result})
+        except Exception as exc:
+            logger.error("appscript run_function failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/project/files", methods=["GET"])
+    def appscript_project_files_route():
+        """Get files in an Apps Script project.
+
+        Query params: project_id (required)
+        Returns: {files: [...]}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        project_id = request.args.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+
+        try:
+            client = get_appscript_client()
+            files = client.get_project_files(project_id)
+            return jsonify({"files": files})
+        except Exception as exc:
+            logger.error("appscript get_project_files failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/project/info", methods=["GET"])
+    def appscript_project_info_route():
+        """Get Apps Script project info.
+
+        Query params: project_id (required)
+        Returns: {info: ...}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        project_id = request.args.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+
+        try:
+            client = get_appscript_client()
+            info = client.get_project_info(project_id)
+            return jsonify({"info": info})
+        except Exception as exc:
+            logger.error("appscript get_project_info failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/project/save", methods=["POST"])
+    def appscript_project_save_route():
+        """Save code to an Apps Script project file.
+
+        Body: {project_id: str, file_id: str, code: str}
+        Returns: {saved: true}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        data = request.get_json(force=True)
+        project_id = data.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+        file_id = data.get("file_id")
+        if not file_id:
+            return jsonify({"error": "file_id required"}), 400
+        code = data.get("code")
+        if code is None:
+            return jsonify({"error": "code required"}), 400
+
+        try:
+            client = get_appscript_client()
+            client.save_code(project_id, file_id, code)
+            return jsonify({"saved": True})
+        except Exception as exc:
+            logger.error("appscript save_code failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/triggers", methods=["GET"])
+    def appscript_triggers_route():
+        """List triggers for an Apps Script project.
+
+        Query params: project_id (required)
+        Returns: {triggers: [...]}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        project_id = request.args.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+
+        try:
+            client = get_appscript_client()
+            triggers = client.list_triggers(project_id)
+            return jsonify({"triggers": triggers})
+        except Exception as exc:
+            logger.error("appscript list_triggers failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/versions", methods=["GET"])
+    def appscript_versions_route():
+        """List versions of an Apps Script project.
+
+        Query params: project_id (required), max_results (default 50)
+        Returns: {versions: [...]}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        project_id = request.args.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+
+        max_results = int(request.args.get("max_results", 50))
+        try:
+            client = get_appscript_client()
+            versions = client.list_versions(project_id, max_results=max_results)
+            return jsonify({"versions": versions})
+        except Exception as exc:
+            logger.error("appscript list_versions failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/history", methods=["GET"])
+    def appscript_history_route():
+        """Get revision history for an Apps Script project.
+
+        Query params: project_id (required), max_results (default 50)
+        Returns: {history: [...]}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        project_id = request.args.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+
+        max_results = int(request.args.get("max_results", 50))
+        try:
+            client = get_appscript_client()
+            history = client.get_project_history(project_id, max_results=max_results)
+            return jsonify({"history": history})
+        except Exception as exc:
+            logger.error("appscript get_project_history failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/pipeline", methods=["POST"])
+    def appscript_pipeline_route():
+        """Run an Apps Script pipeline template.
+
+        Body: {template: str, params?: dict}
+        Returns: {results: [...], stage_count: int, errors: [...]}
+        """
+        from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+        data = request.get_json(force=True)
+        template = data.get("template")
+        if not template:
+            return jsonify({"error": "template required"}), 400
+
+        appscript_templates = {"appscript_automation", "appscript_deploy_and_test"}
+        if template not in appscript_templates:
+            return jsonify({"error": f"Unknown Apps Script template. Choose from: {sorted(appscript_templates)}"}), 400
+
+        params = data.get("params", {})
+        try:
+            pipeline = get_workspace_pipeline()
+            results = pipeline.run(template, params)
+            errors = [r for r in results if "error" in r]
+            return jsonify({"results": results, "stage_count": len(results), "errors": errors})
+        except Exception as exc:
+            logger.error("appscript pipeline failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/appscript/status", methods=["GET"])
+    def appscript_status_route():
+        """Combined Apps Script project info and metadata.
+
+        Query params: project_id (required)
+        Returns: {info: ..., metadata: ...}
+        """
+        from engine.integrations.appscript_client import get_appscript_client
+
+        project_id = request.args.get("project_id")
+        if not project_id:
+            return jsonify({"error": "project_id required"}), 400
+
+        try:
+            client = get_appscript_client()
+            info = client.get_project_info(project_id)
+            metadata = client.get_project_metadata(project_id)
+            return jsonify({"info": info, "metadata": metadata})
+        except Exception as exc:
+            logger.error("appscript status failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
     return app
 
 

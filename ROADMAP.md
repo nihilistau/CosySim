@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.20b** "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" ✅ | Last updated: 2026-07
+> Current: **v1.21b** "AI STUDIO + APPS SCRIPT WIRING" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,14 +10,39 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.20b — "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" ✅
+## Current Shipped State: v1.21b — "AI STUDIO + APPS SCRIPT WIRING" ✅
 
-**Baseline: 20 scenes, 63 scheduler tasks, 31 workspace skills, 11,771+ tests, 24 pipeline stages, 25 templates, 50 workspace API ops across 29 YAML sections, 7 MetaMetrics categories (55+ metrics).**
+**Baseline: 20 scenes, 63 scheduler tasks, 53 workspace skills, 11,843+ tests, 31 pipeline stages, 35 templates, 148 workspace API ops across 40+ YAML sections, 7 MetaMetrics categories (55+ metrics).**
 
-The v1.20b sprint bridges in-memory benchmark tracking to persistent MetaMetrics,
-adds automated Copilot control plane drift repair, and registers two new scheduler
-tasks for continuous self-improvement. MetaMetrics now covers 7 categories
-(Knowledge, Inference, Task, Test, System, News, Benchmark) with 55+ metric names.
+The v1.21 sprints extended the unified Google Workspace cross-service pipeline to
+cover AI Studio (22 proxy routes, 13 skills) and Apps Script (10 proxy routes, 7 skills,
+full batchexecute client). The YAML registry expanded from 3216→3624 lines with 14 Apps
+Script rpcids, 2 NLM gRPC methods, and 24 heap-discovered operations. Pipeline stages
+grew 24→31 and templates 25→35 with full cross-service coverage.
+
+---
+
+## Shipped: v1.21b — "AI STUDIO + APPS SCRIPT WIRING" ✅
+
+- [x] Apps Script batchexecute client (14 operations, ~730 lines)
+- [x] 22 AI Studio proxy routes in nlm_live_proxy.py
+- [x] 10 Apps Script proxy routes in nlm_live_proxy.py
+- [x] 13 AI Studio MCP skills (workspace_aistudio_*)
+- [x] 7 Apps Script MCP skills (workspace_appscript_*)
+- [x] 7 pipeline stages (24→31), 10 pipeline templates (25→35)
+- [x] 72 appscript client tests + pipeline test assertions updated
+- [x] All 237 targeted tests pass
+
+---
+
+## Shipped: v1.21a — "YAML REGISTRY EXPANSION" ✅
+
+- [x] HAR mining tools: v121_har_extract.py, v121_payload_extractor.py, v121_yaml_expand.py
+- [x] YAML registry expansion 3216→3624 lines (version 5.0)
+- [x] Apps Script section: 14 batchexecute rpcids with payload templates
+- [x] NLM gRPC section: 2 service methods
+- [x] NLM heap-discovered section: 24 methods from heap analysis
+- [x] All 77 registry tests pass
 
 ---
 

@@ -1015,6 +1015,253 @@ def _stage_colab_build(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[
         return {"error": str(exc), "status": "failed"}
 
 
+# ──── AI Studio Stage Functions (v1.21b) ─────────────────────────────────────
+
+
+def _stage_aistudio_generate(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate content via AI Studio.
+
+    Params:
+        prompt: Text prompt for content generation.
+        model: Model name (default from context or 'gemini-2.5-flash').
+        temperature: Sampling temperature (default 0.7).
+        max_tokens: Maximum output tokens (default 8192).
+
+    Returns:
+        Dict with ``content``, ``model``, and ``tokens_used`` keys.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    prompt = params.get("prompt") or context.get("prompt", "")
+    if not prompt:
+        return {"error": "No prompt provided", "content": ""}
+
+    model = params.get("model") or context.get("model", "gemini-2.5-flash")
+    temperature = float(params.get("temperature", context.get("temperature", 0.7)))
+    max_tokens = int(params.get("max_tokens", context.get("max_tokens", 8192)))
+    try:
+        client = get_aistudio_client()
+        result = client.generate_content(
+            prompt=prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return {
+            "content": result.get("text", result.get("content", "")),
+            "model": model,
+            "tokens_used": result.get("usage", {}).get("total_tokens", 0),
+        }
+    except Exception as exc:
+        return {"error": str(exc), "content": ""}
+
+
+def _stage_aistudio_embed(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Embed content via AI Studio embedding API.
+
+    Params:
+        text: Text to embed. Falls back to context content/output.
+        model: Embedding model name (default 'text-embedding-004').
+        task_type: Embedding task type (default 'RETRIEVAL_DOCUMENT').
+
+    Returns:
+        Dict with ``embedding``, ``dimensions``, and ``model`` keys.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    text = params.get("text") or context.get("content", context.get("output", ""))
+    if not text:
+        return {"error": "No text provided", "embedding": []}
+
+    model = params.get("model") or context.get("embed_model", "text-embedding-004")
+    task_type = params.get("task_type") or context.get("task_type", "RETRIEVAL_DOCUMENT")
+    try:
+        client = get_aistudio_client()
+        result = client.embed_content(text=text, model=model, task_type=task_type)
+        embedding = result.get("embedding", result.get("values", []))
+        return {
+            "embedding": embedding,
+            "dimensions": len(embedding) if isinstance(embedding, list) else 0,
+            "model": model,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "embedding": []}
+
+
+def _stage_aistudio_create_applet(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Create and optionally deploy an AI Studio applet.
+
+    Params:
+        name: Applet display name.
+        prompt: System prompt / instructions for the applet.
+        model: Model to use (default 'gemini-2.5-flash').
+        deploy: Whether to deploy immediately (default False).
+
+    Returns:
+        Dict with ``applet_id``, ``name``, ``deployed``, and ``url`` keys.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    name = params.get("name") or context.get("applet_name", "")
+    prompt = params.get("prompt") or context.get("prompt", "")
+    if not name or not prompt:
+        return {"error": "Both name and prompt are required", "applet_id": ""}
+
+    model = params.get("model") or context.get("model", "gemini-2.5-flash")
+    deploy = bool(params.get("deploy", context.get("deploy", False)))
+    try:
+        client = get_aistudio_client()
+        applet = client.create_applet(name=name, system_instruction=prompt, model=model)
+        applet_id = applet.get("id", applet.get("applet_id", ""))
+
+        deployed = False
+        url = ""
+        if deploy and applet_id:
+            deploy_result = client.deploy_applet(applet_id)
+            deployed = deploy_result.get("success", False)
+            url = deploy_result.get("url", "")
+
+        return {
+            "applet_id": applet_id,
+            "name": name,
+            "deployed": deployed,
+            "url": url,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "applet_id": ""}
+
+
+def _stage_aistudio_generate_image(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate images via AI Studio image generation.
+
+    Params:
+        prompt: Image generation prompt.
+        count: Number of images to generate (default 1).
+        aspect_ratio: Aspect ratio (default '1:1').
+
+    Returns:
+        Dict with ``images`` list, ``count``, and ``prompt`` keys.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    prompt = params.get("prompt") or context.get("image_prompt", context.get("prompt", ""))
+    if not prompt:
+        return {"error": "No prompt provided", "images": []}
+
+    count = int(params.get("count", context.get("image_count", 1)))
+    aspect_ratio = params.get("aspect_ratio") or context.get("aspect_ratio", "1:1")
+    try:
+        client = get_aistudio_client()
+        result = client.generate_image(prompt=prompt, count=count, aspect_ratio=aspect_ratio)
+        images = result.get("images", [result] if result else [])
+        return {
+            "images": images,
+            "count": len(images),
+            "prompt": prompt,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "images": []}
+
+
+# ──── Apps Script Stage Functions (v1.21b) ────────────────────────────────────
+
+
+def _stage_appscript_run(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Run a function in an Apps Script project.
+
+    Params:
+        project_id: The Apps Script project ID.
+        function_name: Name of the function to execute.
+        parameters: Optional list of parameters to pass.
+
+    Returns:
+        Dict with ``result``, ``function_name``, and ``project_id`` keys.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    project_id = params.get("project_id") or context.get("project_id", "")
+    function_name = params.get("function_name") or context.get("function_name", "")
+    if not project_id or not function_name:
+        return {"error": "Both project_id and function_name are required", "result": None}
+
+    parameters = params.get("parameters") or context.get("parameters", [])
+    try:
+        client = get_appscript_client()
+        result = client.run_function(project_id, function_name, parameters=parameters)
+        return {
+            "result": result,
+            "function_name": function_name,
+            "project_id": project_id,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "result": None}
+
+
+def _stage_appscript_deploy(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Deploy code to an Apps Script project.
+
+    Params:
+        project_id: The Apps Script project ID.
+        files: List of file dicts with 'name', 'type', and 'source' keys.
+        description: Optional version description.
+
+    Returns:
+        Dict with ``success``, ``project_id``, and ``files_saved`` keys.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    project_id = params.get("project_id") or context.get("project_id", "")
+    files = params.get("files") or context.get("files", [])
+    if not project_id or not files:
+        return {"error": "Both project_id and files are required", "success": False}
+
+    description = params.get("description") or context.get("description", "Pipeline deployment")
+    try:
+        client = get_appscript_client()
+        result = client.save_code(project_id, files)
+        return {
+            "success": True,
+            "project_id": project_id,
+            "files_saved": len(files),
+            "description": description,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "success": False}
+
+
+def _stage_appscript_get_project(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Get Apps Script project information and files.
+
+    Params:
+        project_id: The Apps Script project ID.
+        include_files: Whether to fetch source files (default True).
+
+    Returns:
+        Dict with ``info``, ``files``, and ``project_id`` keys.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    project_id = params.get("project_id") or context.get("project_id", "")
+    if not project_id:
+        return {"error": "project_id is required", "info": {}}
+
+    include_files = bool(params.get("include_files", context.get("include_files", True)))
+    try:
+        client = get_appscript_client()
+        info = client.get_project_info(project_id)
+        files = []
+        if include_files:
+            files = client.get_project_files(project_id)
+        return {
+            "info": info,
+            "files": files,
+            "project_id": project_id,
+            "file_count": len(files) if isinstance(files, list) else 0,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "info": {}}
+
+
 # ──── Stage Registry ──────────────────────────────────────────────────────────
 
 STAGE_REGISTRY: Dict[str, Callable] = {
@@ -1042,6 +1289,15 @@ STAGE_REGISTRY: Dict[str, Callable] = {
     "colab_execute": _stage_colab_execute,
     "colab_ask": _stage_colab_ask,
     "colab_build": _stage_colab_build,
+    # AI Studio (v1.21b)
+    "aistudio_generate": _stage_aistudio_generate,
+    "aistudio_embed": _stage_aistudio_embed,
+    "aistudio_create_applet": _stage_aistudio_create_applet,
+    "aistudio_generate_image": _stage_aistudio_generate_image,
+    # Apps Script (v1.21b)
+    "appscript_run": _stage_appscript_run,
+    "appscript_deploy": _stage_appscript_deploy,
+    "appscript_get_project": _stage_appscript_get_project,
 }
 
 
@@ -1227,6 +1483,76 @@ PIPELINE_TEMPLATES: Dict[str, List[Dict[str, Any]]] = {
         {"stage": "colab_build", "params": {}},
         {"stage": "drive_upload", "params": {}, "optional": True},
         {"stage": "nexus_store", "params": {"category": "code", "content_type": "code", "tags": ["notebook", "generated", "colab"]}},
+    ],
+
+    # ── AI Studio Pipeline Templates (v1.21b) ────────────────────────────────
+
+    "aistudio_content_pipeline": [
+        {"stage": "aistudio_generate", "params": {}},
+        {"stage": "aistudio_embed", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "generated", "content_type": "note", "tags": ["aistudio", "generated"]}},
+    ],
+
+    "aistudio_embed_and_store": [
+        {"stage": "aistudio_embed", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "embeddings", "content_type": "note", "tags": ["aistudio", "embedding"]}},
+    ],
+
+    "aistudio_applet_deploy": [
+        {"stage": "aistudio_create_applet", "params": {"deploy": True}},
+        {"stage": "nexus_store", "params": {"category": "applets", "content_type": "code", "tags": ["aistudio", "applet", "deployed"]}},
+    ],
+
+    "aistudio_image_pipeline": [
+        {"stage": "aistudio_generate_image", "params": {}},
+        {"stage": "drive_upload", "params": {"subfolder": "generated-images"}},
+        {"stage": "nexus_store", "params": {"category": "media", "content_type": "note", "tags": ["aistudio", "image", "generated"]}},
+    ],
+
+    "aistudio_research_generate": [
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "aistudio_generate", "params": {}},
+        {"stage": "aistudio_embed", "params": {}, "optional": True},
+        {"stage": "nexus_store", "params": {"category": "research", "content_type": "document", "tags": ["aistudio", "nlm", "research"]}},
+    ],
+
+    # ── Apps Script Pipeline Templates (v1.21b) ──────────────────────────────
+
+    "appscript_automation": [
+        {"stage": "appscript_run", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "automation", "content_type": "code", "tags": ["appscript", "automation"]}},
+    ],
+
+    "appscript_deploy_and_test": [
+        {"stage": "appscript_deploy", "params": {}},
+        {"stage": "appscript_run", "params": {}},
+        {"stage": "nexus_store", "params": {"category": "automation", "content_type": "code", "tags": ["appscript", "deployed", "tested"]}},
+    ],
+
+    "appscript_inspect_and_store": [
+        {"stage": "appscript_get_project", "params": {"include_files": True}},
+        {"stage": "nexus_store", "params": {"category": "code", "content_type": "code", "tags": ["appscript", "inspection"]}},
+    ],
+
+    # ── Cross-Service with AI Studio/Apps Script (v1.21b) ────────────────────
+
+    "full_cross_service_v2": [
+        {"stage": "prewarm", "params": {}, "optional": True},
+        {"stage": "drive_search", "params": {}},
+        {"stage": "nlm_research", "params": {}},
+        {"stage": "aistudio_generate", "params": {}},
+        {"stage": "aistudio_embed", "params": {}, "optional": True},
+        {"stage": "create_sheet", "params": {"title": "Research Data v2"}},
+        {"stage": "create_doc", "params": {}},
+        {"stage": "drive_upload", "params": {"subfolder": "cross-service-v2"}},
+        {"stage": "nexus_store", "params": {"category": "research", "content_type": "document", "tags": ["cross-service", "v2", "aistudio"]}},
+    ],
+
+    "appscript_data_pipeline": [
+        {"stage": "appscript_run", "params": {}},
+        {"stage": "create_sheet", "params": {}},
+        {"stage": "aistudio_generate", "params": {"prompt": "Analyse and summarise the data from the Apps Script execution"}},
+        {"stage": "nexus_store", "params": {"category": "data", "content_type": "note", "tags": ["appscript", "data", "pipeline"]}},
     ],
 }
 

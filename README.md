@@ -1,8 +1,8 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.20b](https://img.shields.io/badge/version-1.20b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11771](https://img.shields.io/badge/tests-11%2C771-brightgreen.svg)]() [![Skills: 391](https://img.shields.io/badge/skills-391-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.21b](https://img.shields.io/badge/version-1.21b-blueviolet.svg)]() [![Scenes: 20](https://img.shields.io/badge/scenes-20-6f42c1.svg)]() [![Tests: 11843](https://img.shields.io/badge/tests-11%2C843-brightgreen.svg)]() [![Skills: 411](https://img.shields.io/badge/skills-411-0a7f5a.svg)]()
 
-> v1.20b — "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" — Local-first multi-scene AI simulation framework
+> v1.21b — "AI STUDIO + APPS SCRIPT WIRING" — Local-first multi-scene AI simulation framework
 
 ## Overview
 
@@ -14,18 +14,18 @@ The framework features a **unified cyberpunk aesthetic** (neon_base template), *
 
 | Metric | Value |
 |--------|-------|
-| Version | **1.20b** — "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" |
-| Tests | **11,771 passing** / 345+ test files |
+| Version | **1.21b** — "AI STUDIO + APPS SCRIPT WIRING" |
+| Tests | **11,843 passing** / 345+ test files |
 | Scenes | **20** Flask scenes + 3 Streamlit apps |
 | Services | **12** launcher-managed services |
-| Skill packs | **38 packs / 391 skills** |
+| Skill packs | **38 packs / 411 skills** |
 | MCP tools | **42** domain modules |
 | Interceptors | **26** auto-registered pipeline hooks |
 | Scheduler tasks | **63** autonomous recurring tasks |
-| Pipeline stages | **24** cross-service pipeline stages |
-| Pipeline templates | **25** orchestration templates |
-| Workspace skills | **31** Google Workspace skills |
-| Workspace API ops | **50** operations across **29** YAML sections |
+| Pipeline stages | **31** cross-service pipeline stages |
+| Pipeline templates | **35** orchestration templates |
+| Workspace skills | **53** Google Workspace skills |
+| Workspace API ops | **148** operations across **40+** YAML sections |
 | API keys cataloged | **16** keys across **12** Google services |
 | Client methods | **14** WorkspaceGeminiClient methods |
 | Copilot agents | **19** specialized agent definitions |

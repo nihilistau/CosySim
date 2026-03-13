@@ -114,7 +114,7 @@ class TestStageRegistry:
 
     def test_stage_count(self):
         """Registry has the expected number of stages."""
-        assert len(STAGE_REGISTRY) == 24
+        assert len(STAGE_REGISTRY) == 31
 
 
 class TestPipelineTemplates:
@@ -139,7 +139,7 @@ class TestPipelineTemplates:
 
     def test_template_count(self):
         """Correct number of templates are defined."""
-        assert len(PIPELINE_TEMPLATES) == 25
+        assert len(PIPELINE_TEMPLATES) == 35
 
     def test_templates_have_stages(self):
         """Every template has at least one stage."""
