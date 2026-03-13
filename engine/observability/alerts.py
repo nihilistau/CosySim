@@ -269,4 +269,10 @@ def _infer_node(metric: str) -> str:
         return "pipeline"
     if "error" in metric:
         return "system"
+    if metric in ("process", "worker_count", "stalled_count", "python_worker"):
+        return "process"
+    if "worker" in metric:
+        return "process"
+    if "stall" in metric or "git_stall" in metric:
+        return "process"
     return "system"

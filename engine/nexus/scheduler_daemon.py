@@ -1347,6 +1347,24 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "daily",
         _copilot_auto_repair_callback,
     )
+    daemon.register(
+        "process-monitor-snapshot",
+        "Capture full process snapshot and record to MetricsDB",
+        "every_4h",
+        _process_snapshot_callback,
+    )
+    daemon.register(
+        "git-operation-check",
+        "Check for running or stalled git operations",
+        "every_15m",
+        _git_operation_check_callback,
+    )
+    daemon.register(
+        "stall-detection-sweep",
+        "Scan for stalled processes across all tracked categories",
+        "every_4h",
+        _stall_detection_callback,
+    )
 
 
 def _auto_embedding_callback() -> Dict[str, Any]:
@@ -1366,6 +1384,99 @@ def _auto_embedding_callback() -> Dict[str, Any]:
         }
     except Exception as exc:
         logger.error("Auto-embedding task failed: %s", exc)
+        return {"error": str(exc)}
+
+
+# ── Process Monitor Callbacks ─────────────────────────────────────────────────
+
+
+def _process_snapshot_callback() -> Dict[str, Any]:
+    """Capture a full process snapshot and record to MetricsDB."""
+    try:
+        from engine.system import get_process_monitor
+
+        mon = get_process_monitor()
+        snapshot = mon.system_snapshot()
+        recorded = mon.record_to_metrics_db()
+        return {
+            "total_processes": snapshot.get("total_processes", 0),
+            "git_operations": len(snapshot.get("git_operations", [])),
+            "tracked_operations": len(snapshot.get("tracked_operations", [])),
+            "stalled": len(snapshot.get("stalled", [])),
+            "total_memory_mb": snapshot.get("total_memory_mb", 0.0),
+            "recorded_to_db": recorded,
+        }
+    except Exception as exc:
+        logger.error("Process snapshot task failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _git_operation_check_callback() -> Dict[str, Any]:
+    """Check for running or stalled git operations."""
+    try:
+        from engine.system import get_process_monitor
+
+        mon = get_process_monitor()
+        git_ops = mon.git_operations()
+        stalled = [
+            op for op in git_ops
+            if op.elapsed_seconds > 300
+        ]
+        if stalled:
+            logger.warning(
+                "Detected %d stalled git operations: %s",
+                len(stalled),
+                ", ".join(f"{o.op_type.value}({o.pid})" for o in stalled),
+            )
+        return {
+            "active_git_ops": len(git_ops),
+            "stalled_git_ops": len(stalled),
+            "operations": [
+                {
+                    "pid": op.pid,
+                    "type": op.op_type.value,
+                    "phase": op.phase.value,
+                    "elapsed_seconds": round(op.elapsed_seconds, 1),
+                }
+                for op in git_ops
+            ],
+        }
+    except Exception as exc:
+        logger.error("Git operation check failed: %s", exc)
+        return {"error": str(exc)}
+
+
+def _stall_detection_callback() -> Dict[str, Any]:
+    """Sweep all tracked categories for stalled processes."""
+    try:
+        from engine.system import get_process_monitor
+
+        mon = get_process_monitor()
+        stalls = mon.stall_detection()
+        if stalls:
+            logger.warning(
+                "Detected %d stalled processes: %s",
+                len(stalls),
+                ", ".join(
+                    f"{s.process.name}(PID {s.process.pid})" for s in stalls
+                ),
+            )
+        return {
+            "stalled_count": len(stalls),
+            "stalls": [
+                {
+                    "pid": s.process.pid,
+                    "name": s.process.name,
+                    "category": s.process.category.value if s.process.category else "unknown",
+                    "cpu_seconds": round(s.process.cpu_seconds, 1),
+                    "memory_mb": round(s.process.memory_mb, 1),
+                    "reason": s.reason,
+                }
+                for s in stalls
+            ],
+        }
+    except Exception as exc:
+        logger.error("Stall detection sweep failed: %s", exc)
         return {"error": str(exc)}
 
 
