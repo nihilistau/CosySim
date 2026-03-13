@@ -914,3 +914,764 @@ def workspace_colab_pipeline(template: str, params: str = "{}") -> str:
     except Exception as exc:
         logger.error("workspace_colab_pipeline failed: %s", exc)
         return json.dumps({"error": str(exc)})
+
+
+# ──── AI Studio Skills (v1.21b) ────
+
+
+@skill(
+    pack="workspace",
+    description="Generate content using a Google AI Studio model",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=2.0,
+    tags=["aistudio", "generate", "gemini", "ai"],
+)
+def workspace_aistudio_generate(
+    prompt: str,
+    model: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    system_instruction: Optional[str] = None,
+) -> str:
+    """Generate content with a Google AI Studio model.
+
+    Args:
+        prompt: The user prompt to send.
+        model: Model name override (uses default if omitted).
+        temperature: Sampling temperature (0.0–2.0).
+        max_tokens: Maximum output tokens.
+        system_instruction: Optional system instruction prepended to the request.
+
+    Returns:
+        JSON string with generated content and metadata.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    try:
+        client = get_aistudio_client()
+        result = client.generate_content(
+            prompt,
+            model_name=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            system_instruction=system_instruction,
+        )
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_generate failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="List available models in Google AI Studio",
+    category="SYSTEM",
+    cooldown=5.0,
+    cost=1.0,
+    tags=["aistudio", "models", "list"],
+)
+def workspace_aistudio_list_models() -> str:
+    """List available models in Google AI Studio.
+
+    Returns:
+        JSON string with an array of model metadata objects.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    try:
+        client = get_aistudio_client()
+        result = client.list_models()
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_list_models failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Embed content into a vector representation via AI Studio",
+    category="SYSTEM",
+    cooldown=2.0,
+    cost=1.0,
+    tags=["aistudio", "embed", "embedding", "vector"],
+)
+def workspace_aistudio_embed(
+    model: str,
+    content: str,
+    task_type: Optional[str] = None,
+    title: Optional[str] = None,
+) -> str:
+    """Embed content into a vector representation via AI Studio.
+
+    Args:
+        model: Embedding model name (e.g. ``text-embedding-004``).
+        content: Text to embed.
+        task_type: Optional task type hint (e.g. ``RETRIEVAL_DOCUMENT``).
+        title: Optional title for the content being embedded.
+
+    Returns:
+        JSON string with the embedding vector and metadata.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    try:
+        client = get_aistudio_client()
+        result = client.embed_content(model, content, task_type=task_type, title=title)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_embed failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Count tokens for content using an AI Studio model",
+    category="SYSTEM",
+    cooldown=1.0,
+    cost=0.5,
+    tags=["aistudio", "tokens", "count"],
+)
+def workspace_aistudio_count_tokens(model: str, contents: str) -> str:
+    """Count the number of tokens for the given content.
+
+    Args:
+        model: Model name used for tokenisation.
+        contents: Content to tokenise (JSON string or plain text).
+
+    Returns:
+        JSON string with the token count.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    try:
+        parsed_contents = json.loads(contents) if isinstance(contents, str) else contents
+    except (json.JSONDecodeError, TypeError):
+        parsed_contents = contents
+
+    try:
+        client = get_aistudio_client()
+        result = client.count_tokens(model, parsed_contents)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_count_tokens failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Enhance or improve a prompt using AI Studio",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=1.5,
+    tags=["aistudio", "prompt", "enhance"],
+)
+def workspace_aistudio_enhance_prompt(
+    prompt: str,
+    model: Optional[str] = None,
+) -> str:
+    """Enhance or improve a prompt using AI Studio.
+
+    Args:
+        prompt: The original prompt to enhance.
+        model: Model name override for the enhancement request.
+
+    Returns:
+        JSON string with the enhanced prompt and suggestions.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    try:
+        client = get_aistudio_client()
+        result = client.enhance_prompt(prompt, model=model)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_enhance_prompt failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Generate images using an AI Studio model",
+    category="MEDIA",
+    cooldown=10.0,
+    cost=5.0,
+    tags=["aistudio", "image", "generate", "multimodal"],
+)
+def workspace_aistudio_generate_image(
+    prompt: str,
+    model: Optional[str] = None,
+    n: int = 1,
+    size: Optional[str] = None,
+) -> str:
+    """Generate images from a text prompt via AI Studio.
+
+    Args:
+        prompt: Text description of the desired image.
+        model: Model name override for image generation.
+        n: Number of images to generate (default 1).
+        size: Output image size (e.g. ``1024x1024``).
+
+    Returns:
+        JSON string with generated image data or URLs.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    try:
+        client = get_aistudio_client()
+        result = client.generate_image(prompt, model=model, n=n, size=size)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_generate_image failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Generate a video from a text prompt via AI Studio",
+    category="MEDIA",
+    cooldown=15.0,
+    cost=8.0,
+    tags=["aistudio", "video", "generate", "multimodal"],
+)
+def workspace_aistudio_generate_video(
+    prompt: str,
+    model: Optional[str] = None,
+    duration: Optional[int] = None,
+    aspect_ratio: Optional[str] = None,
+) -> str:
+    """Generate a video from a text prompt via AI Studio.
+
+    Args:
+        prompt: Text description of the desired video.
+        model: Model name override for video generation.
+        duration: Desired video duration in seconds.
+        aspect_ratio: Output aspect ratio (e.g. ``16:9``).
+
+    Returns:
+        JSON string with video generation results.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    try:
+        client = get_aistudio_client()
+        result = client.generate_video(prompt, model=model, duration=duration, aspect_ratio=aspect_ratio)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_generate_video failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Convert text to speech using AI Studio",
+    category="MEDIA",
+    cooldown=5.0,
+    cost=3.0,
+    tags=["aistudio", "tts", "speech", "audio"],
+)
+def workspace_aistudio_tts(
+    text: str,
+    voice: Optional[str] = None,
+    model: Optional[str] = None,
+) -> str:
+    """Convert text to speech using AI Studio.
+
+    Args:
+        text: The text to synthesise into speech.
+        voice: Voice preset name.
+        model: Model name override for TTS.
+
+    Returns:
+        JSON string with audio data or a reference URL.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    try:
+        client = get_aistudio_client()
+        result = client.text_to_speech(text, voice=voice, model=model)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_tts failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Create, list, get, update, or delete AI Studio prompts",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=1.0,
+    tags=["aistudio", "prompt", "manage"],
+)
+def workspace_aistudio_manage_prompt(
+    action: str,
+    display_name: Optional[str] = None,
+    prompt_data: Optional[str] = None,
+    prompt_name: Optional[str] = None,
+) -> str:
+    """Manage AI Studio saved prompts.
+
+    Args:
+        action: One of ``list``, ``create``, ``get``, ``update``, ``delete``.
+        display_name: Human-readable prompt name (create/update).
+        prompt_data: JSON string with prompt content (create/update).
+        prompt_name: Resource name of the prompt (get/update/delete).
+
+    Returns:
+        JSON string with the operation result.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    valid_actions = {"list", "create", "get", "update", "delete"}
+    if action not in valid_actions:
+        return json.dumps({"error": f"Unknown action. Choose from: {sorted(valid_actions)}"})
+
+    try:
+        client = get_aistudio_client()
+        parsed_data = None
+        if prompt_data is not None:
+            try:
+                parsed_data = json.loads(prompt_data) if isinstance(prompt_data, str) else prompt_data
+            except (json.JSONDecodeError, TypeError):
+                parsed_data = prompt_data
+
+        if action == "list":
+            result = client.list_prompts()
+        elif action == "create":
+            result = client.create_prompt(display_name=display_name, prompt_data=parsed_data)
+        elif action == "get":
+            result = client.get_prompt(prompt_name=prompt_name)
+        elif action == "update":
+            result = client.update_prompt(prompt_name=prompt_name, display_name=display_name, prompt_data=parsed_data)
+        elif action == "delete":
+            result = client.delete_prompt(prompt_name=prompt_name)
+
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_manage_prompt failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Create, list, deploy, undeploy, get, or delete AI Studio applets",
+    category="SYSTEM",
+    cooldown=5.0,
+    cost=3.0,
+    tags=["aistudio", "applet", "manage", "deploy"],
+)
+def workspace_aistudio_manage_applet(
+    action: str,
+    display_name: Optional[str] = None,
+    code: Optional[str] = None,
+    applet_name: Optional[str] = None,
+    model: Optional[str] = None,
+    system_instruction: Optional[str] = None,
+) -> str:
+    """Manage AI Studio applets (Gems).
+
+    Args:
+        action: One of ``list``, ``create``, ``deploy``, ``undeploy``, ``delete``, ``get``.
+        display_name: Human-readable applet name (create).
+        code: Applet source code (create).
+        applet_name: Resource name of the applet (deploy/undeploy/delete/get).
+        model: Model name for the applet (create).
+        system_instruction: System prompt for the applet (create).
+
+    Returns:
+        JSON string with the operation result.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    valid_actions = {"list", "create", "deploy", "undeploy", "delete", "get"}
+    if action not in valid_actions:
+        return json.dumps({"error": f"Unknown action. Choose from: {sorted(valid_actions)}"})
+
+    try:
+        client = get_aistudio_client()
+
+        if action == "list":
+            result = client.list_applets()
+        elif action == "create":
+            result = client.create_applet(
+                display_name=display_name,
+                code=code,
+                model=model,
+                system_instruction=system_instruction,
+            )
+        elif action == "deploy":
+            result = client.deploy_applet(applet_name=applet_name)
+        elif action == "undeploy":
+            result = client.undeploy_applet(applet_name=applet_name)
+        elif action == "delete":
+            result = client.delete_applet(applet_name=applet_name)
+        elif action == "get":
+            result = client.get_applet(applet_name=applet_name)
+
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_manage_applet failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Create, list, get, or delete AI Studio files",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=1.0,
+    tags=["aistudio", "file", "manage"],
+)
+def workspace_aistudio_manage_file(
+    action: str,
+    display_name: Optional[str] = None,
+    file_data: Optional[str] = None,
+    mime_type: Optional[str] = None,
+    file_name: Optional[str] = None,
+) -> str:
+    """Manage AI Studio uploaded files.
+
+    Args:
+        action: One of ``list``, ``create``, ``get``, ``delete``.
+        display_name: Human-readable file name (create).
+        file_data: Base64-encoded file data or file path (create).
+        mime_type: MIME type of the file (create).
+        file_name: Resource name of the file (get/delete).
+
+    Returns:
+        JSON string with the operation result.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    valid_actions = {"list", "create", "get", "delete"}
+    if action not in valid_actions:
+        return json.dumps({"error": f"Unknown action. Choose from: {sorted(valid_actions)}"})
+
+    try:
+        client = get_aistudio_client()
+
+        if action == "list":
+            result = client.list_files()
+        elif action == "create":
+            result = client.create_file(display_name=display_name, file_data=file_data, mime_type=mime_type)
+        elif action == "get":
+            result = client.get_file(file_name=file_name)
+        elif action == "delete":
+            result = client.delete_file(file_name=file_name)
+
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_manage_file failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Check content safety via AI Studio moderation",
+    category="SYSTEM",
+    cooldown=1.0,
+    cost=0.5,
+    tags=["aistudio", "safety", "check"],
+)
+def workspace_aistudio_check_safety(
+    content: str,
+    safety_settings: Optional[str] = None,
+) -> str:
+    """Check content against AI Studio safety filters.
+
+    Args:
+        content: Text content to evaluate.
+        safety_settings: Optional JSON string with custom safety thresholds.
+
+    Returns:
+        JSON string with safety ratings per category.
+    """
+    from engine.integrations.aistudio_client import get_aistudio_client
+
+    parsed_settings = None
+    if safety_settings is not None:
+        try:
+            parsed_settings = json.loads(safety_settings) if isinstance(safety_settings, str) else safety_settings
+        except (json.JSONDecodeError, TypeError):
+            parsed_settings = safety_settings
+
+    try:
+        client = get_aistudio_client()
+        result = client.check_safety(content, safety_settings=parsed_settings)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_check_safety failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Run an AI Studio-oriented workspace pipeline template",
+    category="SYSTEM",
+    cooldown=5.0,
+    cost=4.0,
+    tags=["aistudio", "pipeline", "workflow"],
+)
+def workspace_aistudio_pipeline(template: str, params: str = "{}") -> str:
+    """Run an AI Studio-oriented workspace pipeline template.
+
+    Available templates: aistudio_content_pipeline, aistudio_embed_and_store,
+    aistudio_applet_deploy, aistudio_image_pipeline.
+
+    Args:
+        template: Pipeline template name.
+        params: JSON string of parameters for the pipeline stages.
+
+    Returns:
+        JSON with ``results``, ``stage_count``, and ``errors`` keys.
+    """
+    from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+    aistudio_templates = {
+        "aistudio_content_pipeline",
+        "aistudio_embed_and_store",
+        "aistudio_applet_deploy",
+        "aistudio_image_pipeline",
+    }
+    if template not in aistudio_templates:
+        return json.dumps({"error": f"Unknown template. Choose from: {sorted(aistudio_templates)}"})
+
+    try:
+        parsed_params = json.loads(params) if isinstance(params, str) else params
+        pipeline = get_workspace_pipeline()
+        results = pipeline.run(template, parsed_params)
+        errors = [r for r in results if "error" in r]
+        return json.dumps({"results": results, "stage_count": len(results), "errors": errors}, default=str)
+    except Exception as exc:
+        logger.error("workspace_aistudio_pipeline failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+# ──── Apps Script Skills (v1.21b) ────
+
+
+@skill(
+    pack="workspace",
+    description="List recent executions for a Google Apps Script project",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=1.0,
+    tags=["appscript", "executions", "list"],
+)
+def workspace_appscript_list_executions(project_id: str, max_results: int = 50) -> str:
+    """List recent executions for an Apps Script project.
+
+    Args:
+        project_id: The Apps Script project ID.
+        max_results: Maximum number of executions to return (default 50).
+
+    Returns:
+        JSON string with an array of execution records.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    try:
+        client = get_appscript_client()
+        result = client.list_executions(project_id, max_results=max_results)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_appscript_list_executions failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Run a function in a Google Apps Script project",
+    category="SYSTEM",
+    cooldown=5.0,
+    cost=3.0,
+    tags=["appscript", "run", "execute", "function"],
+)
+def workspace_appscript_run_function(
+    project_id: str,
+    function_name: str,
+    parameters: Optional[str] = None,
+) -> str:
+    """Run a function in a Google Apps Script project.
+
+    Args:
+        project_id: The Apps Script project ID.
+        function_name: Name of the function to execute.
+        parameters: Optional JSON string with function arguments.
+
+    Returns:
+        JSON string with the function return value and execution metadata.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    parsed_params = None
+    if parameters is not None:
+        try:
+            parsed_params = json.loads(parameters) if isinstance(parameters, str) else parameters
+        except (json.JSONDecodeError, TypeError):
+            parsed_params = parameters
+
+    try:
+        client = get_appscript_client()
+        result = client.run_function(project_id, function_name, parameters=parsed_params)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_appscript_run_function failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Get info and source files for a Google Apps Script project",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=1.0,
+    tags=["appscript", "project", "info", "files"],
+)
+def workspace_appscript_get_project(project_id: str, include_files: bool = True) -> str:
+    """Get project metadata and optionally its source files.
+
+    Args:
+        project_id: The Apps Script project ID.
+        include_files: Whether to include source files (default True).
+
+    Returns:
+        JSON string with project info and optional file list.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    try:
+        client = get_appscript_client()
+        project_info = client.get_project(project_id)
+        if include_files:
+            files = client.get_project_files(project_id)
+            project_info["files"] = files
+        return json.dumps(project_info, default=str)
+    except Exception as exc:
+        logger.error("workspace_appscript_get_project failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Save code to a file in a Google Apps Script project",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=2.0,
+    tags=["appscript", "save", "code", "edit"],
+)
+def workspace_appscript_save_code(project_id: str, file_id: str, code: str) -> str:
+    """Save code to an Apps Script project file.
+
+    Args:
+        project_id: The Apps Script project ID.
+        file_id: The file ID within the project.
+        code: Source code to save.
+
+    Returns:
+        JSON string confirming the save operation.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    try:
+        client = get_appscript_client()
+        result = client.save_code(project_id, file_id, code)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_appscript_save_code failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="List triggers for a Google Apps Script project",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=1.0,
+    tags=["appscript", "triggers", "list"],
+)
+def workspace_appscript_list_triggers(project_id: str) -> str:
+    """List triggers configured for an Apps Script project.
+
+    Args:
+        project_id: The Apps Script project ID.
+
+    Returns:
+        JSON string with an array of trigger definitions.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    try:
+        client = get_appscript_client()
+        result = client.list_triggers(project_id)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_appscript_list_triggers failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="List versions of a Google Apps Script project",
+    category="SYSTEM",
+    cooldown=3.0,
+    cost=1.0,
+    tags=["appscript", "versions", "list"],
+)
+def workspace_appscript_list_versions(project_id: str, max_results: int = 50) -> str:
+    """List published versions of an Apps Script project.
+
+    Args:
+        project_id: The Apps Script project ID.
+        max_results: Maximum number of versions to return (default 50).
+
+    Returns:
+        JSON string with an array of version records.
+    """
+    from engine.integrations.appscript_client import get_appscript_client
+
+    try:
+        client = get_appscript_client()
+        result = client.list_versions(project_id, max_results=max_results)
+        return json.dumps(result, default=str)
+    except Exception as exc:
+        logger.error("workspace_appscript_list_versions failed: %s", exc)
+        return json.dumps({"error": str(exc)})
+
+
+@skill(
+    pack="workspace",
+    description="Run an Apps Script-oriented workspace pipeline template",
+    category="SYSTEM",
+    cooldown=5.0,
+    cost=4.0,
+    tags=["appscript", "pipeline", "workflow"],
+)
+def workspace_appscript_pipeline(template: str, params: str = "{}") -> str:
+    """Run an Apps Script-oriented workspace pipeline template.
+
+    Available templates: appscript_automation, appscript_deploy_and_test.
+
+    Args:
+        template: Pipeline template name.
+        params: JSON string of parameters for the pipeline stages.
+
+    Returns:
+        JSON with ``results``, ``stage_count``, and ``errors`` keys.
+    """
+    from engine.nexus.workspace_pipeline import get_workspace_pipeline
+
+    appscript_templates = {"appscript_automation", "appscript_deploy_and_test"}
+    if template not in appscript_templates:
+        return json.dumps({"error": f"Unknown template. Choose from: {sorted(appscript_templates)}"})
+
+    try:
+        parsed_params = json.loads(params) if isinstance(params, str) else params
+        pipeline = get_workspace_pipeline()
+        results = pipeline.run(template, parsed_params)
+        errors = [r for r in results if "error" in r]
+        return json.dumps({"results": results, "stage_count": len(results), "errors": errors}, default=str)
+    except Exception as exc:
+        logger.error("workspace_appscript_pipeline failed: %s", exc)
+        return json.dumps({"error": str(exc)})

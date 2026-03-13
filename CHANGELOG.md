@@ -3,6 +3,87 @@
 All notable changes to CosySim are documented here.
 
 ---
+## [1.21b] — "AI STUDIO + APPS SCRIPT WIRING" — 2026-07
+
+Full live-wiring of AI Studio and Apps Script into the proxy layer, skill system,
+and cross-service pipeline. Adds the Apps Script batchexecute client, 32 new
+proxy routes, 20 new MCP skills, 7 pipeline stages, and 10 pipeline templates.
+
+### Added: Apps Script Client
+- `engine/integrations/appscript_client.py` — full batchexecute client (~730 lines)
+- 14 operations: list_executions, run_function, get_project_files, get_project_info,
+  get_project_metadata, save_project, save_code, get_project_settings,
+  get_editor_state, update_cursor, page_init, list_triggers, list_versions,
+  get_project_history
+- SAPISIDHASH auth via GoogleAccountPool (same pattern as ColabClient)
+- Factory function: `get_appscript_client(account_name=None)`
+
+### Added: AI Studio Proxy Routes (22 routes)
+- Content generation: generate, stream_generate, generate_image, embed_content
+- Model management: list_models, get_model, create_tuned_model, delete_tuned_model
+- Prompt management: list_prompts, get_prompt, create_prompt, update_prompt, delete_prompt
+- Applet control: create_applet, list_applets, get_applet, update_applet, delete_applet
+- User features: list_gems, get_user_settings, update_user_settings
+- API keys: generate_api_key, list_api_keys
+
+### Added: Apps Script Proxy Routes (10 routes)
+- Project management: get_project, get_project_files, save_project, save_code
+- Execution: run_function, list_executions, list_triggers
+- Metadata: get_project_info, get_project_metadata, get_project_history
+
+### Added: AI Studio MCP Skills (13 skills)
+- `workspace_aistudio_generate`, `workspace_aistudio_stream`, `workspace_aistudio_image`,
+  `workspace_aistudio_embed`, `workspace_aistudio_list_models`,
+  `workspace_aistudio_create_prompt`, `workspace_aistudio_list_prompts`,
+  `workspace_aistudio_get_prompt`, `workspace_aistudio_create_applet`,
+  `workspace_aistudio_list_gems`, `workspace_aistudio_tune_model`,
+  `workspace_aistudio_gen_api_key`, `workspace_aistudio_settings`
+
+### Added: Apps Script MCP Skills (7 skills)
+- `workspace_appscript_run`, `workspace_appscript_get_project`,
+  `workspace_appscript_save_code`, `workspace_appscript_list_executions`,
+  `workspace_appscript_list_triggers`, `workspace_appscript_list_versions`,
+  `workspace_appscript_history`
+
+### Added: Pipeline Stages (24 → 31)
+- AI Studio: `aistudio_generate`, `aistudio_embed`, `aistudio_create_applet`,
+  `aistudio_generate_image`
+- Apps Script: `appscript_run`, `appscript_deploy`, `appscript_get_project`
+
+### Added: Pipeline Templates (25 → 35)
+- AI Studio: `aistudio_content_pipeline`, `aistudio_embed_and_store`,
+  `aistudio_applet_deploy`, `aistudio_image_pipeline`,
+  `aistudio_research_generate`
+- Apps Script: `appscript_automation`, `appscript_deploy_and_test`,
+  `appscript_inspect_and_store`
+- Cross-service: `full_cross_service_v2`, `appscript_data_pipeline`
+
+### Added: Tests
+- `tests/test_appscript_client.py` — 72 tests covering all 14 operations,
+  factory, auth, protocol encoding, error handling
+- Updated `tests/test_workspace_pipeline.py` — stage count 24→31, template count 25→35
+
+---
+## [1.21a] — "YAML REGISTRY EXPANSION" — 2026-07
+
+Deep HAR/heap exploration adding Apps Script RPC surface (14 rpcids), NLM gRPC
+methods, and heap-discovered operations to the unified YAML registry.
+
+### Added: HAR Mining Tools
+- `scripts/v121_har_extract.py` — automated rpcid/gRPC/REST extraction from 15 HAR files
+- `scripts/v121_payload_extractor.py` — deep payload structure analysis
+- `scripts/v121_yaml_expand.py` — automated YAML registry expansion
+
+### Added: YAML Registry Expansion (3216 → 3624 lines)
+- `appscript` section: 14 batchexecute rpcids with payload templates (soc-app 779)
+- `nlm_grpc` section: 2 gRPC service methods (NoteCreation, ListSavedNotes)
+- `nlm_heap_discovered` section: 24 methods from heap snapshot analysis
+- Registry version bumped to 5.0
+
+### Tests
+- All 77 registry tests pass
+
+---
 ## [1.20b] — "SYSTEM BENCHMARKING & SELF-IMPROVEMENT" — 2026-07
 
 Benchmark-to-MetaMetrics persistence bridge, BENCHMARK_METRICS category,
