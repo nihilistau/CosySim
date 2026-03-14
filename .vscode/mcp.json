@@ -39,9 +39,9 @@
 		},
 		"io.github.f/prompts.chat-mcp": {
 			"type": "stdio",
-			"command": "npx",
+			"command": "node",
 			"args": [
-				"@fkadev/prompts.chat-mcp@1.0.9"
+				"node_modules/@fkadev/prompts.chat-mcp/build/index.js"
 			],
 			"env": {
 				"PROMPTS_API_KEY": "${input:PROMPTS_API_KEY}",
