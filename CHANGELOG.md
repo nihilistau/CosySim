@@ -4,6 +4,53 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.32] — "MULTI-DIMENSIONAL METRICS & PARETO MODEL SELECTION" — 2026-07
+
+Closes ALL remaining GAP_ANALYSIS gaps (3 MEDIUM). Self-improvement maturity
+reaches ~95%. Metrics can now be sliced by arbitrary tag dimensions, and model
+promotion uses multi-objective Pareto frontier analysis instead of single scores.
+
+### Added
+- **MetricDimensions** (`engine/observability/metric_dimensions.py`, ~540 lines)
+  - `DimensionStore` — SQLite-backed dimensional metric storage with arbitrary tag/dimension support
+  - `DimensionalMetric`, `AggregationResult`, `TagCardinality` data models
+  - Multi-dimensional aggregation queries with GROUP BY, filters, time windows
+  - Tag cardinality tracking, percentile computation (p50/p95/p99), export for analysis
+  - Thread-safe singleton with per-thread DB connections
+
+- **ParetoSelector** (`engine/nexus/pareto_selector.py`, ~893 lines)
+  - `ModelObjectives` — typed benchmark metrics (accuracy, latency, cost, throughput, error rate, memory)
+  - Pareto frontier computation via non-dominated sorting
+  - 3 scalarization methods: weighted_sum, Tchebycheff, augmented Tchebycheff
+  - 4 ranking strategies: weighted_sum, tchebycheff, pareto_rank (NSGA-II layers), knee_point
+  - 5 context presets: balanced, latency_sensitive, accuracy_critical, cost_efficient, throughput_max
+  - Knee point detection (2D perpendicular distance + nD hyperplane projection)
+  - Pure Python — no numpy/scipy dependency
+
+- **Multi-Criteria Promotion** (modified `training/model_registry.py`)
+  - `promote_multi_criteria(model_type, strategy, context)` — Pareto-based promotion
+  - `get_pareto_frontier(model_type, context)` — frontier analysis
+  - `_to_model_objectives()` — converts benchmark_details to typed ModelObjectives
+  - Backward compatible — `auto_promote()` still works for single-score cases
+
+- **Pareto-Aware Online Evaluation** (modified `engine/nexus/online_evaluator.py`)
+  - `_pareto_evaluate()` — multi-objective dominance check (quality + latency + error rate)
+  - Config-driven: `online_eval.pareto_evaluation` toggle
+  - Falls through to standard quality-only check when disabled or inconclusive
+
+- **MCP Skills** (`engine/skills/builtin/dimension_skills.py`, 10 skills, pack="model_ops")
+  - Dimensional metrics: record_dimensional_metric, query_dimensional_metrics, get_tag_cardinality, get_metric_dimensions_summary
+  - Pareto selection: compute_pareto_frontier, rank_models_multi_criteria, list_selection_contexts, recommend_model
+  - Multi-criteria promotion: promote_model_multi_criteria, get_promotion_strategy_info
+
+### Tests
+- `test_metric_dimensions.py` — 55 tests
+- `test_pareto_selector.py` — 54 tests
+- `test_dimension_skills.py` — 29 tests
+- Total new: 138 tests | Full suite: 13,187 passed
+
+---
+
 ## [1.31] — "CAUSAL INFERENCE & PREDICTIVE REFRESH" — 2026-07
 
 Closes the two remaining HIGH-priority gaps: causal inference engine and

@@ -946,10 +946,11 @@ class OnlineEvaluator:
         Rules:
             1. If total_samples < min_samples → CONTINUE
             2. If candidate_error_rate > production_error_rate * 2 → ROLLBACK
-            3. If quality_improvement_pct > promote_threshold → PROMOTE
-            4. If quality_improvement_pct < -degradation_threshold → ROLLBACK
-            5. If duration > max_duration_hours → INCONCLUSIVE
-            6. Otherwise → CONTINUE
+            3. If Pareto evaluation enabled, use multi-objective dominance check
+            4. If quality_improvement_pct > promote_threshold → PROMOTE
+            5. If quality_improvement_pct < -degradation_threshold → ROLLBACK
+            6. If duration > max_duration_hours → INCONCLUSIVE
+            7. Otherwise → CONTINUE
         """
         if metrics.total_samples < session.min_samples:
             return EvalDecision.CONTINUE
@@ -963,6 +964,12 @@ class OnlineEvaluator:
         if metrics.candidate_error_rate > 0.5 and metrics.production_error_rate < 0.1:
             return EvalDecision.ROLLBACK
 
+        # Pareto-aware evaluation: check multi-objective dominance
+        if self._pareto_evaluation_enabled():
+            pareto_decision = self._pareto_evaluate(session, metrics)
+            if pareto_decision is not None:
+                return pareto_decision
+
         if metrics.quality_improvement_pct > session.promote_threshold:
             return EvalDecision.PROMOTE
 
@@ -974,6 +981,81 @@ class OnlineEvaluator:
             return EvalDecision.INCONCLUSIVE
 
         return EvalDecision.CONTINUE
+
+    def _pareto_evaluation_enabled(self) -> bool:
+        """Check if Pareto-based multi-criteria evaluation is enabled."""
+        cfg = _get_config()
+        if cfg is None:
+            return False
+        return bool(cfg.get("online_eval.pareto_evaluation", False))
+
+    def _pareto_evaluate(
+        self, session: EvalSession, metrics: EvalMetrics
+    ) -> Optional[EvalDecision]:
+        """Evaluate candidate vs production using Pareto dominance.
+
+        Compares candidate against production across quality, latency, and
+        error rate simultaneously.  Returns PROMOTE if candidate Pareto-dominates
+        production, ROLLBACK if production dominates candidate, or None to fall
+        through to the standard quality-only check.
+
+        Args:
+            session: Current evaluation session.
+            metrics: Aggregated evaluation metrics.
+
+        Returns:
+            EvalDecision or None if Pareto is inconclusive.
+        """
+        try:
+            from engine.nexus.pareto_selector import (
+                get_pareto_selector,
+                ModelObjectives,
+                ObjectiveConfig,
+            )
+        except ImportError:
+            return None
+
+        prod_obj = ModelObjectives(
+            model_id="production",
+            model_type="eval",
+            accuracy=metrics.production_avg_quality,
+            latency_p50_ms=metrics.production_avg_latency,
+            latency_p95_ms=metrics.production_p95_latency,
+            error_rate=metrics.production_error_rate,
+        )
+        cand_obj = ModelObjectives(
+            model_id="candidate",
+            model_type="eval",
+            accuracy=metrics.candidate_avg_quality,
+            latency_p50_ms=metrics.candidate_avg_latency,
+            latency_p95_ms=metrics.candidate_p95_latency,
+            error_rate=metrics.candidate_error_rate,
+        )
+
+        eval_objectives = [
+            ObjectiveConfig("accuracy", "maximize", weight=2.0),
+            ObjectiveConfig("latency_p50_ms", "minimize", weight=1.0),
+            ObjectiveConfig("latency_p95_ms", "minimize", weight=1.0),
+            ObjectiveConfig("error_rate", "minimize", weight=1.5),
+        ]
+
+        selector = get_pareto_selector()
+
+        if selector.dominates(cand_obj, prod_obj, eval_objectives):
+            logger.info(
+                "Pareto: candidate dominates production across all objectives "
+                "(session %s)", session.session_id,
+            )
+            return EvalDecision.PROMOTE
+
+        if selector.dominates(prod_obj, cand_obj, eval_objectives):
+            logger.info(
+                "Pareto: production dominates candidate across all objectives "
+                "(session %s)", session.session_id,
+            )
+            return EvalDecision.ROLLBACK
+
+        return None
 
     @staticmethod
     def _build_decision_reason(

@@ -1,11 +1,17 @@
 """Model Registry — tracks all fine-tuned models, their benchmark scores, and active status.
 
+Supports single-score promotion (``auto_promote``) and multi-criteria Pareto-based
+promotion (``promote_multi_criteria``).
+
 Usage::
     from training.model_registry import get_model_registry
     registry = get_model_registry()
     registry.register("qa_evaluator", adapter_path="training/models/qa_eval_abc123/adapter")
     registry.promote("qa_evaluator", "abc123")
     best = registry.get_active("qa_evaluator")
+
+    # Multi-criteria promotion
+    result = registry.promote_multi_criteria("qa_evaluator", context="accuracy_critical")
 """
 from __future__ import annotations
 
@@ -15,7 +21,7 @@ import time
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +185,193 @@ class ModelRegistry:
             return current_active
         self.promote(model_type, best.model_id)
         return best
+
+    def promote_multi_criteria(
+        self,
+        model_type: str,
+        strategy: str = "weighted_sum",
+        context: str = "balanced",
+        custom_weights: Optional[Dict[str, float]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Promote the best model using multi-criteria Pareto-based selection.
+
+        Uses ParetoSelector to evaluate models across multiple objectives
+        (accuracy, latency, cost, throughput, etc.) instead of a single score.
+
+        Args:
+            model_type: The model type to promote.
+            strategy: Ranking strategy — weighted_sum, tchebycheff, pareto_rank, knee_point.
+            context: Selection context preset — balanced, latency_sensitive,
+                accuracy_critical, cost_efficient, throughput_max.
+            custom_weights: Override default weights per objective.
+                Keys are objective names, values are weights.
+
+        Returns:
+            Dict with promotion result including model_id, score, strategy,
+            frontier_size, and all_rankings, or None if no candidates.
+        """
+        from engine.nexus.pareto_selector import (
+            get_pareto_selector,
+            ModelObjectives,
+            ObjectiveConfig,
+        )
+
+        candidates = [
+            m for m in self._models.values()
+            if m.model_type == model_type
+            and m.benchmark_score is not None
+        ]
+        if not candidates:
+            logger.info("Multi-criteria: no scored models for %s", model_type)
+            return None
+
+        objectives_list = self._to_model_objectives(candidates)
+        if not objectives_list:
+            return None
+
+        selector = get_pareto_selector()
+
+        custom_objectives: Optional[List[ObjectiveConfig]] = None
+        if custom_weights:
+            ctx = selector.get_context(context)
+            custom_objectives = []
+            for obj in ctx.objectives:
+                w = custom_weights.get(obj.name, obj.weight)
+                custom_objectives.append(ObjectiveConfig(
+                    name=obj.name,
+                    direction=obj.direction,
+                    weight=w,
+                    ideal=obj.ideal,
+                    nadir=obj.nadir,
+                    threshold=obj.threshold,
+                ))
+
+        rankings = selector.rank_models(
+            objectives_list,
+            strategy=strategy,
+            context=context,
+            custom_objectives=custom_objectives,
+        )
+
+        if not rankings:
+            return None
+
+        best_obj, best_score = rankings[0]
+        best_model = next(
+            (m for m in candidates if m.model_id == best_obj.model_id), None
+        )
+        if not best_model:
+            return None
+
+        current_active = self.get_active(model_type)
+        if current_active and current_active.model_id == best_model.model_id:
+            logger.info(
+                "Multi-criteria: %s already active for %s (score=%.4f, strategy=%s)",
+                best_model.model_id, model_type, best_score, strategy,
+            )
+        else:
+            self.promote(model_type, best_model.model_id)
+            logger.info(
+                "Multi-criteria promoted %s for %s (score=%.4f, strategy=%s, context=%s)",
+                best_model.model_id, model_type, best_score, strategy, context,
+            )
+
+        frontier = selector.compute_frontier(objectives_list, context=context)
+        return {
+            "promoted_model_id": best_model.model_id,
+            "promoted_score": round(best_score, 6),
+            "strategy": strategy,
+            "context": context,
+            "frontier_size": len(frontier.frontier),
+            "total_candidates": len(candidates),
+            "all_rankings": [
+                {"model_id": obj.model_id, "score": round(score, 6)}
+                for obj, score in rankings
+            ],
+        }
+
+    def get_pareto_frontier(
+        self,
+        model_type: str,
+        context: str = "balanced",
+    ) -> Dict[str, Any]:
+        """Compute the Pareto frontier for a model type.
+
+        Args:
+            model_type: The model type to analyze.
+            context: Selection context preset.
+
+        Returns:
+            Dict with frontier models, dominated models, and analysis.
+        """
+        from engine.nexus.pareto_selector import get_pareto_selector
+
+        candidates = [
+            m for m in self._models.values()
+            if m.model_type == model_type
+            and m.benchmark_score is not None
+        ]
+        if not candidates:
+            return {"frontier": [], "dominated": [], "total": 0}
+
+        objectives_list = self._to_model_objectives(candidates)
+        selector = get_pareto_selector()
+        result = selector.compute_frontier(objectives_list, context=context)
+
+        return {
+            "frontier": [
+                {"model_id": m.model_id, "model_type": m.model_type}
+                for m in result.frontier
+            ],
+            "dominated": [
+                {"model_id": m.model_id, "model_type": m.model_type}
+                for m in result.dominated
+            ],
+            "total": len(candidates),
+            "strategy": result.strategy,
+            "context": result.context,
+        }
+
+    def _to_model_objectives(
+        self, models: List[RegisteredModel]
+    ) -> List["ModelObjectives"]:
+        """Convert RegisteredModels to ModelObjectives for Pareto analysis.
+
+        Extracts typed metrics from benchmark_details, falling back to
+        benchmark_score for accuracy if specific fields are missing.
+
+        Args:
+            models: List of registered models.
+
+        Returns:
+            List of ModelObjectives with populated metrics.
+        """
+        from engine.nexus.pareto_selector import ModelObjectives
+
+        results: List[ModelObjectives] = []
+        for m in models:
+            details = m.benchmark_details or {}
+            results.append(ModelObjectives(
+                model_id=m.model_id,
+                model_type=m.model_type,
+                accuracy=details.get("accuracy", m.benchmark_score or 0.0),
+                latency_p50_ms=details.get("latency_p50_ms", 0.0),
+                latency_p95_ms=details.get("latency_p95_ms", 0.0),
+                cost_per_1k_tokens=details.get("cost_per_1k_tokens", 0.0),
+                throughput_rps=details.get("throughput_rps", 0.0),
+                error_rate=details.get("error_rate", 0.0),
+                memory_mb=details.get("memory_mb", 0.0),
+                custom={
+                    k: float(v) for k, v in details.items()
+                    if k not in {
+                        "accuracy", "latency_p50_ms", "latency_p95_ms",
+                        "cost_per_1k_tokens", "throughput_rps", "error_rate",
+                        "memory_mb",
+                    }
+                    and isinstance(v, (int, float))
+                },
+            ))
+        return results
 
     def get_active(self, model_type: str) -> Optional[RegisteredModel]:
         """Return the currently active model for a type."""
