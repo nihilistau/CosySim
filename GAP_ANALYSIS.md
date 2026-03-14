@@ -7,11 +7,13 @@ CosySim has a **strong foundation** for self-improvement with 3 major operationa
 2. **Training Flywheel** — Continuous collection of training data from system interactions
 3. **Metrics & Reflection** — System-wide metrics tracking with NLM-driven insights
 
-As of **v1.29**, the critical execution loop is **CLOSED** — experiments are now
+As of **v1.30**, the critical execution loop is **CLOSED** — experiments are now
 automatically executed, models are evaluated against live traffic, anomalies trigger
-corrective actions, and every system change has measured impact. Combined with the
-v1.28 monitoring foundation (anomaly detection, correlation, forecasting, alert
-routing), the self-improvement maturity has risen from ~60% to ~85%.
+corrective actions, and every system change has measured impact. v1.30 adds PM2-based
+process lifecycle management (PM2Manager, 14 MCP skills, ecosystem drift detection,
+health scoring), closing the long-standing "no crash recovery / no log aggregation"
+gap. Combined with the v1.28 monitoring foundation and v1.29 execution engine,
+the self-improvement maturity has risen from ~60% to ~85%.
 
 **Remaining open gaps:**
 - No causal inference (partially addressed by CorrelationEngine + ImpactTracker but true causal DAG inference not implemented)
@@ -19,6 +21,12 @@ routing), the self-improvement maturity has risen from ~60% to ~85%.
 - No predictive refresh (refreshing knowledge before it degrades)
 - Limited model promotion criteria (score-based only, partially addressed by OnlineEvaluator)
 - No automated model selection via Pareto frontier
+
+**Gaps CLOSED by v1.30:**
+- ~~No crash recovery~~ — PM2 auto-restarts crashed processes
+- ~~No log aggregation~~ — PM2 manages logs in `logs/pm2/` with rotation
+- ~~No ecosystem drift detection~~ — PM2Manager detects mismatches between running state and config
+- ~~No health scoring for services~~ — PM2Manager provides composite health scores (0–1.0)
 
 ---
 
