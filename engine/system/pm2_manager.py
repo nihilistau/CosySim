@@ -79,7 +79,18 @@ logger = logging.getLogger(__name__)
 
 # ──── Constants ──────────────────────────────────────────────────────────
 
-PM2_BINARY = "pm2"
+def _resolve_pm2_binary() -> str:
+    """Find the PM2 binary, preferring the full path on Windows."""
+    import shutil
+    # Try common Windows npm global paths first
+    if sys.platform == "win32":
+        npm_global = os.path.join(os.environ.get("APPDATA", ""), "npm", "pm2.cmd")
+        if os.path.isfile(npm_global):
+            return npm_global
+    found = shutil.which("pm2")
+    return found or "pm2"
+
+PM2_BINARY = _resolve_pm2_binary()
 DEFAULT_ECOSYSTEM = "ecosystem.config.js"
 HISTORY_DB_PATH = "data/pm2_history.db"
 PM2_COMMAND_TIMEOUT = 30
