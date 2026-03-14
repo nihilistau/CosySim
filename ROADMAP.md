@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.30** "PM2 PROCESS MANAGEMENT" ✅ | Last updated: 2026-07
+> Current: **v1.31** "CAUSAL INFERENCE & PREDICTIVE REFRESH" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,16 +10,25 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.30 — "PM2 PROCESS MANAGEMENT" ✅
+## Current Shipped State: v1.31 — "CAUSAL INFERENCE & PREDICTIVE REFRESH" ✅
 
-**Baseline: 20 scenes, 74 scheduler tasks, 115+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process), ~12,845+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills.**
+**Baseline: 20 scenes, 76 scheduler tasks, 126+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh), ~13,046+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills, 6 causal analysis skills, 5 knowledge refresh skills.**
 
-v1.30 adds PM2-based process lifecycle management. PM2Manager (1638 lines) wraps
-the PM2 CLI with SQLite event tracking, health scoring, ecosystem drift detection,
-and a CLI entry point. ecosystem.config.js defines all CosySim services, scenes,
-and cron jobs. 14 MCP process skills, 2 scheduler tasks, 117 new tests.
+v1.31 closes the two remaining HIGH-priority gaps: causal inference (Granger
+causality, causal DAG, root-cause analysis, intervention prediction) and
+predictive knowledge refresh (exponential decay staleness, access tracking,
+proactive refresh scheduling). 11 new MCP skills, 2 scheduler tasks, 199 tests.
 
 ---
+
+## Shipped: v1.31 — "CAUSAL INFERENCE & PREDICTIVE REFRESH" ✅
+- [x] `engine/observability/causal_engine.py` — Granger causality F-test, causal DAG with cycle breaking, root-cause analysis, intervention prediction
+- [x] `engine/nexus/predictive_refresh.py` — Exponential decay staleness model, 12 content-type half-lives, proactive refresh scheduling
+- [x] `engine/skills/builtin/causal_skills.py` — 6 @skill(pack="causal") MCP skills
+- [x] `engine/skills/builtin/refresh_skills.py` — 5 @skill(pack="knowledge_refresh") MCP skills
+- [x] 2 scheduler tasks: causal-analysis (6h), knowledge-staleness-sweep (6h)
+- [x] 199 tests across 4 new test files — all passing
+- [x] 8 existing test files updated for scheduler count (74→76)
 
 ## Shipped: v1.30 — "PM2 PROCESS MANAGEMENT" ✅
 - [x] `engine/system/pm2_manager.py` — Full PM2 CLI wrapper: start/stop/restart/describe, SQLite event history, health scoring (0–1.0), ecosystem drift detection, cross-referencing with scene ports

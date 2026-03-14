@@ -1398,6 +1398,20 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     except Exception as exc:
         logger.debug("PM2 task registration skipped: %s", exc)
 
+    # ──── Causal Analysis ────
+    try:
+        from engine.observability.causal_engine import register_causal_tasks
+        register_causal_tasks(daemon)
+    except Exception as exc:
+        logger.debug("CausalEngine task registration skipped: %s", exc)
+
+    # ──── Predictive Refresh ────
+    try:
+        from engine.nexus.predictive_refresh import register_refresh_tasks
+        register_refresh_tasks(daemon)
+    except Exception as exc:
+        logger.debug("PredictiveRefresh task registration skipped: %s", exc)
+
 
 def _auto_embedding_callback() -> Dict[str, Any]:
     """Batch-embed new Nexus entries and Q&A pairs into the vector store."""

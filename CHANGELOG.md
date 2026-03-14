@@ -4,6 +4,40 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.31] — "CAUSAL INFERENCE & PREDICTIVE REFRESH" — 2026-07
+
+Closes the two remaining HIGH-priority gaps: causal inference engine and
+predictive knowledge refresh. Extends the observability stack with Granger
+causality testing, causal DAG construction, root-cause analysis, and
+intervention prediction. Adds predictive staleness tracking for Nexus
+knowledge entries with exponential decay models and auto-scheduled refresh.
+
+### Added
+- **CausalEngine** (`engine/observability/causal_engine.py`, ~1250 lines) —
+  Granger causality F-test (pure Python, no scipy), causal DAG construction
+  with automatic cycle breaking, root-cause analysis via BFS traversal,
+  intervention prediction with cascade estimation, SQLite persistence.
+- **PredictiveRefresh** (`engine/nexus/predictive_refresh.py`, ~1000 lines) —
+  Exponential decay staleness model with 12 content-type-aware half-lives,
+  access pattern tracking, staleness threshold prediction, proactive refresh
+  scheduling (80% of predicted crossing time), SQLite persistence.
+- **6 causal MCP skills** (`engine/skills/builtin/causal_skills.py`) —
+  `causal_granger_test`, `causal_build_dag`, `causal_root_causes`,
+  `causal_analyze_intervention`, `causal_summary`, `causal_find_path`.
+- **5 knowledge refresh MCP skills** (`engine/skills/builtin/refresh_skills.py`) —
+  `knowledge_staleness_report`, `knowledge_refresh_queue`,
+  `knowledge_refresh_stale`, `knowledge_schedule_refresh`,
+  `knowledge_refresh_status`.
+- **2 scheduler tasks** — `causal-analysis` (every 6h) and
+  `knowledge-staleness-sweep` (every 6h). Total registered: 76.
+- **199 tests** across 4 new test files — all passing.
+
+### Changed
+- Updated 8 test files: scheduler task count assertions 74→76 / 73→75.
+- Full suite: 13,046 passed, 0 new failures.
+
+---
+
 ## [1.30] — "PM2 PROCESS MANAGEMENT" — 2026-07
 
 Adds PM2-based process lifecycle management across all CosySim services,
