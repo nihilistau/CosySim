@@ -1391,6 +1391,13 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     except Exception as exc:
         logger.debug("AnomalyTrigger registration skipped: %s", exc)
 
+    # ──── PM2 Process Management ────
+    try:
+        from engine.system.pm2_manager import register_pm2_tasks
+        register_pm2_tasks(daemon)
+    except Exception as exc:
+        logger.debug("PM2 task registration skipped: %s", exc)
+
 
 def _auto_embedding_callback() -> Dict[str, Any]:
     """Batch-embed new Nexus entries and Q&A pairs into the vector store."""
