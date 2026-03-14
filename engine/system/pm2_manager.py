@@ -68,6 +68,7 @@ import os
 import pathlib
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -939,14 +940,17 @@ class PM2Manager:
         cmd = [PM2_BINARY, *args]
         logger.debug("Running PM2 command: %s", " ".join(cmd))
 
+        kwargs: Dict[str, Any] = {
+            "capture_output": True,
+            "text": True,
+            "timeout": PM2_COMMAND_TIMEOUT,
+            "cwd": self._project_root,
+        }
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=PM2_COMMAND_TIMEOUT,
-                cwd=self._project_root,
-            )
+            result = subprocess.run(cmd, **kwargs)
         except FileNotFoundError:
             raise PM2Error(
                 f"PM2 binary '{PM2_BINARY}' not found — is PM2 installed "
