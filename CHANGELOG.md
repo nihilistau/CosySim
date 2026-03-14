@@ -32,6 +32,25 @@ scoring, ecosystem drift detection, 14 MCP skills, and 117 new tests.
 - Updated 8 test files: scheduler task count assertions 72→74 / 71→73.
 - Full suite: 12,845 passed, 0 failed.
 
+### Fixed (v1.30.1 — Windows PM2 Compatibility)
+- **ecosystem.config.js** — rewrote with `pyService()`/`sceneService()` helpers;
+  `script: '-m'` and `script: '-c'` patterns fail on PM2 Windows (treated as
+  literal filenames). All entries now use wrapper scripts.
+- **6 PM2 wrapper scripts** (`scripts/pm2/`) — `scheduler.py`, `start_tts.py`,
+  `start_streamlit.py`, `nexus_maintenance.py`, `nexus_dedup.py`,
+  `copilot_reseed.py`. Each imports and calls the target module directly.
+- **`windowsHide: true`** on all PM2 entries — prevents console window blink.
+- **`subprocess.CREATE_NO_WINDOW`** in `pm2_manager.py` — prevents visible
+  cmd.exe windows from Python subprocess calls on Windows.
+- **`.vscode/mcp.json`** — replaced `npx @fkadev/prompts.chat-mcp` with
+  `node node_modules/.../build/index.js` (npx spawns visible windows on Windows).
+- **PM2 binary resolution** (`_resolve_pm2_binary()` in `pm2_manager.py`) —
+  resolves full path to `pm2.cmd` via `%APPDATA%/npm/` when PATH is limited
+  inside PM2-managed processes.
+- **Scheduler daemon wrapper** — defaults to `start` mode (not `status` one-shot)
+  so PM2 doesn't restart a process that exits immediately.
+- Smoke tested: scheduler runs stably under PM2 (0 restarts, 68MB).
+
 ---
 
 ## [1.29] — "SELF-IMPROVEMENT EXECUTION ENGINE" — 2026-07
