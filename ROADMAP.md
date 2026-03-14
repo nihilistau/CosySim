@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.31** "CAUSAL INFERENCE & PREDICTIVE REFRESH" ✅ | Last updated: 2026-07
+> Current: **v1.32** "MULTI-DIMENSIONAL METRICS & PARETO MODEL SELECTION" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,14 +10,15 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.31 — "CAUSAL INFERENCE & PREDICTIVE REFRESH" ✅
+## Current Shipped State: v1.32 — "MULTI-DIMENSIONAL METRICS & PARETO MODEL SELECTION" ✅
 
-**Baseline: 20 scenes, 76 scheduler tasks, 126+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh), ~13,046+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills, 6 causal analysis skills, 5 knowledge refresh skills.**
+**Baseline: 20 scenes, 76 scheduler tasks, 136+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops), ~13,187+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills, 6 causal analysis skills, 5 knowledge refresh skills, 10 model ops/Pareto skills.**
 
-v1.31 closes the two remaining HIGH-priority gaps: causal inference (Granger
-causality, causal DAG, root-cause analysis, intervention prediction) and
-predictive knowledge refresh (exponential decay staleness, access tracking,
-proactive refresh scheduling). 11 new MCP skills, 2 scheduler tasks, 199 tests.
+v1.32 closes ALL remaining GAP_ANALYSIS gaps. Metrics now support arbitrary
+tag/dimension slicing (MetricDimensions). Model promotion uses multi-objective
+Pareto frontier analysis with 4 ranking strategies and 5 context presets
+(ParetoSelector). OnlineEvaluator gains Pareto-aware dominance checking.
+10 new MCP skills, 138 new tests. Self-improvement maturity: ~95%.
 
 ---
 

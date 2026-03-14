@@ -13,6 +13,7 @@ Provides:
 - TrendPredictor: linear regression trends, capacity warnings, degradation detection
 - UnifiedMonitor: top-level orchestrator composing all monitoring subsystems
 - UnifiedDashboard: single API surface for all monitoring data with widgets
+- DimensionStore: arbitrary tag/dimension support for multi-dimensional metric slicing
 """
 
 from engine.observability.alert_router import (
@@ -44,6 +45,13 @@ from engine.observability.correlation_engine import (
 )
 from engine.observability.metrics_collector import MetricsCollector, get_metrics_collector
 from engine.observability.metrics_db import MetricsDB, get_metrics_db
+from engine.observability.metric_dimensions import (
+    AggregationResult,
+    DimensionalMetric,
+    DimensionStore,
+    TagCardinality,
+    get_dimension_store,
+)
 from engine.observability.pack_tracker import (
     PackActivity,
     PackTracker,
@@ -61,6 +69,7 @@ from engine.observability.unified_dashboard import (
 from engine.observability.unified_monitor import UnifiedMonitor, get_unified_monitor
 
 __all__ = [
+    "AggregationResult",
     "Alert",
     "AlertChannel",
     "AlertEngine",
@@ -72,6 +81,8 @@ __all__ = [
     "CorrelationEngine",
     "CorrelationResult",
     "DashboardWidget",
+    "DimensionStore",
+    "DimensionalMetric",
     "MetricConfig",
     "MetricsCollector",
     "MetricsDB",
@@ -80,6 +91,7 @@ __all__ = [
     "RoutedAlert",
     "RoutingRule",
     "SkillExecution",
+    "TagCardinality",
     "TimeRange",
     "TrainingCapture",
     "TrendPredictor",
@@ -92,6 +104,7 @@ __all__ = [
     "get_anomaly_detector",
     "get_anomaly_trigger",
     "get_correlation_engine",
+    "get_dimension_store",
     "get_metrics_collector",
     "get_metrics_db",
     "get_pack_tracker",
