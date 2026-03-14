@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.29** "SELF-IMPROVEMENT EXECUTION ENGINE" ✅ | Last updated: 2026-07
+> Current: **v1.30** "PM2 PROCESS MANAGEMENT" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,16 +10,24 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.29 — "SELF-IMPROVEMENT EXECUTION ENGINE" ✅
+## Current Shipped State: v1.30 — "PM2 PROCESS MANAGEMENT" ✅
 
-**Baseline: 20 scenes, 72 scheduler tasks, 101+ skills (81 workspace/NLM/monitoring + 20 self-improvement), ~12,700+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills.**
+**Baseline: 20 scenes, 74 scheduler tasks, 115+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process), ~12,845+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills.**
 
-v1.29 closes the critical execution loop gap: the system now **executes**
-experiment proposals, evaluates models against live traffic, triggers corrective
-actions on anomalies, and tracks the measured impact of every system change. 4 new
-modules (ExperimentExecutor, OnlineEvaluator, ImpactTracker, AnomalyTrigger), 20
-MCP self-improvement skills, 4 new scheduler tasks, and 257 new tests.
-Self-improvement maturity: **~60% → ~85%**.
+v1.30 adds PM2-based process lifecycle management. PM2Manager (1638 lines) wraps
+the PM2 CLI with SQLite event tracking, health scoring, ecosystem drift detection,
+and a CLI entry point. ecosystem.config.js defines all CosySim services, scenes,
+and cron jobs. 14 MCP process skills, 2 scheduler tasks, 117 new tests.
+
+---
+
+## Shipped: v1.30 — "PM2 PROCESS MANAGEMENT" ✅
+- [x] `engine/system/pm2_manager.py` — Full PM2 CLI wrapper: start/stop/restart/describe, SQLite event history, health scoring (0–1.0), ecosystem drift detection, cross-referencing with scene ports
+- [x] `ecosystem.config.js` — 11+ services, 4 scenes, 3 cron tasks, all `cosysim-` prefixed
+- [x] `engine/skills/builtin/process_skills.py` — 14 @skill(pack="process") MCP skills
+- [x] 2 scheduler tasks: pm2-health-check (10m), pm2-ecosystem-drift (30m)
+- [x] 117 tests across 2 new test files — all passing
+- [x] 8 existing test files updated for scheduler count (72→74)
 
 ---
 

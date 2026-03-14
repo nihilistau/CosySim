@@ -4,6 +4,36 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.30] — "PM2 PROCESS MANAGEMENT" — 2026-07
+
+Adds PM2-based process lifecycle management across all CosySim services,
+scenes, and cron jobs. Full CLI wrapper with SQLite event tracking, health
+scoring, ecosystem drift detection, 14 MCP skills, and 117 new tests.
+
+### Added
+- **PM2Manager** (`engine/system/pm2_manager.py`, 1638 lines) — singleton
+  PM2 CLI wrapper with subprocess-based PM2 control, SQLite event tracking,
+  health scoring (0–1.0 composite score), ecosystem drift detection, process
+  cross-referencing with scene ports, and CLI entry point for direct use.
+- **ecosystem.config.js** — PM2 process definitions for 11+ services,
+  4 scenes, and 3 cron tasks. All prefixed `cosysim-`, logs → `logs/pm2/`.
+- **14 MCP process skills** (`engine/skills/builtin/process_skills.py`) —
+  `pm2_list`, `pm2_start`, `pm2_stop`, `pm2_restart`, `pm2_describe`,
+  `pm2_logs`, `pm2_metrics`, `pm2_health`, `pm2_ecosystem_start`,
+  `pm2_ecosystem_diff`, `pm2_save_restore`, `pm2_cross_reference`,
+  `pm2_event_history`, `pm2_modules`.
+- **2 scheduler tasks** — `pm2-health-check` (every 10m) and
+  `pm2-ecosystem-drift` (every 30m). Total registered: 74 (73 unique).
+- **117 tests** — 77 PM2Manager tests (`tests/test_pm2_manager.py`) and
+  40 process skills tests (`tests/test_process_skills.py`), all passing.
+- **PM2 v6.0.14** installed globally via npm.
+
+### Changed
+- Updated 8 test files: scheduler task count assertions 72→74 / 71→73.
+- Full suite: 12,845 passed, 0 failed.
+
+---
+
 ## [1.29] — "SELF-IMPROVEMENT EXECUTION ENGINE" — 2026-07
 
 Closes the critical execution loop gap: the system now **executes** experiment
