@@ -13,4 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from engine.nexus.scheduler_daemon import main
 
 if __name__ == "__main__":
+    # Ensure we run in daemon mode, not one-shot status mode
+    if len(sys.argv) == 1:
+        sys.argv.append("start")
     main()
