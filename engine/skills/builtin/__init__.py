@@ -20,6 +20,9 @@ from . import cdp_skills
 from . import google_account_skills
 from . import debugger_skills
 from . import recovery_skills
+from . import lifecycle_skills
+from . import workspace_skills
+from . import orchestration_skills
 
 __all__ = [
     "comfyui_skills", "memory_skills", "character_skills", "voice_skills",
@@ -42,4 +45,7 @@ __all__ = [
     "google_account_skills",
     "debugger_skills",
     "recovery_skills",
+    "lifecycle_skills",
+    "workspace_skills",
+    "orchestration_skills",
 ]

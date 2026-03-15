@@ -7,12 +7,18 @@ CosySim has a **strong foundation** for self-improvement with 3 major operationa
 2. **Training Flywheel** — Continuous collection of training data from system interactions
 3. **Metrics & Reflection** — System-wide metrics tracking with NLM-driven insights
 
-As of **v1.33**, ALL identified gaps are now **CLOSED** — autonomous feedback
-loops, conversation sync, and lifecycle skills complete the self-improvement
-pipeline. Combined with v1.28–v1.32 modules, the self-improvement maturity
-has reached ~97%.
+As of **v1.34**, ALL identified gaps are now **CLOSED** — agent task
+orchestration, evaluation gates, and autonomous feedback loops complete the
+self-improvement pipeline. Combined with v1.28–v1.33 modules, the
+self-improvement maturity has reached ~98%.
 
 **Remaining open gaps:** None. All gaps closed.
+
+**Gaps CLOSED by v1.34:**
+- ~~No task spec validation~~ — TaskSpec: 11 built-in schemas, pre/post-flight validation, 28 heuristic quality scorers
+- ~~No multi-step task chaining~~ — TaskPipeline: ordered step execution, data flow, 4 failure modes (STOP/SKIP/RETRY/FALLBACK), 4 built-in templates
+- ~~No evaluation gate before promotion~~ — EvaluationGate: benchmark-driven policies (NO_REGRESSION/MUST_IMPROVE/PARETO_DOMINANT/CUSTOM), SQLite history, side effects (Nexus/ImpactTracker/ModelRegistry)
+- ~~No orchestration MCP skills~~ — 10 skills (pack="orchestration") exposing task, pipeline, and gate operations to agents
 
 **Gaps CLOSED by v1.33:**
 - ~~No autonomous execution loop~~ — AutoLoop: 5 scheduler-driven callbacks (experiment, eval, training, impact, full-cycle) with SQLite cycle tracking

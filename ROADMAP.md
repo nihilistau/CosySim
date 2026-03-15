@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.33** "AUTONOMOUS FEEDBACK LOOPS" ✅ | Last updated: 2026-07
+> Current: **v1.34** "AGENT TASK ORCHESTRATION & EVALUATION GATES" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,15 +10,26 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.33 — "AUTONOMOUS FEEDBACK LOOPS" ✅
+## Current Shipped State: v1.34 — "AGENT TASK ORCHESTRATION & EVALUATION GATES" ✅
 
-**Baseline: 20 scenes, 82 scheduler tasks, 148+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops + 12 lifecycle), ~13,328+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills, 6 causal analysis skills, 5 knowledge refresh skills, 10 model ops/Pareto skills, 12 lifecycle/autonomous loop skills.**
+**Baseline: 20 scenes, 82 scheduler tasks, 158+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops + 12 lifecycle + 10 orchestration), ~13,535+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills, 6 causal analysis skills, 5 knowledge refresh skills, 10 model ops/Pareto skills, 12 lifecycle/autonomous loop skills, 10 orchestration/evaluation gate skills.**
+
+v1.34 closes the agent delegation and model quality gaps. TaskSpec validates
+all LLM task inputs/outputs with 11 built-in schemas. TaskPipeline chains
+multi-step workflows with 4 failure modes. EvaluationGate prevents degraded
+model promotion via benchmark-driven policies. 10 orchestration MCP skills
+expose task, pipeline, and gate operations to agents.
+Self-improvement maturity: ~98%.
+
+---
+
+## Shipped: v1.33 — "AUTONOMOUS FEEDBACK LOOPS" ✅
 
 v1.33 closes the autonomous execution gap. AutoLoop orchestrates experiment
 execution, evaluation sweeps, training triggers, and impact assessment on
 scheduler-driven cadences. ConversationSync pipes scene conversations into
 Nexus. 12 lifecycle MCP skills let agents monitor and trigger all loop
-operations. Self-improvement maturity: ~97%.
+operations.
 
 ---
 
