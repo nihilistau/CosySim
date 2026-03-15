@@ -4,6 +4,49 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.33] — "AUTONOMOUS FEEDBACK LOOPS" — 2026-07
+
+Closes the autonomous execution gap. The system now self-drives experiment
+execution, model evaluation sweeps, training triggers, and impact assessment
+without human intervention. Conversations sync from scenes to Nexus automatically.
+
+### Added
+- **AutoLoop** (`engine/nexus/auto_loop.py`, ~903 lines)
+  - Autonomous feedback loop orchestrator with SQLite cycle tracking
+  - 5 scheduler tasks: experiment execution (2h), eval sweep (30m), training check (4h), impact assessment (6h), full daily cycle
+  - Each callback: lazy imports, exception handling, impact recording, cycle persistence
+  - Health status: healthy/degraded/stalled based on recent cycle outcomes
+  - Daily markdown report generation with experiment/eval/training/impact summaries
+
+- **ConversationSync** (`engine/nexus/conversation_sync.py`, ~957 lines)
+  - Scene-to-Nexus conversation pipeline reading EventChain DB
+  - Groups events by chain_id, creates Nexus knowledge entries
+  - Skill usage aggregation and Q&A storage
+  - Interaction pattern detection: conversation lengths, active characters, peak hours, skill sequences
+  - 2 scheduler tasks: conversation-sync (2h), conversation-analyze (6h)
+
+- **Lifecycle Skills** (`engine/skills/builtin/lifecycle_skills.py`, ~500 lines)
+  - 12 MCP skills (pack="lifecycle", category="system")
+  - `get_loop_status`, `trigger_experiment_cycle`, `trigger_eval_sweep`, `trigger_training_cycle`
+  - `trigger_full_cycle`, `get_cycle_history`, `get_training_queue_status`
+  - `force_conversation_sync`, `get_conversation_sync_status`
+  - `get_improvement_report`, `get_loop_health`, `configure_loop`
+
+- **Launcher auto-start** — scheduler daemon, auto-loop, and conversation sync start automatically on `launcher.py --core`
+
+### Tests
+- `tests/test_auto_loop.py` — 58 tests (init, registration, cycles, callbacks, status, metrics)
+- `tests/test_conversation_sync.py` — 48 tests (init, state, events, sync, patterns, scheduler)
+- `tests/test_lifecycle_skills.py` — 35 tests (registration, all 12 skills, helpers)
+- Total v1.33 tests: **141 new**, bringing suite to ~13,328+
+
+### Stats
+- Scheduler tasks: 75 → 82 (+7 autonomous tasks)
+- MCP skills: 136 → 148 (+12 lifecycle skills)
+- Self-improvement maturity: ~95% → ~97% (autonomous execution loops closed)
+
+---
+
 ## [1.32] — "MULTI-DIMENSIONAL METRICS & PARETO MODEL SELECTION" — 2026-07
 
 Closes ALL remaining GAP_ANALYSIS gaps (3 MEDIUM). Self-improvement maturity

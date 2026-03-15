@@ -275,6 +275,32 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     except Exception as exc:
         print(f"  ⚠️  EventCascade start failed: {exc}")
 
+    # Start scheduler daemon + autonomous feedback loops
+    try:
+        from engine.nexus.scheduler_daemon import get_scheduler_daemon
+        _scheduler = get_scheduler_daemon()
+        _scheduler.start()
+        task_count = len(_scheduler.list_tasks())
+        print(f"  ⏱️  Scheduler daemon started ({task_count} tasks)")
+    except Exception as exc:
+        print(f"  ⚠️  Scheduler daemon: {exc}")
+
+    try:
+        from engine.nexus.auto_loop import get_auto_loop
+        _auto_loop = get_auto_loop()
+        registered = _auto_loop.register_tasks()
+        print(f"  🔄 Auto-loop registered ({registered} feedback tasks)")
+    except Exception as exc:
+        print(f"  ⚠️  Auto-loop: {exc}")
+
+    try:
+        from engine.nexus.conversation_sync import get_conversation_sync
+        _conv_sync = get_conversation_sync()
+        _conv_sync.register_task()
+        print("  💬 Conversation sync active")
+    except Exception as exc:
+        print(f"  ⚠️  Conversation sync: {exc}")
+
     time.sleep(5)
     print("\n  Health check:")
     for name in service_names + scene_names:
