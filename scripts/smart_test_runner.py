@@ -1,25 +1,30 @@
-"""Smart test runner for CosySim — tiered, git-diff-aware, timing-cached.
+"""Smart test runner for CosySim — tiered, git-diff-aware, timing-cached, parallel.
 
 Selects and orders tests intelligently based on git changes, tier levels,
-and historical timing data. Replaces brute-force full-suite runs with
-targeted, speed-ranked execution.
+content-hash caching, and historical timing data. Replaces brute-force
+full-suite runs with targeted, speed-ranked, parallel execution.
 
 Usage:
     python scripts/smart_test_runner.py                    # Auto: git-diff + tier 2
     python scripts/smart_test_runner.py --tier 1           # Quick smoke test
     python scripts/smart_test_runner.py --tier 3           # Integration
-    python scripts/smart_test_runner.py --full             # Everything
+    python scripts/smart_test_runner.py --full             # Everything (parallel)
     python scripts/smart_test_runner.py --changed          # Only changed file tests
     python scripts/smart_test_runner.py --file tests/test_penthouse*.py
     python scripts/smart_test_runner.py --report           # Generate timing report
+    python scripts/smart_test_runner.py -j auto            # Auto-detect CPU workers
+    python scripts/smart_test_runner.py -x                 # Stop on first failure
+    python scripts/smart_test_runner.py --no-cache         # Ignore content-hash cache
 """
 from __future__ import annotations
 
 import argparse
 import datetime
 import glob as glob_mod
+import hashlib
 import json
 import logging
+import multiprocessing
 import os
 import re
 import subprocess
@@ -27,7 +32,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 # ──── Constants ───────────────────────────────────────────────────────────────
 
@@ -35,6 +40,10 @@ ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = ROOT / "tests"
 DEFAULT_TIMING_CACHE = ROOT / "data" / "test_timing.json"
 DEFAULT_REPORTS_DIR = ROOT / "data" / "test_reports"
+DEFAULT_HASH_CACHE = ROOT / "data" / "test_hash_cache.json"
+
+# Auto-detect reasonable worker count (leave 1 core free for OS)
+AUTO_WORKERS = max(1, multiprocessing.cpu_count() - 1)
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +63,8 @@ TIER_DEFINITIONS: Dict[int, Dict[str, Any]] = {
         ],
     },
     2: {
-        "label": "Core (<2min)",
-        "timeout": 120,
+        "label": "Core (<5min)",
+        "timeout": 300,
         "patterns": [
             "test_penthouse*",
             "test_phone*",
@@ -92,8 +101,8 @@ TIER_DEFINITIONS: Dict[int, Dict[str, Any]] = {
         ],
     },
     3: {
-        "label": "Integration (<5min)",
-        "timeout": 300,
+        "label": "Integration (<10min)",
+        "timeout": 600,
         "patterns": [
             "test_pipeline*",
             "test_copilot*",
@@ -109,11 +118,21 @@ TIER_DEFINITIONS: Dict[int, Dict[str, Any]] = {
             "test_model*",
             "test_vam*",
             "test_integration*",
+            "test_metric_dimensions*",
+            "test_pareto_selector*",
+            "test_dimension_skills*",
+            "test_causal*",
+            "test_predictive*",
+            "test_experiment*",
+            "test_anomaly*",
+            "test_online_eval*",
+            "test_impact*",
+            "test_pm2*",
         ],
     },
     4: {
         "label": "Full (everything)",
-        "timeout": 1800,
+        "timeout": 3600,
         "patterns": ["test_*"],
     },
 }
@@ -137,6 +156,7 @@ class TestResult:
     errors: int = 0
     duration_seconds: float = 0.0
     test_files: List[str] = field(default_factory=list)
+    cache_skipped_files: List[str] = field(default_factory=list)
     slowest_tests: List[Dict[str, Any]] = field(default_factory=list)
     return_code: int = 0
     tier: Optional[int] = None
@@ -355,6 +375,159 @@ def save_timing_cache(
         logger.warning("Failed to save timing cache: %s", exc)
 
 
+# ──── Content-Hash Cache ──────────────────────────────────────────────────────
+
+
+def _file_hash(path: Path) -> str:
+    """Compute SHA-256 of a file's content.
+
+    Args:
+        path: Path to file.
+
+    Returns:
+        Hex digest string, or empty string if file unreadable.
+    """
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _compute_test_hash(test_file: Path) -> str:
+    """Compute a combined hash for a test file and its likely source module.
+
+    Hash includes:
+    - The test file content
+    - The source file content (test_X.py → X.py in engine/content/training)
+    - conftest.py if it exists
+
+    Args:
+        test_file: Path to the test file.
+
+    Returns:
+        Combined SHA-256 hex digest.
+    """
+    hasher = hashlib.sha256()
+
+    # Hash the test file itself
+    test_hash = _file_hash(test_file)
+    hasher.update(test_hash.encode())
+
+    # Hash the conftest (shared fixtures affect all tests)
+    conftest = test_file.parent / "conftest.py"
+    if conftest.exists():
+        hasher.update(_file_hash(conftest).encode())
+
+    # Try to find and hash the source file
+    stem = test_file.stem
+    if stem.startswith("test_"):
+        source_stem = stem[5:]  # Remove "test_" prefix
+        # Search common source locations
+        for source_dir in [
+            ROOT / "engine",
+            ROOT / "content",
+            ROOT / "training",
+            ROOT / "scripts",
+            ROOT / "helpers",
+        ]:
+            for source_file in source_dir.rglob(f"{source_stem}.py"):
+                hasher.update(_file_hash(source_file).encode())
+                break  # First match is enough
+
+    return hasher.hexdigest()
+
+
+def load_hash_cache(cache_path: Path) -> Dict[str, Dict[str, Any]]:
+    """Load content-hash cache from JSON.
+
+    Args:
+        cache_path: Path to the hash cache JSON file.
+
+    Returns:
+        Dict mapping test file name → {hash, passed, timestamp}.
+    """
+    if not cache_path.exists():
+        return {}
+    try:
+        with open(cache_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to load hash cache: %s", exc)
+        return {}
+
+
+def save_hash_cache(cache_path: Path, cache: Dict[str, Dict[str, Any]]) -> None:
+    """Save content-hash cache to JSON.
+
+    Args:
+        cache_path: Path to the hash cache JSON file.
+        cache: Dict mapping test file name → {hash, passed, timestamp}.
+    """
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(cache, f, indent=2, sort_keys=True)
+        logger.debug("Hash cache updated: %s entries", len(cache))
+    except OSError as exc:
+        logger.warning("Failed to save hash cache: %s", exc)
+
+
+def filter_unchanged_tests(
+    test_files: List[str],
+    hash_cache: Dict[str, Dict[str, Any]],
+) -> Tuple[List[str], List[str]]:
+    """Filter out test files whose content hash hasn't changed since last pass.
+
+    Args:
+        test_files: Candidate test file paths.
+        hash_cache: Loaded content-hash cache.
+
+    Returns:
+        Tuple of (files_to_run, files_skipped).
+    """
+    to_run: List[str] = []
+    skipped: List[str] = []
+
+    for tf in test_files:
+        name = Path(tf).name
+        current_hash = _compute_test_hash(Path(tf))
+        cached = hash_cache.get(name)
+
+        if cached and cached.get("hash") == current_hash and cached.get("passed"):
+            skipped.append(tf)
+        else:
+            to_run.append(tf)
+
+    return to_run, skipped
+
+
+def update_hash_cache(
+    hash_cache: Dict[str, Dict[str, Any]],
+    test_files: List[str],
+    passed: bool,
+) -> Dict[str, Dict[str, Any]]:
+    """Update hash cache with results from a test run.
+
+    Args:
+        hash_cache: Existing cache dict (mutated in place).
+        test_files: Test files that were run.
+        passed: Whether all tests passed.
+
+    Returns:
+        Updated cache dict.
+    """
+    ts = _now_iso()
+    for tf in test_files:
+        name = Path(tf).name
+        current_hash = _compute_test_hash(Path(tf))
+        hash_cache[name] = {
+            "hash": current_hash,
+            "passed": passed,
+            "timestamp": ts,
+        }
+    return hash_cache
+
+
 def order_by_speed(
     test_files: List[str], timings: Dict[str, float]
 ) -> List[str]:
@@ -469,6 +642,7 @@ def run_pytest(
     parallel_workers: int = 0,
     extra_args: Optional[List[str]] = None,
     timeout: int = 600,
+    fail_fast: bool = False,
 ) -> TestResult:
     """Execute pytest with the given test files.
 
@@ -477,6 +651,7 @@ def run_pytest(
         parallel_workers: Number of parallel workers (0 = sequential).
         extra_args: Additional pytest arguments.
         timeout: Maximum runtime in seconds.
+        fail_fast: Stop on first failure.
 
     Returns:
         TestResult with parsed output.
@@ -493,6 +668,9 @@ def run_pytest(
         f"--durations=20",
         "--strict-markers",
     ]
+
+    if fail_fast:
+        cmd.append("-x")
 
     if parallel_workers > 1:
         cmd.extend(["-n", str(parallel_workers)])
@@ -572,8 +750,12 @@ def print_summary(result: TestResult) -> None:
         f"  Skipped:  {result.skipped}",
         f"  Errors:   {result.errors}",
         f"  Duration: {result.duration_seconds:.1f}s",
-        f"{'─' * 70}",
     ]
+
+    if result.cache_skipped_files:
+        lines.append(f"  Cache-skipped: {len(result.cache_skipped_files)} files (unchanged since last pass)")
+
+    lines.append(f"{'─' * 70}")
 
     if result.slowest_tests:
         lines.append("  Slowest tests:")
@@ -671,23 +853,33 @@ class SmartTestRunner:
 
     Attributes:
         timing_cache_path: Path to the test timing JSON cache.
+        hash_cache_path: Path to the content-hash cache JSON.
         reports_dir: Path to save test reports.
         parallel_workers: Number of pytest-xdist workers.
         skip_patterns: File name patterns to always skip.
+        fail_fast: Stop on first failure.
+        use_hash_cache: Whether to skip unchanged tests via content hashing.
     """
 
     def __init__(
         self,
         timing_cache_path: Optional[Path] = None,
+        hash_cache_path: Optional[Path] = None,
         reports_dir: Optional[Path] = None,
         parallel_workers: int = 0,
         skip_patterns: Optional[List[str]] = None,
+        fail_fast: bool = False,
+        use_hash_cache: bool = True,
     ) -> None:
         self.timing_cache_path = timing_cache_path or DEFAULT_TIMING_CACHE
+        self.hash_cache_path = hash_cache_path or DEFAULT_HASH_CACHE
         self.reports_dir = reports_dir or DEFAULT_REPORTS_DIR
         self.parallel_workers = parallel_workers
         self.skip_patterns = skip_patterns or list(SKIP_PATTERNS)
+        self.fail_fast = fail_fast
+        self.use_hash_cache = use_hash_cache
         self._timings = load_timing_cache(self.timing_cache_path)
+        self._hash_cache = load_hash_cache(self.hash_cache_path) if use_hash_cache else {}
 
     def _filter_skipped(self, files: List[str]) -> List[str]:
         """Remove files matching skip patterns.
@@ -702,6 +894,25 @@ class SmartTestRunner:
             f for f in files
             if Path(f).name not in self.skip_patterns
         ]
+
+    def _apply_hash_cache(self, test_files: List[str]) -> Tuple[List[str], List[str]]:
+        """Filter out unchanged tests if hash caching is enabled.
+
+        Args:
+            test_files: Candidate test files.
+
+        Returns:
+            Tuple of (files_to_run, files_skipped_by_cache).
+        """
+        if not self.use_hash_cache or not self._hash_cache:
+            return test_files, []
+        to_run, skipped = filter_unchanged_tests(test_files, self._hash_cache)
+        if skipped:
+            logger.info(
+                "Hash cache: skipping %d unchanged file(s), running %d",
+                len(skipped), len(to_run),
+            )
+        return to_run, skipped
 
     def run_changed(self, ref: str = "HEAD") -> TestResult:
         """Run tests only for files changed since the given ref.
@@ -726,6 +937,7 @@ class SmartTestRunner:
             return TestResult(timestamp=_now_iso())
 
         logger.info("Resolved %d test file(s) from changes", len(test_files))
+        # Don't apply hash cache for --changed: these files changed, must re-test
         test_files = order_by_speed(test_files, self._timings)
         return self._execute(test_files, tier=None)
 
@@ -744,10 +956,19 @@ class SmartTestRunner:
 
         test_files = collect_tier_files(tier)
         test_files = self._filter_skipped(test_files)
+
+        # Apply hash cache for tiers ≥ 2 (skip unchanged tests)
+        cache_skipped: List[str] = []
+        if tier >= 2:
+            test_files, cache_skipped = self._apply_hash_cache(test_files)
+
         test_files = order_by_speed(test_files, self._timings)
 
         logger.info("Collected %d test file(s) for tier %d", len(test_files), tier)
-        return self._execute(test_files, tier=tier, timeout=tier_def["timeout"])
+        return self._execute(
+            test_files, tier=tier, timeout=tier_def["timeout"],
+            cache_skipped=cache_skipped,
+        )
 
     def run_full(self) -> TestResult:
         """Run the complete test suite (tier 4).
@@ -808,6 +1029,7 @@ class SmartTestRunner:
         test_files: List[str],
         tier: Optional[int] = None,
         timeout: int = 600,
+        cache_skipped: Optional[List[str]] = None,
     ) -> TestResult:
         """Execute pytest and process results.
 
@@ -815,6 +1037,7 @@ class SmartTestRunner:
             test_files: Ordered list of test file paths.
             tier: Optional tier label for the report.
             timeout: Maximum runtime in seconds.
+            cache_skipped: Files skipped by content-hash cache.
 
         Returns:
             TestResult with parsed output and updated cache.
@@ -823,14 +1046,22 @@ class SmartTestRunner:
             test_files,
             parallel_workers=self.parallel_workers,
             timeout=timeout,
+            fail_fast=self.fail_fast,
         )
         result.tier = tier
+        result.cache_skipped_files = cache_skipped or []
 
         # Update timing cache from durations output
         new_timings = extract_file_timings(result.raw_output)
         if new_timings:
             save_timing_cache(self.timing_cache_path, self._timings, new_timings)
             self._timings.update(new_timings)
+
+        # Update content-hash cache (skip on timeout — results are incomplete)
+        if self.use_hash_cache and test_files and result.return_code != -1:
+            all_passed = result.return_code == 0
+            update_hash_cache(self._hash_cache, test_files, all_passed)
+            save_hash_cache(self.hash_cache_path, self._hash_cache)
 
         # Print summary and save report
         print_summary(result)
@@ -875,17 +1106,20 @@ def build_parser() -> argparse.ArgumentParser:
         Configured ArgumentParser.
     """
     parser = argparse.ArgumentParser(
-        description="CosySim Smart Test Runner — tiered, git-aware, timing-cached",
+        description="CosySim Smart Test Runner — tiered, git-aware, hash-cached, parallel",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 Examples:
   %(prog)s                         Auto: git-diff + tier 2 fallback
   %(prog)s --tier 1                Quick smoke tests (<30s)
   %(prog)s --tier 3                Integration tests (<5min)
-  %(prog)s --full                  Full suite (tier 4)
+  %(prog)s --full                  Full suite (tier 4, parallel)
   %(prog)s --changed               Only git-changed file tests
   %(prog)s --file "tests/test_penthouse*.py"
   %(prog)s --report                Show timing report from cache
+  %(prog)s -j auto                 Auto-detect workers ({AUTO_WORKERS} on this machine)
+  %(prog)s -x                      Stop on first failure
+  %(prog)s --no-cache              Ignore content-hash cache (re-run everything)
         """,
     )
 
@@ -912,8 +1146,16 @@ Examples:
     )
 
     parser.add_argument(
-        "--workers", "-j", type=int, default=0,
-        help="Number of parallel workers (requires pytest-xdist)",
+        "--workers", "-j", type=str, default="auto",
+        help="Parallel workers: number, 'auto' (CPU-1), or '0' for sequential (default: auto)",
+    )
+    parser.add_argument(
+        "-x", "--fail-fast", action="store_true",
+        help="Stop on first test failure",
+    )
+    parser.add_argument(
+        "--no-cache", action="store_true",
+        help="Ignore content-hash cache (re-run all tests even if unchanged)",
     )
     parser.add_argument(
         "--timing-cache", type=str, default=None,
@@ -966,7 +1208,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         else DEFAULT_REPORTS_DIR
     )
 
-    workers = args.workers or yaml_cfg.get("parallel_workers", 0)
+    # Resolve worker count: "auto" → CPU-1, digit string → int
+    workers_arg = args.workers
+    if workers_arg == "auto":
+        workers = yaml_cfg.get("parallel_workers", AUTO_WORKERS)
+        if workers == "auto":
+            workers = AUTO_WORKERS
+    elif workers_arg.isdigit():
+        workers = int(workers_arg)
+    else:
+        workers = AUTO_WORKERS
+    logger.info("Workers: %d (%s)", workers, "auto" if workers_arg == "auto" else "manual")
 
     # Handle --report (no tests run)
     if args.report:
@@ -980,6 +1232,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         reports_dir=reports_dir,
         parallel_workers=workers,
         skip_patterns=skip_pats,
+        fail_fast=args.fail_fast,
+        use_hash_cache=not args.no_cache,
     )
 
     # Dispatch to appropriate mode

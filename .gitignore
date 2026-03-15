@@ -156,6 +156,7 @@ data/heap_output/
 data/nlm_screenshots/
 data/argus/
 data/accounts/
+data/test_reports/
 data/*.json
 data/*.png
 data/*.tmp

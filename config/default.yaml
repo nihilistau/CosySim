@@ -849,9 +849,10 @@ testing:
   smart_runner:
     enabled: true
     default_tier: 2
-    parallel_workers: 4
+    parallel_workers: auto
     timing_cache: "data/test_timing.json"
     reports_dir: "data/test_reports"
+    hash_cache: "data/test_hash_cache.json"
     skip_patterns:
       - "test_agent_loop.py"
       - "live_wire_test.py"
