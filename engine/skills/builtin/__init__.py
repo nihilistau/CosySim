@@ -23,6 +23,7 @@ from . import recovery_skills
 from . import lifecycle_skills
 from . import workspace_skills
 from . import orchestration_skills
+from . import resilience_skills
 
 __all__ = [
     "comfyui_skills", "memory_skills", "character_skills", "voice_skills",
@@ -48,4 +49,5 @@ __all__ = [
     "lifecycle_skills",
     "workspace_skills",
     "orchestration_skills",
+    "resilience_skills",
 ]

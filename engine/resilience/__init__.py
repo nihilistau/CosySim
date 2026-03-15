@@ -1,0 +1,1 @@
+"""engine.resilience — Operational resilience framework."""
