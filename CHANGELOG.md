@@ -4,6 +4,57 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.34] — "AGENT TASK ORCHESTRATION & EVALUATION GATES" — 2026-07
+
+Closes the agent delegation and model quality gaps. TaskSpec validates all LLM
+task inputs/outputs with 11 built-in schemas. TaskPipeline chains multi-step
+workflows with failure modes. EvaluationGate prevents degraded model promotion
+via benchmark-driven gate policies. 10 orchestration MCP skills expose all
+operations to agents.
+
+### Added
+- **TaskSpec & Validation** (`engine/nexus/task_spec.py`, ~1208 lines)
+  - `TaskSpec` dataclass with type/prompt/model/schema/retry/timeout/priority validation
+  - `ResultSchema` class with min/max length, required/forbidden patterns, quality rubric
+  - 11 built-in schemas (one per task type: evaluate, summarize, generate, classify, compare, code_review, security_check, test_generate, doc_generate, translate, refactor)
+  - `validate_spec()` / `validate_result()` pre-flight and post-flight validation
+  - 28 heuristic criterion scorers for quality scoring without LLM calls
+  - `to_submit_kwargs()` converts TaskSpec to LMSTaskBridge-compatible format
+
+- **Task Pipeline** (`engine/nexus/task_pipeline.py`, ~1194 lines)
+  - `TaskPipeline` / `PipelineStep` for ordered multi-step LLM workflows
+  - Data flow: step N output → step N+1 input (with optional transforms)
+  - 4 failure modes: STOP, SKIP, RETRY, FALLBACK (model switching)
+  - `PipelineExecutor` with SQLite-backed run history and validation
+  - 4 built-in templates: review_and_fix, summarize_and_classify, security_audit, doc_and_test
+  - `store_as` mechanism for named context passing between steps
+
+- **Evaluation Gate** (`training/evaluation_gate.py`, ~1300 lines)
+  - `EvaluationGate` singleton with SQLite-backed gate/benchmark history
+  - 4 gate policies: NO_REGRESSION, MUST_IMPROVE, PARETO_DOMINANT, CUSTOM
+  - Benchmark suite: accuracy (LLM-as-judge), latency, consistency (pairwise), error rate
+  - Weighted scoring (accuracy=0.40, latency=0.20, consistency=0.25, error_rate=0.15)
+  - Side effects: Nexus logging, ImpactTracker recording, ModelRegistry score updates
+  - Default benchmark prompts: 20 prompts across 4 categories
+
+- **Orchestration Skills** (`engine/skills/builtin/orchestration_skills.py`, ~500 lines)
+  - 10 MCP skills (pack="orchestration", category="system")
+  - `submit_task` / `get_task_result` — validated task submission and retrieval
+  - `list_task_types` / `get_task_metrics` — type discovery and execution metrics
+  - `submit_pipeline` / `get_pipeline_templates` / `get_pipeline_history` — pipeline operations
+  - `run_evaluation_gate` / `get_gate_results` / `get_model_health` — gate operations
+
+- **207 new tests** across 4 test files
+  - `tests/test_task_spec.py` — 64 tests (spec validation, schemas, scoring)
+  - `tests/test_task_pipeline.py` — 49 tests (pipeline execution, failure modes, templates)
+  - `tests/test_evaluation_gate.py` — 51 tests (gate policies, benchmarks, persistence)
+  - `tests/test_orchestration_skills.py` — 43 tests (all 10 skills, helpers)
+
+### Changed
+- `engine/skills/builtin/__init__.py` — registered orchestration_skills, lifecycle_skills, workspace_skills packs
+
+---
+
 ## [1.33] — "AUTONOMOUS FEEDBACK LOOPS" — 2026-07
 
 Closes the autonomous execution gap. The system now self-drives experiment
