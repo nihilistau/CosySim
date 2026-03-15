@@ -7,12 +7,17 @@ CosySim has a **strong foundation** for self-improvement with 3 major operationa
 2. **Training Flywheel** — Continuous collection of training data from system interactions
 3. **Metrics & Reflection** — System-wide metrics tracking with NLM-driven insights
 
-As of **v1.34**, ALL identified gaps are now **CLOSED** — agent task
-orchestration, evaluation gates, and autonomous feedback loops complete the
-self-improvement pipeline. Combined with v1.28–v1.33 modules, the
-self-improvement maturity has reached ~98%.
+As of **v1.35**, ALL identified gaps are now **CLOSED** — operational
+resilience and config trust complete the production readiness pipeline.
+Combined with v1.28–v1.34 modules, the self-improvement maturity has
+reached ~99%.
 
 **Remaining open gaps:** None. All gaps closed.
+
+**Gaps CLOSED by v1.35:**
+- ~~No circuit breaker / cascading failure prevention~~ — CircuitBreaker: CLOSED→OPEN→HALF_OPEN state machine, ExponentialBackoff, RetryPolicy, @circuit_protected decorator, CircuitBreakerRegistry singleton
+- ~~No config drift detection~~ — ConfigDriftMonitor: SQLite-backed baseline snapshots, deep-diff with severity classification, 30-minute scheduler checks, rollback to baseline, Config.set() hooks
+- ~~No resilience MCP skills~~ — 10 skills (pack="resilience") exposing circuit breaker + config drift operations to agents
 
 **Gaps CLOSED by v1.34:**
 - ~~No task spec validation~~ — TaskSpec: 11 built-in schemas, pre/post-flight validation, 28 heuristic quality scorers

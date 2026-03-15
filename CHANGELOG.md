@@ -4,6 +4,54 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.35] — "OPERATIONAL RESILIENCE & CONFIG TRUST" — 2026-07
+
+Production-grade fault tolerance and configuration trust. Circuit breaker state
+machine prevents cascading failures with exponential backoff. Config drift
+monitor detects and alerts on runtime configuration divergence from Nexus-stored
+baselines. 10 resilience MCP skills expose all operations to agents.
+
+### Added
+- **Circuit Breaker Framework** (`engine/resilience/circuit_breaker.py`, ~870 lines)
+  - `CircuitBreaker` state machine: CLOSED → OPEN → HALF_OPEN with rolling failure windows
+  - `CircuitConfig` dataclass: failure_threshold, recovery_timeout, half_open_max_calls, success_threshold, excluded_exceptions, window_size
+  - `ExponentialBackoff` class: configurable base/max delay, multiplier, jitter
+  - `RetryPolicy` dataclass with `@retry_with_backoff` decorator (sync + async)
+  - `@circuit_protected` decorator with optional fallback functions
+  - `CircuitBreakerRegistry` singleton: register/get/create/status/reset/health
+  - `StateTransition` history tracking (max 100 per breaker)
+  - Nexus logging on state transitions + MetricsDB alert recording
+
+- **Config Drift Monitor** (`engine/nexus/config_drift.py`, ~780 lines)
+  - `ConfigDriftMonitor` with SQLite persistence (WAL mode, 3 tables)
+  - `store_baseline()` snapshots config + SHA256 hash to SQLite and Nexus
+  - `check_drift()` deep-diffs current config vs baseline with severity classification
+  - `DriftSeverity` enum: INFO, WARNING, CRITICAL (critical for ports, security, DB paths)
+  - `install_config_hooks()` monkey-patches Config.set() to record all changes
+  - `register_drift_tasks()` adds 30-minute drift checks + daily baseline refresh
+  - `rollback_key()` / `rollback_all()` reverts to baseline values
+  - Nexus integration for baseline audit trail
+
+- **Resilience MCP Skills** (`engine/skills/builtin/resilience_skills.py`, 10 skills)
+  - `get_circuit_status` — all breaker states with optional name filter
+  - `reset_circuit` — force-close a tripped breaker
+  - `get_circuit_history` — state transition log with limit
+  - `get_retry_stats` — aggregate breaker health summary
+  - `check_config_drift` — trigger drift check now
+  - `get_drift_report` — recent drift check history
+  - `store_config_baseline` — snapshot current config
+  - `rollback_config_key` — revert specific key to baseline
+  - `get_config_changes` — config change history with key filter
+  - `get_system_resilience` — combined circuit + drift health status
+
+### Tests
+- `tests/test_circuit_breaker.py` — 71 tests (state machine, backoff, decorator, registry, threading)
+- `tests/test_config_drift.py` — 53 tests (baseline, drift detection, rollback, hooks, scheduler)
+- `tests/test_resilience_skills.py` — 40 tests (all 10 skills, error handling, serialization)
+- **Total new tests: 164**
+
+---
+
 ## [1.34] — "AGENT TASK ORCHESTRATION & EVALUATION GATES" — 2026-07
 
 Closes the agent delegation and model quality gaps. TaskSpec validates all LLM
