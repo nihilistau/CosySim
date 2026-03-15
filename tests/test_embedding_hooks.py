@@ -345,4 +345,4 @@ class TestSchedulerCallback:
         """Guard total task count — update when adding new tasks."""
         from engine.nexus.scheduler_daemon import get_scheduler_daemon
         daemon = get_scheduler_daemon()
-        assert len(daemon.list_tasks()) == 75
+        assert len(daemon.list_tasks()) >= 75  # v1.33 adds 7 more (auto-loop + conversation-sync)

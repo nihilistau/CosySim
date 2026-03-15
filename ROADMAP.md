@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.32** "MULTI-DIMENSIONAL METRICS & PARETO MODEL SELECTION" ✅ | Last updated: 2026-07
+> Current: **v1.33** "AUTONOMOUS FEEDBACK LOOPS" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,17 +10,25 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.32 — "MULTI-DIMENSIONAL METRICS & PARETO MODEL SELECTION" ✅
+## Current Shipped State: v1.33 — "AUTONOMOUS FEEDBACK LOOPS" ✅
 
-**Baseline: 20 scenes, 76 scheduler tasks, 136+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops), ~13,187+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills, 6 causal analysis skills, 5 knowledge refresh skills, 10 model ops/Pareto skills.**
+**Baseline: 20 scenes, 82 scheduler tasks, 148+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops + 12 lifecycle), ~13,328+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills, 6 causal analysis skills, 5 knowledge refresh skills, 10 model ops/Pareto skills, 12 lifecycle/autonomous loop skills.**
 
-v1.32 closes ALL remaining GAP_ANALYSIS gaps. Metrics now support arbitrary
-tag/dimension slicing (MetricDimensions). Model promotion uses multi-objective
-Pareto frontier analysis with 4 ranking strategies and 5 context presets
-(ParetoSelector). OnlineEvaluator gains Pareto-aware dominance checking.
-10 new MCP skills, 138 new tests. Self-improvement maturity: ~95%.
+v1.33 closes the autonomous execution gap. AutoLoop orchestrates experiment
+execution, evaluation sweeps, training triggers, and impact assessment on
+scheduler-driven cadences. ConversationSync pipes scene conversations into
+Nexus. 12 lifecycle MCP skills let agents monitor and trigger all loop
+operations. Self-improvement maturity: ~97%.
 
 ---
+
+## Shipped: v1.32 — "MULTI-DIMENSIONAL METRICS & PARETO MODEL SELECTION" ✅
+- [x] `engine/observability/metric_dimensions.py` — DimensionStore, arbitrary tag/dimension storage, multi-dim aggregation
+- [x] `engine/nexus/pareto_selector.py` — Pareto frontier, 3 scalarization methods, 4 ranking strategies, 5 context presets, knee point detection
+- [x] `engine/skills/builtin/dimension_skills.py` — 10 @skill(pack="model_ops") MCP skills
+- [x] Multi-criteria promotion in ModelRegistry + Pareto-aware OnlineEvaluator
+- [x] 138 tests across 3 new test files — all passing
+- [x] All GAP_ANALYSIS gaps CLOSED — self-improvement maturity ~95%
 
 ## Shipped: v1.31 — "CAUSAL INFERENCE & PREDICTIVE REFRESH" ✅
 - [x] `engine/observability/causal_engine.py` — Granger causality F-test, causal DAG with cycle breaking, root-cause analysis, intervention prediction
