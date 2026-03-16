@@ -1,5 +1,6 @@
 """engine.skills.builtin — Built-in skill packs"""
 # Import all packs so their @skill decorators fire at import time
+from . import argus_skills
 from . import comfyui_skills, memory_skills, character_skills, voice_skills, tts_skills, social_skills
 from . import training_skills, notebooklm_skills
 from . import board_skills, coding_skills, nexus_skills
@@ -27,6 +28,7 @@ from . import resilience_skills
 from . import lifecycle_mgmt_skills
 
 __all__ = [
+    "argus_skills",
     "comfyui_skills", "memory_skills", "character_skills", "voice_skills",
     "tts_skills", "social_skills", "training_skills", "notebooklm_skills",
     "board_skills", "coding_skills", "nexus_skills",
