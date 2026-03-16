@@ -4,6 +4,53 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.36] — "DATA INTEGRITY & GRACEFUL LIFECYCLE" — 2026-07
+
+Centralized schema migration engine tracks versions across 24+ SQLite databases
+with drift detection and rollback. Graceful shutdown manager coordinates ordered
+service teardown across 4 phases. 10 lifecycle management MCP skills expose all
+operations to agents.
+
+### Added
+- **Schema Migration Engine** (`engine/nexus/schema_migration.py`, ~950 lines)
+  - `SchemaMigrationEngine` singleton with SQLite-backed migration registry
+  - `Migration` dataclass: versioned up/down steps (SQL strings or Python callables)
+  - `SchemaSnapshot` captures tables, columns, types, indexes from live databases
+  - `detect_drift()` / `detect_all_drift()` compares actual vs expected schemas
+  - `run_pending()` applies migrations in order with history tracking
+  - `rollback()` reverts to target version via down migrations
+  - `discover_databases()` scans data/ for all .db files with size/table info
+  - Nexus logging + scheduler integration (daily drift checks)
+
+- **Graceful Shutdown Manager** (`engine/lifecycle/shutdown_manager.py`, ~750 lines)
+  - `ShutdownManager` singleton with ordered shutdown phases (DRAIN → FLUSH → CLOSE → CLEANUP)
+  - `ShutdownHandler` dataclass: callback, timeout, priority, critical flag
+  - Windows-compatible signal handlers (SIGINT + SIGBREAK + atexit)
+  - Timeout enforcement per handler with force-kill fallback
+  - `ShutdownReport` with per-phase results, timing, and error details
+  - 4 factory functions: database flush, scheduler drain, thread pool drain, Flask shutdown
+  - Nexus logging of shutdown events
+
+- **Lifecycle Management MCP Skills** (`engine/skills/builtin/lifecycle_mgmt_skills.py`, 10 skills)
+  - `get_schema_status` — migration status for one or all databases
+  - `run_schema_migration` — run pending migrations
+  - `detect_schema_drift` — check for schema drift
+  - `discover_databases` — list all discovered SQLite databases
+  - `get_migration_history` — migration history with limit
+  - `get_shutdown_status` — current shutdown state and handlers
+  - `list_shutdown_handlers` — all registered shutdown handlers
+  - `initiate_graceful_shutdown` — begin orderly shutdown (300s cooldown)
+  - `register_db_shutdown` — register database for graceful shutdown
+  - `get_system_lifecycle` — combined migration + shutdown health
+
+### Tests
+- `tests/test_schema_migration.py` — 57 tests (migration registry, runner, drift, snapshots, rollback)
+- `tests/test_shutdown_manager.py` — 48 tests (phases, handlers, signals, factories, Nexus)
+- `tests/test_lifecycle_mgmt_skills.py` — 38 tests (all 10 skills, error handling)
+- **Total new tests: 143**
+
+---
+
 ## [1.35] — "OPERATIONAL RESILIENCE & CONFIG TRUST" — 2026-07
 
 Production-grade fault tolerance and configuration trust. Circuit breaker state
