@@ -7,12 +7,17 @@ CosySim has a **strong foundation** for self-improvement with 3 major operationa
 2. **Training Flywheel** — Continuous collection of training data from system interactions
 3. **Metrics & Reflection** — System-wide metrics tracking with NLM-driven insights
 
-As of **v1.35**, ALL identified gaps are now **CLOSED** — operational
-resilience and config trust complete the production readiness pipeline.
-Combined with v1.28–v1.34 modules, the self-improvement maturity has
+As of **v1.36**, ALL identified gaps are now **CLOSED** — data integrity
+and graceful lifecycle management complete the production readiness pipeline.
+Combined with v1.28–v1.35 modules, the self-improvement maturity has
 reached ~99%.
 
 **Remaining open gaps:** None. All gaps closed.
+
+**Gaps CLOSED by v1.36:**
+- ~~No schema migration system~~ — SchemaMigrationEngine: versioned up/down migrations (SQL + Python), drift detection via SchemaSnapshot comparison, rollback, daily scheduler checks, database discovery across 24+ DBs
+- ~~No graceful shutdown~~ — ShutdownManager: 4 ordered phases (DRAIN/FLUSH/CLOSE/CLEANUP), handler registration with timeout/priority/critical, Windows-compatible signals, factory functions for DB/scheduler/threadpool/Flask shutdown
+- ~~No lifecycle management MCP skills~~ — 10 skills (pack="lifecycle_mgmt") exposing migration + shutdown operations to agents
 
 **Gaps CLOSED by v1.35:**
 - ~~No circuit breaker / cascading failure prevention~~ — CircuitBreaker: CLOSED→OPEN→HALF_OPEN state machine, ExponentialBackoff, RetryPolicy, @circuit_protected decorator, CircuitBreakerRegistry singleton

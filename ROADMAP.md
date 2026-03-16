@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.35** "OPERATIONAL RESILIENCE & CONFIG TRUST" ✅ | Last updated: 2026-07
+> Current: **v1.36** "DATA INTEGRITY & GRACEFUL LIFECYCLE" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,15 +10,19 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.35 — "OPERATIONAL RESILIENCE & CONFIG TRUST" ✅
+## Current Shipped State: v1.36 — "DATA INTEGRITY & GRACEFUL LIFECYCLE" ✅
 
-**Baseline: 20 scenes, 84 scheduler tasks, 168+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops + 12 lifecycle + 10 orchestration + 10 resilience), ~13,700+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 10 process monitor skills, 14 monitoring skills, 20 self-improvement skills, 14 PM2 process management skills, 6 causal analysis skills, 5 knowledge refresh skills, 10 model ops/Pareto skills, 12 lifecycle/autonomous loop skills, 10 orchestration/evaluation gate skills, 10 resilience/config trust skills.**
+**Baseline: 20 scenes, 86 scheduler tasks, 178+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops + 12 lifecycle + 10 orchestration + 10 resilience + 10 lifecycle management), ~13,840+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 24+ SQLite databases with migration tracking.**
 
-v1.35 closes the error recovery and config drift gaps. CircuitBreaker prevents
-cascading service failures with state machine, exponential backoff, and registry.
-ConfigDriftMonitor detects runtime config divergence from Nexus-stored baselines
-every 30 minutes. 10 resilience MCP skills expose all operations to agents.
+v1.36 closes the data migration and graceful shutdown gaps. SchemaMigrationEngine
+tracks versions across 24+ SQLite databases with drift detection and rollback.
+ShutdownManager coordinates ordered service teardown across 4 phases with
+timeout enforcement. 10 lifecycle management MCP skills expose all operations.
 Self-improvement maturity: ~99%.
+
+---
+
+## Shipped: v1.35 — "OPERATIONAL RESILIENCE & CONFIG TRUST" ✅
 
 ---
 

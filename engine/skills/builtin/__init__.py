@@ -24,6 +24,7 @@ from . import lifecycle_skills
 from . import workspace_skills
 from . import orchestration_skills
 from . import resilience_skills
+from . import lifecycle_mgmt_skills
 
 __all__ = [
     "comfyui_skills", "memory_skills", "character_skills", "voice_skills",
@@ -50,4 +51,5 @@ __all__ = [
     "workspace_skills",
     "orchestration_skills",
     "resilience_skills",
+    "lifecycle_mgmt_skills",
 ]
