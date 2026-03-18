@@ -7,11 +7,16 @@ CosySim has a **strong foundation** for self-improvement with 3 major operationa
 2. **Training Flywheel** — Continuous collection of training data from system interactions
 3. **Metrics & Reflection** — System-wide metrics tracking with NLM-driven insights
 
-As of **v1.39**, ALL identified gaps are now **CLOSED** — structured logging
-and integration testing complete the observability layer.  Combined with
-v1.28–v1.38 modules, the self-improvement maturity has reached ~100%.
+As of **v1.40**, ALL identified gaps are now **CLOSED** — health check aggregator
+and service discovery registry complete the observability layer.
 
 **Remaining open gaps:** None. All gaps closed.
+
+**v1.40 update:** HealthChecker (10 service probes, ThreadPoolExecutor, SQLite
+history, Prometheus export, background watcher) + ServiceRegistry (6 auto-registered
+builtins, capability discovery, heartbeat, broadcast_event, SQLite persistence) +
+Flask Blueprint (/api/health, /api/services, /metrics) + 10 health MCP skills.
+No new gaps opened.
 
 **v1.39 update:** StructuredLogger (SQLite + JSON-lines, TraceContext, @traced,
 BoundLogger, install_root_handler) + IntegrationRunner (ServiceProbe, 5
@@ -22,6 +27,19 @@ observability skills. No new gaps opened.
 SecretType categories) + Rate Limiter (token buckets, 8 pre-configured
 services, backpressure, @rate_limited decorator) + 10 MCP security skills.
 No new gaps opened.
+
+**Gaps CLOSED by v1.40:**
+- ~~No health check aggregator~~ — HealthChecker: 10 built-in probes (lmstudio, nexus,
+  pm2, comfyui, tts, secret_manager, rate_limiter, structured_logger, integration_runner,
+  disk_space), ThreadPoolExecutor concurrency, SQLite history (7 days), Prometheus export,
+  background watcher, custom probe registration, optional service floor-clamping
+- ~~No service discovery registry~~ — ServiceRegistry: 6 auto-registered builtins,
+  AND-filtered discover() (type/tags/capabilities/status), heartbeat/expire_stale,
+  get_by_capability, broadcast_event with callback registry, SQLite persistence
+- ~~No health REST endpoints~~ — Flask Blueprint: /api/health (cached 10 s), /api/health/<svc>,
+  /api/services, /api/services/discover (POST), /metrics (Prometheus)
+- ~~No health MCP skills~~ — 10 skills (pack="health") for full report, single probe,
+  history, alerts, registration, discovery, deregister, heartbeat, Prometheus, capabilities
 
 **Gaps CLOSED by v1.39:**
 - ~~No structured logging~~ — StructuredLogger: SQLite + JSON-lines backend, TraceContext

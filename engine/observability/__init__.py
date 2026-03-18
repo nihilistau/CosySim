@@ -14,6 +14,9 @@ Provides:
 - UnifiedMonitor: top-level orchestrator composing all monitoring subsystems
 - UnifiedDashboard: single API surface for all monitoring data with widgets
 - DimensionStore: arbitrary tag/dimension support for multi-dimensional metric slicing
+- HealthChecker: unified health polling for all system services (v1.40)
+- ServiceRegistry: dynamic service discovery for scenes and agents (v1.40)
+- health_bp: Flask Blueprint for health and discovery endpoints (v1.40)
 """
 
 from engine.observability.alert_router import (
@@ -80,6 +83,23 @@ from engine.observability.structured_logger import (
     traced,
 )
 
+# v1.40 health check + service discovery
+from engine.observability.health_checker import (
+    HealthChecker,
+    HealthStatus,
+    ServiceHealth,
+    SystemHealthReport,
+    get_health_checker,
+)
+from engine.observability.health_routes import health_bp
+from engine.observability.service_registry import (
+    DiscoveryResult,
+    ServiceRecord,
+    ServiceRegistry,
+    ServiceType,
+    get_service_registry,
+)
+
 __all__ = [
     "AggregationResult",
     "Alert",
@@ -134,4 +154,16 @@ __all__ = [
     "get_structured_logger",
     "install_root_handler",
     "traced",
+    # v1.40 health check + service discovery
+    "DiscoveryResult",
+    "HealthChecker",
+    "HealthStatus",
+    "ServiceHealth",
+    "ServiceRecord",
+    "ServiceRegistry",
+    "ServiceType",
+    "SystemHealthReport",
+    "get_health_checker",
+    "get_service_registry",
+    "health_bp",
 ]
