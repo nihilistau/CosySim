@@ -34,6 +34,7 @@ class GrpcFrame:
     length: int
     payload: bytes
     is_trailer: bool = False
+    fields: List[ProtoField] = field(default_factory=list)
 
     @property
     def payload_text(self) -> str:
@@ -141,9 +142,10 @@ class GrpcWebDecoder:
             resp.frames = frames
             # Extract proto fields from data frames
             for frame in resp.data_frames:
-                fields = self._parse_proto_varint(frame.payload)
+                parsed_fields = self._parse_proto_varint(frame.payload)
+                frame.fields = parsed_fields
                 resp.proto_fields.update({f.field_number: f.value_decoded or f.value_raw
-                                          for f in fields})
+                                           for f in parsed_fields})
         except Exception as exc:
             logger.debug("gRPC-web binary parse failed for %s/%s: %s", service, method, exc)
 

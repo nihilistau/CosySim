@@ -1,6 +1,6 @@
 meta:
-  version: '5.0'
-  updated: '2026-07-10'
+  version: '6.0'
+  updated: '2026-07-14'
   base_url: https://notebooklm.google.com
   rpc_path: /_/LabsTailwindUi/data/batchexecute
   grpc_chat_path: /_/LabsTailwindUi/data/ google.internal.labs.tailwind.orchestration.v1. LabsTailwindOrchestrationService/GenerateFreeFormStreamed
@@ -16,12 +16,21 @@ meta:
       example: '-7074006073653346490'
       source: notebooklm.google.com-gold.har
       notes: Negative 64-bit integer, included in batchexecute URL as f.sid parameter
-  har_enrichment_version: v1.21c
+  har_enrichment_version: v1.37
   har_sources:
   - notebooklm.google.com-gold.har
   - docs.-google.com-sheets-gemini-jackpot.har
   - m=postshellbase
   - rs=AA2YrTu55zzqRDSqVuS7VTCy_ldgsy4J6g
+  - gemini.google.com-NEWEST.har
+  - labs.google.har
+  - artsandculture.google2-game.com.har
+  - artsandculture.google2.com.har
+  - dashboard.render.com.har
+  build_labels_latest:
+    gemini_server: boq_assistant-bard-web-server_20260311.02_p8
+    opal_server: boq_labs-opal-ui_20260312.41_p0
+    bard_client: boq-bard-web.BardChatUi.en_AU.aCiCIwVFaOo.2018.O
 parameters:
   tier_marker:
     description: Account tier hint sent to NLM. Server does NOT enforce gating.
@@ -1145,73 +1154,155 @@ gemini:
       description: Main chat generation — sends message, returns response
       category: chat
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[]'
+      notes: Empty payload — message content likely in batch wrapper envelope
     K4WWud:
       description: Conversation management — list, create, delete conversations
       category: conversation
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[[1],["en-AU"]]'
+      notes: First element is action flags [1]=list, second is locale array
     ozz5Z:
       description: Feature flags / account state — shared with NLM
       category: account
       confirmed: '2026-03-05'
-      notes: Same rpcid used across NLM and Gemini (shared WIZ infrastructure)
+      enriched: '2026-07-14'
+      payload_template: '[[[[null,"1",447]],[[null,"1",448]],...]]'
+      notes: Same rpcid used across NLM and Gemini (shared WIZ infrastructure). Payload is numbered feature flag pairs.
     CNgdBe:
       description: Model selection / configuration
       category: model
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[1,["en-AU"],0]'
+      notes: First element is model ID index, second is locale, third is config flags
     GPRiHf:
       description: Response rating / feedback
       category: feedback
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[]'
     maGuAc:
       description: Upload attachment / file
       category: upload
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[0]'
+      notes: Single element is page/offset index
     ESY5D:
-      description: Get conversation history / details
+      description: Get conversation history / feature flags list
       category: conversation
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[["adaptive_device_responses_enabled","advanced_mode_theme_override_triggered",...]]'
+      notes: Payload is a list of feature flag names — reveals all client-side capabilities
     MaZiqc:
       description: Extension/plugin interaction
       category: extension
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[13,null,[1,null,1]]'
+      notes: First element is extension ID, third is config triple [enabled, null, version]
     aPya6c:
       description: Session initialization / heartbeat
       category: session
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[]'
     cYRIkd:
       description: User preferences / settings
       category: account
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '["en-AU"]'
+      notes: Single locale string
     qpEbW:
       description: Search conversation history
       category: search
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[[[1,11],[2,11],[6,11]]]'
+      notes: Filter/sort specification — pairs of [field_id, max_results]
     o30O0e:
-      description: Image generation request
-      category: media
+      description: User profile fetch (contacts/identity)
+      category: account
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[["me"],[[["person.photo","person.name","person.email"]],null,[1,7]]]'
+      notes: 'Originally labeled as image gen — actually a People API profile fetch. Fields: photo, name, email.'
     DYBcR:
       description: Locale / language preferences — shared with NLM
       category: account
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '["en-AU"]'
       notes: Same rpcid used in NLM get_locale
     L5adhe:
-      description: Draft / edit message
+      description: Draft / edit message — large state initialization
       category: chat
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '[[null x 40+]]'
+      notes: Very large payload — initializes conversation state with 40+ positional slots
     ku4Jyf:
       description: Code execution request
       category: code
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '["en-AU",null,null,null,4,null,null,[2,4,7,17],null,[]]'
+      notes: Locale + execution config. Array [2,4,7,17] may be language IDs (Python=2, JS=4, etc.)
     PCck7e:
-      description: Share conversation
+      description: Share conversation / gem
       category: sharing
       confirmed: '2026-03-05'
+      enriched: '2026-07-14'
+      payload_template: '["r_2512cf63652d7659"]'
+      notes: Single param is gem/conversation ID with r_ prefix
     NXpLKc:
       description: Get linked notebooks (cross-product bridge)
       category: integration
       confirmed: '2026-03-05'
-      notes: Bridge between Gemini and NotebookLM
+      enriched: '2026-07-14'
+      payload_template: '[]'
+      notes: Bridge between Gemini and NotebookLM — empty payload fetches all linked notebooks
+    # ──── NEW rpcids from v1.37 HAR goldmine ────
+    HcT8bb:
+      description: List storybook gems — fetch available gem storybooks
+      category: gems
+      confirmed: '2026-07-14'
+      source: gemini.google.com-NEWEST.har
+      payload_template: '["storybook",["en-AU"],1,null,1]'
+      notes: First arg is gem type, second is locale, rest are pagination/filter flags. Seen on /gem/storybook and /gems/view paths.
+    XqA3Ic:
+      description: Get storybook detail — fetch specific gem storybook by ID
+      category: gems
+      confirmed: '2026-07-14'
+      source: gemini.google.com-NEWEST.har
+      payload_template: null
+      notes: Observed in batches with ESY5D on /gem/storybook/{id} paths. Retrieves full storybook content for a specific gem.
+    ZKcapf:
+      description: List saved info — paginated saved content listing
+      category: content
+      confirmed: '2026-07-14'
+      source: gemini.google.com-NEWEST.har
+      payload_template: '[100]'
+      notes: Single param is page_size. Seen on /saved-info path — retrieves user's saved responses/bookmarks.
+    jGArJ:
+      description: List my content — filtered content on /mystuff
+      category: content
+      confirmed: '2026-07-14'
+      source: gemini.google.com-NEWEST.har
+      payload_template: '[[0,0,0,1,1,0,0],3]'
+      notes: First array is 7 binary filter flags (content types), second is sort/view mode. Powers the /mystuff dashboard.
+    sJBwce:
+      description: Get subscription tiers — Pro/Free tier info
+      category: account
+      confirmed: '2026-07-14'
+      source: gemini.google.com-NEWEST.har
+      payload_template: '[[1,2]]'
+      notes: Pair [1,2] likely represents [current_tier, available_tiers]. May reveal subscription state and upgrade paths.
 aistudio:
   meta:
     service_name: MakerSuiteService
@@ -3804,3 +3895,266 @@ looker_integration:
   - LOOKER_DATASOURCE_MODEL_NAME_MISSING_VALIDATION_ERROR
   - LOOKER_DATASOURCE_EXPLORE_NAME_MISSING_VALIDATION_ERROR
   notes: Looker is a valid data source type in Sheets alongside BigQuery
+
+# ════════════════════════════════════════════════════════════════════════════
+# v1.37 HAR GOLDMINE — NEW SERVICE SECTIONS
+# Source: GoldMine HAR captures (2026-03-16)
+# ════════════════════════════════════════════════════════════════════════════
+
+opal:
+  meta:
+    service_name: Opal
+    rpc_path: /_/Opal/data/batchexecute
+    base_url: https://opal.google.com
+    build_label: boq_labs-opal-ui_20260312.41_p0
+    auth_method: cookie_sapisidhash
+    source: labs.google.har
+    confirmed: '2026-07-14'
+    notes: >
+      Opal is a NEW Google Labs service discovered in labs.google.har.
+      Uses standard WIZ batchexecute transport. Has Drive proxy API for
+      direct file access and gallery listing. Appears to be an experimental
+      document/media workspace.
+  rpcids:
+    ug7pge:
+      description: Opal Gemini initialization — bootstraps Gemini integration in Opal
+      category: session
+      confirmed: '2026-07-14'
+      source: labs.google.har
+      payload_template: '[]'
+      notes: Empty payload — likely session/capability initialization for Gemini features within Opal
+  rest_apis:
+    drive_proxy:
+      path: /api/drive-proxy/drive/v3/files/{file_id}
+      method: GET
+      description: Direct Drive file access through Opal proxy
+      notes: Bypasses standard Drive API — accesses files via Opal's own proxy layer
+    gallery_list:
+      path: /api/gallery/list
+      method: GET
+      description: List gallery items in Opal
+      notes: Gallery content listing — may include shared templates, examples, or user content
+
+appcatalyst:
+  meta:
+    service_name: AppCatalyst
+    grpc_host: appcatalyst.pa.googleapis.com
+    base_path: /v1beta1
+    auth_method: api_key + oauth
+    source: labs.google.har
+    confirmed: '2026-07-14'
+    notes: >
+      AppCatalyst is Google's internal application builder API. It provides DIRECT
+      model access to Gemini models including Gemini 3 Flash Preview via standard
+      REST endpoints. This is distinct from AI Studio's gRPC-web protocol — it uses
+      simple REST with API key auth. The v1beta1 prefix indicates pre-GA status.
+      Critical discovery: provides createCachedContent for server-side content caching.
+  endpoints:
+    check_app_access:
+      path: /v1beta1/checkAppAccess
+      method: POST
+      description: Check if current user has access to an app/project
+      category: auth
+    create_cached_content:
+      path: /v1beta1/cachedContents
+      method: POST
+      description: Create cached content for reuse across requests
+      category: optimization
+      notes: >
+        Server-side content caching — could dramatically reduce token usage for
+        repeated context. Critical for our Nexus → LLM pipeline efficiency.
+    execute_step:
+      path: /v1beta1/executeStep
+      method: POST
+      description: Execute a single step in an agent workflow
+      category: agent
+      notes: Agent-style step execution — implies AppCatalyst supports multi-step agent workflows
+    generate_webpage_stream:
+      path: /v1beta1/generateWebpageStream
+      method: POST
+      description: Generate webpage content via streaming
+      category: generation
+      notes: Streaming webpage generation — likely powers Google's web creation tools
+    get_email_preferences:
+      path: /v1beta1/getEmailPreferences
+      method: GET
+      description: Get email notification preferences
+      category: account
+    set_email_preferences:
+      path: /v1beta1/setEmailPreferences
+      method: POST
+      description: Update email notification preferences
+      category: account
+    get_location:
+      path: /v1beta1/getLocation
+      method: GET
+      description: Get user location context
+      category: context
+    generate_content:
+      path: /v1beta1/models/{model}:generateContent
+      method: POST
+      description: Direct model inference — non-streaming
+      category: inference
+      models_confirmed:
+        - gemini-2.5-flash
+        - gemini-3-flash-preview
+      notes: >
+        Direct REST endpoint for model inference. Confirmed access to Gemini 3
+        Flash Preview — this is the newest model available. Uses API key auth,
+        not OAuth, making it potentially accessible for automation.
+    stream_generate_content:
+      path: /v1beta1/models/{model}:streamGenerateContent
+      method: POST
+      description: Direct model inference — streaming (SSE)
+      category: inference
+      models_confirmed:
+        - gemini-2.5-flash
+        - gemini-3-flash-preview
+      notes: >
+        Streaming variant of generateContent. Returns SSE stream with partial
+        responses. Key endpoint for real-time inference integration.
+
+gemini_streaming:
+  meta:
+    service_name: BardFrontendService
+    base_url: https://gemini.google.com
+    transport: grpc-web
+    source: gemini.google.com-NEWEST.har
+    confirmed: '2026-07-14'
+    notes: >
+      Separate from BardChatUi batchexecute — this is the gRPC-web streaming
+      endpoint that powers real-time chat generation in Gemini. Uses the full
+      gRPC service path in the URL. Note: BardFrontendService is a DIFFERENT
+      service from BardChatUi even though both serve gemini.google.com.
+  endpoints:
+    stream_generate:
+      path: /_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate
+      method: POST
+      description: gRPC-web streaming chat generation
+      transport: grpc-web
+      category: chat
+      notes: >
+        The primary real-time streaming endpoint for Gemini chat. Uses gRPC-web
+        framing (not SSE). This is what powers the live typing animation in the
+        Gemini UI.
+
+account_linking_grpc:
+  meta:
+    service_name: AccountLinkingService
+    grpc_service: google.internal.identity.accountlinking.v1.AccountLinkingService
+    auth_method: internal_only
+    source: gemini.google.com-NEWEST.har + heap analysis
+    confirmed: '2026-07-14'
+    notes: >
+      Internal Google identity service for cross-product account linking.
+      Discovered in Gemini HAR traffic. These methods handle OAuth delegation
+      between Google services (e.g., linking Gemini → Drive, Gemini → Docs).
+      Marked as internal — may require special auth or service-to-service tokens.
+  methods:
+    DeleteLink:
+      description: Remove an account link between services
+      category: identity
+    DepositGoogleCredential:
+      description: Store OAuth credential for linked service
+      category: identity
+      notes: Credential deposit — enables cross-service access without re-auth
+    FinishOAuth:
+      description: Complete OAuth flow for account linking
+      category: identity
+    GetLink:
+      description: Retrieve current account link status
+      category: identity
+    StartLinkingSession:
+      description: Initiate new account linking session
+      category: identity
+      notes: First step in OAuth delegation flow
+
+async_data_grpc:
+  meta:
+    service_name: AsyncDataService
+    grpc_service: google.internal.onegoogle.asyncdata.v1.AsyncDataService
+    source: gemini.google.com-NEWEST.har + heap analysis
+    confirmed: '2026-07-14'
+    notes: >
+      Internal Google async data service for cross-product state management.
+      Handles background data fetching and state reporting across OneGoogle services.
+  methods:
+    GetAsyncData:
+      description: Fetch async data from background pipelines
+      category: data
+    ReportState:
+      description: Report client state to server
+      category: telemetry
+
+waa_grpc:
+  meta:
+    service_name: Waa
+    grpc_service: google.internal.waa.v1.Waa
+    source: gemini.google.com-NEWEST.har + heap analysis
+    confirmed: '2026-07-14'
+    notes: >
+      WAA (Web App Analytics) service — handles analytics and telemetry for
+      Google web applications. The Create/Ping pattern suggests session-level
+      analytics tracking.
+  methods:
+    Create:
+      description: Create WAA analytics session
+      category: telemetry
+    Ping:
+      description: Heartbeat/activity ping for analytics
+      category: telemetry
+
+translate_internal:
+  meta:
+    service_name: TranslateService
+    grpc_service: google.internal.translate.v1
+    source: Heap-20260316T125812.heaptimeline
+    discovery_method: heap_analysis
+    confirmed: '2026-07-14'
+    notes: >
+      Internal Google Translate service types discovered in heap analysis.
+      These represent the wire types used for internal translation features
+      embedded in Gemini. Could enable automated translation pipelines.
+  types:
+    GetSupportedLanguagesResponse:
+      description: Response listing supported translation languages
+      category: translation
+    TextToSpeechResponse:
+      description: TTS response from internal Translate service
+      category: tts
+      notes: Google Translate's TTS — separate from Cloud TTS API
+    TranslateTextResponse:
+      description: Translation result response
+      category: translation
+
+batchexecute_services:
+  meta:
+    description: All discovered batchexecute service endpoints across Google products
+    source: v1.37 HAR goldmine analysis
+    confirmed: '2026-07-14'
+    notes: Five distinct batchexecute services discovered, each using the same WIZ protocol but with different service names and rpcid sets.
+  services:
+    BardChatUi:
+      path: /_/BardChatUi/data/batchexecute
+      host: gemini.google.com
+      rpcid_count: 22
+      notes: Gemini Chat — primary consumer-facing chat interface
+    BardFrontendService:
+      path: /_/BardFrontendService/data/batchexecute
+      host: gemini.google.com
+      notes: Gemini Frontend — separate from BardChatUi, handles frontend-specific ops
+    LabsTailwindUi:
+      path: /_/LabsTailwindUi/data/batchexecute
+      host: notebooklm.google.com
+      rpcid_count: 58
+      notes: NotebookLM — our primary operational surface
+    AppsMakerFrontendUi:
+      path: /_/AppsMakerFrontendUi/data/batchexecute
+      host: aistudio.google.com
+      rpcid_count: 34
+      notes: AI Studio — model management and playground
+    Opal:
+      path: /_/Opal/data/batchexecute
+      host: opal.google.com
+      rpcid_count: 1
+      notes: NEW — Google Labs experimental workspace. Minimal rpcid surface so far.

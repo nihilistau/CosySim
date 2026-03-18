@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from engine.config import get_config
+from engine.nexus.embedding_service import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -192,14 +193,25 @@ class NexusVectorStore:
             return
 
         coll = self._get_collection(collection)
+        svc = self._embedding_service or get_embedding_service()
         meta = _sanitize_metadata(metadata or {})
         meta["_added_at"] = time.time()
+
+        embeddings = svc.embed_batch([text], purpose=collection)
+        if len(embeddings) != 1:
+            logger.warning(
+                "Vector store add skipped for %s: embedding unavailable (got %s)",
+                entry_id,
+                len(embeddings),
+            )
+            return
 
         try:
             coll.upsert(
                 ids=[entry_id],
                 documents=[text[:10000]],  # ChromaDB has a limit
                 metadatas=[meta],
+                embeddings=embeddings,
             )
             self._adds += 1
             logger.debug("Vector store: added %s to %s", entry_id, collection)
@@ -225,6 +237,7 @@ class NexusVectorStore:
             return 0
 
         coll = self._get_collection(collection)
+        svc = self._embedding_service or get_embedding_service()
         ids: List[str] = []
         documents: List[str] = []
         metadatas: List[Dict[str, Any]] = []
@@ -251,11 +264,22 @@ class NexusVectorStore:
             chunk_ids = ids[i:i + chunk_size]
             chunk_docs = documents[i:i + chunk_size]
             chunk_meta = metadatas[i:i + chunk_size]
+            embeddings = svc.embed_batch(chunk_docs, purpose=collection)
+            if len(embeddings) != len(chunk_ids):
+                logger.warning(
+                    "Batch add skipped for chunk %d-%d: embedding len %d != ids %d",
+                    i,
+                    i + len(chunk_ids),
+                    len(embeddings),
+                    len(chunk_ids),
+                )
+                continue
             try:
                 coll.upsert(
                     ids=chunk_ids,
                     documents=chunk_docs,
                     metadatas=chunk_meta,
+                    embeddings=embeddings,
                 )
                 added += len(chunk_ids)
             except Exception as exc:
