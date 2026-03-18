@@ -4,6 +4,105 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.40] — "HEALTH CHECK DASHBOARD + SERVICE DISCOVERY" — 2026-03
+
+Unified health check aggregator polling all system services concurrently, a
+dynamic service registry with capability-based discovery, Flask Blueprint
+endpoints for health and Prometheus metrics, and 10 MCP health skills.
+Includes 148 tests (50+ health_checker, 40+ service_registry, 30+ health_skills).
+
+### Added
+
+- **Health Check Aggregator** (`engine/observability/health_checker.py`, ~480 lines)
+  - `HealthChecker` singleton via `get_health_checker()` with SQLite backend
+    (`data/health_history.db`); keeps 7 days of history
+  - `HealthStatus` enum: HEALTHY / DEGRADED / UNHEALTHY / UNKNOWN
+  - `ServiceHealth` dataclass: service_name, status, latency_ms, message,
+    checked_at, details (Dict)
+  - `SystemHealthReport` dataclass: timestamp, overall, services, score (0–1), alerts
+  - 10 built-in service probes: lmstudio (GET /api/v1/models + bearer token),
+    nexus (import + search with 3 s timeout), pm2 (subprocess jlist), comfyui
+    (GET /system_stats, optional), tts (GET /health, optional), secret_manager
+    (export_safe_report), rate_limiter (get_metrics), structured_logger
+    (get_error_summary), integration_runner (probe_service), disk_space (shutil)
+  - `check_all(parallel=True)` — ThreadPoolExecutor with up to 10 workers
+  - `check_service(name)` — single service probe by name
+  - `get_last_report()` — cached last SystemHealthReport
+  - `watch(interval_seconds=60, callback=None)` — daemon background watcher thread
+  - `stop_watch()` — graceful watcher termination
+  - `get_history(hours=24)` — SQLite query with timestamp filter
+  - `get_alerts(hours=1)` — entries with active alerts from history
+  - `register_probe(name, fn, timeout=5.0)` — custom probe registration
+  - `score_to_status(score)` — 0.9+ HEALTHY, 0.6+ DEGRADED, else UNHEALTHY
+  - `export_prometheus()` — cosysim_health_score, cosysim_service_healthy,
+    cosysim_service_latency_ms, cosysim_alerts_total in Prometheus text format
+  - Optional services (comfyui, tts) floor-clamped at 0.5 in score calculation
+
+- **Service Registry** (`engine/observability/service_registry.py`, ~380 lines)
+  - `ServiceRegistry` singleton via `get_service_registry()` with SQLite backend
+    (`data/service_registry.db`)
+  - `ServiceType` enum: SCENE / AGENT / LLM / SKILL_PACK / TOOL / EXTERNAL
+  - `ServiceRecord` dataclass: service_id, name, service_type, host, port,
+    health_url, metadata, registered_at, last_seen, status, tags, capabilities
+  - `DiscoveryResult` dataclass: services, total, filtered_by
+  - `register(record)` → service_id — upsert with registered_at preservation
+  - `deregister(service_id)` → bool — remove + SQLite delete
+  - `heartbeat(service_id)` → bool — update last_seen + set status="active"
+  - `discover(service_type, tags, capabilities, status)` → DiscoveryResult (AND filters)
+  - `get(service_id)` → ServiceRecord — single lookup
+  - `list_all()` → List[ServiceRecord] — in-memory snapshot
+  - `expire_stale(max_age_seconds=120)` — mark non-builtin active→unknown; skip builtins
+  - `get_by_capability(capability)` → List[ServiceRecord]
+  - `broadcast_event(event_type, data)` → int — notify all registered callbacks
+  - `register_callback(service_id, fn)` — event handler registration
+  - Auto-registers 6 built-in services on init: lmstudio (LLM, caps: inference/
+    embeddings/vision), nexus (TOOL, caps: knowledge/search/qa), scheduler (TOOL,
+    caps: scheduling/cron), secret_manager (TOOL, caps: secrets/vault),
+    rate_limiter (TOOL, caps: rate_limiting/backpressure), structured_logger
+    (TOOL, caps: logging/tracing)
+
+- **Health Flask Routes** (`engine/observability/health_routes.py`, ~200 lines)
+  - `health_bp` Flask Blueprint — mountable via `app.register_blueprint(health_bp)`
+  - `GET /api/health` — full health report, 10 s in-process cache; 200/207/503
+  - `GET /api/health/<service>` — single service probe; 404 on unknown
+  - `GET /api/services` — all registered services with metadata
+  - `POST /api/services/discover` — body: {type?, tags?, capabilities?, status?}
+  - `GET /metrics` — Prometheus text format, MIME `text/plain; version=0.0.4`
+
+- **Health MCP Skills** (`engine/skills/builtin/health_skills.py`, ~320 lines)
+  - Pack: `health`, Category: SYSTEM, 10 skills:
+  - `get_system_health()` — full report with icons and score bar
+  - `check_service_health(service_name)` — single probe with latency + details
+  - `get_health_history(hours=24)` — ASCII bar chart of score history
+  - `get_health_alerts(hours=1)` — recent UNHEALTHY/DEGRADED events
+  - `register_service(name, type, host, port, capabilities_json)` — UUID-keyed entry
+  - `discover_services(service_type, capability)` — filtered discovery
+  - `deregister_service(service_id)` — remove from registry
+  - `heartbeat_service(service_id)` — keep-alive ping
+  - `export_prometheus_metrics()` — Prometheus text output
+  - `get_service_capabilities(service_id)` — capability + tag listing
+
+- **Observability module** (`engine/observability/__init__.py`)
+  - Added exports: HealthChecker, HealthStatus, ServiceHealth, SystemHealthReport,
+    get_health_checker, DiscoveryResult, ServiceRecord, ServiceRegistry, ServiceType,
+    get_service_registry, health_bp
+
+- **Tests** (148 total)
+  - `tests/test_health_checker.py` — 57 tests: all 10 probes mocked, check_all
+    concurrency timing, score thresholds, optional service floor-clamping,
+    watch/stop_watch lifecycle, SQLite history/alerts, register_probe, Prometheus format
+  - `tests/test_service_registry.py` — 43 tests: builtin auto-registration,
+    register/deregister/heartbeat lifecycle, discover() AND-filtering (type/tags/
+    capabilities/status), expire_stale (builtin exemption), get_by_capability,
+    broadcast_event/register_callback, SQLite round-trip, singleton
+  - `tests/test_health_skills.py` — 48 tests: all 10 skills with mocked
+    HealthChecker/ServiceRegistry, score/status/alert rendering, invalid type
+    handling, capability listing, Prometheus trigger logic
+
+---
+
+
+
 ## [1.41] — "ARGUS DEEP POLISH" — 2026-07
 
 Live API clients for Google Opal, AppCatalyst (Gemini 3 Flash Preview), and
