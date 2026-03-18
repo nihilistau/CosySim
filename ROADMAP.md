@@ -1,6 +1,6 @@
 # CosySim Roadmap
 
-> Current: **v1.36** "DATA INTEGRITY & GRACEFUL LIFECYCLE" ✅ | Last updated: 2026-07
+> Current: **v1.37** "HAR ENRICHMENT & RPC REGISTRY v6" ✅ | Last updated: 2026-07
 
 ## Philosophy
 
@@ -10,9 +10,15 @@ The system's ultimate goal: **inhabit itself** — AI agents that maintain, impr
 
 ---
 
-## Current Shipped State: v1.36 — "DATA INTEGRITY & GRACEFUL LIFECYCLE" ✅
+## Current Shipped State: v1.37 — "HAR ENRICHMENT & RPC REGISTRY v6" ✅
 
-**Baseline: 20 scenes, 86 scheduler tasks, 178+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops + 12 lifecycle + 10 orchestration + 10 resilience + 10 lifecycle management), ~13,840+ tests, 31 pipeline stages, 35 templates, 302 API ops across 34+ YAML sections, 7 MetaMetrics categories (55+ metrics), 24+ SQLite databases with migration tracking.**
+**Baseline: 20 scenes, 86 scheduler tasks, 178+ skills (81 workspace/NLM/monitoring + 20 self-improvement + 14 process + 6 causal + 5 knowledge refresh + 10 model ops + 12 lifecycle + 10 orchestration + 10 resilience + 10 lifecycle management), ~13,840+ tests, 31 pipeline stages, 35 templates, 302+ API ops across 40+ YAML/registry sections, 7 MetaMetrics categories (55+ metrics), 24+ SQLite databases with migration tracking.**
+
+v1.37 upgrades the NotebookLM RPC registry to version 6.0 (har_enrichment v1.37) with new Gemini rpcids, Opal/AppCatalyst coverage, build-label tracking, and ARGUS registry skills tests. Registry structure is now validated end-to-end while self-improvement maturity remains ~99%.
+
+---
+
+## Shipped: v1.36 — "DATA INTEGRITY & GRACEFUL LIFECYCLE" ✅
 
 v1.36 closes the data migration and graceful shutdown gaps. SchemaMigrationEngine
 tracks versions across 24+ SQLite databases with drift detection and rollback.

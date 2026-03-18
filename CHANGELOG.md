@@ -4,6 +4,24 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.37] — "HAR ENRICHMENT & RPC REGISTRY v6" — 2026-07
+
+NotebookLM RPC registry upgraded to v6.0 with the latest HAR enrichment (v1.37), broader service coverage, and ARGUS regression tests.
+
+### Added
+- **NotebookLM RPC Registry v6.0** (`config/nlm_rpcids.yaml`, har_enrichment v1.37)
+  - New HAR sources: notebooklm.google.com-gold, Sheets Gemini jackpot, postshellbase modules, gemini.google.com latest, labs.google, artsandculture (two domains), dashboard.render.com.
+  - Latest build labels tracked (gemini_server, opal_server, bard_client) plus updated session parameters (bl, f_sid).
+  - New Gemini rpcids from the gold harvest (HcT8bb, XqA3Ic, ZKcapf, jGArJ, sJBwce) with categories and payload templates.
+  - Expanded coverage: Opal REST + rpcid (drive_proxy, gallery_list, ug7pge), AppCatalyst endpoints (generate_content, stream_generate_content), Gemini streaming metadata; batchexecute services mapped (5+).
+- **ARGUS Registry Skills Tests** (`tests/test_argus_skills.py`)
+  - Verifies YAML structure/meta, section counts (40+), new rpcids, AppCatalyst/Opal coverage, build-label reporting, search helpers, and registry singleton behaviors.
+
+### Changed
+- **Datasets refreshed** (`training/datasets/collected/output_evaluator_live.jsonl`, `training/datasets/news_ratings.jsonl`) to align with the latest registry/ARGUS coverage.
+
+---
+
 ## [1.36] — "DATA INTEGRITY & GRACEFUL LIFECYCLE" — 2026-07
 
 Centralized schema migration engine tracks versions across 24+ SQLite databases

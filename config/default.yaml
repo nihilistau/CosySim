@@ -3,7 +3,7 @@
 
 system:
   name: "CosySim AI Playground"
-  version: "1.13b"
+  version: "1.37"
   environment: "default"
 
 # Paths configuration
@@ -509,7 +509,7 @@ agent_profiles:
   big:
     model: ""                     # empty = use default loaded model
     context_length: 8192
-    max_tokens: 4000
+    max_tokens: 800
     temperature: 0.75
     top_p: 0.9
     description: "Primary character agent — deep reasoning, long context"

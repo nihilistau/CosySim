@@ -674,7 +674,8 @@ def main() -> None:
             result = modes[mode_name]()
             cookie_count = len(result.get("cookies", {})) if result else 0
             if result and cookie_count >= 3:
-                result.setdefault("services", capture_services)
+                # Always respect CLI-requested services instead of any defaults from capture mode
+                result["services"] = capture_services
                 capture = result
                 used_mode = mode_name
                 break

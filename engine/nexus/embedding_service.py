@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Union
 
+import requests
+
 from engine.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -133,7 +135,9 @@ class GeminiEmbeddingProvider:
         model: str = "gemini-embedding-exp-03-07",
         output_dimensions: int = 768,
         api_key_index: int = 0,
+        enabled: bool = True,
     ) -> None:
+        self._enabled = enabled
         self._model = model
         self._dimensions = output_dimensions
         self._api_key_index = api_key_index
@@ -152,10 +156,13 @@ class GeminiEmbeddingProvider:
         return self._dimensions
 
     def _get_client(self) -> Any:
+        if not self._enabled:
+            raise RuntimeError("Gemini embedding provider disabled")
         if self._client is None:
             try:
-                from engine.integrations.aistudio_client import AIStudioClient
-                self._client = AIStudioClient(key_index=self._api_key_index)
+                from engine.integrations.aistudio_client import get_aistudio_client
+
+                self._client = get_aistudio_client()
             except Exception as exc:
                 logger.error("Failed to create AIStudioClient: %s", exc)
                 raise
@@ -208,11 +215,19 @@ class GeminiEmbeddingProvider:
 # ──── LMStudio local provider ────────────────────────────────────────────────
 
 class LMStudioEmbeddingProvider:
-    """Local embedding via LMStudio SDK (offline capable)."""
+    """Local embedding via LMStudio REST API (OpenAI-compatible)."""
 
-    def __init__(self, model_key: Optional[str] = None) -> None:
-        self._model_key = model_key
-        self._sdk: Any = None
+    def __init__(
+        self,
+        model_key: Optional[str] = None,
+        api_host: Optional[str] = None,
+        api_token: Optional[str] = None,
+    ) -> None:
+        self._model_key = model_key or "text-embedding"
+        base = api_host or "127.0.0.1:1234"
+        self._base_url = base if base.startswith("http") else f"http://{base}"
+        self._api_token = api_token
+        self._session = requests.Session()
         self._dimensions_cache: Optional[int] = None
         self._call_count = 0
         self._error_count = 0
@@ -232,45 +247,67 @@ class LMStudioEmbeddingProvider:
         except Exception:
             return 768  # reasonable default
 
-    def _get_sdk(self) -> Any:
-        if self._sdk is None:
-            try:
-                from engine.lmstudio.sdk_client import get_sdk_client
-                self._sdk = get_sdk_client()
-            except Exception as exc:
-                logger.error("Failed to connect to LMStudio SDK: %s", exc)
-                raise
-        return self._sdk
+    def _headers(self) -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self._api_token:
+            headers["Authorization"] = f"Bearer {self._api_token}"
+        return headers
+
+    def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        resp = self._session.post(
+            f"{self._base_url}/v1/embeddings",
+            headers=self._headers(),
+            json=payload,
+            timeout=30,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"LMStudio embed HTTP {resp.status_code}: {resp.text[:200]}")
+        try:
+            return resp.json()
+        except Exception as exc:
+            raise RuntimeError(f"LMStudio embed invalid JSON: {exc}") from exc
+
+    def _extract_embeddings(self, data: Dict[str, Any]) -> List[List[float]]:
+        items = data.get("data") or []
+        vectors: List[List[float]] = []
+        for item in items:
+            vec = item.get("embedding")
+            if vec is None:
+                continue
+            vectors.append(list(vec))
+        return vectors
 
     def embed(self, text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> List[float]:
-        """Generate embedding using LMStudio's loaded embedding model."""
-        sdk = self._get_sdk()
-        try:
-            vector = sdk.embed(text, model_key=self._model_key)
-            self._call_count += 1
-            return vector if isinstance(vector, list) else list(vector)
-        except Exception as exc:
-            self._error_count += 1
-            logger.warning("LMStudio embed failed: %s", exc)
-            raise
+        """Generate embedding using LMStudio's REST API."""
+        payload = {
+            "model": self._model_key,
+            "input": text,
+        }
+        data = self._post(payload)
+        vectors = self._extract_embeddings(data)
+        if not vectors:
+            raise RuntimeError("LMStudio embed returned no vectors")
+        self._call_count += 1
+        return vectors[0]
 
-    def embed_batch(self, texts: List[str],
-                    task_type: str = "RETRIEVAL_DOCUMENT") -> List[List[float]]:
-        """Generate embeddings one-by-one through LMStudio."""
+    def embed_batch(
+        self, texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT"
+    ) -> List[List[float]]:
+        """Generate embeddings via a single LMStudio batch call."""
         if not texts:
             return []
-        sdk = self._get_sdk()
-        results: List[List[float]] = []
-        try:
-            for text in texts:
-                vec = sdk.embed(text, model_key=self._model_key)
-                results.append(vec if isinstance(vec, list) else list(vec))
-            self._call_count += 1
-            return results
-        except Exception as exc:
-            self._error_count += 1
-            logger.warning("LMStudio batch embed failed: %s", exc)
-            raise
+        payload = {
+            "model": self._model_key,
+            "input": texts,
+        }
+        data = self._post(payload)
+        vectors = self._extract_embeddings(data)
+        if len(vectors) != len(texts):
+            raise RuntimeError(
+                f"LMStudio embed_batch mismatch: expected {len(texts)}, got {len(vectors)}"
+            )
+        self._call_count += 1
+        return vectors
 
 
 # ──── Embedding service (unified interface) ──────────────────────────────────
@@ -323,6 +360,10 @@ class EmbeddingService:
         )
         self._batch_size = batch_size
         self._api_key_index = api_key_index
+        self._enable_gemini = cfg.get("nexus.embeddings.enable_gemini", False)
+        self._lmstudio_host = cfg.get("lmstudio.host", "127.0.0.1")
+        self._lmstudio_port = cfg.get("lmstudio.port", 1234)
+        self._lmstudio_token = cfg.get("lmstudio.api_token", None)
 
         self._cache = EmbeddingCache(max_size=cache_size)
         self._stats = EmbeddingStats()
@@ -339,12 +380,13 @@ class EmbeddingService:
 
         providers: List[EmbeddingProvider] = []
 
-        if self._preferred_provider in ("gemini", "auto"):
+        if self._enable_gemini and self._preferred_provider in ("gemini", "auto"):
             try:
                 gp = GeminiEmbeddingProvider(
                     model=self._model,
                     output_dimensions=self._dimensions,
                     api_key_index=self._api_key_index,
+                    enabled=self._enable_gemini,
                 )
                 providers.append(gp)
             except Exception as exc:
@@ -352,7 +394,12 @@ class EmbeddingService:
 
         if self._preferred_provider in ("local", "auto", "gemini"):
             try:
-                lp = LMStudioEmbeddingProvider(model_key=self._local_model_key)
+                api_host = f"{self._lmstudio_host}:{self._lmstudio_port}"
+                lp = LMStudioEmbeddingProvider(
+                    model_key=self._local_model_key,
+                    api_host=api_host,
+                    api_token=self._lmstudio_token,
+                )
                 providers.append(lp)
             except Exception as exc:
                 logger.debug("Cannot create LMStudio provider: %s", exc)

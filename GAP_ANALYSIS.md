@@ -7,12 +7,16 @@ CosySim has a **strong foundation** for self-improvement with 3 major operationa
 2. **Training Flywheel** — Continuous collection of training data from system interactions
 3. **Metrics & Reflection** — System-wide metrics tracking with NLM-driven insights
 
-As of **v1.36**, ALL identified gaps are now **CLOSED** — data integrity
-and graceful lifecycle management complete the production readiness pipeline.
-Combined with v1.28–v1.35 modules, the self-improvement maturity has
-reached ~99%.
+As of **v1.37**, ALL identified gaps are now **CLOSED** — data integrity,
+graceful lifecycle management, and registry validation complete the production
+readiness pipeline. Combined with v1.28–v1.35 modules, the self-improvement
+maturity has reached ~99%.
 
 **Remaining open gaps:** None. All gaps closed.
+
+**v1.37 update:** NotebookLM RPC registry upgraded to version 6.0
+(har_enrichment v1.37) with new Gemini rpcids, Opal/AppCatalyst coverage, and
+ARGUS registry validation tests. No new gaps opened.
 
 **Gaps CLOSED by v1.36:**
 - ~~No schema migration system~~ — SchemaMigrationEngine: versioned up/down migrations (SQL + Python), drift detection via SchemaSnapshot comparison, rollback, daily scheduler checks, database discovery across 24+ DBs
