@@ -68,6 +68,18 @@ from engine.observability.unified_dashboard import (
 )
 from engine.observability.unified_monitor import UnifiedMonitor, get_unified_monitor
 
+from engine.observability.structured_logger import (
+    BoundLogger,
+    LogEvent,
+    LogLevel,
+    StructuredLogger,
+    TraceContext,
+    get_logger,
+    get_structured_logger,
+    install_root_handler,
+    traced,
+)
+
 __all__ = [
     "AggregationResult",
     "Alert",
@@ -112,4 +124,14 @@ __all__ = [
     "get_unified_dashboard",
     "get_unified_monitor",
     "register_anomaly_trigger_tasks",
+    # v1.39 structured logging
+    "BoundLogger",
+    "LogEvent",
+    "LogLevel",
+    "StructuredLogger",
+    "TraceContext",
+    "get_logger",
+    "get_structured_logger",
+    "install_root_handler",
+    "traced",
 ]

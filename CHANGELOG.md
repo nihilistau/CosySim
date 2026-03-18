@@ -4,6 +4,90 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.39] — "STRUCTURED LOGGING + INTEGRATION TESTING" — 2026-03
+
+Queryable structured log store with SQLite + JSON-lines output, distributed
+trace correlation, and an end-to-end integration testing framework for real
+service boundaries.  Includes 10 MCP observability skills and 156 tests.
+
+### Added
+
+- **Structured Logger** (`engine/observability/structured_logger.py`, ~470 lines)
+  - `StructuredLogger` singleton via `get_structured_logger()` with SQLite backend
+    (`data/structured_logs.db`) and JSON-lines file (`data/structured_logs.jsonl`)
+  - `LogEvent` dataclass: event_id, timestamp, level, logger_name, message,
+    context, trace_id, span_id, service, tags, duration_ms, error_type,
+    error_msg, stack_trace
+  - `LogLevel` enum: DEBUG / INFO / WARNING / ERROR / CRITICAL (maps to stdlib)
+  - `TraceContext` dataclass: thread-local trace_id + span_id for correlation
+  - `log(level, message, context, tags, duration_ms)` — emit + persist + JSON
+  - `info / debug / warning / error / critical(message, **context)` — convenience
+  - `@traced(service, operation)` — auto-span: duration capture, exception logging,
+    trace context lifecycle, `functools.wraps`-preserved signature
+  - `begin_trace(trace_id=None)` / `end_trace()` — thread-local trace management
+  - `query(level, service, tags, since, limit)` — SQLite query with all filters
+  - `get_error_summary(hours=24)` — error counts by type and service
+  - `get_slow_operations(threshold_ms=1000, hours=24)` — slow span report
+  - `get_trace(trace_id)` — all events for a distributed trace
+  - `flush_old_logs(days=7)` — purge aged records, returns deleted count
+  - `BoundLogger` — service-scoped wrapper, pre-fills service on every call
+  - `get_logger(name)` — module-level BoundLogger factory (replaces ad-hoc loggers)
+  - `install_root_handler()` — idempotent stdlib capture; uncaught exception hook
+  - Thread-safe writes via `threading.Lock`; recursion guard prevents double-capture
+  - Compact JSON lines (no pretty-print); indexed on timestamp, level, service, trace_id
+
+- **Integration Testing Framework** (`engine/testing/integration_runner.py`, ~500 lines)
+  - `IntegrationRunner` singleton via `get_integration_runner()` with SQLite backend
+    (`data/integration_results.db`)
+  - `IntegrationTest` dataclass: test_id, name, services, test_fn, setup_fn,
+    teardown_fn, timeout_seconds, tags, requires_gpu
+  - `IntegrationResult` dataclass: result_id, test_id, passed, skipped,
+    duration_ms, error, logs, metrics, timestamp
+  - `IntegrationSuite` — named collection of test IDs with `add()` helper
+  - `ServiceProbe` — HTTP GET and import-based liveness checks for known services
+    (lmstudio, nexus, comfyui, mcp)
+  - `register(test)` — adds to in-memory registry + SQLite; raises on duplicate
+  - `run(test_ids, tags, skip_unavailable=True)` — executes tests, thread-based
+    timeout enforcement, stores all results
+  - `run_suite(suite_name)` — named suite execution
+  - `probe_service(name)` / `probe_services()` — single or bulk liveness
+  - `get_results(test_id, since, limit)` — historical result query
+  - `get_flaky_tests(threshold=0.2)` — tests with >20% failure rate
+  - `schedule_suite(suite_name, cron_expr)` — wires to `TaskSchedulerDaemon`
+  - `register_dynamic(name, services, test_code)` — exec-based dynamic registration
+  - `@integration_test(name, services, timeout, tags)` — inline decorator
+  - 5 pre-built smoke tests registered at import time (lmstudio_ping,
+    nexus_roundtrip, mcp_skill_execute, rate_limiter_acquire, secret_manager_get);
+    each genuinely skipped when required service is unreachable
+  - Thread-safe via `threading.Lock`; all DB writes transactional
+
+- **Observability Skills** (`engine/skills/builtin/observability_skills.py`, 10 skills)
+  - Pack: `observability`, Category: `system`
+  - Logging: `query_logs`, `get_error_summary`, `get_slow_operations`,
+    `flush_old_logs`, `get_trace`
+  - Integration: `run_integration_tests`, `get_integration_results`,
+    `get_flaky_tests`, `probe_services`, `register_integration_test`
+
+- **Tests** (156 new tests across 3 files)
+  - `tests/test_structured_logger.py` — 71 tests covering all logger features
+  - `tests/test_integration_runner.py` — 45 tests covering runner + pre-built tests
+  - `tests/test_observability_skills.py` — 40 tests covering all 10 skills
+
+- **Wiring**
+  - `engine/observability/__init__.py` — exports StructuredLogger, BoundLogger,
+    LogEvent, LogLevel, TraceContext, traced, get_logger, get_structured_logger,
+    install_root_handler
+  - `engine/testing/__init__.py` — new package init, exports IntegrationRunner etc.
+  - `engine/skills/builtin/__init__.py` — imports observability_skills
+
+### Test Baseline
+- Tier 1: 331 → 331 (unchanged)
+- Tier 2: 2966 → 2968 (smart runner subset); full suite +156 tests, all passing
+
+---
+
+
+
 ## [1.38] — "SECRET MANAGEMENT + RATE LIMITING" — 2026-07
 
 Centralized secret vault with Fernet encryption and per-service token bucket

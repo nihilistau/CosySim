@@ -27,6 +27,7 @@ from . import orchestration_skills
 from . import resilience_skills
 from . import lifecycle_mgmt_skills
 from . import security_skills
+from . import observability_skills
 
 __all__ = [
     "argus_skills",
@@ -56,4 +57,5 @@ __all__ = [
     "resilience_skills",
     "lifecycle_mgmt_skills",
     "security_skills",
+    "observability_skills",
 ]
