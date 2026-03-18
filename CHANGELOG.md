@@ -4,6 +4,76 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.38] — "SECRET MANAGEMENT + RATE LIMITING" — 2026-07
+
+Centralized secret vault with Fernet encryption and per-service token bucket
+rate limiting.  Both modules ship with SQLite backends for persistence and
+audit logging, 10 MCP skills for agent access, and 125+ tests.
+
+### Added
+- **Secret Manager** (`engine/security/secret_manager.py`, ~430 lines)
+  - `SecretManager` singleton with in-memory cache backed by `data/secrets.db`
+  - `SecretEntry` dataclass: name, value, secret_type, created_at, expires_at,
+    rotated_at, source, tags
+  - `SecretType` enum: API_KEY, BEARER_TOKEN, DB_PATH, PASSWORD, CERT, WEBHOOK, OTHER
+  - `SecretSource` enum: ENV_VAR, CONFIG_FILE, VAULT_FILE, RUNTIME
+  - Fernet AES-128-CBC encryption at rest; key auto-generated in `data/.secret_key`
+  - Plaintext fallback (with warning) when `cryptography` not installed
+  - `get(name)` — expiry-aware retrieval with audit logging
+  - `set(name, value, ttl_seconds)` — create/update with optional TTL
+  - `rotate(name, new_value)` — records rotation timestamp + Nexus log entry
+  - `delete(name)` — removes from cache and DB
+  - `list_secrets(secret_type, tags)` — metadata only, never exposes values
+  - `load_from_env(prefix="COSYSIM_")` — bulk import from environment variables
+  - `load_from_config()` — scans config tree for secret-looking keys
+  - `check_expiry()` — detects expired/expiring-soon secrets, Nexus alert
+  - `get_audit_log(limit)` — rolling access/rotation/delete history
+  - `export_safe_report()` — metadata health report (no values)
+  - `get_secret_manager()` singleton factory
+
+- **Rate Limiter** (`engine/security/rate_limiter.py`, ~430 lines)
+  - `RateLimiter` singleton backed by `data/rate_limiter.db`
+  - `TokenBucket` with background refill thread (50 ms tick), FIFO wait queue
+  - `RateLimitConfig` dataclass: capacity, refill_rate, burst_multiplier,
+    backpressure_threshold, max_queue_depth
+  - `RateLimitResult` dataclass: allowed, tokens_remaining, wait_seconds, queued
+  - `RateLimitExceeded` exception when queue is full
+  - `acquire(service, tokens, wait, timeout)` — blocking or non-blocking
+  - `try_acquire(service, tokens)` — immediate non-blocking check
+  - `release_all(service)` — admin reset to full capacity
+  - `get_status(service)` — tokens, queue depth, rejection rate snapshot
+  - `configure_service(config)` — live update with SQLite persistence
+  - `get_metrics()` — all services with avg_wait_ms
+  - `backpressure_active(service)` — True when tokens < threshold
+  - `@rate_limited(service, tokens)` — decorator for skill functions
+  - 8 pre-configured services: lmstudio, nlm, aistudio, gemini, comfyui,
+    tts, scheduler, nexus
+  - `get_rate_limiter()` singleton factory
+
+- **Security MCP Skills** (`engine/skills/builtin/security_skills.py`)
+  - Pack ``security``, category ``system``, 10 skills total
+  - Secret skills: `get_secret_status`, `rotate_secret`, `check_secret_expiry`,
+    `load_secrets_from_env`, `get_secret_audit_log`
+  - Rate limit skills: `get_rate_limit_status`, `configure_rate_limit`,
+    `reset_rate_limit`, `get_rate_metrics`, `check_backpressure`
+
+- **Security package** (`engine/security/__init__.py`)
+  - Exports `get_secret_manager`, `SecretManager`, `get_rate_limiter`, `RateLimiter`
+
+- **Tests** (`tests/test_secret_manager.py`, `tests/test_rate_limiter.py`,
+  `tests/test_security_skills.py`)
+  - 125+ tests: 55 secret manager, 45 rate limiter, 35 skills
+
+### Changed
+- **`engine/config.py`** — `ConfigManager.get()` now checks the SecretManager
+  first for paths whose last segment looks like a secret (token/key/password/
+  secret/bearer/credential).  Only fires when the singleton is already
+  initialised, avoiding circular-import issues at startup.
+- **`engine/skills/builtin/__init__.py`** — added `security_skills` import so
+  all 10 skills register at startup.
+
+---
+
 ## [1.37] — "HAR ENRICHMENT & RPC REGISTRY v6" — 2026-07
 
 NotebookLM RPC registry upgraded to v6.0 with the latest HAR enrichment (v1.37), broader service coverage, and ARGUS regression tests.
