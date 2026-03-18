@@ -4,7 +4,85 @@ All notable changes to CosySim are documented here.
 
 ---
 
-## [1.39] — "STRUCTURED LOGGING + INTEGRATION TESTING" — 2026-03
+## [1.41] — "ARGUS DEEP POLISH" — 2026-07
+
+Live API clients for Google Opal, AppCatalyst (Gemini 3 Flash Preview), and
+five newly-discovered Gemini rpcids from HAR analysis.  Adds a registry
+validator script and 10 new MCP skills in the `argus_extended` pack.  All
+network paths are covered by 110+ new unit tests (HTTP fully mocked).
+
+### Added
+
+- **OpalClient** (`engine/integrations/opal_client.py`, ~310 lines)
+  - `OpalClient` singleton via `get_opal_client()` / `reset_opal_client()`
+  - Auth: `data/nlm_meta.json` → `google_account_pool` → config → env vars
+    (same priority order as `NLMDirectClient`)
+  - `generate_content(prompt, style)` — batchexecute rpcid `ug7pge`
+  - `drive_proxy_get(item_id)` / `drive_proxy_list(page_size)` — REST proxy
+  - `gallery_list(category, page_size)` / `gallery_get(item_id)` — REST gallery
+  - Cookie + `at_token` CSRF header injection; retries on 401
+
+- **AppCatalystClient** (`engine/integrations/appcatalyst_client.py`, ~380 lines)
+  - `AppCatalystClient` singleton via `get_appcatalyst_client()` /
+    `reset_appcatalyst_client()`
+  - Auth: `secret_manager.get_secret()` → config `appcatalyst.api_key` →
+    `google.api_key` → env `APPCATALYST_API_KEY` / `GOOGLE_API_KEY`
+  - Base URL `https://appcatalyst.pa.googleapis.com/v1beta1/`
+  - `generate(prompt, model, temperature, max_output_tokens, system_prompt)`
+  - `generate_vision(prompt, image_path_or_url, model)` — multimodal
+  - `embed(text, model)` / `embed_batch(texts, model)` — text embeddings
+  - `list_models()` — discover available Gemini 3 model variants
+  - `count_tokens(text, model)` — token counting
+  - `batch_generate(prompts, model, temperature)` — parallel prompt dispatch
+  - `fine_tune_list()` / `fine_tune_status(job_id)` — fine-tuning visibility
+
+- **GeminiExtendedClient** (`engine/integrations/gemini_extended_client.py`, ~340 lines)
+  - `GeminiExtendedClient` singleton via `get_gemini_extended_client()` /
+    `reset_gemini_extended_client()`
+  - Five new rpcids discovered via HAR analysis — with YAML fallback constants:
+    - `HcT8bb` — list storybooks (`list_storybooks(page_size, locale)`)
+    - `XqA3Ic` — get storybook detail (`get_storybook(storybook_id)`)
+    - `ZKcapf` — list saved info (`list_saved_info(page_size)`)
+    - `jGArJ` — search saved info (`search_saved_info(query, category, page_size)`)
+    - `sJBwce` — get subscription tiers (`get_subscription_tiers()`)
+  - `stream_response(prompt, model)` — streaming via
+    `BardFrontendService/StreamGenerate` with chunk-level yielding
+
+- **argus_extended_skills** (`engine/skills/builtin/argus_extended_skills.py`)
+  - Pack `argus_extended`, category `system`, 10 new MCP skills:
+    - `opal_generate(prompt, style)` — Opal creative generation
+    - `opal_gallery_list(category, page_size)` — Opal gallery browse
+    - `opal_drive_list(page_size)` — Opal Drive proxy listing
+    - `appcatalyst_generate(prompt, model, temperature, system_prompt)` — Gemini 3
+    - `appcatalyst_generate_vision(prompt, image_path, model)` — multimodal
+    - `appcatalyst_list_models()` — available model catalogue
+    - `appcatalyst_embed(text, model)` — text embedding vector
+    - `gemini_list_storybooks(page_size, locale)` — storybook listing
+    - `gemini_list_saved_info(category, page_size)` — saved-info listing
+    - `gemini_get_subscription_tiers()` — account subscription status
+
+- **RegistryValidator** (`scripts/argus/registry_validator.py`, ~280 lines)
+  - `RegistryValidator` with `ValidationReport` (passed, errors, warnings, summary)
+  - `validate_opal()` — checks opal section keys and URL format
+  - `validate_appcatalyst()` — checks 9 endpoint entries + auth fields
+  - `validate_gemini_streaming()` — checks streaming URL + rpcid entries
+  - `validate_account_linking_grpc()` — checks gRPC method block
+  - `validate_new_gemini_rpcids()` — checks all 5 new rpcids are present
+  - `validate_all()` — runs all checks and returns combined report
+  - CLI: `python scripts/argus/registry_validator.py [--json]`
+
+### Tests
+
+- `tests/test_opal_client.py` — 25+ unit tests (all HTTP mocked)
+- `tests/test_appcatalyst_client.py` — 30+ unit tests
+- `tests/test_gemini_extended_client.py` — 25+ unit tests
+- `tests/test_argus_extended_skills.py` — 32 unit tests; mocks all client
+  factories (`get_opal_client`, `get_appcatalyst_client`,
+  `get_gemini_extended_client`)
+
+---
+
+## [1.39]— "STRUCTURED LOGGING + INTEGRATION TESTING" — 2026-03
 
 Queryable structured log store with SQLite + JSON-lines output, distributed
 trace correlation, and an end-to-end integration testing framework for real
