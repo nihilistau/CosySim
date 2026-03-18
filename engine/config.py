@@ -22,6 +22,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_SECRET_KEYWORDS = ("token", "key", "password", "secret", "credential", "bearer")
+
+
+def _is_secret_config_path(path: str) -> bool:
+    """Return True when *path* looks like it addresses a secret value."""
+    last_segment = path.split(".")[-1].lower()
+    return any(kw in last_segment for kw in _SECRET_KEYWORDS)
+
 
 class ConfigManager:
     """Manages system configuration with environment-based overrides."""
@@ -130,6 +138,11 @@ class ConfigManager:
     def get(self, path: str, default: Any = None) -> Any:
         """
         Get configuration value by dot-notation path.
+
+        For keys that look like secrets (contain token/key/password/secret/
+        bearer/credential) the SecretManager is consulted first when it has
+        already been initialised.  This avoids circular-import issues during
+        startup while still enabling runtime secret injection.
         
         Args:
             path: Dot-notation path (e.g., "database.sqlite.path")
@@ -145,6 +158,18 @@ class ConfigManager:
             >>> config.get("nonexistent.key", "default_value")
             'default_value'
         """
+        # -- SecretManager hook (only for secret-looking keys) --
+        if _is_secret_config_path(path):
+            try:
+                from engine.security.secret_manager import _manager_instance  # type: ignore[attr-defined]
+
+                if _manager_instance is not None:
+                    sm_value = _manager_instance.get(path.replace(".", "_"))
+                    if sm_value is not None:
+                        return sm_value
+            except Exception:
+                pass  # Fall through to normal config access
+
         keys = path.split(".")
         value = self._config
         
