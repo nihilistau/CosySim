@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end.sh\"",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/session-end.py --from-stdin",
             "timeout": 30,
             "async": true,
             "statusMessage": "Syncing session to NEXUS..."
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool.sh\"",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/post-tool.py",
             "timeout": 5,
             "async": true
           }

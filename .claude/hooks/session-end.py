@@ -246,21 +246,40 @@ def main() -> None:
     parser.add_argument("--transcript", default="")
     parser.add_argument("--cwd", default=".")
     parser.add_argument("--reason", default="unknown")
+    # v1.44.0 — Windows-compatible: read hook JSON from stdin directly
+    parser.add_argument("--from-stdin", action="store_true",
+                        help="Read hook input JSON from stdin (Claude Code hook mode)")
     args = parser.parse_args()
 
+    session_id = args.session_id
+    transcript = args.transcript
+    cwd = args.cwd
+    reason = args.reason
+
+    # When called as a Claude Code hook, read JSON from stdin
+    if args.from_stdin:
+        try:
+            hook_input = json.loads(sys.stdin.read())
+            session_id = hook_input.get("session_id", session_id)
+            transcript = hook_input.get("transcript_path", transcript)
+            cwd = hook_input.get("cwd", cwd)
+            reason = hook_input.get("reason", reason)
+        except Exception:
+            pass  # Fall through with defaults
+
     # Parse transcript
-    transcript_data = parse_transcript(args.transcript)
+    transcript_data = parse_transcript(transcript)
 
     # Gather git context
-    git_context = get_git_context(args.cwd)
+    git_context = get_git_context(cwd)
 
     # Store to NEXUS
     store_to_nexus(
-        session_id=args.session_id,
-        reason=args.reason,
+        session_id=session_id,
+        reason=reason,
         transcript_data=transcript_data,
         git_context=git_context,
-        cwd=args.cwd,
+        cwd=cwd,
     )
 
 
