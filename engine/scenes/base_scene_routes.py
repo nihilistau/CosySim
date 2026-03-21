@@ -104,6 +104,56 @@ class BaseSceneRoutesMixin:
         if "/api/shop/catalog" not in _existing:
             self.register_shop_route(app)
 
+        # v1.43.0 — Browser telemetry endpoint
+        if "/api/telemetry" not in _existing:
+            self.register_telemetry_route(app)
+
+    # ──── Browser Telemetry ────────────────────────────────────────────────
+
+    def register_telemetry_route(self, app) -> None:
+        """Register ``POST /api/telemetry`` — receives browser-side events.
+
+        Persists JS errors, user clicks, network failures, and performance
+        metrics via StructuredLogger. Events are batched by the client
+        (cosysim-telemetry.js) and flushed every 10s.
+        """
+        import json as _json
+        from flask import Response, request as _request
+
+        scene_ref = self
+
+        @app.route("/api/telemetry", methods=["POST"])
+        def _telemetry():
+            data = _request.get_json(silent=True) or {}
+            events = data.get("events", [])
+            if not events:
+                return Response(_json.dumps({"ok": True, "count": 0}), mimetype="application/json")
+
+            try:
+                from engine.observability.structured_logger import get_structured_logger, LogLevel
+                sl = get_structured_logger()
+                level_map = {"error": LogLevel.ERROR, "warning": LogLevel.WARNING, "info": LogLevel.INFO}
+
+                for evt in events[:100]:  # Cap at 100 per batch
+                    lvl = level_map.get(evt.get("level", "info"), LogLevel.INFO)
+                    sl.log(
+                        lvl,
+                        evt.get("message", "browser event"),
+                        service=f"browser:{evt.get('scene', scene_ref.scene_name)}",
+                        tags=["browser", evt.get("type", "unknown")],
+                        context={
+                            k: v for k, v in evt.items()
+                            if k not in ("message", "level", "type")
+                        },
+                    )
+            except Exception as _exc:
+                _bslogger.debug("Telemetry persist failed: %s", _exc)
+
+            return Response(
+                _json.dumps({"ok": True, "count": len(events)}),
+                mimetype="application/json",
+            )
+
     def register_character_routes(self, app) -> None:
         """Register character info API routes used by the portrait overlay.
 
