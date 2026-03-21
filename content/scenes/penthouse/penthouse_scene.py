@@ -1396,6 +1396,8 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                         pass
             else:
                 # Path 2: Direct orchestrator inference (no agent loop needed)
+                import sys as _sys
+                print(f"[PENTHOUSE CHAT] Path 2: orchestrator for {char_id}", file=_sys.stderr, flush=True)
                 from engine.lmstudio import get_orchestrator
                 orch = get_orchestrator()
 
@@ -1429,6 +1431,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                 logger.info("Penthouse chat via orchestrator: %d chars", len(response_text))
 
         except Exception as exc:
+            import sys as _sys, traceback as _tb
+            print(f"[PENTHOUSE CHAT] EXCEPTION: {exc}", file=_sys.stderr, flush=True)
+            _tb.print_exc(file=_sys.stderr)
             logger.warning("Chat response inference failed for %s: %s", char_id, exc)
 
         if not response_text:
