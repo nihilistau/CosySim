@@ -262,28 +262,20 @@ class HealthChecker:
     # Built-in service probes
     # ------------------------------------------------------------------
 
+    # v1.43.1 [2026-03-21] — Use unified client for health check
     def _check_lmstudio(self) -> ServiceHealth:
-        """Probe LMStudio REST API.
+        """Probe LMStudio via unified LMSClient.
 
         Returns:
             ServiceHealth for lmstudio.
         """
         start = _time_module.monotonic()
         try:
-            import urllib.request
-
-            from engine.config import get_config
-
-            cfg = get_config()
-            base = cfg.get("lmstudio.url", "http://localhost:1234")
-            url = f"{base}/api/v1/models"
-            token = cfg.get("lmstudio.api_token", "")
-            req = urllib.request.Request(url)
-            if token:
-                req.add_header("Authorization", f"Bearer {token}")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read())
-            models = data.get("data", [])
+            from engine.lmstudio.lms_client import get_lms_client
+            client = get_lms_client()
+            if not client.is_available():
+                raise ConnectionError("LMStudio not responding")
+            models = client.get_models(loaded_only=True)
             latency = (_time_module.monotonic() - start) * 1000
             count = len(models)
             if count > 0:
@@ -295,7 +287,7 @@ class HealthChecker:
                     checked_at=datetime.now(),
                     details={
                         "model_count": count,
-                        "models": [m.get("id", "") for m in models[:3]],
+                        "models": [getattr(m, "key", str(m)) for m in models[:3]],
                     },
                 )
             return ServiceHealth(

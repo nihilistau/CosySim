@@ -1113,3 +1113,500 @@ html, body {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.4; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   v1.44.0 — 3-Column Dashboard Layout
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Dashboard Grid ──────────────────────────────────────── */
+.neoncity-dashboard {
+    display: grid;
+    grid-template-columns: 240px 1fr 260px;
+    gap: 12px;
+    padding: 12px 16px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+@media (max-width: 1200px) {
+    .neoncity-dashboard { grid-template-columns: 200px 1fr 220px; }
+}
+@media (max-width: 900px) {
+    .neoncity-dashboard {
+        grid-template-columns: 1fr;
+    }
+    .sidebar { display: flex; flex-direction: row; gap: 12px; }
+    .sidebar > .hud-panel { flex: 1; }
+}
+
+/* ── Sidebars ────────────────────────────────────────────── */
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+}
+
+.dashboard-center {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    overflow-y: auto;
+}
+
+/* ── HUD Panels (shared sidebar panel style) ─────────────── */
+.hud-panel {
+    background: var(--nc-panel);
+    border: 1px solid var(--nc-border);
+    border-radius: 6px;
+    padding: 12px;
+    position: relative;
+}
+
+.hud-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--nc-accent), transparent);
+    opacity: 0.4;
+    border-radius: 6px 6px 0 0;
+}
+
+.panel-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--nc-accent);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Player Stats ────────────────────────────────────────── */
+.stat-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.stat-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 30px;
+    align-items: center;
+    gap: 6px;
+}
+
+.stat-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: var(--nc-mono);
+}
+
+.stat-bar-track {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.stat-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.stat-bar-fill.hp     { background: linear-gradient(90deg, #ef4444, #f87171); }
+.stat-bar-fill.energy { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.stat-bar-fill.heat   { background: linear-gradient(90deg, #f97316, #fb923c); }
+.stat-bar-fill.rep    { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+
+.stat-val {
+    font-size: 0.65rem;
+    font-family: var(--nc-mono);
+    color: rgba(255, 255, 255, 0.6);
+    text-align: right;
+}
+
+.player-skills {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.skill-chip {
+    font-size: 0.55rem;
+    padding: 2px 6px;
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+    border-radius: 3px;
+    color: var(--nc-accent);
+    letter-spacing: 0.06em;
+}
+
+.player-location {
+    margin-top: 8px;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.loc-icon {
+    color: var(--nc-accent);
+    font-size: 0.8rem;
+}
+
+/* ── Inventory Grid ──────────────────────────────────────── */
+.inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+
+.inv-slot {
+    aspect-ratio: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+    font-size: 0.7rem;
+}
+
+.inv-slot:hover {
+    border-color: var(--nc-accent);
+    background: rgba(6, 182, 212, 0.05);
+}
+
+.inv-slot.filled {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.inv-slot .item-icon {
+    font-size: 1.1rem;
+}
+
+.inv-slot .item-qty {
+    position: absolute;
+    bottom: 1px;
+    right: 3px;
+    font-size: 0.5rem;
+    font-family: var(--nc-mono);
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.inv-slot.rarity-rare    { border-color: #3b82f6; }
+.inv-slot.rarity-epic    { border-color: #8b5cf6; }
+.inv-slot.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.2); }
+
+.equipped-row {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 20px;
+}
+
+.equipped-tag {
+    font-size: 0.55rem;
+    padding: 2px 6px;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 3px;
+    color: #22c55e;
+}
+
+/* ── Crew Roster ─────────────────────────────────────────── */
+.crew-panel .panel-title {
+    display: flex;
+    justify-content: space-between;
+}
+
+.crew-count {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 400;
+}
+
+.crew-roster {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.crew-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 8px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px;
+}
+
+.crew-card:hover {
+    border-color: rgba(6, 182, 212, 0.3);
+}
+
+.crew-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--nc-text);
+}
+
+.crew-role {
+    font-size: 0.55rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--nc-accent);
+}
+
+.crew-level {
+    font-size: 0.6rem;
+    font-family: var(--nc-mono);
+    color: rgba(255, 255, 255, 0.5);
+    text-align: right;
+}
+
+.crew-loyalty-bar {
+    grid-column: 1 / -1;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 2px;
+}
+
+.crew-loyalty-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.crew-empty {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.3);
+    font-style: italic;
+    text-align: center;
+    padding: 12px 0;
+}
+
+.btn-crew-ops {
+    width: 100%;
+    margin-top: 8px;
+    padding: 6px;
+    background: rgba(6, 182, 212, 0.08);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+    border-radius: 4px;
+    color: var(--nc-accent);
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-crew-ops:hover {
+    background: rgba(6, 182, 212, 0.15);
+}
+
+/* ── Mission Board ───────────────────────────────────────── */
+.mission-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.mission-tab {
+    flex: 1;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mission-tab.active {
+    background: rgba(6, 182, 212, 0.1);
+    border-color: var(--nc-accent);
+    color: var(--nc-accent);
+}
+
+.mission-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.mission-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.mission-card:hover {
+    border-color: rgba(6, 182, 212, 0.3);
+}
+
+.mission-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--nc-text);
+    margin-bottom: 2px;
+}
+
+.mission-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.mission-type {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.mission-type.recon       { color: #3b82f6; }
+.mission-type.heist       { color: #f97316; }
+.mission-type.deal        { color: #22c55e; }
+.mission-type.extraction  { color: #8b5cf6; }
+.mission-type.hit         { color: #ef4444; }
+
+.mission-difficulty {
+    font-family: var(--nc-mono);
+}
+
+.mission-reward {
+    font-size: 0.55rem;
+    color: #facc15;
+    margin-top: 4px;
+}
+
+.mission-btn {
+    margin-top: 6px;
+    width: 100%;
+    padding: 4px;
+    background: rgba(6, 182, 212, 0.08);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+    border-radius: 3px;
+    color: var(--nc-accent);
+    font-size: 0.55rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+}
+
+.mission-btn:hover {
+    background: rgba(6, 182, 212, 0.2);
+}
+
+.mission-empty {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.3);
+    font-style: italic;
+    text-align: center;
+    padding: 12px 0;
+}
+
+.mission-count {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 400;
+}
+
+/* ── City Map Panel ──────────────────────────────────────── */
+.map-location {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(6, 182, 212, 0.06);
+    border: 1px solid rgba(6, 182, 212, 0.15);
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.map-location .loc-icon {
+    color: var(--nc-accent);
+    font-size: 1rem;
+    animation: nc-active-dot 2s ease-in-out infinite;
+}
+
+#map-loc-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--nc-text);
+}
+
+.map-district {
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.4);
+    margin-left: auto;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.map-neighbors {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.map-neighbor {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px;
+    padding: 4px 6px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    font-size: 0.6rem;
+}
+
+.map-neighbor:hover {
+    border-color: rgba(6, 182, 212, 0.3);
+    background: rgba(6, 182, 212, 0.05);
+}
+
+.map-neighbor-name {
+    color: var(--nc-text);
+    font-weight: 500;
+}
+
+.map-neighbor-cost {
+    color: rgba(255, 255, 255, 0.4);
+    font-family: var(--nc-mono);
+    font-size: 0.5rem;
+    text-align: right;
+}
+
+.map-neighbor-cost .cost-energy { color: #3b82f6; }
+.map-neighbor-cost .cost-heat   { color: #f97316; }

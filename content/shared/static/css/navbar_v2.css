@@ -570,3 +570,66 @@
     background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
     color: var(--cs-scene-accent, #00e5ff);
 }
+
+/* ── v1.44.0 — Travel toast + travelling indicator ──────────────── */
+
+.cs-navbar__nav-item--travelling {
+    opacity: 0.5;
+    pointer-events: none;
+    animation: cs-travel-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes cs-travel-pulse {
+    0%, 100% { opacity: 0.5; }
+    50%      { opacity: 0.8; }
+}
+
+.cs-travel-toast {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.92);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    border-radius: 8px;
+    padding: 20px 32px;
+    text-align: center;
+    animation: cs-toast-in 0.3s ease-out;
+}
+
+.cs-travel-toast--error {
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.cs-travel-toast__title {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #06b6d4;
+    margin-bottom: 4px;
+}
+
+.cs-travel-toast--error .cs-travel-toast__title {
+    color: #ef4444;
+}
+
+.cs-travel-toast__dest {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin-bottom: 6px;
+    text-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+}
+
+.cs-travel-toast__detail {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+}
+
+@keyframes cs-toast-in {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}

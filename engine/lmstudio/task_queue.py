@@ -442,8 +442,8 @@ class TaskQueue:
                 if self._on_error:
                     try:
                         self._on_error(task, e)
-                    except Exception:
-                        pass
+                    except Exception as cb_exc:
+                        logger.warning("on_error callback failed: %s", cb_exc, exc_info=True)
 
             # Signal completion
             event = self._completion_events.get(task.id)
@@ -491,11 +491,28 @@ class TaskQueue:
 
         self._metrics.record_completion(task)
 
+        # v1.44.0 [2026-03-21] — Feed InferenceMonitor for unified metrics
+        try:
+            from engine.lmstudio.inference_monitor import get_inference_monitor
+            tps = (task.tokens_used / (elapsed_ms / 1000)) if elapsed_ms > 0 and task.tokens_used > 0 else 0.0
+            get_inference_monitor().record(
+                agent_id=task.metadata.get("agent_id", "task_queue") if hasattr(task, "metadata") and task.metadata else "task_queue",
+                model=model,
+                tier="task_queue",
+                task_type=task.task_type.value if hasattr(task.task_type, "value") else str(task.task_type),
+                latency_ms=elapsed_ms,
+                tokens=task.tokens_used,
+                tps=tps,
+                success=True,
+            )
+        except Exception:
+            logger.debug("InferenceMonitor task record failed", exc_info=True)
+
         if self._on_complete:
             try:
                 self._on_complete(task)
-            except Exception:
-                pass
+            except Exception as cb_exc:
+                logger.warning("on_complete callback failed: %s", cb_exc, exc_info=True)
 
         logger.debug(
             "Task %s completed: model=%s, latency=%.0fms, tokens=%d",
@@ -529,7 +546,7 @@ class TaskQueue:
                     if fnmatch.fnmatch(model_name.lower(), pattern.lower()):
                         return model_name
         except Exception:
-            pass
+            logger.debug("Model affinity resolution failed", exc_info=True)
 
         # Try LMLink peer routing
         try:
@@ -551,7 +568,7 @@ class TaskQueue:
                     if decision.peer.loaded_models:
                         return decision.peer.loaded_models[0]
         except Exception:
-            pass
+            logger.debug("LMLink peer routing failed", exc_info=True)
 
         # Fall back to config default
         from engine.config import get_config

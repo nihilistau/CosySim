@@ -90,15 +90,13 @@ class LLMService:
     #  Connection helpers
     # ─────────────────────────────────────────────
 
+    # v1.43.1 [2026-03-21] — Rewired to use unified client
     def is_available(self) -> bool:
         """Check whether the LLM backend is reachable."""
-        if not REQUESTS_AVAILABLE:
-            return False
         try:
-            from engine.utils import get_lmstudio_headers
-            r = requests.get(f"{self.base_url}/models", headers=get_lmstudio_headers(), timeout=4)
-            self._connected = r.ok
-            return r.ok
+            from engine.lmstudio.chat import is_ready
+            self._connected = is_ready()
+            return self._connected
         except Exception:
             self._connected = False
             return False
@@ -109,17 +107,12 @@ class LLMService:
             return self.model
         if self._model_cache:
             return self._model_cache
-        if not REQUESTS_AVAILABLE:
-            return None
         try:
-            from engine.utils import get_lmstudio_headers
-            r = requests.get(f"{self.base_url}/models", headers=get_lmstudio_headers(), timeout=4)
-            if r.ok:
-                data = r.json()
-                models = data.get("data", [])
-                if models:
-                    self._model_cache = models[0]["id"]
-                    return self._model_cache
+            from engine.lmstudio.lms_client import get_lms_client
+            resolved = get_lms_client().resolve_model()
+            if resolved:
+                self._model_cache = resolved
+                return resolved
         except Exception:
             pass
         return None
@@ -128,6 +121,7 @@ class LLMService:
     #  Core chat method
     # ─────────────────────────────────────────────
 
+    # v1.43.1 [2026-03-21] — Rewired to use engine.lmstudio.chat()
     def chat(
         self,
         messages: List[Dict],
@@ -139,6 +133,9 @@ class LLMService:
         """
         Send messages and return the assistant reply.
 
+        Now routes through the unified ``engine.lmstudio.chat()`` —
+        one client, one auth path, one URL construction.
+
         Args:
             messages: list of {"role": "user"/"assistant", "content": "..."}
             system_prompt: Prepended system message (character persona)
@@ -149,58 +146,28 @@ class LLMService:
         Returns:
             Response text or None on failure
         """
-        if not REQUESTS_AVAILABLE:
-            return self._fallback_response(messages)
-
-        model = self.get_active_model()
-        if not model:
-            logger.warning("No LLM model available – using fallback")
-            return self._fallback_response(messages)
-
-        # Build message list
-        full_messages = []
-        if system_prompt:
-            full_messages.append({"role": "system", "content": system_prompt})
-        full_messages.extend(messages)
-
-        payload = {
-            "model": model,
-            "messages": full_messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": False,
-        }
-
         try:
-            from engine.utils import get_lmstudio_headers
-            r = requests.post(
-                f"{self.base_url}/chat/completions",
-                json=payload,
-                headers=get_lmstudio_headers(),
-                timeout=self.timeout,
+            from engine.lmstudio.chat import chat as unified_chat
+            _reply = unified_chat(
+                messages,
+                system=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
-            r.raise_for_status()
-            data = r.json()
-            _reply = data["choices"][0]["message"]["content"].strip()
-            # MCP: publish to ActivityBus
-            try:
-                from engine.services.activity_bus import get_activity_bus
-                get_activity_bus().publish(
-                    activity_type="llm_inference",
-                    description=f"LLM [{model}]: {len(_reply)} chars",
-                    agent_id="llm_service",
-                    scene=None,
-                    data={"model": model, "tokens_out": len(_reply.split()), "temperature": temperature},
-                )
-            except Exception:
-                pass
-            return _reply
-
-        except requests.exceptions.ConnectionError:
-            logger.error("LLM backend not reachable at %s", self.base_url)
-            return self._fallback_response(messages)
-        except requests.exceptions.Timeout:
-            logger.error("LLM request timed out after %ss", self.timeout)
+            if _reply:
+                # MCP: publish to ActivityBus
+                try:
+                    from engine.services.activity_bus import get_activity_bus
+                    get_activity_bus().publish(
+                        activity_type="llm_inference",
+                        description=f"LLM [unified]: {len(_reply)} chars",
+                        agent_id="llm_service",
+                        scene=None,
+                        data={"tokens_out": len(_reply.split()), "temperature": temperature},
+                    )
+                except Exception:
+                    pass
+                return _reply
             return self._fallback_response(messages)
         except Exception as e:
             logger.error("LLM error: %s", e)

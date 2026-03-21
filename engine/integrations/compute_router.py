@@ -794,57 +794,31 @@ class ComputeRouter:
             backend_failures.append(f"colab_agent unavailable: inference failed ({exc})")
             logger.warning("Colab agent inference failed: %s", exc)
 
-        # 3. Try LMStudio
+        # v1.43.1 [2026-03-21] — Try LMStudio via unified chat()
         if fallback_to_local:
-            lmstudio_base_url = _resolve_lmstudio_base_url()
-            lmstudio_headers = _resolve_lmstudio_headers()
-            model_request: Dict[str, Any] = {"timeout": 2}
-            chat_request: Dict[str, Any] = {"timeout": 60}
-            if lmstudio_headers:
-                model_request["headers"] = lmstudio_headers
-                chat_request["headers"] = lmstudio_headers
             try:
-                models_resp = requests.get(
-                    f"{lmstudio_base_url}/api/v1/models",
-                    **model_request,
-                )
-                if models_resp.status_code == 200:
-                    models_data = models_resp.json()
-                    model_id = model_preference
-                    if model_preference == "auto":
-                        model_list = models_data.get("data", [])
-                        model_id = model_list[0]["id"] if model_list else "default"
-
-                    lms_resp = requests.post(
-                        f"{lmstudio_base_url}/api/v1/chat",
-                        json={
-                            "model": model_id,
-                            "input": prompt,
-                            "stream": False,
-                        },
-                        **chat_request,
+                from engine.lmstudio.chat import chat, is_ready
+                if is_ready():
+                    model_id = model_preference if model_preference != "auto" else None
+                    response_text = chat(
+                        [{"role": "user", "content": prompt}],
+                        model=model_id,
                     )
-                    if lms_resp.status_code == 200:
-                        lms_data = lms_resp.json()
-                        response_text = _extract_lmstudio_response_text(lms_data)
+                    if response_text:
                         return _append_degraded_metadata(
                             {
                                 "response": response_text,
                                 "backend": "lmstudio",
-                                "model": model_id,
+                                "model": model_id or "auto",
                                 "account": "local",
                                 "latency_ms": int((time.time() - start) * 1000),
-                                "lmstudio_url": lmstudio_base_url,
+                                "lmstudio_url": "unified-client",
                             },
                             backend_failures,
                         )
-                    backend_failures.append(
-                        f"lmstudio unavailable: chat returned HTTP {lms_resp.status_code}"
-                    )
+                    backend_failures.append("lmstudio unavailable: chat returned empty")
                 else:
-                    backend_failures.append(
-                        f"lmstudio unavailable: models returned HTTP {models_resp.status_code}"
-                    )
+                    backend_failures.append("lmstudio unavailable: not ready")
             except Exception as exc:
                 backend_failures.append(
                     f"lmstudio unavailable: request failed at {lmstudio_base_url} ({exc})"

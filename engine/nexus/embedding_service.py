@@ -217,6 +217,7 @@ class GeminiEmbeddingProvider:
 class LMStudioEmbeddingProvider:
     """Local embedding via LMStudio REST API (OpenAI-compatible)."""
 
+    # v1.44.0 [2026-03-21] — Reads api_token from config instead of constructor param
     def __init__(
         self,
         model_key: Optional[str] = None,
@@ -226,7 +227,15 @@ class LMStudioEmbeddingProvider:
         self._model_key = model_key or "text-embedding"
         base = api_host or "127.0.0.1:1234"
         self._base_url = base if base.startswith("http") else f"http://{base}"
-        self._api_token = api_token
+        # Resolve token: explicit param → config → None
+        if api_token:
+            self._api_token = api_token
+        else:
+            try:
+                from engine.config import get_config
+                self._api_token = get_config().get("lmstudio.api_token", "") or None
+            except Exception:
+                self._api_token = None
         self._session = requests.Session()
         self._dimensions_cache: Optional[int] = None
         self._call_count = 0

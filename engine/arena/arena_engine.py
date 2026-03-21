@@ -777,28 +777,18 @@ class ArenaEngine:
         chosen_card: Optional[Card] = None
         reasoning: str = "No reasoning provided."
 
+        # v1.43.1 [2026-03-21] — Use unified chat()
         try:
-            url = f"{self._lmstudio_url}/api/v1/chat"
-            payload: dict = {
-                "model": fighter.model_id,
-                "input": prompt,
-                "stream": False,
-                "max_tokens": _AGENT_MAX_TOKENS,
-                "temperature": _AGENT_TEMPERATURE,
-            }
-            response = requests.post(url, json=payload, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-
-            # Support both LMStudio v1 ("content") and OpenAI-compat formats
-            content: str = (
-                data.get("content")
-                or (
-                    data.get("choices", [{}])[0]
-                    .get("message", {})
-                    .get("content", "")
-                )
-                or ""
+            from engine.lmstudio.chat import chat
+            content: str = chat(
+                [{"role": "user", "content": prompt}],
+                system=(
+                    f"You are {fighter.name}, a fighter in the Arena. "
+                    f"Pick one card from your hand to play this turn."
+                ),
+                model=fighter.model_id if fighter.model_id != "auto" else None,
+                max_tokens=_AGENT_MAX_TOKENS,
+                temperature=_AGENT_TEMPERATURE,
             )
 
             card_name: str = ""

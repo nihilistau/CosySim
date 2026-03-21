@@ -108,6 +108,11 @@ from .server_controller import ServerController, get_server_controller, ModelIns
 from .lmlink_manager   import LMLinkManager, get_lmlink_manager, LMLinkPeer, AffinityRule, RoutingDecision
 # Task queue with model-affinity routing
 from .task_queue        import TaskQueue, get_task_queue, Task, TaskType, TaskPriority, TaskStatus
+# v1.44.0 [2026-03-21] — Complete chat facade (THE public API for all inference)
+from .chat              import (
+    chat, chat_response, chat_stream, chat_stateful, chat_structured,
+    quick_reply, is_ready, get_models as list_models,
+)
 
 __all__ = [
     # Native v1 (the only inference path)
@@ -146,4 +151,7 @@ __all__ = [
     "LMLinkManager", "get_lmlink_manager", "LMLinkPeer", "AffinityRule", "RoutingDecision",
     # Task queue
     "TaskQueue", "get_task_queue", "Task", "TaskType", "TaskPriority", "TaskStatus",
+    # Complete chat facade
+    "chat", "chat_response", "chat_stream", "chat_stateful",
+    "chat_structured", "quick_reply", "is_ready", "list_models",
 ]

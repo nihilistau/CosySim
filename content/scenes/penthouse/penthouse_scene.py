@@ -1321,123 +1321,73 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                 "type": msg_type,
             })
 
+    # v1.43.1 [2026-03-21] — Rewritten to use engine.lmstudio.chat()
     def _generate_chat_response(self, sender_name: str, message: str) -> None:
-        """Generate an immediate agent response to a player chat message.
+        """Generate an agent response to a player chat message.
 
-        Picks the most appropriate loaded character, runs inference via
-        the agent loop pipeline, and emits the result over Socket.IO.
-        Designed to run in a daemon thread so the chat handler returns
-        immediately.
+        Uses the unified ``engine.lmstudio.chat()`` — one function,
+        one code path, no scattered HTTP calls.  Runs in a daemon
+        thread so the Socket.IO handler returns immediately.
         """
-        # v1.43.0 — If no characters loaded, use default agent via orchestrator
-        if not self.characters:
-            char_id = "aria"
-            char_name = "Aria"
-        else:
+        from engine.lmstudio.chat import chat
+
+        # Pick responding character
+        if self.characters:
             char_id, char = next(iter(self.characters.items()))
             char_name = getattr(char, "name", char_id)
+        else:
+            char_id, char_name = "aria", "Aria"
 
         self.socketio.emit("agent_typing", {"character_name": char_name})
 
-        # v1.43.0 [2026-03-21] — Use orchestrator/conversation manager for inference
-        # Falls back through: agent_loop → orchestrator → conversation manager
-        response_text = ""
-        try:
-            if self.agent_loop and char_id in self.agent_loop._characters:
-                # Path 1: Full agent loop with interceptor pipeline
-                from engine.agents.virtual_agent import InferenceRequest
-                from engine.agents.stream_processor import strip_token_artifacts
+        # Build system prompt from character profile
+        profile = self.profiles.get(char_id)
+        system_prompt = (
+            f"You are {char_name}, a character in The Penthouse scene. "
+            f"Stay in character. Be expressive and engaging. "
+            f"Respond naturally to the player."
+        )
+        if profile and hasattr(profile, "personality"):
+            system_prompt += f"\nPersonality: {profile.personality}"
 
-                recent: List[Dict[str, Any]] = []
-                if hasattr(self.agent_loop, "_log_lock"):
-                    with self.agent_loop._log_lock:
+        # Gather recent conversation context
+        recent_lines = ""
+        if self.agent_loop and hasattr(self.agent_loop, "shared_log"):
+            try:
+                log_lock = getattr(self.agent_loop, "_log_lock", None)
+                if log_lock:
+                    with log_lock:
                         recent = list(self.agent_loop.shared_log[-8:])
-                elif self.agent_loop.shared_log:
+                else:
                     recent = list(self.agent_loop.shared_log[-8:])
-
-                log_lines = "\n".join(
+                recent_lines = "\n".join(
                     f"  {e.get('name', '?')}: {e.get('text', '')}"
                     for e in recent
                 )
+            except Exception:
+                pass
 
-                prompt = (
-                    f"Recent conversation:\n{log_lines}\n\n"
-                    f"{sender_name} just said: {message}\n\n"
-                    f"Respond as {char_name} in character."
-                )
+        # Build the user message with context
+        user_content = f"{sender_name}: {message}"
+        if recent_lines:
+            user_content = (
+                f"Recent conversation:\n{recent_lines}\n\n"
+                f"{sender_name} just said: {message}\n\n"
+                f"Respond as {char_name} in character."
+            )
 
-                conv_id = f"penthouse_chat_{char_id}"
-                request = InferenceRequest(
-                    agent_id=char_id,
-                    messages=[{"role": "user", "content": prompt}],
-                    conversation_id=conv_id,
-                    temperature=0.85,
-                    max_output_tokens=300,
-                    store=True,
-                    priority=1,
-                    metadata={
-                        "type": "penthouse_chat_response",
-                        "scene": "penthouse",
-                        "sender": sender_name,
-                    },
-                )
-
-                proc = self.agent_loop._infer(request)
-                response_text = strip_token_artifacts(
-                    proc.clean_text or proc.raw_text or ""
-                )
-
-                if proc.mood_tags:
-                    try:
-                        profile = self.profiles.get(char_id)
-                        if profile and hasattr(profile, "stats"):
-                            profile.stats.adjust(mood=5)
-                    except Exception:
-                        pass
-            else:
-                # Path 2: Direct orchestrator inference (no agent loop needed)
-                import sys as _sys
-                print(f"[PENTHOUSE CHAT] Path 2: orchestrator for {char_id}", file=_sys.stderr, flush=True)
-                from engine.lmstudio import get_orchestrator
-                orch = get_orchestrator()
-
-                # Build character system prompt from profile
-                profile = self.profiles.get(char_id)
-                system_prompt = (
-                    f"You are {char_name}, a character in The Penthouse scene. "
-                    f"Stay in character. Be expressive and engaging. "
-                    f"Respond naturally to the player."
-                )
-                if profile and hasattr(profile, "personality"):
-                    system_prompt += f"\nPersonality: {profile.personality}"
-
-                resp = orch.infer(
-                    agent_id=char_id,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"{sender_name}: {message}"},
-                    ],
-                    task_type="chat",
-                    priority="interactive",
-                    temperature=0.85,
-                    max_tokens=300,
-                )
-                if resp and hasattr(resp, "content"):
-                    response_text = resp.content or ""
-                elif resp and hasattr(resp, "text"):
-                    response_text = resp.text or ""
-                elif isinstance(resp, str):
-                    response_text = resp
-                logger.info("Penthouse chat via orchestrator: %d chars", len(response_text))
-
-        except Exception as exc:
-            import sys as _sys, traceback as _tb
-            print(f"[PENTHOUSE CHAT] EXCEPTION: {exc}", file=_sys.stderr, flush=True)
-            _tb.print_exc(file=_sys.stderr)
-            logger.warning("Chat response inference failed for %s: %s", char_id, exc)
+        # One call — the unified chat() function
+        response_text = chat(
+            [{"role": "user", "content": user_content}],
+            system=system_prompt,
+            temperature=0.85,
+            max_tokens=300,
+        )
 
         if not response_text:
             response_text = f"*{char_name} looks at you thoughtfully*"
+
+        logger.info("Penthouse chat: %s → %d chars", char_id, len(response_text))
 
         ts = datetime.now().isoformat()
         self.socketio.emit("chat_response", {

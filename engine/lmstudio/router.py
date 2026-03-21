@@ -350,7 +350,7 @@ class InferenceRouter:
             if self._tiers.get(tier, TierConfig(tier)).enabled:
                 return tier
         except Exception:
-            pass  # fall through to rule-based
+            logger.debug("Tier selection lookup failed, falling through to rules", exc_info=True)
 
         task = request.task_type
 

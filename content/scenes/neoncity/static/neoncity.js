@@ -35,6 +35,25 @@ class NeonCityScene {
 
         /** @type {number|null} Ticker restart timer */
         this._tickerTimer = null;
+
+        // v1.44.0 — HUD state for sidebars
+        /** @type {Object|null} Player state snapshot */
+        this.playerState = null;
+
+        /** @type {Array} Inventory items */
+        this.inventory = [];
+
+        /** @type {Object} Equipped items by slot */
+        this.equipped = {};
+
+        /** @type {Object} Crew roster */
+        this.crewData = null;
+
+        /** @type {Object} Missions data */
+        this.missionData = { available: [], active: [] };
+
+        /** @type {string} Active mission tab */
+        this._missionTab = 'available';
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -43,6 +62,7 @@ class NeonCityScene {
     init() {
         this._initParticles();
         this._setupSocket();
+        this._loadHudData();
     }
 
     // ── Particle system ──────────────────────────────────────────────────
@@ -89,6 +109,8 @@ class NeonCityScene {
         this.socket.on('city_event', (data) => this._onCityEvent(data));
         this.socket.on('intel_result', (data) => this._onIntelResult(data));
         this.socket.on('district_alert', (data) => this._onDistrictAlert(data));
+        this.socket.on('hud_state', (data) => this._onHudState(data));
+        this.socket.on('hud_update', (data) => this._onHudUpdate(data));
         this.socket.on('error', (data) => {
             console.warn('[NeonCity] Server error:', data.message || data);
         });
@@ -478,6 +500,354 @@ class NeonCityScene {
         if (modal) modal.style.display = 'none';
     }
 
+    // ── v1.44.0 — HUD Sidebar Methods ─────────────────────────────────────
+
+    /** Load combined HUD data from REST API (initial load). */
+    _loadHudData() {
+        fetch('/api/hud')
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) return;
+                this._onHudState(data);
+            })
+            .catch(e => console.warn('[NeonCity] HUD data fetch failed:', e));
+
+        // Also load city map neighbors
+        this._loadCityMap();
+    }
+
+    /** Fetch city map location + neighbors for the map panel. */
+    _loadCityMap() {
+        fetch('/api/city/neighbors')
+            .then(r => r.json())
+            .then(data => this._renderCityMap(data))
+            .catch(e => console.warn('[NeonCity] City map fetch failed:', e));
+    }
+
+    /**
+     * Render city map panel with current location and neighbors.
+     * @param {Object} data - { location, neighbors: [...] }
+     */
+    _renderCityMap(data) {
+        const locName = document.getElementById('map-loc-name');
+        const districtEl = document.getElementById('map-district');
+        const neighborsEl = document.getElementById('map-neighbors');
+        if (!neighborsEl) return;
+
+        if (locName) locName.textContent = data.location || 'Unknown';
+        if (districtEl) {
+            // Find district from neighbor data or set generic
+            const firstNeighbor = (data.neighbors || [])[0];
+            districtEl.textContent = firstNeighbor ? firstNeighbor.district || '' : '';
+        }
+
+        const neighbors = data.neighbors || [];
+        if (neighbors.length === 0) {
+            neighborsEl.innerHTML = '<div style="font-size:0.6rem;color:rgba(255,255,255,0.3);text-align:center;padding:8px">No connections</div>';
+            return;
+        }
+
+        neighborsEl.innerHTML = neighbors.map(n => `
+            <div class="map-neighbor" onclick="NeonCityApp.travelTo('${this._esc(n.name)}', ${n.port || 0})" title="Travel to ${this._esc(n.name)}">
+                <span class="map-neighbor-name">${this._esc(n.name)}</span>
+                <span class="map-neighbor-cost">
+                    <span class="cost-energy">-${n.energy_cost}E</span>
+                    ${n.heat_add > 0 ? `<span class="cost-heat">+${n.heat_add}H</span>` : ''}
+                </span>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * Travel to a city map node via the travel API.
+     * @param {string} destination - City node name.
+     * @param {number} port - Target scene port (for redirect URL).
+     */
+    async travelTo(destination, port) {
+        this._appendChatEntry('system', '[CITY]', `Travelling to ${destination}...`);
+        try {
+            const res = await fetch('/api/city/travel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ destination }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                const costs = [];
+                if (data.energy_cost) costs.push(`-${data.energy_cost} energy`);
+                if (data.heat_add)    costs.push(`+${data.heat_add} heat`);
+                const costStr = costs.length ? ` (${costs.join(', ')})` : '';
+                this._appendChatEntry('system', '[CITY]', `Arrived at ${data.to}.${costStr}`);
+                if (port > 0) {
+                    setTimeout(() => { window.location.href = `http://localhost:${port}/`; }, 1200);
+                } else {
+                    // Same scene (e.g. NEON CITY → NEON CITY) — just refresh
+                    this._loadCityMap();
+                    this.refreshHud();
+                }
+            } else {
+                this._appendChatEntry('system', '[CITY]', `Travel blocked: ${data.message || 'Unknown'}`);
+            }
+        } catch (err) {
+            this._appendChatEntry('system', '[CITY]', `Travel error: ${err.message}`);
+        }
+    }
+
+    /** Request HUD state via Socket.IO. */
+    refreshHud() {
+        if (this.socket) this.socket.emit('get_hud');
+    }
+
+    /**
+     * Handle full HUD state from Socket.IO or REST.
+     * @param {Object} data - Combined player/inventory/crew/missions.
+     */
+    _onHudState(data) {
+        if (data.player)    { this.playerState = data.player;   this._renderPlayerStats(data.player); }
+        if (data.inventory) { this.inventory = data.inventory;  this._renderInventory(data.inventory); }
+        if (data.equipped)  { this.equipped = data.equipped;    this._renderEquipped(data.equipped); }
+        if (data.crew)      { this.crewData = data.crew;        this._renderCrew(data.crew); }
+        if (data.missions)  { this.missionData = data.missions; this._renderMissions(); }
+        if (data.balance !== undefined) this._updateCredits(data.balance);
+    }
+
+    /**
+     * Handle incremental HUD update (e.g. from PlayerState auto-emit).
+     * @param {Object} data - Partial player state update.
+     */
+    _onHudUpdate(data) {
+        if (!this.playerState) this.playerState = {};
+        Object.assign(this.playerState, data);
+        this._renderPlayerStats(this.playerState);
+        if (data.credits !== undefined) this._updateCredits(data.credits);
+    }
+
+    /**
+     * Render player stat bars in the left sidebar.
+     * @param {Object} ps - Player state dict.
+     */
+    _renderPlayerStats(ps) {
+        const stats = [
+            { key: 'health',     id: 'health',     max: 100 },
+            { key: 'energy',     id: 'energy',     max: 100 },
+            { key: 'heat',       id: 'heat',       max: 100 },
+            { key: 'reputation', id: 'reputation', max: 100 },
+        ];
+        for (const s of stats) {
+            const val = ps[s.key] ?? 0;
+            const bar = document.getElementById(`stat-${s.id}`);
+            const txt = document.getElementById(`val-${s.id}`);
+            if (bar) bar.style.width = `${Math.min(100, Math.max(0, val))}%`;
+            if (txt) txt.textContent = Math.round(val);
+        }
+
+        // Player skills chips
+        const skillsEl = document.getElementById('player-skills');
+        if (skillsEl && ps.skills) {
+            skillsEl.innerHTML = Object.entries(ps.skills)
+                .filter(([, v]) => v > 0)
+                .map(([k, v]) => `<span class="skill-chip">${this._esc(k)} ${v}</span>`)
+                .join('');
+        }
+
+        // Location
+        const locEl = document.getElementById('loc-name');
+        if (locEl && ps.active_location) locEl.textContent = ps.active_location;
+    }
+
+    /**
+     * Render inventory grid.
+     * @param {Array} items - Array of item objects from to_hud_dict().
+     */
+    _renderInventory(items) {
+        const grid = document.getElementById('inventory-grid');
+        if (!grid) return;
+
+        const ITEM_ICONS = {
+            'neural_jack': '&#129504;', 'reflex_booster': '&#9889;', 'subdermal_armor': '&#128737;',
+            'stim_pack': '&#128138;', 'health_booster': '&#10084;', 'nano_blade': '&#128481;',
+            'rail_pistol': '&#128299;', 'netrunner_mk1': '&#128187;', 'encrypted_file': '&#128196;',
+            'corp_keycard': '&#128273;', 'ghost_net_token': '&#128123;', 'synth_ramen': '&#127836;',
+            'black_lotus': '&#127800;', 'ice_breaker_v1': '&#10052;',
+        };
+        const RARITY_MAP = { 'common': '', 'uncommon': '', 'rare': 'rarity-rare', 'epic': 'rarity-epic', 'legendary': 'rarity-legendary' };
+
+        let html = '';
+        const slots = 12;
+        for (let i = 0; i < slots; i++) {
+            const item = items[i];
+            if (item) {
+                const icon = ITEM_ICONS[item.id] || '&#9670;';
+                const rarity = RARITY_MAP[item.rarity] || '';
+                const qty = (item.quantity > 1) ? `<span class="item-qty">x${item.quantity}</span>` : '';
+                html += `<div class="inv-slot filled ${rarity}" title="${this._esc(item.name || item.id)}" onclick="NeonCityApp.onItemClick('${this._esc(item.id)}')">
+                    <span class="item-icon">${icon}</span>${qty}
+                </div>`;
+            } else {
+                html += '<div class="inv-slot empty"></div>';
+            }
+        }
+        grid.innerHTML = html;
+    }
+
+    /**
+     * Render equipped items tags.
+     * @param {Object} equipped - Slot → item_id mapping.
+     */
+    _renderEquipped(equipped) {
+        const row = document.getElementById('equipped-row');
+        if (!row) return;
+        const entries = Object.entries(equipped).filter(([, v]) => v);
+        if (entries.length === 0) {
+            row.innerHTML = '<span style="font-size:0.55rem;color:rgba(255,255,255,0.3)">No items equipped</span>';
+            return;
+        }
+        row.innerHTML = entries
+            .map(([slot, id]) => `<span class="equipped-tag" title="${slot}">${this._esc(id)}</span>`)
+            .join('');
+    }
+
+    /**
+     * Render crew roster in right sidebar.
+     * @param {Object} crew - Crew data from to_hud_dict().
+     */
+    _renderCrew(crew) {
+        const roster = document.getElementById('crew-roster');
+        const countEl = document.getElementById('crew-count');
+        if (!roster) return;
+
+        const members = crew.members || crew.crew || [];
+        if (countEl) countEl.textContent = `${members.length}/8`;
+
+        if (members.length === 0) {
+            roster.innerHTML = '<div class="crew-empty">No crew recruited yet.</div>';
+            return;
+        }
+
+        roster.innerHTML = members.map(m => `
+            <div class="crew-card">
+                <div>
+                    <div class="crew-name">${this._esc(m.name || m.character_id)}</div>
+                    <div class="crew-role">${this._esc(m.role || 'unknown')}</div>
+                </div>
+                <div class="crew-level">LV${m.level || 1}</div>
+                <div class="crew-loyalty-bar">
+                    <div class="crew-loyalty-fill" style="width:${m.loyalty || 50}%"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    /** Render mission list based on active tab. */
+    _renderMissions() {
+        const list = document.getElementById('mission-list');
+        const countEl = document.getElementById('mission-count');
+        if (!list) return;
+
+        const missions = this._missionTab === 'active'
+            ? (this.missionData.active || [])
+            : (this.missionData.available || []);
+
+        if (countEl) {
+            const total = (this.missionData.available || []).length + (this.missionData.active || []).length;
+            countEl.textContent = total > 0 ? total : '';
+        }
+
+        if (missions.length === 0) {
+            list.innerHTML = `<div class="mission-empty">${this._missionTab === 'active' ? 'No active missions.' : 'No missions available.'}</div>`;
+            return;
+        }
+
+        list.innerHTML = missions.map(m => {
+            const typeClass = (m.type || m.mission_type || '').toLowerCase();
+            const btn = this._missionTab === 'available'
+                ? `<button class="mission-btn" onclick="NeonCityApp.acceptMission('${this._esc(m.id || m.mission_id)}')">ACCEPT</button>`
+                : `<div class="mission-reward">&#9889; IN PROGRESS</div>`;
+            const reward = m.rewards
+                ? Object.entries(m.rewards).map(([k, v]) => `${v} ${k}`).join(', ')
+                : '';
+            return `
+                <div class="mission-card">
+                    <div class="mission-title">${this._esc(m.title || m.name || 'Unknown')}</div>
+                    <div class="mission-meta">
+                        <span class="mission-type ${typeClass}">${this._esc(typeClass || 'misc')}</span>
+                        <span class="mission-difficulty">&#9733;${m.difficulty || 1}</span>
+                    </div>
+                    ${reward ? `<div class="mission-reward">&#8354; ${this._esc(reward)}</div>` : ''}
+                    ${btn}
+                </div>
+            `;
+        }).join('');
+    }
+
+    /**
+     * Switch between available/active mission tabs.
+     * @param {string} tab - 'available' or 'active'.
+     */
+    switchMissionTab(tab) {
+        this._missionTab = tab;
+        document.querySelectorAll('.mission-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === tab);
+        });
+        this._renderMissions();
+    }
+
+    /**
+     * Accept a mission from the board.
+     * @param {string} missionId
+     */
+    async acceptMission(missionId) {
+        try {
+            const res = await fetch('/api/missions/accept', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mission_id: missionId }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                this._appendChatEntry('system', '[MISSIONS]', 'Mission accepted!');
+                this.refreshHud();
+            } else {
+                this._appendChatEntry('system', '[MISSIONS]', `Failed: ${data.error || 'Unknown error'}`);
+            }
+        } catch (err) {
+            this._appendChatEntry('system', '[MISSIONS]', `Error: ${err.message}`);
+        }
+    }
+
+    /** Check crew operations (complete ready ones). */
+    async checkCrewOps() {
+        try {
+            const res = await fetch('/api/crew');
+            const data = await res.json();
+            if (data.operations) {
+                const ready = (data.operations || []).filter(op => op.status === 'completed');
+                if (ready.length > 0) {
+                    this._appendChatEntry('system', '[CREW]', `${ready.length} operation(s) completed!`);
+                } else {
+                    this._appendChatEntry('system', '[CREW]', 'No completed operations.');
+                }
+            }
+            this.refreshHud();
+        } catch (err) {
+            this._appendChatEntry('system', '[CREW]', `Error: ${err.message}`);
+        }
+    }
+
+    /**
+     * Handle inventory item click (show tooltip or use).
+     * @param {string} itemId
+     */
+    onItemClick(itemId) {
+        const item = (this.inventory || []).find(i => i.id === itemId);
+        if (!item) return;
+        this._showToast(
+            item.name || itemId,
+            `${item.description || 'No description'}${item.category ? ` [${item.category}]` : ''}`,
+            4000
+        );
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────
 
     /**
@@ -585,4 +955,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(() => {
         if (NeonCityApp.socket) NeonCityApp.socket.emit('get_faction_status');
     }, 30_000);
+
+    // v1.44.0 — Refresh HUD sidebars every 30 s
+    setInterval(() => NeonCityApp.refreshHud(), 30_000);
 });

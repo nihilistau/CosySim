@@ -492,40 +492,19 @@ class NexusQueryRouter:
 
     # ── LMStudio Integration ───────────────────────────────────────
 
+    # v1.43.1 [2026-03-21] — Use unified chat()
     def _call_lmstudio(self, question: str) -> str:
-        """Call LMStudio v1 API for inference."""
-        cfg = get_config()
-        host = cfg.get("lmstudio.host", "localhost")
-        port = cfg.get("lmstudio.port", 1234)
-        url = f"http://{host}:{port}/api/v1/chat/completions"
-
-        payload = json.dumps({
-            "messages": [
-                {"role": "system", "content": (
-                    "You are a knowledgeable assistant for the CosySim project. "
-                    "Answer concisely and accurately. If unsure, say so."
-                )},
-                {"role": "user", "content": question},
-            ],
-            "temperature": 0.3,
-            "max_tokens": 500,
-            "stream": False,
-        }).encode()
-
-        import urllib.request
-        from engine.utils import get_lmstudio_headers
-        req = urllib.request.Request(url, data=payload)
-        for k, v in get_lmstudio_headers().items():
-            req.add_header(k, v)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode())
-                choices = data.get("choices", [])
-                if choices:
-                    return choices[0].get("message", {}).get("content", "")
-        except Exception as exc:
-            logger.warning("LMStudio call failed: %s", exc)
-        return ""
+        """Call LMStudio for inference via unified chat()."""
+        from engine.lmstudio.chat import chat
+        return chat(
+            [{"role": "user", "content": question}],
+            system=(
+                "You are a knowledgeable assistant for the CosySim project. "
+                "Answer concisely and accurately. If unsure, say so."
+            ),
+            temperature=0.3,
+            max_tokens=500,
+        )
 
     # ── Storage ─────────────────────────────────────────────────────
 

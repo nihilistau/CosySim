@@ -9,9 +9,23 @@ from typing import Any, Callable, Optional
 logger = logging.getLogger(__name__)
 
 
-# v1.43.0 [2026-03-21] — Shared LMStudio auth headers
+# v1.44.0 [2026-03-21] — DEPRECATED: Use get_lms_client() for inference
+#   or get_config().get("lmstudio.api_token") for auth tokens.
 def get_lmstudio_headers() -> dict:
-    """Return HTTP headers for LMStudio API calls (includes Bearer token if configured)."""
+    """Return HTTP headers for LMStudio API calls.
+
+    .. deprecated:: v1.44.0
+        Use ``engine.lmstudio.chat`` functions or ``get_lms_client()``
+        instead.  This function remains for legacy callers outside the
+        LMStudio subsystem.
+    """
+    import warnings
+    warnings.warn(
+        "get_lmstudio_headers() is deprecated — use get_lms_client() for inference "
+        "or get_config().get('lmstudio.api_token') for auth tokens.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     headers: dict = {"Content-Type": "application/json", "Accept": "application/json"}
     try:
         from engine.config import get_config

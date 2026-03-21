@@ -99,20 +99,20 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
         self._setup_routes()
         self._setup_socketio()
 
+    # v1.43.1 [2026-03-21] — Use unified chat()
     def _llm_call(self, system: str, user: str, max_tokens: int = 1500, agent_id: str = "coders_agent") -> str:
         """Stateless LLM call with governance context."""
         try:
-            from engine.lmstudio.lms_client import get_lms_client
+            from engine.lmstudio.chat import chat
             from engine.mcp.comms_framework import build_governance_context
-            client = get_lms_client()
             gov_ctx = build_governance_context(agent_id, "coders", user)
             full_system = f"{system}\n\n{gov_ctx}" if gov_ctx else system
-            messages = [
-                {"role": "system", "content": full_system},
-                {"role": "user", "content": user},
-            ]
-            resp = client.chat(messages, temperature=0.7, max_tokens=max_tokens, store=False)
-            return resp.content if hasattr(resp, "content") else str(resp)
+            return chat(
+                [{"role": "user", "content": user}],
+                system=full_system,
+                temperature=0.7,
+                max_tokens=max_tokens,
+            )
         except Exception as e:
             logger.warning("Coders LLM call failed: %s", e)
             return ""

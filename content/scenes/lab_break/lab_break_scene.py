@@ -521,45 +521,26 @@ class LabBreakScene(BaseScene):
             "emotions": self.emotions.to_dict(),
         }
 
+    # v1.43.1 [2026-03-21] — Rewritten to use engine.lmstudio.chat()
     def _generate_agent_reply(self, user_message: str) -> str:
         """Generate the agent's response via LMStudio inference."""
+        from engine.lmstudio.chat import chat
+
         system_prompt = self._build_system_prompt()
 
         recent = self.conversation_history[-10:]
-        messages = [{"role": "system", "content": system_prompt}]
+        messages: list = []
         for entry in recent:
             role = "user" if entry["role"] == "user" else "assistant"
             messages.append({"role": role, "content": entry["content"]})
 
-        try:
-            from engine.config import get_config
-            cfg = get_config()
-            host = cfg.get("lmstudio.host", "localhost")
-            port = cfg.get("lmstudio.port", 1234)
-            model = cfg.get("lmstudio.models.small", "")
-
-            import requests
-            from engine.utils import get_lmstudio_headers
-            headers = get_lmstudio_headers()
-
-            resp = requests.post(
-                f"http://{host}:{port}/api/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.85,
-                    "max_tokens": 400,
-                    "stream": False,
-                },
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            logger.warning("LMStudio inference failed, using fallback: %s", e)
-            return self._fallback_reply(user_message)
+        response_text = chat(
+            messages,
+            system=system_prompt,
+            temperature=0.85,
+            max_tokens=400,
+        )
+        return response_text or self._fallback_reply(user_message)
 
     def _fallback_reply(self, user_message: str) -> str:
         """Generate a fallback reply when LMStudio is unavailable."""
