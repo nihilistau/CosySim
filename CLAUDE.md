@@ -108,7 +108,8 @@ Use `infer_processed()` for tag extraction, `infer_stream()` for raw streaming.
 - **Docstrings**: Google style (summary, `Args:`, `Returns:`, `Raises:`).
 - **Naming**: PascalCase classes, snake_case functions/files, UPPER_SNAKE constants, `_underscore` private.
 - **Format**: 4-space indent, double quotes, f-strings, 88–100 char soft limit, 120 max.
-- **Logging**: `logger = logging.getLogger(__name__)` per module. Never use `print()`.
+- **Logging**: `logger = logging.getLogger(__name__)` per module. Never use `print()`. Use structured logging patterns — include context (scene, agent, operation) in log messages.
+- **Monitoring**: Every new feature must include monitoring hooks. Log errors structurally, not silently. Use health check endpoints, EventChain for activity tracking, and Nexus for persistent metrics. Embedding/API errors must be caught and surfaced, not swallowed.
 - **State**: Mutable game state must sync to MCPFramework. Access config via `get_config().get("dot.path", default)`. Never hardcode ports, paths, or model names.
 
 ## Adding a Skill

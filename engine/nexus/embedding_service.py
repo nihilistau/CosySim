@@ -253,6 +253,7 @@ class LMStudioEmbeddingProvider:
             headers["Authorization"] = f"Bearer {self._api_token}"
         return headers
 
+    # v1.43.0 [2026-03-21] — Better error detection for LMStudio embedding endpoint
     def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         resp = self._session.post(
             f"{self._base_url}/v1/embeddings",
@@ -263,9 +264,18 @@ class LMStudioEmbeddingProvider:
         if resp.status_code >= 400:
             raise RuntimeError(f"LMStudio embed HTTP {resp.status_code}: {resp.text[:200]}")
         try:
-            return resp.json()
+            data = resp.json()
         except Exception as exc:
             raise RuntimeError(f"LMStudio embed invalid JSON: {exc}") from exc
+        # LMStudio may return 200 with an error body when no embedding model is loaded
+        if "error" in data:
+            err_msg = data.get("error", {})
+            if isinstance(err_msg, dict):
+                err_msg = err_msg.get("message", str(err_msg))
+            raise RuntimeError(f"LMStudio embed error: {err_msg}")
+        if not data.get("data"):
+            raise RuntimeError("LMStudio embed returned no data — is an embedding model loaded?")
+        return data
 
     def _extract_embeddings(self, data: Dict[str, Any]) -> List[List[float]]:
         items = data.get("data") or []
