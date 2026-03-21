@@ -44,9 +44,11 @@
   </style>
 {% endblock %}
 
-{% block scene_content %}
-  <canvas id="particle-canvas" class="particle-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.35"></canvas>
+{% block scene_overlays %}
+  <canvas id="particle-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.35"></canvas>
+{% endblock %}
 
+{% block scene_content %}
 <div class="neoncity-layout">
 
   <!-- ── CITY HEADER ─────────────────────────────────────────── -->
