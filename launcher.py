@@ -390,36 +390,58 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     print(f"\n  {total} target(s) launched.  Hub -> {_hub_url()}\n")
 
     # ── Watchdog loop ────────────────────────────────────────────────
-    # v1.51.0 — Reports dead scenes every 30s instead of 60s
+    # v1.51.1 [2026-03-22] — Short sleep intervals for Windows Ctrl+C compat
+    # On Windows, time.sleep(30) blocks the main thread and SIGINT can't
+    # interrupt it when daemon threads hold the GIL. Use 1s ticks instead.
+    _shutdown = False
+
+    def _handle_sigint(sig, frame):
+        nonlocal _shutdown
+        _shutdown = True
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+    # Also handle SIGTERM on Unix (harmless no-op on Windows if missing)
     try:
-        signal.signal(signal.SIGINT, signal.default_int_handler)
-        while True:
-            time.sleep(30)
-            down = [n for n in service_names + scene_names
-                    if not _port_up(ALL_TARGETS[n]["port"])]
-            if down:
-                labels = [ALL_TARGETS[n]["label"] for n in down]
-                print(f"  [WARN] Not responding: {', '.join(labels)}")
+        signal.signal(signal.SIGTERM, _handle_sigint)
+    except (OSError, AttributeError):
+        pass
+
+    _watchdog_counter = 0
+    try:
+        while not _shutdown:
+            time.sleep(1)
+            _watchdog_counter += 1
+            if _watchdog_counter >= 30:
+                _watchdog_counter = 0
+                down = [n for n in service_names + scene_names
+                        if not _port_up(ALL_TARGETS[n]["port"])]
+                if down:
+                    labels = [ALL_TARGETS[n]["label"] for n in down]
+                    print(f"  [WARN] Not responding: {', '.join(labels)}")
     except KeyboardInterrupt:
-        print("\n  Shutting down...")
-        # Gracefully stop world systems before killing subprocesses
-        for mod, getter, method in [
-            ("engine.world.world_sim", "get_world_sim", "stop"),
-            ("engine.world.event_cascade", "get_event_cascade", "stop"),
-            ("engine.events.cross_scene_relay", "get_cross_scene_relay", "stop"),
-        ]:
-            try:
-                import importlib as _il
-                m = _il.import_module(mod)
-                getattr(getattr(m, getter)(), method)()
-            except Exception:
-                pass
-        for proc in all_procs:
-            try:
-                proc.terminate()
-            except Exception:
-                pass
-        print("  Done.\n")
+        pass
+
+    print("\n  Shutting down...")
+    for mod, getter, method in [
+        ("engine.world.world_sim", "get_world_sim", "stop"),
+        ("engine.world.event_cascade", "get_event_cascade", "stop"),
+        ("engine.events.cross_scene_relay", "get_cross_scene_relay", "stop"),
+    ]:
+        try:
+            import importlib as _il
+            m = _il.import_module(mod)
+            getattr(getattr(m, getter)(), method)()
+        except Exception:
+            pass
+    for proc in all_procs:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    print("  Done.\n")
+    # Force exit — daemon threads won't block shutdown
+    import os
+    os._exit(0)
 
 
 
