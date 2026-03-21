@@ -56,5 +56,7 @@ services:
     auto_start: true
   system_control:
     auto_start: true
+  totally_nonexistent_scene_xyz:
+    auto_start: true
   tts:
     auto_start: false

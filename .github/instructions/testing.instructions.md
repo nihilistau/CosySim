@@ -42,16 +42,40 @@ def test_feature_does_expected_thing(temp_db, mock_config):
 - Use `tmp_path` for any file I/O tests
 
 ## Running Tests
+
+### Smart runner (preferred — git-diff aware)
 ```bash
-# Full suite
-python -m pytest tests/ -v --tb=short --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py
+# Quick sanity check (~53s, ~15 files, one per domain)
+python scripts/smart_test.py --smoke
+python -m pytest tests/ --smoke-only
 
-# Single file
-python -m pytest tests/test_bedroom_game.py -v
+# Only tests for uncommitted changes (auto-caps at 80 files)
+python scripts/smart_test.py
+python -m pytest tests/ --affected
 
-# By marker
-python -m pytest tests/ -m unit
-python -m pytest tests/ -m "not slow"
+# Only tests for staged files (pre-commit)
+python -m pytest tests/ --staged
+
+# Tests for a specific domain
+python scripts/smart_test.py --domain scene_hub
+python scripts/smart_test.py --domain engine_core,shared
+
+# Tests since a git ref
+python -m pytest tests/ --since HEAD~3
+
+# Dry-run: show what would run
+python scripts/smart_test.py --list
+
+# Auto-fallback to smoke if too many files affected
+python -m pytest tests/ --affected --cap 40
+```
+
+### Direct pytest (single files, markers, full suite)
+```bash
+python -m pytest tests/test_bedroom_game.py -v    # Single file
+python -m pytest tests/ -m unit                    # By marker
+python -m pytest tests/ -m "not slow"              # Skip slow
+python -m pytest -n auto tests/                    # Parallel (xdist)
 ```
 
 ## Coverage

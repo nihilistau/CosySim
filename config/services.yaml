@@ -1,0 +1,28 @@
+# CosySim — Services Pillar Configuration
+# Overrides for service-tier targets (merged on top of default.yaml)
+
+# Service endpoints
+services:
+  lmstudio:
+    host: "localhost"
+    port: 1234
+  nexus:
+    host: "localhost"
+    port: 8700
+  comfyui:
+    host: "localhost"
+    port: 8188
+  tts:
+    host: "localhost"
+    port: 8600
+
+# Scheduler intervals (seconds)
+scheduler:
+  news_poll: 900
+  health_check: 60
+  auth_recovery: 300
+
+# NLM proxy settings
+nlm_proxy:
+  timeout: 30
+  max_retries: 3

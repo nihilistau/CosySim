@@ -8,16 +8,17 @@ Usage:
 from __future__ import annotations
 
 import logging
-import socket
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import jinja2
 from flask import Flask, jsonify, render_template
 
+from engine.control_plane_registry import PILLAR_IDS, SCENE_DEFS, SERVICE_DEFS
 from engine.port_registry import HUB_CATALOGUE_TARGETS, build_target_listing, get_port
 from engine.scenes.base_scene import BaseScene
 from content.shared import register_shared_assets
+from engine.utils import port_is_open
 
 logger = logging.getLogger(__name__)
 
@@ -190,21 +191,12 @@ def _build_scene_catalogue() -> List[Dict[str, Any]]:
 
 SCENE_CATALOGUE: List[Dict[str, Any]] = _build_scene_catalogue()
 
-# Group metadata for section headers
+# Group metadata for section headers (pillar-based)
 SCENE_GROUPS: List[Dict[str, str]] = [
-    {"id": "neon_world", "label": "NEON WORLD",  "icon": "🏙️"},
-    {"id": "action",     "label": "ACTION",       "icon": "⚔️"},
-    {"id": "system",     "label": "SYSTEM",       "icon": "🖥️"},
+    {"id": "game",     "label": "NEONCITY",      "icon": "🏙️"},
+    {"id": "service",  "label": "SERVICES",       "icon": "🖥️"},
+    {"id": "creation", "label": "CREATION KIT",   "icon": "🎨"},
 ]
-
-
-def _port_open(port: int) -> bool:
-    """Check if a TCP port is listening on localhost."""
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=0.4):
-            return True
-    except OSError:
-        return False
 
 
 class HubScene(BaseScene):
@@ -261,6 +253,33 @@ class HubScene(BaseScene):
         self._setup_routes()
         logger.info("HubScene (THE TERMINAL) created on port %d", port)
 
+    # ── Overrides ────────────────────────────────────────────────────
+
+    def register_scene_registry_route(self, app) -> None:
+        """Override base class to provide enriched scene-registry with presentation data."""
+
+        @app.route("/api/scene-registry")
+        def api_scene_registry() -> Any:
+            all_defs = {**SERVICE_DEFS, **SCENE_DEFS}
+            pillars: Dict[str, list] = {"game": [], "service": [], "creation": []}
+            for pillar_name, target_ids in PILLAR_IDS.items():
+                for tid in target_ids:
+                    info = all_defs.get(tid, {})
+                    presentation = _SCENE_PRESENTATION.get(tid, {})
+                    port = get_port(tid, 0)
+                    online = port_is_open(port) if port else False
+                    pillars[pillar_name].append({
+                        "key": tid,
+                        "label": info.get("label", tid.upper()),
+                        "port": port,
+                        "accent": presentation.get("accent", "#94a3b8"),
+                        "icon": presentation.get("icon", ""),
+                        "subtitle": presentation.get("subtitle", ""),
+                        "desc": presentation.get("desc", ""),
+                        "status": "up" if online else "down",
+                    })
+            return jsonify({"pillars": pillars})
+
     # ── Routes ──────────────────────────────────────────────────────
 
     def _setup_routes(self) -> None:
@@ -280,7 +299,7 @@ class HubScene(BaseScene):
             """Return scene catalogue with live health status."""
             scenes = []
             for s in SCENE_CATALOGUE:
-                online = _port_open(s["port"])
+                online = port_is_open(s["port"])
                 scenes.append({**s, "status": "online" if online else "offline"})
             return jsonify(scenes)
 

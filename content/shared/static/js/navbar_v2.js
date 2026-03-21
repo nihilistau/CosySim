@@ -67,6 +67,12 @@ class CosyNavbar {
         /** @type {number|null} Timer handle for health-ping loop. */
         this._pingTimer = null;
 
+        /** @type {'game'|'service'|'creation'} Active pillar filter. */
+        this._activePillar = 'game';
+
+        /** @type {object|null} Pillar registry data from API. */
+        this._pillarData = null;
+
         // DOM refs — populated in init()
         this._el = {
             navbar:      null,
@@ -444,6 +450,202 @@ class CosyNavbar {
                 detail: { panel },
             }),
         );
+    }
+    // ─────────────────────────────────────────────────────────────────
+    // Public: pillar registry
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Fetch the scene registry from the API and enable pillar filtering.
+     * Falls back gracefully to the hardcoded scene list if the API is
+     * unavailable.
+     */
+    async loadPillarRegistry() {
+        try {
+            const resp = await fetch('/api/scene-registry', {
+                signal: AbortSignal.timeout(4000),
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data && data.pillars) {
+                this._pillarData = data.pillars;
+                this._injectPillarToggle();
+            }
+        } catch (_) {
+            // API unavailable — keep hardcoded scenes
+        }
+    }
+
+    /**
+     * Inject a pillar toggle (pill buttons) into the navbar left cluster.
+     * Clicking a pill re-renders the scene nav with that pillar's scenes.
+     */
+    _injectPillarToggle() {
+        if (!this._pillarData) return;
+        const navbar = this._el.navbar;
+        if (!navbar) return;
+
+        // Don't inject twice
+        if (navbar.querySelector('.cs-navbar__pillar-toggle')) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'cs-navbar__pillar-toggle';
+        wrap.setAttribute('role', 'tablist');
+        wrap.setAttribute('aria-label', 'Pillar filter');
+
+        const pills = [
+            { id: 'game',     label: 'NEONCITY',      icon: '' },
+            { id: 'service',  label: 'SERVICES',      icon: '' },
+            { id: 'creation', label: 'CREATION KIT',  icon: '' },
+        ];
+
+        pills.forEach(p => {
+            const btn = document.createElement('button');
+            btn.className = 'cs-navbar__pillar-pill' +
+                (p.id === this._activePillar ? ' cs-navbar__pillar-pill--active' : '');
+            btn.setAttribute('role', 'tab');
+            btn.setAttribute('aria-selected', String(p.id === this._activePillar));
+            btn.dataset.pillar = p.id;
+            btn.textContent = p.label;
+            const count = (this._pillarData[p.id] || []).length;
+            if (count) {
+                const badge = document.createElement('span');
+                badge.className = 'cs-navbar__pillar-badge';
+                badge.textContent = String(count);
+                btn.appendChild(badge);
+            }
+            btn.addEventListener('click', () => this._switchPillar(p.id));
+            wrap.appendChild(btn);
+        });
+
+        // Insert after logo/scene name, before the nav
+        const leftCluster = navbar.querySelector('.cs-navbar__left');
+        if (leftCluster) {
+            leftCluster.after(wrap);
+        }
+    }
+
+    /**
+     * Switch the active pillar and re-render scene links.
+     *
+     * @param {'game'|'service'|'creation'} pillar
+     */
+    _switchPillar(pillar) {
+        if (pillar === this._activePillar && this._pillarData) return;
+        this._activePillar = pillar;
+
+        // Update pill active state
+        const pills = document.querySelectorAll('.cs-navbar__pillar-pill');
+        pills.forEach(p => {
+            const active = p.dataset.pillar === pillar;
+            p.classList.toggle('cs-navbar__pillar-pill--active', active);
+            p.setAttribute('aria-selected', String(active));
+        });
+
+        // Re-render scene nav
+        this._renderPillarScenes(pillar);
+    }
+
+    /**
+     * Replace the scene nav links with scenes from the given pillar.
+     *
+     * @param {string} pillar
+     */
+    _renderPillarScenes(pillar) {
+        const nav = this._el.nav;
+        if (!nav || !this._pillarData) return;
+        const scenes = this._pillarData[pillar] || [];
+
+        // Remove existing nav items and MORE dropdown
+        nav.querySelectorAll('.cs-navbar__nav-item, .cs-navbar__nav-item--more, .cs-navbar__nav-shortcut')
+            .forEach(el => el.remove());
+
+        const inline = scenes.slice(0, 8);
+        const more = scenes.slice(8);
+
+        inline.forEach(scene => {
+            nav.appendChild(this._createNavItem(scene));
+        });
+
+        if (more.length) {
+            const moreBtn = document.createElement('div');
+            moreBtn.className = 'cs-navbar__nav-item cs-navbar__nav-item--more';
+            moreBtn.tabIndex = 0;
+            moreBtn.setAttribute('role', 'button');
+            moreBtn.setAttribute('aria-haspopup', 'true');
+            moreBtn.setAttribute('aria-expanded', 'false');
+
+            const moreLabel = document.createElement('span');
+            moreLabel.className = 'cs-navbar__nav-label';
+            moreLabel.textContent = 'MORE \u25BC';
+            moreBtn.appendChild(moreLabel);
+
+            const dropdown = document.createElement('ul');
+            dropdown.className = 'cs-navbar__more-dropdown';
+            dropdown.setAttribute('role', 'menu');
+            more.forEach(scene => {
+                const li = document.createElement('li');
+                li.setAttribute('role', 'none');
+                const a = this._createNavItem(scene, true);
+                a.setAttribute('role', 'menuitem');
+                li.appendChild(a);
+                dropdown.appendChild(li);
+            });
+            moreBtn.appendChild(dropdown);
+
+            moreBtn.addEventListener('click', () => {
+                const expanded = moreBtn.getAttribute('aria-expanded') === 'true';
+                moreBtn.setAttribute('aria-expanded', String(!expanded));
+            });
+
+            nav.appendChild(moreBtn);
+            this._el.moreBtn = moreBtn;
+            this._el.moreDropdown = dropdown;
+        }
+    }
+
+    /**
+     * Create a single scene nav link element.
+     *
+     * @param {object}  scene       Scene data from registry.
+     * @param {boolean} [isDropdown=false]  Use dropdown item class.
+     * @returns {HTMLElement}
+     */
+    _createNavItem(scene, isDropdown = false) {
+        const a = document.createElement('a');
+        const isCurrent = scene.key === this.currentScene;
+        a.className = isDropdown
+            ? 'cs-navbar__more-item' + (isCurrent ? ' cs-navbar__nav-item--active' : '')
+            : 'cs-navbar__nav-item' + (isCurrent ? ' cs-navbar__nav-item--active' : '');
+        a.href = `http://localhost:${scene.port}/`;
+        a.setAttribute('data-scene-nav', '');
+        a.setAttribute('data-scene-key', scene.key);
+        a.setAttribute('data-scene-port', String(scene.port));
+        if (scene.accent) {
+            a.setAttribute('data-scene-accent', scene.accent);
+            a.style.setProperty('--item-accent', scene.accent);
+        }
+        a.setAttribute('aria-current', isCurrent ? 'page' : 'false');
+
+        const dot = document.createElement('span');
+        dot.className = 'cs-navbar__nav-dot' +
+            (scene.status === 'up' ? ' cs-navbar__nav-dot--online' : '');
+        dot.setAttribute('data-status-dot', scene.key);
+        dot.setAttribute('aria-hidden', 'true');
+
+        const label = document.createElement('span');
+        label.className = isDropdown ? '' : 'cs-navbar__nav-label';
+        label.textContent = scene.label;
+
+        const statusDot = document.createElement('span');
+        statusDot.className = 'scene-dot';
+        statusDot.setAttribute('aria-hidden', 'true');
+
+        a.appendChild(dot);
+        a.appendChild(label);
+        a.appendChild(statusDot);
+
+        return a;
     }
 }
 

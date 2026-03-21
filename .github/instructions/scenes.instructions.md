@@ -56,15 +56,25 @@ class MyScene(BaseScene):
 - **NEVER** load `aria_widget.js` — use `{% include 'aria_widget.html' %}` instead
 - Use `{% include 'navbar_v2.html' %}` as the single navbar include
 
+## Pillar Registration
+Every scene/service in `engine/control_plane_registry.py` has a `"pillar"` tag:
+- `"game"` — NeonCity interactive scenes
+- `"service"` — infrastructure services
+- `"creation"` — asset creation tools
+
+New scenes MUST be added to `SCENE_DEFS` with the appropriate `"pillar"` value. The `PILLAR_IDS` dict auto-computes from definitions.
+
 ## Required start() Routes
 Every scene `start()` MUST call all of these after Flask setup:
 ```python
 from content.shared import register_shared_assets
 register_shared_assets(self.app)        # /shared/* routes — REQUIRED or all shared assets 404
-self.register_health_route(self.app)    # /api/health
+self.register_health_route(self.app)    # /api/health + /api/scene-registry (auto-wired)
 self.register_hud_route(self.app)       # /api/hud/state
 self.register_announcer_route(self.app) # /api/announcer/feed
 ```
+
+`register_health_route()` now auto-wires `/api/scene-registry` (pillar-grouped scene catalogue). Override `register_scene_registry_route()` if your scene needs enriched data (e.g. hub adds accent/icon/subtitle).
 
 ## Health Check (run after every scene edit)
 ```powershell

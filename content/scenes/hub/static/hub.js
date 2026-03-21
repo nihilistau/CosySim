@@ -49,16 +49,26 @@ class TheTerminalHub {
     this._ecoTimer   = setInterval(() => this.loadEconomy(), 45_000);
   }
 
-  /** Fetch all scenes and render the scene grid. */
+  /** Fetch all scenes via pillar registry and render the scene grid. */
   async loadScenes() {
     try {
-      const res    = await fetch('/api/scenes');
-      const scenes = await res.json();
-      this._scenes = scenes;
-      this._renderSceneGrid(scenes);
-      this._updateScenesBadge(scenes);
+      const res  = await fetch('/api/scene-registry');
+      const data = await res.json();
+      if (data && data.pillars) {
+        this._renderPillarGrid(data.pillars);
+        this._updateScenesBadgePillar(data.pillars);
+      }
     } catch (err) {
-      console.warn('[TheTerminal] loadScenes failed:', err);
+      // Fallback to legacy /api/scenes endpoint
+      try {
+        const res    = await fetch('/api/scenes');
+        const scenes = await res.json();
+        this._scenes = scenes;
+        this._renderSceneGrid(scenes);
+        this._updateScenesBadge(scenes);
+      } catch (err2) {
+        console.warn('[TheTerminal] loadScenes failed:', err2);
+      }
     }
   }
 
@@ -95,7 +105,53 @@ class TheTerminalHub {
   // ── Scene grid renderer ─────────────────────────────────────────
 
   /**
-   * Build and inject scene cards grouped by category.
+   * Build and inject scene cards grouped by pillar.
+   * @param {object} pillars  Pillar data from /api/scene-registry
+   */
+  _renderPillarGrid(pillars) {
+    const pillarIds = ['game', 'service', 'creation'];
+    pillarIds.forEach(pillarId => {
+      const container = document.getElementById(`scene-grid-${pillarId}`);
+      if (!container) return;
+
+      const scenes = pillars[pillarId] || [];
+      if (!scenes.length) {
+        container.innerHTML = '<div class="loading-placeholder">NO SCENES AVAILABLE</div>';
+        return;
+      }
+
+      container.innerHTML = scenes.map(s => this._sceneCardHTML({
+        id: s.key,
+        port: s.port,
+        label: s.label,
+        subtitle: s.subtitle || '',
+        icon: s.icon || '',
+        accent: s.accent || '#3b82f6',
+        desc: s.desc || '',
+        status: s.status === 'up' ? 'online' : 'offline',
+      })).join('');
+    });
+  }
+
+  /**
+   * Update scenes badge from pillar data.
+   * @param {object} pillars
+   */
+  _updateScenesBadgePillar(pillars) {
+    let online = 0;
+    let total = 0;
+    for (const scenes of Object.values(pillars)) {
+      for (const s of scenes) {
+        total++;
+        if (s.status === 'up') online++;
+      }
+    }
+    const countEl = document.getElementById('scenes-badge-count');
+    if (countEl) countEl.textContent = `${online}/${total}`;
+  }
+
+  /**
+   * Build and inject scene cards grouped by category (legacy fallback).
    * @param {Array<object>} scenes
    */
   _renderSceneGrid(scenes) {
@@ -111,10 +167,6 @@ class TheTerminalHub {
       }
 
       container.innerHTML = groupScenes.map(s => this._sceneCardHTML(s)).join('');
-
-      // Scene cards are now <a> elements with data-scene-nav — the shared
-      // cosysim-transitions.js handler picks up clicks automatically and
-      // applies the fade-through-black transition.  No extra wiring needed.
     });
   }
 

@@ -1,0 +1,16 @@
+# CosySim — Creation Kit Pillar Configuration
+# Overrides for creation-tier targets (merged on top of default.yaml)
+
+# Asset scanning paths
+creation:
+  asset_scan_paths:
+    - "content/assets"
+    - "content/simulation/media"
+  template_registry:
+    scene_templates_dir: "content/scenes"
+    character_templates_dir: "content/assets/characters"
+
+# Canvas / notebook defaults
+canvas:
+  auto_save: true
+  max_notebooks: 50

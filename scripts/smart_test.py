@@ -347,21 +347,33 @@ SOURCE_TO_DOMAINS: List[tuple[str, List[str]]] = [
     ("engine/pipeline/", ["agents"]),
     # Skills
     ("engine/skills/", ["skills"]),
-    # Story
+    # Story / economy / world
     ("engine/story/", ["story"]),
+    ("engine/economy/", ["story"]),
+    ("engine/world/", ["engine_core"]),
     # Training
     ("training/", ["training"]),
+    # Integrations
+    ("engine/integrations/", ["engine_core"]),
     # Engine core
     ("engine/mcp/", ["engine_core"]),
     ("engine/services/", ["engine_core"]),
     ("engine/scenes/", ["engine_core"]),
     ("engine/config", ["engine_core"]),
+    ("engine/control_plane_registry", ["engine_core"]),
+    ("engine/port_registry", ["engine_core"]),
+    ("engine/utils", ["engine_core"]),
+    ("engine/creation/", ["asset_studio"]),
+    # Config files
     ("config/", ["engine_core"]),
+    # Launcher / TUI (infrastructure, run engine_core smoke)
+    ("launcher.py", ["engine_core"]),
+    ("tui.py", ["engine_core"]),
     # Shared
     ("content/shared/", ["shared"]),
     # Content simulation
     ("content/simulation/", ["engine_core"]),
-    # Individual scenes
+    # Individual scenes (must come before generic content/scenes/)
     ("content/scenes/bedroom/", ["scene_bedroom"]),
     ("content/scenes/phone/", ["scene_phone"]),
     ("content/scenes/lounge/", ["scene_lounge"]),
@@ -376,8 +388,16 @@ SOURCE_TO_DOMAINS: List[tuple[str, List[str]]] = [
     ("content/scenes/heist/", ["scene_heist"]),
     ("content/scenes/games/", ["scene_games"]),
     ("content/scenes/coders/", ["scene_coders"]),
+    ("content/scenes/grid/", ["engine_core"]),
+    ("content/scenes/penthouse/", ["engine_core"]),
+    ("content/scenes/lab_break/", ["engine_core"]),
+    ("content/scenes/command_center/", ["shared"]),
+    ("content/scenes/system_control/", ["shared"]),
+    ("content/scenes/nexus_panel/", ["nexus"]),
     # Fallback for content/scenes (base_scene etc)
     ("content/scenes/", ["engine_core"]),
+    # Docs (no tests needed)
+    ("docs/", []),
     # Tests themselves → run just that file
     ("tests/test_", ["_self"]),
     # conftest changes → run smoke (affects all tests)

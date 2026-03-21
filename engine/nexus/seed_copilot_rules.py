@@ -77,6 +77,7 @@ def _get_sources() -> list[dict]:
     docs = [
         (REPO_ROOT / "CHANGELOG.md", "[CosySim] CHANGELOG", "copilot-history", ["changelog", "versions", "releases"], None),
         (REPO_ROOT / "README.md", "[CosySim] README", "copilot-rules", ["readme", "overview", "cosysim"], "readme"),
+        (REPO_ROOT / "CLAUDE.md", "[CosySim] Claude Code Instructions", "copilot-rules", ["claude-code", "instructions", "cosysim"], "claude-code"),
         (REPO_ROOT / "docs" / "ARCHITECTURE.md", "[CosySim] Architecture", "architecture", ["architecture", "design", "cosysim"], "architecture"),
         (REPO_ROOT / "docs" / "AGENT_ONBOARDING.md", "[CosySim] Agent Onboarding", "copilot-rules", ["onboarding", "agents", "local-agents"], "agent-onboarding"),
         (REPO_ROOT / "ROADMAP.md", "[CosySim] ROADMAP", "copilot-plans", ["roadmap", "plans", "future"], "roadmap"),

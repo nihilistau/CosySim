@@ -18,9 +18,14 @@ model = cfg.get("lmstudio.models.primary", "default-model")
 - `config/default.yaml` — base configuration (all settings)
 - `config/development.yaml` — dev overrides (debug=true, test DB)
 - `config/production.yaml` — prod overrides (debug=false, real paths)
+- `config/game.yaml` — game pillar overrides (world sim params, character defaults, scene accents)
+- `config/services.yaml` — service pillar overrides (endpoints, scheduler intervals, proxy settings)
+- `config/creation.yaml` — creation pillar overrides (asset scan paths, template registry, canvas defaults)
 - `config/voices.yaml` — TTS voice definitions
 - `config/skill_manifests.yaml` — skill pack metadata
 - `config/mcp.json` — MCP server definitions
+
+Pillar configs are auto-merged in `engine/config.py` after environment overrides. They provide pillar-specific defaults without polluting `default.yaml`.
 
 ## Rules
 - Never hardcode ports, paths, model names, or API URLs
