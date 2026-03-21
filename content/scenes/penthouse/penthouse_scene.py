@@ -1337,9 +1337,12 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
         self.socketio.emit("agent_typing", {"character_name": char_name})
 
+        # v1.43.0 [2026-03-21] — Use orchestrator/conversation manager for inference
+        # Falls back through: agent_loop → orchestrator → conversation manager
         response_text = ""
         try:
             if self.agent_loop and char_id in self.agent_loop._characters:
+                # Path 1: Full agent loop with interceptor pipeline
                 from engine.agents.virtual_agent import InferenceRequest
                 from engine.agents.stream_processor import strip_token_artifacts
 
@@ -1389,6 +1392,40 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                             profile.stats.adjust(mood=5)
                     except Exception:
                         pass
+            else:
+                # Path 2: Direct orchestrator inference (no agent loop needed)
+                from engine.lmstudio import get_orchestrator
+                orch = get_orchestrator()
+
+                # Build character system prompt from profile
+                profile = self.profiles.get(char_id)
+                system_prompt = (
+                    f"You are {char_name}, a character in The Penthouse scene. "
+                    f"Stay in character. Be expressive and engaging. "
+                    f"Respond naturally to the player."
+                )
+                if profile and hasattr(profile, "personality"):
+                    system_prompt += f"\nPersonality: {profile.personality}"
+
+                resp = orch.infer(
+                    agent_id=char_id,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"{sender_name}: {message}"},
+                    ],
+                    task_type="chat",
+                    priority="interactive",
+                    temperature=0.85,
+                    max_tokens=300,
+                )
+                if resp and hasattr(resp, "content"):
+                    response_text = resp.content or ""
+                elif resp and hasattr(resp, "text"):
+                    response_text = resp.text or ""
+                elif isinstance(resp, str):
+                    response_text = resp
+                logger.info("Penthouse chat via orchestrator: %d chars", len(response_text))
+
         except Exception as exc:
             logger.warning("Chat response inference failed for %s: %s", char_id, exc)
 
