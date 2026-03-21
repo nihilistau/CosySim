@@ -127,8 +127,16 @@ class SystemMonitor:
         """Ping a URL, return ``{up: bool, latency_ms: float, error: str}``."""
         try:
             import requests
+            # v1.43.0 — Include LMStudio auth headers on all health pings
+            headers = {}
+            if "1234" in url or "lmstudio" in url.lower():
+                try:
+                    from engine.utils import get_lmstudio_headers
+                    headers = get_lmstudio_headers()
+                except Exception:
+                    pass
             start = time.perf_counter()
-            resp = requests.get(url, timeout=timeout)
+            resp = requests.get(url, timeout=timeout, headers=headers)
             latency = (time.perf_counter() - start) * 1000
             return {
                 "up": resp.status_code < 500,
@@ -162,7 +170,8 @@ class SystemMonitor:
         try:
             import requests
             url = self._resolve_base("lmstudio", "lmstudio.base_url", "http://localhost:1234")
-            resp = requests.get(f"{url}/api/v1/models", timeout=3)
+            from engine.utils import get_lmstudio_headers
+            resp = requests.get(f"{url}/api/v1/models", timeout=3, headers=get_lmstudio_headers())
             if resp.status_code == 200:
                 data = resp.json()
                 models = data.get("data", [])
