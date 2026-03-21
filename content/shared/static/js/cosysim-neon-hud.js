@@ -50,6 +50,8 @@
       this._rightOpen = false;
       this._phoneOpen = false;
       this._activePopup = null;  // v1.43.0 — active item/crew popup reference
+      this._missionBoardOpen = false;
+      this._shopOpen = false;
 
       // DOM refs — resolved after DOMContentLoaded
       this._els = {};
@@ -162,7 +164,9 @@
 
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
-          if (this._phoneOpen)   this._closePhoneOverlay();
+          if (this._missionBoardOpen) this._closeMissionBoard();
+          else if (this._shopOpen)     this._closeShop();
+          else if (this._phoneOpen)   this._closePhoneOverlay();
           else if (this._rightOpen)  this._closeRightPanel();
           else if (this._leftOpen)   this._closeLeftPanel();
           else if (this._expanded)   this._closePanel();
@@ -178,6 +182,15 @@
         if (e.key === 'p' || e.key === 'P') {
           if (!e.target.matches('input, textarea, [contenteditable]'))
             this._togglePhoneOverlay();
+        }
+        // v1.43.0 — Mission board (M) and Shop (B)
+        if (e.key === 'm' || e.key === 'M') {
+          if (!e.target.matches('input, textarea, [contenteditable]'))
+            this._toggleMissionBoard();
+        }
+        if (e.key === 'b' || e.key === 'B') {
+          if (!e.target.matches('input, textarea, [contenteditable]'))
+            this._toggleShop();
         }
       });
     }
@@ -919,6 +932,420 @@
           <span class="cs-hud-slide__faction-val" style="color:${color}">${standing > 0 ? '+' : ''}${standing}</span>
         </div>`;
       }).join('');
+    }
+
+    // ── Mission Board Overlay ──────────────────────────────────────────────
+
+    _toggleMissionBoard () {
+      if (this._missionBoardOpen) this._closeMissionBoard();
+      else                        this._openMissionBoard();
+    }
+
+    async _openMissionBoard () {
+      this._missionBoardOpen = true;
+      const overlay = document.getElementById('cs-mission-board');
+      const bd = this._els.backdrop;
+      if (overlay) {
+        overlay.setAttribute('aria-hidden', 'false');
+        overlay.style.display = '';
+      }
+      if (bd) { bd.classList.add('cs-hud__backdrop--visible'); bd.setAttribute('aria-hidden', 'false'); }
+
+      // Close other overlays
+      if (this._shopOpen) this._closeShop();
+      if (this._leftOpen) this._closeLeftPanel();
+      if (this._rightOpen) this._closeRightPanel();
+
+      // Wire tab switching
+      const tabs = overlay?.querySelectorAll('.cs-mission__tab');
+      if (tabs) {
+        tabs.forEach(tab => {
+          tab.onclick = () => {
+            tabs.forEach(t => t.classList.remove('cs-mission__tab--active'));
+            tab.classList.add('cs-mission__tab--active');
+            const tabName = tab.dataset.tab;
+            ['available', 'active', 'completed'].forEach(t => {
+              const el = document.getElementById(`mission-tab-${t}`);
+              if (el) el.classList.toggle('cs-mission__content--hidden', t !== tabName);
+            });
+          };
+        });
+      }
+
+      // Wire close button
+      const closeBtn = document.getElementById('mission-board-close');
+      if (closeBtn) closeBtn.onclick = () => this._closeMissionBoard();
+
+      // Fetch mission board data
+      try {
+        const res = await fetch('/api/mission/board', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        this._renderMissionBoardTab('available', data.available || []);
+        this._renderMissionBoardTab('active', data.active || []);
+        this._renderMissionBoardTab('completed', data.completed || []);
+      } catch (err) {
+        console.debug('[HUD] Mission board fetch failed:', err.message);
+      }
+    }
+
+    _closeMissionBoard () {
+      this._missionBoardOpen = false;
+      const overlay = document.getElementById('cs-mission-board');
+      const bd = this._els.backdrop;
+      if (overlay) {
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+      if (!this._shopOpen && !this._leftOpen && !this._rightOpen && !this._expanded) {
+        if (bd) { bd.classList.remove('cs-hud__backdrop--visible'); bd.setAttribute('aria-hidden', 'true'); }
+      }
+    }
+
+    _renderMissionBoardTab (tab, missions) {
+      if (tab === 'available') {
+        const grid = document.querySelector('#mission-tab-available .cs-mission__grid');
+        const emptyEl = document.querySelector('#mission-tab-available .cs-mission__card--placeholder');
+        if (!grid) return;
+        grid.innerHTML = '';
+        if (!missions.length) {
+          grid.innerHTML = `<div class="cs-mission__card cs-mission__card--placeholder">
+            <div class="cs-mission__card-header"><span class="cs-mission__card-title">No missions available</span></div>
+            <p class="cs-mission__card-empty">Check back later — the city never sleeps.</p>
+          </div>`;
+          return;
+        }
+        missions.forEach(m => {
+          const stars = '\u2605'.repeat(m.difficulty || 1) + '\u2606'.repeat(5 - (m.difficulty || 1));
+          const typeClass = m.type ? `cs-mission__card-type--${m.type}` : '';
+          const card = document.createElement('div');
+          card.className = 'cs-mission__card';
+          card.innerHTML = `
+            <div class="cs-mission__card-header">
+              <span class="cs-mission__card-title">${_esc(m.title)}</span>
+              <span class="cs-mission__card-difficulty">${stars}</span>
+            </div>
+            ${m.type ? `<span class="cs-mission__card-type ${typeClass}">${_esc(m.type)}</span>` : ''}
+            ${m.description ? `<p style="font-size:11px;color:rgba(255,255,255,0.5);margin:0">${_esc(m.description)}</p>` : ''}
+            <div class="cs-mission__card-reward">
+              Reward: <strong>\u20B5${(m.reward?.credits || 0).toLocaleString()}</strong> · ${m.reward?.xp || 0} XP
+              ${m.reward?.rep ? ` · +${m.reward.rep} REP` : ''}
+            </div>
+            <div class="cs-mission__card-meta">
+              ${m.faction ? `<span>${_esc(m.faction)}</span>` : ''}
+              ${m.time_limit ? `<span>${m.time_limit}</span>` : ''}
+              ${m.crew_required ? `<span>Crew: ${m.crew_required}</span>` : ''}
+            </div>
+            <button class="cs-mission__card-accept" data-mission-id="${_esc(m.id)}">ACCEPT</button>`;
+          grid.appendChild(card);
+
+          // Wire accept button
+          const acceptBtn = card.querySelector('.cs-mission__card-accept');
+          if (acceptBtn) {
+            acceptBtn.addEventListener('click', async () => {
+              try {
+                const res = await fetch('/api/mission/accept', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ mission_id: m.id }),
+                });
+                if (res.ok) {
+                  acceptBtn.textContent = 'ACCEPTED';
+                  acceptBtn.disabled = true;
+                  acceptBtn.style.opacity = '0.5';
+                  // Refresh board after a short delay
+                  setTimeout(() => this._openMissionBoard(), 500);
+                }
+              } catch (err) { console.error('[HUD] Mission accept failed:', err); }
+            });
+          }
+        });
+
+      } else if (tab === 'active') {
+        const list = document.querySelector('#mission-tab-active .cs-mission__list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!missions.length) {
+          list.innerHTML = '<div class="cs-mission__active-empty">No active missions. Pick one from the board.</div>';
+          return;
+        }
+        missions.forEach(m => {
+          const pct = m.progress?.pct || 0;
+          const item = document.createElement('div');
+          item.className = 'cs-mission__active-item';
+          item.innerHTML = `
+            <div class="cs-mission__active-header">
+              <span class="cs-mission__active-title">${_esc(m.title)}</span>
+              <span style="color:#f59e0b;font-size:10px">${'\u2605'.repeat(m.difficulty || 1)}</span>
+            </div>
+            <div class="cs-mission__progress">
+              <div class="cs-mission__progress-fill" style="width:${pct}%"></div>
+            </div>
+            <div class="cs-mission__progress-label">${pct}% complete</div>
+            <ul class="cs-mission__objectives">
+              ${(m.objectives || []).map(obj => `
+                <li class="cs-mission__objective ${obj.completed ? 'cs-mission__objective--done' : ''}">
+                  <input type="checkbox" ${obj.completed ? 'checked disabled' : ''} readonly>
+                  ${_esc(obj.description)}${obj.optional ? ' <em>(opt)</em>' : ''}
+                </li>
+              `).join('')}
+            </ul>
+            ${m.assigned_crew?.length ? `
+              <div class="cs-mission__crew">
+                ${m.assigned_crew.map(c => `<span class="cs-mission__crew-badge">${_esc(c)}</span>`).join('')}
+              </div>` : ''}
+            <div style="font-size:10px;color:#f59e0b">
+              Reward: \u20B5${(m.reward?.credits || 0).toLocaleString()} · ${m.reward?.xp || 0} XP
+            </div>
+            <button class="cs-mission__abandon" data-mission-id="${_esc(m.id)}">ABANDON</button>`;
+          list.appendChild(item);
+
+          // Wire abandon button
+          const abandonBtn = item.querySelector('.cs-mission__abandon');
+          if (abandonBtn) {
+            abandonBtn.addEventListener('click', async () => {
+              if (!confirm(`Abandon mission: ${m.title}?`)) return;
+              try {
+                await fetch('/api/mission/abandon', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ mission_id: m.id }),
+                });
+                setTimeout(() => this._openMissionBoard(), 300);
+                this._poll();
+              } catch (err) { console.error('[HUD] Mission abandon failed:', err); }
+            });
+          }
+        });
+
+      } else if (tab === 'completed') {
+        const list = document.querySelector('#mission-tab-completed .cs-mission__list--completed');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!missions.length) {
+          list.innerHTML = '<div class="cs-mission__completed-empty">No completed missions yet.</div>';
+          return;
+        }
+        missions.forEach(m => {
+          const item = document.createElement('div');
+          item.className = 'cs-mission__completed-item';
+          const ts = m.completed_at ? new Date(m.completed_at * 1000).toLocaleDateString('en-GB', {
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+          }) : '';
+          item.innerHTML = `
+            <span class="cs-mission__completed-title">${_esc(m.title)}</span>
+            <span class="cs-mission__completed-reward">\u20B5${(m.reward?.credits || 0).toLocaleString()}</span>
+            <span class="cs-mission__completed-time">${ts}</span>`;
+          list.appendChild(item);
+        });
+      }
+    }
+
+    // ── Shop Overlay ───────────────────────────────────────────────────────
+
+    _toggleShop () {
+      if (this._shopOpen) this._closeShop();
+      else                this._openShop();
+    }
+
+    async _openShop () {
+      this._shopOpen = true;
+      const overlay = document.getElementById('cs-shop-overlay');
+      const bd = this._els.backdrop;
+      if (overlay) {
+        overlay.setAttribute('aria-hidden', 'false');
+        overlay.style.display = '';
+      }
+      if (bd) { bd.classList.add('cs-hud__backdrop--visible'); bd.setAttribute('aria-hidden', 'false'); }
+
+      // Close other overlays
+      if (this._missionBoardOpen) this._closeMissionBoard();
+      if (this._leftOpen) this._closeLeftPanel();
+      if (this._rightOpen) this._closeRightPanel();
+
+      // Wire tab switching
+      const tabs = overlay?.querySelectorAll('.cs-shop__tab');
+      if (tabs) {
+        tabs.forEach(tab => {
+          tab.onclick = () => {
+            tabs.forEach(t => t.classList.remove('cs-shop__tab--active'));
+            tab.classList.add('cs-shop__tab--active');
+            const tabName = tab.dataset.shopTab;
+            const buyPanel  = document.getElementById('shop-tab-buy');
+            const sellPanel = document.getElementById('shop-tab-sell');
+            if (buyPanel)  buyPanel.classList.toggle('cs-shop__content--hidden', tabName !== 'buy');
+            if (sellPanel) sellPanel.classList.toggle('cs-shop__content--hidden', tabName !== 'sell');
+          };
+        });
+      }
+
+      // Wire close button
+      const closeBtn = document.getElementById('shop-close');
+      if (closeBtn) closeBtn.onclick = () => this._closeShop();
+
+      // Fetch shop catalog and inventory in parallel
+      try {
+        const [catalogRes, invRes] = await Promise.all([
+          fetch('/api/shop/catalog', { cache: 'no-store' }),
+          fetch('/api/inventory', { cache: 'no-store' }),
+        ]);
+        const catalog = catalogRes.ok ? await catalogRes.json() : {};
+        const inv     = invRes.ok ? await invRes.json() : {};
+        const balance = catalog.balance ?? inv.credits ?? this._state?.credits ?? 0;
+
+        // Update balance display
+        const balEl = document.getElementById('shop-balance');
+        if (balEl) balEl.textContent = Number(balance).toLocaleString();
+
+        this._renderShopBuy(catalog.items || [], balance);
+        this._renderShopSell(inv.items || inv.inventory || []);
+      } catch (err) {
+        console.debug('[HUD] Shop fetch failed:', err.message);
+      }
+    }
+
+    _closeShop () {
+      this._shopOpen = false;
+      const overlay = document.getElementById('cs-shop-overlay');
+      const bd = this._els.backdrop;
+      if (overlay) {
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+      if (!this._missionBoardOpen && !this._leftOpen && !this._rightOpen && !this._expanded) {
+        if (bd) { bd.classList.remove('cs-hud__backdrop--visible'); bd.setAttribute('aria-hidden', 'true'); }
+      }
+    }
+
+    _renderShopBuy (items, balance) {
+      const grid  = document.querySelector('#shop-tab-buy .cs-shop__grid');
+      const empty = document.getElementById('shop-buy-empty');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      if (!items.length) {
+        if (empty) empty.style.display = '';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+
+      items.forEach(item => {
+        const price = item.price || 0;
+        const canAfford = balance >= price;
+        const rarityClass = item.rarity ? `cs-shop__item-rarity--${item.rarity}` : '';
+        const lockedClass = !canAfford ? ' cs-shop__item--locked' : '';
+        const el = document.createElement('div');
+        el.className = `cs-shop__item${lockedClass}`;
+        el.dataset.itemId = item.id;
+        el.innerHTML = `
+          <span class="cs-shop__item-icon">${item.icon || '\uD83D\uDCE6'}</span>
+          <div class="cs-shop__item-info">
+            <span class="cs-shop__item-name">${_esc(item.name)}</span>
+            <span class="cs-shop__item-meta">
+              <span class="cs-shop__item-price">\u20B5 ${Number(price).toLocaleString()}</span>
+              ${item.rarity ? `<span class="cs-shop__item-rarity ${rarityClass}">${_esc(item.rarity.toUpperCase())}</span>` : ''}
+              ${item.category ? `<span class="cs-shop__item-category">${_esc(item.category.toUpperCase())}</span>` : ''}
+            </span>
+          </div>
+          <button class="cs-shop__buy-btn" data-item-id="${_esc(item.id)}" type="button"
+                  ${!canAfford ? 'disabled' : ''}>BUY</button>`;
+        grid.appendChild(el);
+
+        // Wire buy button
+        const buyBtn = el.querySelector('.cs-shop__buy-btn');
+        if (buyBtn && canAfford) {
+          buyBtn.addEventListener('click', async () => {
+            try {
+              const res = await fetch('/api/shop/buy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: item.id, quantity: 1 }),
+              });
+              if (res.ok) {
+                const result = await res.json();
+                buyBtn.textContent = '\u2713';
+                buyBtn.disabled = true;
+                // Update balance
+                const balEl = document.getElementById('shop-balance');
+                if (balEl && result.balance !== undefined) {
+                  balEl.textContent = Number(result.balance).toLocaleString();
+                }
+                // Refresh after brief feedback
+                setTimeout(() => this._openShop(), 600);
+                this._poll();
+              } else {
+                buyBtn.textContent = 'FAIL';
+                setTimeout(() => { buyBtn.textContent = 'BUY'; }, 1500);
+              }
+            } catch (err) {
+              console.error('[HUD] Shop buy failed:', err);
+              buyBtn.textContent = 'ERR';
+              setTimeout(() => { buyBtn.textContent = 'BUY'; }, 1500);
+            }
+          });
+        }
+      });
+    }
+
+    _renderShopSell (items) {
+      const grid  = document.querySelector('#shop-tab-sell .cs-shop__grid');
+      const empty = document.getElementById('shop-sell-empty');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      if (!items.length) {
+        if (empty) empty.style.display = '';
+        return;
+      }
+      if (empty) empty.style.display = 'none';
+
+      items.forEach(item => {
+        const sellPrice = item.sell_price || Math.floor((item.price || 0) / 2);
+        const el = document.createElement('div');
+        el.className = 'cs-shop__item';
+        el.dataset.itemId = item.id;
+        el.innerHTML = `
+          <span class="cs-shop__item-icon">${item.icon || '\uD83D\uDCE6'}</span>
+          <div class="cs-shop__item-info">
+            <span class="cs-shop__item-name">${_esc(item.name)}</span>
+            <span class="cs-shop__item-meta">
+              <span class="cs-shop__item-price">\u20B5 ${Number(sellPrice).toLocaleString()}</span>
+              <span class="cs-shop__item-qty">x${item.qty || 1}</span>
+            </span>
+          </div>
+          <button class="cs-shop__sell-btn" data-item-id="${_esc(item.id)}" type="button">SELL</button>`;
+        grid.appendChild(el);
+
+        // Wire sell button
+        const sellBtn = el.querySelector('.cs-shop__sell-btn');
+        if (sellBtn) {
+          sellBtn.addEventListener('click', async () => {
+            try {
+              const res = await fetch('/api/shop/sell', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: item.id, quantity: 1 }),
+              });
+              if (res.ok) {
+                const result = await res.json();
+                sellBtn.textContent = '\u2713';
+                sellBtn.disabled = true;
+                const balEl = document.getElementById('shop-balance');
+                if (balEl && result.balance !== undefined) {
+                  balEl.textContent = Number(result.balance).toLocaleString();
+                }
+                setTimeout(() => this._openShop(), 600);
+                this._poll();
+              } else {
+                sellBtn.textContent = 'FAIL';
+                setTimeout(() => { sellBtn.textContent = 'SELL'; }, 1500);
+              }
+            } catch (err) {
+              console.error('[HUD] Shop sell failed:', err);
+              sellBtn.textContent = 'ERR';
+              setTimeout(() => { sellBtn.textContent = 'SELL'; }, 1500);
+            }
+          });
+        }
+      });
     }
   }
 

@@ -1,0 +1,73 @@
+{# hud/hud_shop.html — v1.43.0 [2026-03-21] — Black Market shop overlay (buy/sell) #}
+<div class="cs-shop" id="cs-shop-overlay" aria-hidden="true" role="dialog" aria-label="Black Market shop">
+
+  {# ── Header ── #}
+  <div class="cs-shop__header">
+    <span class="cs-shop__title">◈ BLACK MARKET</span>
+    <span class="cs-shop__balance">₵ <span id="shop-balance">0</span></span>
+    <button class="cs-shop__close" id="shop-close" type="button" aria-label="Close shop">✕</button>
+  </div>
+
+  {# ── Tab bar ── #}
+  <div class="cs-shop__tabs">
+    <button class="cs-shop__tab cs-shop__tab--active" data-shop-tab="buy" type="button">BUY</button>
+    <button class="cs-shop__tab" data-shop-tab="sell" type="button">SELL</button>
+  </div>
+
+  {# ── BUY tab ── #}
+  <div class="cs-shop__content" id="shop-tab-buy">
+    <div class="cs-shop__grid">
+      {# Item cards are injected by JS. Static example for reference: #}
+      {#
+      <div class="cs-shop__item" data-item-id="stim_pack_01">
+        <span class="cs-shop__item-icon">💉</span>
+        <div class="cs-shop__item-info">
+          <span class="cs-shop__item-name">Stim Pack</span>
+          <span class="cs-shop__item-meta">
+            <span class="cs-shop__item-price">₵ 250</span>
+            <span class="cs-shop__item-rarity cs-shop__item-rarity--rare">RARE</span>
+            <span class="cs-shop__item-category">MEDICAL</span>
+          </span>
+        </div>
+        <button class="cs-shop__buy-btn" data-item-id="stim_pack_01" type="button">BUY</button>
+      </div>
+
+      <div class="cs-shop__item cs-shop__item--locked" data-item-id="plasma_rifle_x9">
+        <span class="cs-shop__item-icon">🔫</span>
+        <div class="cs-shop__item-info">
+          <span class="cs-shop__item-name">Plasma Rifle X9</span>
+          <span class="cs-shop__item-meta">
+            <span class="cs-shop__item-price">₵ 12,000</span>
+            <span class="cs-shop__item-rarity cs-shop__item-rarity--legendary">LEGENDARY</span>
+            <span class="cs-shop__item-category">WEAPON</span>
+          </span>
+        </div>
+        <button class="cs-shop__buy-btn" data-item-id="plasma_rifle_x9" type="button" disabled>BUY</button>
+      </div>
+      #}
+    </div>
+    <div class="cs-shop__empty" id="shop-buy-empty">No items available.</div>
+  </div>
+
+  {# ── SELL tab ── #}
+  <div class="cs-shop__content cs-shop__content--hidden" id="shop-tab-sell">
+    <div class="cs-shop__grid">
+      {# Inventory item cards injected by JS. Static example: #}
+      {#
+      <div class="cs-shop__item" data-item-id="stim_pack_01">
+        <span class="cs-shop__item-icon">💉</span>
+        <div class="cs-shop__item-info">
+          <span class="cs-shop__item-name">Stim Pack</span>
+          <span class="cs-shop__item-meta">
+            <span class="cs-shop__item-price">₵ 125</span>
+            <span class="cs-shop__item-qty">x3</span>
+          </span>
+        </div>
+        <button class="cs-shop__sell-btn" data-item-id="stim_pack_01" type="button">SELL</button>
+      </div>
+      #}
+    </div>
+    <div class="cs-shop__empty" id="shop-sell-empty">Your inventory is empty.</div>
+  </div>
+
+</div>{# /#cs-shop-overlay #}
