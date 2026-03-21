@@ -277,7 +277,7 @@ class HealthChecker:
             cfg = get_config()
             base = cfg.get("lmstudio.url", "http://localhost:1234")
             url = f"{base}/api/v1/models"
-            token = cfg.get("lmstudio.api_key", "")
+            token = cfg.get("lmstudio.api_token", "")
             req = urllib.request.Request(url)
             if token:
                 req.add_header("Authorization", f"Bearer {token}")

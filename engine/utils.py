@@ -9,6 +9,20 @@ from typing import Any, Callable, Optional
 logger = logging.getLogger(__name__)
 
 
+# v1.43.0 [2026-03-21] — Shared LMStudio auth headers
+def get_lmstudio_headers() -> dict:
+    """Return HTTP headers for LMStudio API calls (includes Bearer token if configured)."""
+    headers: dict = {"Content-Type": "application/json", "Accept": "application/json"}
+    try:
+        from engine.config import get_config
+        token = get_config().get("lmstudio.api_token")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+    except Exception:
+        pass
+    return headers
+
+
 def port_is_open(port: int, host: str = "127.0.0.1", timeout: float = 0.5) -> bool:
     """Return True if a TCP connection to host:port succeeds."""
     try:
