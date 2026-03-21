@@ -28,6 +28,7 @@ from typing import Any, Deque, Dict, List, Optional
 import requests
 
 from engine.config import get_config
+from engine.utils import get_lmstudio_headers
 
 logger = logging.getLogger(__name__)
 
@@ -308,6 +309,7 @@ class InferenceMonitor:
                     "category": "performance",
                     "tags": ["monitor", "snapshot", "auto-generated"],
                 },
+                headers=get_lmstudio_headers(),
                 timeout=10,
             )
             if resp.ok:

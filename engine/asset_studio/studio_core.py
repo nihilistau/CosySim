@@ -322,7 +322,8 @@ class AssetStudioCore:
             try:
                 import requests  # noqa: PLC0415
                 lms_url = f"http://{self._cfg.get('lmstudio.host', 'localhost')}:{self._cfg.get('lmstudio.port', 1234)}"
-                resp = requests.get(f"{lms_url}/api/v1/models", timeout=3)
+                from engine.utils import get_lmstudio_headers  # noqa: PLC0415
+                resp = requests.get(f"{lms_url}/api/v1/models", headers=get_lmstudio_headers(), timeout=3)
                 backends["lmstudio"] = {"status": "online"}
             except Exception as e:
                 backends["lmstudio"] = {"status": "offline", "error": str(e)}

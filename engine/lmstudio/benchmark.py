@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from engine.config import get_config
+from engine.utils import get_lmstudio_headers
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +217,7 @@ class InferenceBenchmark:
             resp = requests.post(
                 f"{self._base_url}/api/v1/chat/completions",
                 json=payload,
+                headers=get_lmstudio_headers(),
                 stream=True,
                 timeout=120,
             )
@@ -372,6 +374,7 @@ class InferenceBenchmark:
                     "category": "performance",
                     "tags": ["benchmark", "auto-generated", summary.model],
                 },
+                headers=get_lmstudio_headers(),
                 timeout=10,
             )
             if resp.ok:

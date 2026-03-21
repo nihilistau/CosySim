@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from engine.config import get_config
+from engine.utils import get_lmstudio_headers
 from engine.lmstudio.benchmark import BenchmarkSummary, InferenceBenchmark
 
 logger = logging.getLogger(__name__)
@@ -310,6 +311,7 @@ class AutoTuner:
                     "category": "performance",
                     "tags": ["tuning", "auto-generated", result.model, result.task_type],
                 },
+                headers=get_lmstudio_headers(),
                 timeout=10,
             )
             if resp.ok:
