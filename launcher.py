@@ -377,31 +377,23 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
         time.sleep(1)
     _launch_group(scene_names, "Scenes")
 
-    # ── Per-target health verification ───────────────────────────────
-    # v1.51.0 — Wait for each scene to actually bind its port
-    if scene_names:
-        print("\n  Health check (waiting for ports)...")
-        for name in scene_names:
+    # ── Health verification ─────────────────────────────────────────
+    # v1.51.1 [2026-03-22] — Wait for ALL scenes to settle, then check once.
+    # Scenes with NexusMixin take 5-15s to init. Checking each sequentially
+    # would eat 80+ seconds for 8 scenes. Instead, give them all 20s to bind.
+    all_names = list(service_names) + list(scene_names)
+    if all_names:
+        print("\n  Waiting for ports (20s)...", end="", flush=True)
+        time.sleep(20)
+        print(" checking:")
+        for name in all_names:
             port = ALL_TARGETS[name]["port"]
             label = ALL_TARGETS[name]["label"]
-            up = False
-            for _ in range(20):  # 10 seconds max
-                if _port_up(port):
-                    up = True
-                    break
-                time.sleep(0.5)
-            icon = "[UP]" if up else "[FAIL]"
+            up = _port_up(port)
+            icon = "[UP]" if up else "[--]"
             print(f"    {icon} {label:.<35s} :{port}")
-            if not up:
+            if not up and name not in failed:
                 failed.append(name)
-
-    # Service health (quick check, already running)
-    if service_names:
-        for name in service_names:
-            port = ALL_TARGETS[name]["port"]
-            label = ALL_TARGETS[name]["label"]
-            icon = "[UP]" if _port_up(port) else "[--]"
-            print(f"    {icon} {label:.<35s} :{port}")
 
     print(f"\n  {total} target(s) launched.  Hub -> {_hub_url()}\n")
 
