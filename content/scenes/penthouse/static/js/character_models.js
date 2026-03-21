@@ -1024,9 +1024,12 @@ function _makeNameLabel(name, accentColor) {
     ctx.fillText(name, 128, 40);
     ctx.shadowBlur = 0;
     const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    // v1.49.1 [2026-03-21] — Enable depthTest so name labels don't render
+    // on top of furniture. Use renderOrder to keep labels above character body.
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
     const sp = new THREE.Sprite(mat);
     sp.scale.set(1.6, 0.4, 1);
+    sp.renderOrder = 10;  // Above character body but respects scene depth
     return sp;
 }
 
@@ -1774,8 +1777,10 @@ function makeDialogBubble(text, accentColor) {
     });
 
     const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    // v1.49.1 [2026-03-21] — Enable depthTest on speech bubbles (same fix as name labels)
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
     const sp = new THREE.Sprite(mat);
+    sp.renderOrder = 11;  // Above name labels, respects scene depth
     const aspect = canvasW / canvasH;
     const scale = 2.2;
     sp.scale.set(scale, scale / aspect, 1);

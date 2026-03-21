@@ -1,9 +1,11 @@
 /* ============================================================
-   NeonCity — v1.45 "Dark Renaissance"
+   NeonCity — v1.46 "Interactive Systems"
    Scene-specific styles. Cyan accent: #06b6d4
 
-   Version: v1.45.0 [2026-03-21]
+   Version: v1.46.0 [2026-03-21]
    Change Log:
+     v1.46.0 [2026-03-21] — Rich event cards (type colors, severity,
+                              expand animation, impact badges)
      v1.45.0 [2026-03-21] — Mission detail modal, crew ops panel,
                               context menu, op timers, clickable cards
      v1.44.0 [2026-03-21] — 3-column dashboard layout
@@ -813,6 +815,7 @@ html, body {
 }
 
 /* ── Events panel ─────────────────────────────────────────── */
+/* v1.46.0 [2026-03-21] — Rich event cards with type colors, expand */
 .events-panel {
     background: var(--nc-panel);
     border: 1px solid var(--nc-border);
@@ -829,9 +832,10 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    max-height: 180px;
+    max-height: 260px;
 }
 
+/* Legacy fallback */
 .event-item {
     padding: 6px 8px;
     background: rgba(255,255,255,0.02);
@@ -841,14 +845,162 @@ html, body {
     line-height: 1.4;
     color: #64748b;
 }
-
 .event-item.active {
     border-left-color: #f97316;
     color: #f97316;
     background: rgba(249,115,22,0.04);
 }
-
 .event-item.system { color: var(--nc-muted); }
+
+/* ── Event cards (v1.46) ─────────────────────────────────── */
+.event-card {
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.02);
+    border-left: 3px solid var(--nc-border);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+.event-card:hover {
+    background: rgba(255,255,255,0.04);
+    border-left-width: 4px;
+}
+
+/* Type-based left border colors */
+.event-card.ev-npc      { border-left-color: #f97316; }
+.event-card.ev-faction   { border-left-color: #8b5cf6; }
+.event-card.ev-ambient   { border-left-color: #06b6d4; }
+.event-card.ev-hacker    { border-left-color: #22c55e; }
+.event-card.ev-arena     { border-left-color: #ef4444; }
+.event-card.ev-world     { border-left-color: #facc15; }
+.event-card.ev-economy   { border-left-color: #3b82f6; }
+.event-card.ev-unknown   { border-left-color: var(--nc-muted); }
+
+/* Header row: type icon + label + severity dots + time */
+.ev-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+.ev-type-icon {
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+.ev-type-label {
+    font-family: var(--nc-mono);
+    font-size: 0.55rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    opacity: 0.5;
+}
+.ev-npc .ev-type-label      { color: #f97316; }
+.ev-faction .ev-type-label   { color: #8b5cf6; }
+.ev-ambient .ev-type-label   { color: #06b6d4; }
+.ev-hacker .ev-type-label    { color: #22c55e; }
+.ev-arena .ev-type-label     { color: #ef4444; }
+.ev-world .ev-type-label     { color: #facc15; }
+.ev-economy .ev-type-label   { color: #3b82f6; }
+
+/* Severity dots */
+.ev-severity {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+}
+.ev-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+}
+.ev-dot.active { background: currentColor; opacity: 0.7; }
+.ev-npc .ev-dot.active      { background: #f97316; }
+.ev-faction .ev-dot.active   { background: #8b5cf6; }
+.ev-ambient .ev-dot.active   { background: #06b6d4; }
+.ev-hacker .ev-dot.active    { background: #22c55e; }
+.ev-arena .ev-dot.active     { background: #ef4444; }
+.ev-world .ev-dot.active     { background: #facc15; }
+.ev-economy .ev-dot.active   { background: #3b82f6; }
+
+/* Timestamp */
+.ev-time {
+    font-family: var(--nc-mono);
+    font-size: 0.55rem;
+    color: var(--nc-muted);
+    margin-left: 6px;
+    white-space: nowrap;
+}
+
+/* Title */
+.ev-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--nc-text);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Expandable details — hidden by default */
+.ev-details {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.2s ease;
+    opacity: 0;
+}
+.event-card.expanded .ev-details {
+    max-height: 120px;
+    opacity: 1;
+    margin-top: 6px;
+}
+.ev-desc {
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.45;
+    margin-bottom: 5px;
+}
+
+/* Meta row: actor, faction, impact badges */
+.ev-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+.ev-actor, .ev-faction {
+    font-family: var(--nc-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.5px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.5);
+}
+.ev-faction { color: #8b5cf6; background: rgba(139,92,246,0.1); }
+
+/* Impact badges */
+.ev-badge {
+    font-family: var(--nc-mono);
+    font-size: 0.55rem;
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-weight: 600;
+}
+.ev-badge.econ {
+    color: #3b82f6;
+    background: rgba(59,130,246,0.1);
+}
+.ev-badge.heat {
+    color: #ef4444;
+    background: rgba(239,68,68,0.1);
+}
+.ev-badge.rep {
+    color: #22c55e;
+    background: rgba(34,197,94,0.1);
+}
 
 .btn-refresh-events {
     padding: 6px 0;

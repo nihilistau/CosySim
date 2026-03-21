@@ -392,21 +392,10 @@ class GridScene(BaseScene):
         @app.route("/")
         def index():
             from flask import render_template
-            player = {}
-            try:
-                from engine.world.player_state import get_player_state
-                player = get_player_state().to_dict()
-            except Exception:
-                pass
-            return render_template(
-                "grid.html",
-                scene_name="THE GRID",
-                accent_color=self.SCENE_METADATA["accent_color"],
-                player=player,
-                market_items=self._state.get_market_items(),
-                faction_data=FACTION_DATA,
-                city_map_nodes=CITY_MAP_NODES,
-            )
+            # v1.49.2 [2026-03-22] — API-first: template is a pure structural
+            # shell. All data (market items, factions, player state) loads
+            # client-side via JS fetch to /api/* endpoints. No Jinja2 data.
+            return render_template("grid.html")
 
         # ── Market API ────────────────────────────────────────────────────────
 

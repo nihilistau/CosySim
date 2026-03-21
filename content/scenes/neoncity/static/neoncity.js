@@ -1,13 +1,16 @@
 /**
- * NeonCity — v1.45 "Dark Renaissance"
+ * NeonCity — v1.46 "Interactive Systems"
  * Living World Hub client-side controller.
  *
  * Handles Socket.IO state sync, district navigation, faction bars,
  * the world ticker, NPC chat, particle effects, mission CRUD,
- * crew operations, inventory context menu, and heat warnings.
+ * crew operations, inventory context menu, heat warnings,
+ * and rich event feed with color-coded cards.
  *
- * Version: v1.45.0 [2026-03-21]
+ * Version: v1.46.0 [2026-03-21]
  * Change Log:
+ *   v1.46.0 [2026-03-21] — Rich event feed (color-coded cards, type icons,
+ *                            severity dots, impact badges, click-to-expand)
  *   v1.45.0 [2026-03-21] — Mission detail modal, crew ops launcher,
  *                            active op timers, inventory context menu,
  *                            fixed crew rendering (to_dict format)
@@ -284,9 +287,14 @@ class NeonCityScene {
         modal.style.display = 'flex';
     }
 
+    // v1.46.0 [2026-03-21] — Rich event cards with type colors, impacts, expand
+    // CONNECTS: WorldSim events, _esc(), events-list DOM
+    // CALLED BY: Socket.IO 'world_events' handler
+    // EMITS: DOM updates to #events-list
+
     /**
-     * Handle world events list.
-     * @param {Object} data - World events payload.
+     * Handle world events list — renders color-coded event cards.
+     * @param {Object} data - World events payload with rich metadata.
      */
     _onWorldEvents(data) {
         const list = document.getElementById('events-list');
@@ -296,9 +304,75 @@ class NeonCityScene {
             list.innerHTML = '<div class="event-item system">No active events detected.</div>';
             return;
         }
-        list.innerHTML = events
-            .map(ev => `<div class="event-item active">${this._esc(ev.description || ev.id)}</div>`)
-            .join('');
+        list.innerHTML = events.map(ev => this._renderEventCard(ev)).join('');
+    }
+
+    /**
+     * Render a single rich event card with type icon, severity, impacts.
+     * @param {Object} ev - Event object from backend.
+     * @returns {string} HTML string for the event card.
+     */
+    _renderEventCard(ev) {
+        const typeMap = {
+            npc_action:      { icon: '&#9670;', cls: 'npc',     label: 'NPC' },
+            faction_shift:   { icon: '&#9876;', cls: 'faction',  label: 'FACTION' },
+            scene_ambient:   { icon: '&#9788;', cls: 'ambient',  label: 'AMBIENT' },
+            hacker_message:  { icon: '&#9000;', cls: 'hacker',   label: 'GHOST' },
+            arena_match:     { icon: '&#9876;', cls: 'arena',    label: 'ARENA' },
+            world_event:     { icon: '&#9888;', cls: 'world',    label: 'WORLD' },
+            economy_tick:    { icon: '&#8354;', cls: 'economy',  label: 'ECON' },
+        };
+        const info = typeMap[ev.event_type] || { icon: '&#9673;', cls: 'unknown', label: ev.event_type || '???' };
+
+        // Severity dots: 0–3 scale
+        const intensity = Math.min(3, Math.max(0, Math.round(ev.intensity || 1)));
+        const dots = '<span class="ev-dot active"></span>'.repeat(intensity)
+                   + '<span class="ev-dot"></span>'.repeat(3 - intensity);
+
+        // Impact badges — only show non-zero
+        let badges = '';
+        if (ev.economy_impact) {
+            const sign = ev.economy_impact > 0 ? '+' : '';
+            badges += `<span class="ev-badge econ">${sign}${ev.economy_impact}&#8354;</span>`;
+        }
+        if (ev.heat_impact) {
+            const sign = ev.heat_impact > 0 ? '+' : '';
+            badges += `<span class="ev-badge heat">${sign}${ev.heat_impact} HT</span>`;
+        }
+        if (ev.rep_impact) {
+            const sign = ev.rep_impact > 0 ? '+' : '';
+            badges += `<span class="ev-badge rep">${sign}${ev.rep_impact} REP</span>`;
+        }
+
+        // Actor tag
+        const actor = ev.actor
+            ? `<span class="ev-actor">${this._esc(ev.actor)}</span>` : '';
+
+        // Faction tag
+        const faction = ev.faction
+            ? `<span class="ev-faction">${this._esc(ev.faction)}</span>` : '';
+
+        const title = this._esc(ev.title || ev.description || ev.id);
+        const desc = this._esc(ev.description || '');
+        const time = ev.created_at ? `<span class="ev-time">${this._esc(ev.created_at)}</span>` : '';
+        const cardId = `ev-${ev.id || Math.random().toString(36).slice(2, 8)}`;
+
+        return `<div class="event-card ev-${info.cls}" id="${cardId}"
+                     onclick="this.classList.toggle('expanded')">
+            <div class="ev-header">
+                <span class="ev-type-icon">${info.icon}</span>
+                <span class="ev-type-label">${info.label}</span>
+                <span class="ev-severity">${dots}</span>
+                ${time}
+            </div>
+            <div class="ev-title">${title}</div>
+            <div class="ev-details">
+                <div class="ev-desc">${desc}</div>
+                <div class="ev-meta">
+                    ${actor}${faction}${badges}
+                </div>
+            </div>
+        </div>`;
     }
 
     /**

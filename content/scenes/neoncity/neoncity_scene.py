@@ -1,16 +1,19 @@
 """
-NeonCity — Living World Hub v1.45 "Dark Renaissance"
-=====================================================
+NeonCity — Living World Hub v1.46 "Interactive Systems"
+========================================================
 
 The city breathes.  Six factions fight for control.  The night never ends.
 
 Multi-district living city hub wiring together the economy, reputation,
 world-simulation, and content engines under the MCP v3.x framework.
-Board-game mode (Glitch Storm) is preserved at ``/board``.
+Board-game mode (Glitch Storm) at ``/board``.
+Cyberspace intrusion network at ``/cyberspace``.
 
-Version: v1.45.0 [2026-03-21]
+Version: v1.46.0 [2026-03-21]
 
 Change Log:
+    v1.46.0 [2026-03-21] — Rich event feed, board game overhaul,
+                            cyberspace intrusion REST API + UI
     v1.45.0 [2026-03-21] — Playable dashboard: mission CRUD, crew ops,
                             shop route, fixed API bugs (dict double-serialise)
     v1.44.0 [2026-03-21] — 3-column dashboard, HUD sidebar panels
@@ -49,6 +52,8 @@ from engine.content.content_engine import get_content_engine
 from engine.director.scene_director import get_scene_director
 from content.shared import register_shared_assets
 from content.scenes.neoncity.neoncity_rules import register_neoncity_rules
+
+from engine.world.cyberspace import get_cyberspace_engine
 
 from .neoncity_state import (
     EVENT_POOL,
@@ -1023,6 +1028,172 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
                 logger.error("HUD API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
 
+        # ── v1.46.0 [2026-03-21] — Cyberspace intrusion REST API ────────
+        # CONNECTS: CyberspaceEngine, neoncity_cyberspace.html
+        # CALLED BY: neoncity-cyberspace.js fetch() calls
+        # EMITS: JSON responses for network graph UI
+
+        @self.app.route("/cyberspace")
+        def cyberspace_ui():
+            return render_template("neoncity_cyberspace.html")
+
+        @self.app.route("/api/cyberspace/networks")
+        def cs_list_networks():
+            """List available networks with summary info."""
+            try:
+                cs = get_cyberspace_engine()
+                return jsonify({"networks": cs.list_networks()})
+            except Exception as exc:
+                logger.error("Cyberspace list_networks error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/network/<network_id>")
+        def cs_get_network(network_id: str):
+            """Full network topology for visualization."""
+            try:
+                cs = get_cyberspace_engine()
+                net = cs.get_network_map(network_id)
+                if not net:
+                    return jsonify({"error": "Network not found"}), 404
+                return jsonify(net)
+            except Exception as exc:
+                logger.error("Cyberspace get_network error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/generate", methods=["POST"])
+        def cs_generate():
+            """Generate a network from template."""
+            data = request.get_json(force=True) or {}
+            nid = data.get("network_id", "")
+            diff = int(data.get("difficulty", 1))
+            force = data.get("force", False)
+            try:
+                cs = get_cyberspace_engine()
+                result = cs.generate_network(nid, difficulty=diff, force=force)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/jack_in", methods=["POST"])
+        def cs_jack_in():
+            """Start an intrusion session."""
+            data = request.get_json(force=True) or {}
+            nid = data.get("network_id", "")
+            programs = data.get("programs")
+            try:
+                cs = get_cyberspace_engine()
+                result = cs.jack_in(nid, programs=programs)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/move", methods=["POST"])
+        def cs_move():
+            """Move to an adjacent node."""
+            data = request.get_json(force=True) or {}
+            sid = data.get("session_id", "")
+            target = data.get("target_node", "")
+            try:
+                cs = get_cyberspace_engine()
+                result = cs.move_to(sid, target)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/scan", methods=["POST"])
+        def cs_scan():
+            """Scan the current node."""
+            data = request.get_json(force=True) or {}
+            sid = data.get("session_id", "")
+            try:
+                cs = get_cyberspace_engine()
+                result = cs.scan_node(sid)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/use_program", methods=["POST"])
+        def cs_use_program():
+            """Use a loaded program."""
+            data = request.get_json(force=True) or {}
+            sid = data.get("session_id", "")
+            pid = data.get("program_id", "")
+            ice_id = data.get("target_ice_id")
+            node_id = data.get("target_node_id")
+            try:
+                cs = get_cyberspace_engine()
+                result = cs.use_program(sid, pid,
+                                        target_ice_id=ice_id,
+                                        target_node_id=node_id)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/extract", methods=["POST"])
+        def cs_extract():
+            """Extract data from current node."""
+            data = request.get_json(force=True) or {}
+            sid = data.get("session_id", "")
+            data_id = data.get("data_id")
+            try:
+                cs = get_cyberspace_engine()
+                result = cs.extract_data(sid, data_id=data_id)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/jack_out", methods=["POST"])
+        def cs_jack_out():
+            """Disconnect from session."""
+            data = request.get_json(force=True) or {}
+            sid = data.get("session_id", "")
+            try:
+                cs = get_cyberspace_engine()
+                result = cs.jack_out(sid)
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/session/<session_id>")
+        def cs_session(session_id: str):
+            """Get current session state."""
+            try:
+                cs = get_cyberspace_engine()
+                result = cs.get_session(session_id)
+                if not result:
+                    return jsonify({"error": "Session not found"}), 404
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/deck")
+        def cs_deck():
+            """Get cyberdeck state."""
+            try:
+                cs = get_cyberspace_engine()
+                deck = cs._cyberdeck
+                return jsonify({
+                    "deck_id": deck.deck_id,
+                    "ram_total": deck.ram_total,
+                    "ram_used": deck.ram_used,
+                    "ram_damage": deck.ram_damage,
+                    "ram_available": deck.ram_available,
+                    "cpu_speed": deck.cpu_speed,
+                    "max_programs": deck.max_programs,
+                    "installed_programs": deck.installed_programs,
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/cyberspace/stats")
+        def cs_stats():
+            """Global cyberspace career stats."""
+            try:
+                cs = get_cyberspace_engine()
+                return jsonify(cs.get_stats())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
     # ------------------------------------------------------------------
     # Private — Socket.IO handlers
     # ------------------------------------------------------------------
@@ -1069,21 +1240,37 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
                 "ticker": self._build_ticker_items()[:3],
             })
 
+        # v1.46.0 [2026-03-21] — Rich event cards with type, impacts, actor
         @self.socketio.on("get_world_events")
         def on_get_world_events(_data=None):
-            """Emit WorldSim digest for neoncity.
+            """Emit WorldSim digest for neoncity with rich event metadata.
+
+            Each event includes title, event_type, scene, actor, intensity,
+            economy/heat/rep impacts, and created_at for the enhanced event
+            feed UI (color-coded cards, severity indicators).
 
             Args:
                 _data: Unused.
             """
             events: List[Dict[str, Any]] = []
             try:
-                for ev in get_world_sim().get_digest(SCENE_ID):
+                for ev in get_world_sim().get_all_events(limit=20):
+                    payload = getattr(ev, "payload", {}) or {}
                     events.append({
                         "id": getattr(ev, "id", ""),
+                        "title": getattr(ev, "title", ""),
                         "description": getattr(ev, "description", str(ev)),
+                        "event_type": getattr(ev, "event_type", "").value
+                            if hasattr(getattr(ev, "event_type", ""), "value")
+                            else str(getattr(ev, "event_type", "")),
                         "scene": getattr(ev, "scene", SCENE_ID),
-                        "timestamp": str(getattr(ev, "timestamp", "")),
+                        "actor": getattr(ev, "actor", ""),
+                        "intensity": getattr(ev, "intensity", 1.0),
+                        "economy_impact": payload.get("economy_impact", 0),
+                        "heat_impact": payload.get("heat_impact", 0),
+                        "rep_impact": payload.get("rep_impact", 0),
+                        "faction": payload.get("faction", ""),
+                        "created_at": getattr(ev, "created_at", ""),
                     })
             except Exception as exc:
                 logger.debug("WorldSim digest failed: %s", exc)
