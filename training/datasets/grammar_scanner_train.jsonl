@@ -1,4 +1,4 @@
-{"instruction": "Scan this text for grammar errors and missing symbols. List all issues or respond 'OK' if clean.", "input": "def foo()\n    return 1", "output": "Issue: Missing colon after function definition", "model_type": "grammar_scanner"}
-{"instruction": "Scan this text for grammar errors and missing symbols. List all issues or respond 'OK' if clean.", "input": "{\"key\": \"val\"", "output": "Issue: Unclosed JSON object, missing closing brace", "model_type": "grammar_scanner"}
+{"instruction": "Scan this text for grammar errors and missing symbols. List all issues or respond 'OK' if clean.", "input": "def bar():\n    return 2", "output": "OK", "model_type": "grammar_scanner"}
 {"instruction": "Scan this text for grammar errors and missing symbols. List all issues or respond 'OK' if clean.", "input": "x = {'a: 1}", "output": "Issue: Unclosed string key 'a", "model_type": "grammar_scanner"}
 {"instruction": "Scan this text for grammar errors and missing symbols. List all issues or respond 'OK' if clean.", "input": "{\"key\": \"value\"}", "output": "OK", "model_type": "grammar_scanner"}
+{"instruction": "Scan this text for grammar errors and missing symbols. List all issues or respond 'OK' if clean.", "input": "{\"key\": \"val\"", "output": "Issue: Unclosed JSON object, missing closing brace", "model_type": "grammar_scanner"}

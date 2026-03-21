@@ -1,1 +1,1 @@
-{"instruction": "Fix the syntax errors in this code or text. Return only the corrected version.", "input": "{\"key\": \"val\"", "output": "{\"key\": \"val\"}", "model_type": "syntax_fixer"}
+{"instruction": "Fix the syntax errors in this code or text. Return only the corrected version.", "input": "def foo()\n    return 1", "output": "def foo():\n    return 1", "model_type": "syntax_fixer"}

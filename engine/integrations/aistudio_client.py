@@ -23,9 +23,11 @@ _REST_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 # Confirmed API keys (rotate via GenerateCloudApiKey)
 API_KEYS = [
-    "AIzaSyCB6OnnfuitFnaYWu4BvtGKaoLFk4cm-GE",
-    "AIzaSyDdP816MREB3SkjZO04QXbjsigfcI0GWOs",
-    "AIzaSyDHAQL7kdN6lNBcBok1eNB8dG7wwo6E6io",
+    "AIzaSyCSt0nZexCAx3F3vQRqBowSHFtsOEcCXf4",
+    "AIzaSyBJYe7k9rD5mlZOkSa7ADy2N9v5YuhijII",
+    "AIzaSyAUm0Y-FiebN1_g4-AJoTII8NVxP5qZZVI",
+    "AIzaSyBZVupqzpydHPgrWGNu0UT0837Fe2BwqB4",
+    "AIzaSyBQ8vuVaujV35Gl88_HrPfQ6Xw5ejTaOI0",
 ]
 
 

@@ -1,5 +1,10 @@
-{"input": "How do I start the CosySim penthouse scene?", "output": "ESSENTIAL", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "What is the meaning of life?", "output": "SKIP", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "How does the interceptor pipeline work?", "output": "ESSENTIAL", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "What port does the Nexus KMS run on?", "output": "ESSENTIAL", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "Can you help me?", "output": "SKIP", "model_type": "qa_evaluator", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
+{"instruction": "test", "input": "q0", "output": "a0", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q1", "output": "a1", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q2", "output": "a2", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q3", "output": "a3", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q4", "output": "a4", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q5", "output": "a5", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q6", "output": "a6", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q7", "output": "a7", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q8", "output": "a8", "model_type": "qa_evaluator"}
+{"instruction": "test", "input": "q9", "output": "a9", "model_type": "qa_evaluator"}
