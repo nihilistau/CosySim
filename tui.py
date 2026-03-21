@@ -1171,6 +1171,15 @@ def main() -> None:
                         help="Open TUI without auto-launching targets")
     parser.set_defaults(autostart=True)
     args = parser.parse_args()
+
+    # v1.51.1 [2026-03-22] — Fallback Ctrl+C handler in case Textual's event loop
+    # is stuck and on_unmount never fires. Forces process exit.
+    import signal as _sig
+    def _force_exit(sig, frame):
+        import os
+        os._exit(1)
+    _sig.signal(_sig.SIGINT, _force_exit)
+
     app = CosySimTUI(autostart=args.autostart)
     app.run()
 

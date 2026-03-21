@@ -275,6 +275,22 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     all_procs: List[subprocess.Popen] = []
     failed: List[str] = []
 
+    # v1.51.1 [2026-03-22] — Install Ctrl+C handler EARLY so startup is interruptible
+    _shutdown = False
+
+    def _handle_sigint(sig, frame):
+        nonlocal _shutdown
+        _shutdown = True
+        print("\n  Interrupted — shutting down...")
+        import os
+        os._exit(1)
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+    try:
+        signal.signal(signal.SIGTERM, _handle_sigint)
+    except (OSError, AttributeError):
+        pass
+
     def _launch_group(names: List[str], group: str) -> None:
         if not names:
             return
@@ -390,21 +406,14 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     print(f"\n  {total} target(s) launched.  Hub -> {_hub_url()}\n")
 
     # ── Watchdog loop ────────────────────────────────────────────────
-    # v1.51.1 [2026-03-22] — Short sleep intervals for Windows Ctrl+C compat
-    # On Windows, time.sleep(30) blocks the main thread and SIGINT can't
-    # interrupt it when daemon threads hold the GIL. Use 1s ticks instead.
-    _shutdown = False
+    # v1.51.1 — 1s ticks for Windows Ctrl+C compat (handler installed above)
 
-    def _handle_sigint(sig, frame):
+    # Switch from hard os._exit to graceful shutdown now that startup is done
+    def _handle_sigint_graceful(sig, frame):
         nonlocal _shutdown
         _shutdown = True
 
-    signal.signal(signal.SIGINT, _handle_sigint)
-    # Also handle SIGTERM on Unix (harmless no-op on Windows if missing)
-    try:
-        signal.signal(signal.SIGTERM, _handle_sigint)
-    except (OSError, AttributeError):
-        pass
+    signal.signal(signal.SIGINT, _handle_sigint_graceful)
 
     _watchdog_counter = 0
     try:
