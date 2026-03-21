@@ -365,9 +365,9 @@ lmstudio:
       use_as_draft_for: "primary"
       enabled: false
     embedding:
-      key: ""                   # e.g. "text-embedding-nomic-embed-text-v1.5"
+      key: "text-embedding-nomic-embed-text-v1.5"
       device: "cpu"
-      enabled: false
+      enabled: true
 
   # ── Llmster / Daemon Mode ────────────────────────────────────────
   llmster:

@@ -59,8 +59,13 @@ let cameraAnimating = false;
 // ═══════════════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════════════
+// v1.50.1 [2026-03-22] — Fixed canvas ID: template uses 'penthouse-canvas' not 'bedroom-canvas'
 function init() {
-    const canvas = document.getElementById('bedroom-canvas');
+    const canvas = document.getElementById('penthouse-canvas');
+    if (!canvas) {
+        console.error('[Bedroom] canvas#penthouse-canvas not found in DOM — 3D scene cannot render');
+        return;
+    }
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
