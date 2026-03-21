@@ -1,0 +1,394 @@
+{# hud/hud_missions.html — Mission board overlay v1.43.0 [2026-03-21] #}
+<div class="cs-hud__panel cs-mission-board" id="cs-mission-board" aria-hidden="true" role="dialog" aria-label="Mission board">
+  <div class="cs-hud__panel-header">
+    <span class="cs-hud__panel-title">📋 MISSION BOARD</span>
+    <button class="cs-hud__panel-close" id="mission-board-close" type="button" aria-label="Close mission board">✕</button>
+  </div>
+
+  {# ── Tab bar ──────────────────────────────────────────────────────────── #}
+  <div class="cs-mission__tabs">
+    <button class="cs-mission__tab cs-mission__tab--active" data-tab="available" type="button">AVAILABLE</button>
+    <button class="cs-mission__tab" data-tab="active" type="button">ACTIVE</button>
+    <button class="cs-mission__tab" data-tab="completed" type="button">COMPLETED</button>
+  </div>
+
+  {# ── Tab content ──────────────────────────────────────────────────────── #}
+  <div class="cs-hud__panel-body cs-mission__body">
+
+    {# — AVAILABLE missions ——————————————————————————————————————————————— #}
+    <div class="cs-mission__content" id="mission-tab-available">
+      <div class="cs-mission__grid">
+        {# Mission cards are injected by JS. Placeholder structure: #}
+        <div class="cs-mission__card cs-mission__card--placeholder">
+          <div class="cs-mission__card-header">
+            <span class="cs-mission__card-title">No missions available</span>
+          </div>
+          <p class="cs-mission__card-empty">Check back later — the city never sleeps.</p>
+        </div>
+      </div>
+    </div>
+
+    {# — ACTIVE missions —————————————————————————————————————————————————— #}
+    <div class="cs-mission__content cs-mission__content--hidden" id="mission-tab-active">
+      <div class="cs-mission__list">
+        <div class="cs-mission__active-empty">No active missions. Pick one from the board.</div>
+      </div>
+    </div>
+
+    {# — COMPLETED missions ——————————————————————————————————————————————— #}
+    <div class="cs-mission__content cs-mission__content--hidden" id="mission-tab-completed">
+      <div class="cs-mission__list cs-mission__list--completed">
+        <div class="cs-mission__completed-empty">No completed missions yet.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ── Inline styles (scoped to mission board) ────────────────────────────── #}
+<style>
+  /* ── Mission board overlay — larger than event feed panel ────────────── */
+  .cs-mission-board {
+    width: min(700px, 80vw);
+    max-height: 80vh;
+  }
+
+  .cs-mission__body {
+    max-height: calc(80vh - 88px);
+  }
+
+  /* ── Tabs ────────────────────────────────────────────────────────────── */
+  .cs-mission__tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.15);
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .cs-mission__tab {
+    flex: 1;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.45);
+    font-family: var(--cs-font-mono, "JetBrains Mono", monospace);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+  }
+
+  .cs-mission__tab:hover {
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.04);
+  }
+
+  .cs-mission__tab--active {
+    color: var(--cs-scene-accent, #00e5ff);
+    border-bottom-color: var(--cs-scene-accent, #00e5ff);
+    background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.06);
+  }
+
+  /* ── Tab content areas ──────────────────────────────────────────────── */
+  .cs-mission__content--hidden {
+    display: none !important;
+  }
+
+  /* ── AVAILABLE — Card grid ──────────────────────────────────────────── */
+  .cs-mission__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+  }
+
+  .cs-mission__card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.12);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .cs-mission__card:hover {
+    border-color: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.35);
+    box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08);
+  }
+
+  .cs-mission__card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cs-mission__card-title {
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cs-mission__card-difficulty {
+    color: #ffab00;
+    font-size: 11px;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  .cs-mission__card-type {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.12);
+    color: var(--cs-scene-accent, #00e5ff);
+    border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+  }
+
+  .cs-mission__card-type--recon   { color: #64ffda; background: rgba(100, 255, 218, 0.1); border-color: rgba(100, 255, 218, 0.2); }
+  .cs-mission__card-type--heist   { color: #ff6e40; background: rgba(255, 110, 64, 0.1);  border-color: rgba(255, 110, 64, 0.2);  }
+  .cs-mission__card-type--deal    { color: #ffab00; background: rgba(255, 171, 0, 0.1);   border-color: rgba(255, 171, 0, 0.2);   }
+  .cs-mission__card-type--extraction { color: #7c4dff; background: rgba(124, 77, 255, 0.1); border-color: rgba(124, 77, 255, 0.2); }
+  .cs-mission__card-type--hit     { color: #ff1744; background: rgba(255, 23, 68, 0.1);   border-color: rgba(255, 23, 68, 0.2);   }
+
+  .cs-mission__card-reward {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.03em;
+  }
+
+  .cs-mission__card-reward strong {
+    color: #ffab00;
+    font-weight: 600;
+  }
+
+  .cs-mission__card-meta {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.35);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .cs-mission__card-meta span::before {
+    content: "›";
+    margin-right: 4px;
+    opacity: 0.5;
+  }
+
+  .cs-mission__card-accept {
+    align-self: flex-end;
+    padding: 4px 14px;
+    background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.15);
+    border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.35);
+    border-radius: 4px;
+    color: var(--cs-scene-accent, #00e5ff);
+    font-family: var(--cs-font-mono, "JetBrains Mono", monospace);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+
+  .cs-mission__card-accept:hover {
+    background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
+    box-shadow: 0 0 8px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.2);
+  }
+
+  .cs-mission__card-empty {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 11px;
+    font-style: italic;
+  }
+
+  /* ── ACTIVE — Mission list ──────────────────────────────────────────── */
+  .cs-mission__list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .cs-mission__active-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.12);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cs-mission__active-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cs-mission__active-title {
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+
+  /* Progress bar */
+  .cs-mission__progress {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .cs-mission__progress-fill {
+    height: 100%;
+    background: var(--cs-scene-accent, #00e5ff);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    box-shadow: 0 0 6px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
+  }
+
+  .cs-mission__progress-label {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: right;
+    letter-spacing: 0.06em;
+  }
+
+  /* Objective checklist */
+  .cs-mission__objectives {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .cs-mission__objective {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .cs-mission__objective input[type="checkbox"] {
+    accent-color: var(--cs-scene-accent, #00e5ff);
+    pointer-events: none;
+    width: 12px;
+    height: 12px;
+  }
+
+  .cs-mission__objective--done {
+    text-decoration: line-through;
+    opacity: 0.45;
+  }
+
+  /* Crew badges */
+  .cs-mission__crew {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .cs-mission__crew-badge {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .cs-mission__abandon {
+    align-self: flex-end;
+    padding: 4px 14px;
+    background: rgba(255, 23, 68, 0.1);
+    border: 1px solid rgba(255, 23, 68, 0.25);
+    border-radius: 4px;
+    color: #ff1744;
+    font-family: var(--cs-font-mono, "JetBrains Mono", monospace);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+
+  .cs-mission__abandon:hover {
+    background: rgba(255, 23, 68, 0.2);
+    box-shadow: 0 0 8px rgba(255, 23, 68, 0.15);
+  }
+
+  .cs-mission__active-empty,
+  .cs-mission__completed-empty {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 11px;
+    font-style: italic;
+    padding: 16px 0;
+    text-align: center;
+  }
+
+  /* ── COMPLETED — Compact list ───────────────────────────────────────── */
+  .cs-mission__completed-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+  }
+
+  .cs-mission__completed-title {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cs-mission__completed-reward {
+    font-size: 10px;
+    color: rgba(255, 171, 0, 0.6);
+    flex-shrink: 0;
+  }
+
+  .cs-mission__completed-time {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.25);
+    flex-shrink: 0;
+  }
+
+  /* ── Responsive ─────────────────────────────────────────────────────── */
+  @media (max-width: 500px) {
+    .cs-mission-board {
+      width: calc(100vw - 16px);
+    }
+    .cs-mission__grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
