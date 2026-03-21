@@ -157,17 +157,33 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
 
 # ──── Multi-Launch Engine ─────────────────────────────────────────────────
 
+# v1.51.3 [2026-03-22] — Pre-import module in main thread, construct+serve in daemon.
+# Avoids import lock deadlocks (main thread does the import) while keeping
+# heavy __init__ work (register_shared_assets etc.) off the main thread.
+
 def _start_in_thread(name: str, info: Dict[str, Any],
                      failed: List[str]) -> threading.Thread:
+    t = info["type"]
+
+    # Pre-import the module in main thread to avoid import lock contention
+    if t == "flask":
+        try:
+            _import_class(info["cls"])  # import only, don't construct
+        except Exception as exc:
+            print(f"\n  {info['label']} import failed: {exc}")
+            failed.append(name)
+            return threading.Thread(target=lambda: None, daemon=True)
+
     def _worker() -> None:
         try:
             _run_single(name, info)
         except Exception as exc:
             print(f"\n  {info['label']} crashed: {exc}")
             failed.append(name)
-    t = threading.Thread(target=_worker, daemon=True, name=f"cosysim-{name}")
-    t.start()
-    return t
+
+    thr = threading.Thread(target=_worker, daemon=True, name=f"cosysim-{name}")
+    thr.start()
+    return thr
 
 
 def _start_streamlit_proc(info: Dict[str, Any],
