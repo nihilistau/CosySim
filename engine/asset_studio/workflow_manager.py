@@ -432,7 +432,7 @@ class WorkflowManager:
                 "temperature": 0.1,
             }
             resp = requests.post(
-                "http://localhost:1234/v1/chat/completions",
+                "http://localhost:1234/api/v1/chat/completions",
                 json=payload,
                 timeout=30,
             )

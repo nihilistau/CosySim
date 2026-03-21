@@ -214,7 +214,7 @@ class InferenceBenchmark:
             ttft_recorded = False
 
             resp = requests.post(
-                f"{self._base_url}/v1/chat/completions",
+                f"{self._base_url}/api/v1/chat/completions",
                 json=payload,
                 stream=True,
                 timeout=120,

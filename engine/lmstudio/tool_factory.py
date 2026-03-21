@@ -373,7 +373,7 @@ def _raw_chat(client, messages, tools, model, temperature, max_tokens, integrati
     )
     try:
         r = client._client.post(
-            f"{client.base_url}/v1/chat/completions",
+            f"{client.base_url}/api/v1/chat/completions",
             json=payload,
             timeout=client.timeout,
         )
