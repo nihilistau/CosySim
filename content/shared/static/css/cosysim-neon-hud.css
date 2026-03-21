@@ -2360,7 +2360,9 @@
   animation: cs-overlay-in 0.25s ease-out;
 }
 
-.cs-shop[aria-hidden="true"] { display: none !important; }
+/* v1.49.2 [2026-03-22] — Ensure hidden shop doesn't intercept pointer events */
+.cs-shop[aria-hidden="true"],
+.cs-shop[hidden] { display: none !important; pointer-events: none !important; }
 
 @keyframes cs-overlay-in {
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
