@@ -1,0 +1,90 @@
+{# hud/hud_command.html — Right slide panel: Command center #}
+<aside class="cs-hud-slide cs-hud-slide--right" id="cs-hud-right-panel" aria-hidden="true" role="complementary" aria-label="Command panel">
+
+  <div class="cs-hud-slide__header">
+    <span class="cs-hud-slide__title">⊕ COMMAND CENTER</span>
+    <button class="cs-hud-slide__close" id="hud-right-close" type="button" aria-label="Close command panel">✕</button>
+  </div>
+
+  <div class="cs-hud-slide__body">
+
+    {# Phone launch button #}
+    <div class="cs-hud-slide__section cs-hud-slide__section--phone">
+      <div class="cs-hud-slide__section-label">GHOSTSIGNAL OS</div>
+      <button class="cs-hud-slide__phone-launch" id="hud-phone-launch" type="button">
+        <span class="cs-hud-slide__phone-launch-icon">📱</span>
+        <span class="cs-hud-slide__phone-launch-label">Open SIGNAL</span>
+        <span class="cs-hud-slide__phone-launch-status" id="hud-phone-status">● ONLINE</span>
+      </button>
+      <div class="cs-hud-slide__phone-notifs" id="hud-phone-notifs">
+        <span class="cs-hud-slide__notif-pill">2 unread</span>
+      </div>
+    </div>
+
+    {# Scene navigation shortcuts #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">QUICK TRAVEL</div>
+      <div class="cs-hud-slide__nav-grid" id="hud-nav-grid">
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5556" target="_blank" title="The Penthouse">🏙️ PENTHOUSE</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5557" target="_blank" title="The Velvet Pit">🍸 VELVET PIT</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5559" target="_blank" title="Club Noir">🃏 CLUB NOIR</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5563" target="_blank" title="Neon City">⚡ NEON CITY</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5565" target="_blank" title="The Score">💰 THE SCORE</a>
+        <a class="cs-hud-slide__nav-btn" href="http://localhost:5569" target="_blank" title="The Grid">🕸️ THE GRID</a>
+      </div>
+    </div>
+
+    {# Crew status #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">CREW STATUS</div>
+      <div class="cs-hud-slide__crew-list" id="hud-crew-list">
+        <div class="cs-hud-slide__crew-empty">No crew yet. Build relationships to recruit.</div>
+      </div>
+    </div>
+
+    {# Shop button #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">BLACK MARKET</div>
+      <button class="cs-hud-slide__shop-btn" id="hud-shop-open" type="button"
+              onclick="if(window.CosyShop) CosyShop.open({ title: 'BLACK MARKET', apiBase: '/api/shop' })">
+        <span>🛒</span> <span>Open Shop</span>
+      </button>
+    </div>
+
+    {# System info #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">SYSTEM</div>
+      <div class="cs-hud-slide__sys-grid">
+        <div class="cs-hud-slide__sys-item">
+          <span class="cs-hud-slide__sys-label">LMStudio</span>
+          <span class="cs-hud-slide__sys-dot" id="sys-lmstudio" title="LMStudio"></span>
+        </div>
+        <div class="cs-hud-slide__sys-item">
+          <span class="cs-hud-slide__sys-label">Nexus</span>
+          <span class="cs-hud-slide__sys-dot" id="sys-nexus" title="Nexus KMS"></span>
+        </div>
+        <div class="cs-hud-slide__sys-item">
+          <span class="cs-hud-slide__sys-label">TTS</span>
+          <span class="cs-hud-slide__sys-dot" id="sys-tts" title="TTS Server"></span>
+        </div>
+        <div class="cs-hud-slide__sys-item">
+          <span class="cs-hud-slide__sys-label">ComfyUI</span>
+          <span class="cs-hud-slide__sys-dot" id="sys-comfy" title="ComfyUI"></span>
+        </div>
+      </div>
+      <a class="cs-hud-slide__sys-link" href="http://localhost:8500" target="_blank">⊞ Open Hub</a>
+    </div>
+
+    {# Nexus quick search #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">NEXUS SEARCH</div>
+      <div class="cs-hud-slide__search-wrap">
+        <input type="text" class="cs-hud-slide__search-input" id="hud-nexus-search"
+               placeholder="Search knowledge…" autocomplete="off">
+        <button class="cs-hud-slide__search-btn" id="hud-nexus-search-btn" type="button">⌕</button>
+      </div>
+      <div class="cs-hud-slide__search-results" id="hud-nexus-results"></div>
+    </div>
+
+  </div>{# /.cs-hud-slide__body #}
+</aside>

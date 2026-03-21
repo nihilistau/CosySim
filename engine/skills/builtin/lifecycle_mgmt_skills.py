@@ -6,12 +6,12 @@ are JSON-formatted strings for LLM consumption.
 """
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional
 
 from engine.skills.skill import skill, SkillCategory
+from engine.skills.utils import to_json
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def _json(obj: Any) -> str:
     """Serialise *obj* to an indented JSON string."""
-    return json.dumps(obj, indent=2, default=str)
+    return to_json(obj, indent=2)
 
 
 def _error(action: str, exc: Exception) -> str:

@@ -6,13 +6,13 @@ system-resilience health — all as JSON-returning MCP skills.
 """
 from __future__ import annotations
 
-import json
 import logging
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from engine.skills.skill import skill, SkillCategory
+from engine.skills.utils import to_json
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def _default_serializer(obj: Any) -> Any:
 
 def _to_json(data: Any) -> str:
     """Serialize *data* to a compact JSON string."""
-    return json.dumps(data, default=_default_serializer, ensure_ascii=False)
+    return to_json(data, default=_default_serializer, ensure_ascii=False)
 
 
 # ── Lazy accessors (best-effort imports) ────────────────────────────────

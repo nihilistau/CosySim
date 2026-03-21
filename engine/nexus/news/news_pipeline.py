@@ -6,7 +6,6 @@ fetch counts, dedup ratios, store success/failure, and cycle duration.
 from __future__ import annotations
 
 import logging
-import socket
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,8 +16,19 @@ from engine.nexus.news.dedup_filter import DedupFilter
 from engine.nexus.news.rss_fetcher import RSSFetcher
 from engine.nexus.news_sources import get_all_categories, get_questions
 from engine.nexus.client import get_nexus_client
+from engine.utils import port_is_open
 
-logger = logging.getLogger(__name__)
+try:
+    from engine.observability.structured_logger import get_logger as _get_structured_logger, traced
+    logger = _get_structured_logger(__name__)
+except Exception:
+    logger = logging.getLogger(__name__)  # type: ignore[assignment]
+
+    def traced(*args, **kwargs):  # type: ignore[misc]
+        """No-op traced decorator fallback."""
+        def decorator(func):
+            return func
+        return decorator
 
 _pipeline_instance: Optional[NewsPipeline] = None
 
@@ -43,11 +53,7 @@ def _nexus_reachable(timeout: float = 2.0) -> bool:
         port = get_port_registry().get_port("nexus")
     except Exception:
         port = 8700
-    try:
-        with socket.create_connection(("localhost", port), timeout=timeout):
-            return True
-    except (OSError, ConnectionRefusedError, TimeoutError):
-        return False
+    return port_is_open(port, "localhost", timeout=timeout)
 
 
 class NewsPipeline:
@@ -79,10 +85,20 @@ class NewsPipeline:
         _record("news.dedup.filtered", float(filtered), {"category": category})
         _record("news.dedup.ratio", ratio, {"category": category})
 
-        logger.info(
-            "fetch_category(%s): %d raw → %d fresh (%.0f%% dedup)",
-            category, total, fresh_count, ratio * 100,
-        )
+        try:
+            logger.info(  # type: ignore[union-attr]
+                f"fetch_category({category}): {total} raw → {fresh_count} fresh ({ratio * 100:.0f}% dedup)",
+                count=fresh_count,
+                total=total,
+                source=category,
+                dedup_ratio=round(ratio, 3),
+            )
+        except TypeError:
+            # Fallback for stdlib logger (no keyword context args)
+            logger.info(  # type: ignore[union-attr]
+                "fetch_category(%s): %d raw → %d fresh (%.0f%% dedup)",
+                category, total, fresh_count, ratio * 100,
+            )
         return fresh
 
     def fetch_all(self) -> Dict[str, List[NewsItem]]:
@@ -101,14 +117,14 @@ class NewsPipeline:
         to avoid blocking for minutes when Nexus is offline.
         """
         if not _nexus_reachable():
-            logger.warning("Nexus not reachable, skipping storage of %d items", len(items))
+            logger.warning(f"Nexus not reachable, skipping storage of {len(items)} items")
             _record("news.store.failed", float(len(items)))
             return 0
 
         try:
             client = get_nexus_client()
         except Exception as exc:
-            logger.warning("Nexus unavailable, skipping storage: %s", exc)
+            logger.warning(f"Nexus unavailable, skipping storage: {exc}")
             _record("news.store.failed", float(len(items)))
             return 0
 
@@ -128,11 +144,11 @@ class NewsPipeline:
                 stored += 1
             except Exception as exc:
                 failed += 1
-                logger.warning("Failed to store item '%s': %s", item.title[:50], exc)
+                logger.warning(f"Failed to store item '{item.title[:50]}': {exc}")
 
         _record("news.store.success", float(stored))
         _record("news.store.failed", float(failed))
-        logger.info("Stored %d/%d items to Nexus", stored, len(items))
+        logger.info(f"Stored {stored}/{len(items)} items to Nexus")
         return stored
 
     def store_qa_to_nexus(self, question: str, answer: str, category: str) -> bool:
@@ -152,7 +168,7 @@ class NewsPipeline:
             _record("news.distill.qa_pairs", 1.0, {"category": category})
             return True
         except Exception as exc:
-            logger.warning("Failed to store Q&A: %s", exc)
+            logger.warning(f"Failed to store Q&A: {exc}")
             return False
 
     # ──── Digest Creation ────
@@ -179,11 +195,12 @@ class NewsPipeline:
                     lines.append(f"**{r.get('title', 'Unknown')}**\n{r.get('content', '')[:200]}\n")
                 return "\n".join(lines)
         except Exception as exc:
-            logger.warning("Failed to get digest: %s", exc)
+            logger.warning(f"Failed to get digest: {exc}")
         return f"No news digest available for {category}"
 
     # ──── Full Pipeline ────
 
+    @traced("news", "fetch_cycle")
     def run_fetch_cycle(self) -> Dict:
         """Run a full fetch + store cycle for all categories.
 
@@ -204,10 +221,8 @@ class NewsPipeline:
         _record("news.cycle.duration_s", duration)
 
         logger.info(
-            "Fetch cycle complete: %d items, %d stored in %.1fs",
-            report["total_items"],
-            report["total_stored"],
-            duration,
+            f"Fetch cycle complete: {report['total_items']} items, "
+            f"{report['total_stored']} stored in {duration:.1f}s"
         )
         return report
 

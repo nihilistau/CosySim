@@ -102,17 +102,17 @@
       // Periodic refresh
       this._pollTimer = setInterval(() => this._loadItems(), POLL_INTERVAL_MS);
 
-      // Listen to socket world events if HUD socket is available
-      if (window.NeonHUD && window.NeonHUD.socket) {
-        this._attachSocket(window.NeonHUD.socket);
-      } else {
-        // Retry after HUD boots
-        const check = setInterval(() => {
-          if (window.NeonHUD && window.NeonHUD.socket) {
-            this._attachSocket(window.NeonHUD.socket);
-            clearInterval(check);
-          }
-        }, 1000);
+      // Listen to socket world events — use window.socket (scene convention)
+      // or create own connection. Never poll for NeonHUD.socket (it's private).
+      if (window.socket) {
+        this._attachSocket(window.socket);
+      } else if (typeof io !== 'undefined') {
+        try {
+          const sock = io();
+          this._attachSocket(sock);
+        } catch (_e) {
+          // Socket.IO unavailable — announcer runs in poll-only mode
+        }
       }
     },
 
@@ -128,25 +128,28 @@
     _bindEvents () {
       const { toggle, prev, next, pin, close } = this._els;
 
-      if (toggle) toggle.onclick = () => this._toggle();
-      if (prev)   prev.onclick   = () => { this._stopAutoAdvance(); this._step(-1); };
-      if (next)   next.onclick   = () => { this._stopAutoAdvance(); this._step(1); };
-      if (pin)    pin.onclick    = () => this._togglePin();
-      if (close)  close.onclick  = () => this._collapse();
+      // Use addEventListener instead of onclick to avoid overwriting handlers
+      if (toggle) toggle.addEventListener('click', () => this._toggle());
+      if (prev)   prev.addEventListener('click', () => { this._stopAutoAdvance(); this._step(-1); });
+      if (next)   next.addEventListener('click', () => { this._stopAutoAdvance(); this._step(1); });
+      if (pin)    pin.addEventListener('click', () => this._togglePin());
+      if (close)  close.addEventListener('click', () => this._collapse());
 
       // Keyboard: A = toggle announcer
-      document.addEventListener('keydown', e => {
+      this._onKeydown = e => {
         if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) return;
         if (e.key === 'a' || e.key === 'A') this._toggle();
-      });
+      };
+      document.addEventListener('keydown', this._onKeydown);
 
       // Auto-collapse if clicking outside (when not pinned)
-      document.addEventListener('click', e => {
+      this._onDocClick = e => {
         if (this._pinned || this._collapsed) return;
         if (this._els.root && !this._els.root.contains(e.target)) {
           this._collapse();
         }
-      });
+      };
+      document.addEventListener('click', this._onDocClick);
     },
 
     // ── Data ─────────────────────────────────────────────────────────────

@@ -225,8 +225,9 @@ def _log_training_to_nexus(results: Dict[str, dict]) -> None:
                 "metadata": {"dataset": dataset, "action": info.get("action")},
                 "quality_score": 0.8 if info.get("action") == "trained" else 0.5,
             }).encode()
+            nexus_url = os.getenv("NEXUS_URL", "http://localhost:9400")
             req = urllib.request.Request(
-                "http://localhost:9400/api/knowledge",
+                f"{nexus_url}/api/knowledge",
                 data=data,
                 headers={"Content-Type": "application/json"},
                 method="POST",

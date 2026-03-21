@@ -452,7 +452,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 return
 
             # Mood contagion — Lola's performance mood spreads to the guest
-            from engine.mcp.cosysim_server import mood_contagion as mc_tool
+            from engine.mcp.tools.scene import mood_contagion as mc_tool
             mc_tool(
                 source_character_id = LOLA_ID,
                 scene_id            = SCENE_ID,

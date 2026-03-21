@@ -245,21 +245,21 @@ class TestApiScenesRoute:
         hub.app.config["TESTING"] = True
         return hub.app.test_client()
 
-    @patch("content.scenes.hub.hub_flask._port_open", return_value=False)
+    @patch("content.scenes.hub.hub_flask.port_is_open", return_value=False)
     def test_returns_json_list(self, _mock_port, client):
         resp = client.get("/api/scenes")
         assert resp.status_code == 200
         data = resp.get_json()
         assert isinstance(data, list)
 
-    @patch("content.scenes.hub.hub_flask._port_open", return_value=False)
+    @patch("content.scenes.hub.hub_flask.port_is_open", return_value=False)
     def test_scene_count_matches_catalogue(self, _mock_port, client):
         from content.scenes.hub.hub_flask import SCENE_CATALOGUE
         resp = client.get("/api/scenes")
         data = resp.get_json()
         assert len(data) == len(SCENE_CATALOGUE)
 
-    @patch("content.scenes.hub.hub_flask._port_open", return_value=False)
+    @patch("content.scenes.hub.hub_flask.port_is_open", return_value=False)
     def test_scene_has_expected_keys(self, _mock_port, client):
         resp = client.get("/api/scenes")
         data = resp.get_json()
@@ -267,21 +267,21 @@ class TestApiScenesRoute:
             for key in ("id", "port", "label", "group", "status"):
                 assert key in scene, f"Missing key '{key}' in scene {scene.get('id')}"
 
-    @patch("content.scenes.hub.hub_flask._port_open", return_value=True)
+    @patch("content.scenes.hub.hub_flask.port_is_open", return_value=True)
     def test_all_online_when_ports_open(self, _mock_port, client):
         resp = client.get("/api/scenes")
         data = resp.get_json()
         for scene in data:
             assert scene["status"] == "online"
 
-    @patch("content.scenes.hub.hub_flask._port_open", return_value=False)
+    @patch("content.scenes.hub.hub_flask.port_is_open", return_value=False)
     def test_all_offline_when_ports_closed(self, _mock_port, client):
         resp = client.get("/api/scenes")
         data = resp.get_json()
         for scene in data:
             assert scene["status"] == "offline"
 
-    @patch("content.scenes.hub.hub_flask._port_open")
+    @patch("content.scenes.hub.hub_flask.port_is_open")
     def test_mixed_status(self, mock_port, client):
         """Only the bedroom port is open; others are offline."""
         mock_port.side_effect = lambda p: p == 5556
@@ -292,14 +292,14 @@ class TestApiScenesRoute:
         assert bedroom["status"] == "online"
         assert casino["status"] == "offline"
 
-    @patch("content.scenes.hub.hub_flask._port_open", return_value=False)
+    @patch("content.scenes.hub.hub_flask.port_is_open", return_value=False)
     def test_scene_has_icon(self, _mock_port, client):
         resp = client.get("/api/scenes")
         data = resp.get_json()
         bedroom = [s for s in data if s["id"] == "penthouse"][0]
         assert "icon" in bedroom
 
-    @patch("content.scenes.hub.hub_flask._port_open", return_value=False)
+    @patch("content.scenes.hub.hub_flask.port_is_open", return_value=False)
     def test_scene_has_desc(self, _mock_port, client):
         resp = client.get("/api/scenes")
         data = resp.get_json()
@@ -456,27 +456,27 @@ class TestSceneCatalogue:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  _port_open helper
+#  port_is_open helper
 # ═══════════════════════════════════════════════════════════════
 
 class TestPortOpen:
-    """_port_open() returns True/False based on socket connectivity."""
+    """port_is_open() returns True/False based on socket connectivity."""
 
     def test_port_open_returns_bool(self):
-        from content.scenes.hub.hub_flask import _port_open
-        result = _port_open(19999)  # unlikely to be listening
+        from engine.utils import port_is_open
+        result = port_is_open(19999)  # unlikely to be listening
         assert isinstance(result, bool)
 
     def test_port_open_false_for_unused_port(self):
-        from content.scenes.hub.hub_flask import _port_open
-        assert _port_open(19999) is False
+        from engine.utils import port_is_open
+        assert port_is_open(19999) is False
 
-    @patch("content.scenes.hub.hub_flask.socket.create_connection")
+    @patch("engine.utils.socket.create_connection")
     def test_port_open_true_when_connected(self, mock_conn):
         mock_conn.return_value.__enter__ = MagicMock()
         mock_conn.return_value.__exit__ = MagicMock(return_value=False)
-        from content.scenes.hub.hub_flask import _port_open
-        assert _port_open(5556) is True
+        from engine.utils import port_is_open
+        assert port_is_open(5556) is True
 
 
 # ═══════════════════════════════════════════════════════════════

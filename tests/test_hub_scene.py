@@ -182,21 +182,21 @@ class TestServiceUp:
 
 
 class TestPortOpen:
-    """Test _port_open TCP port check."""
+    """Test port_is_open TCP port check."""
 
-    @patch("socket.create_connection")
+    @patch("engine.utils.socket.create_connection")
     def test_returns_true_when_port_listening(self, mock_conn, hub_module):
-        mod, _, _, _ = hub_module
         mock_sock = MagicMock()
         mock_conn.return_value.__enter__ = MagicMock(return_value=mock_sock)
         mock_conn.return_value.__exit__ = MagicMock(return_value=False)
-        assert mod._port_open(5555) is True
+        from engine.utils import port_is_open
+        assert port_is_open(5555) is True
 
-    @patch("socket.create_connection")
+    @patch("engine.utils.socket.create_connection")
     def test_returns_false_when_port_closed(self, mock_conn, hub_module):
-        mod, _, _, _ = hub_module
         mock_conn.side_effect = OSError("Connection refused")
-        assert mod._port_open(59999) is False
+        from engine.utils import port_is_open
+        assert port_is_open(59999) is False
 
 
 class TestSceneCategories:

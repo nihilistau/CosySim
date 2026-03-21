@@ -237,7 +237,7 @@ def monitoring_pack_detail(pack_name: str) -> str:
             for p in procs[:10]:
                 lines.append(f"  PID {p.get('pid', '?'):>6}  {p.get('process_name', '?'):20s}  [{p.get('process_category', '?')}]  CPU {p.get('cpu_s', 0.0):.1f}s  Mem {p.get('mem_mb', 0.0):.1f}MB")
     except Exception:
-        pass
+        logger.debug("Failed to fetch pack processes for %s", pack_name, exc_info=True)
 
     try:
         recent = tracker.recent_executions(n=5, pack=pack_name)
@@ -247,7 +247,7 @@ def monitoring_pack_detail(pack_name: str) -> str:
                 ok = "✓" if ex.get("success", True) else "✗"
                 lines.append(f"  {ok} {ex.get('skill', ex.get('skill_name', '?')):25s}  {ex.get('duration_s', 0.0):.3f}s  {_ts(ex.get('ts'))}")
     except Exception:
-        pass
+        logger.debug("Failed to fetch recent executions for %s", pack_name, exc_info=True)
 
     return "\n".join(lines)
 

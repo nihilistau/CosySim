@@ -109,6 +109,19 @@ class ConcurrentExecutor:
         self._client = client
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="lms-concurrent")
 
+    def close(self) -> None:
+        """Shut down the thread pool, releasing resources."""
+        self._pool.shutdown(wait=False)
+
+    def __del__(self) -> None:
+        self.close()
+
+    def __enter__(self) -> "ConcurrentExecutor":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     # ── Submit / gather ─────────────────────────────────────────────────
 
     def submit(

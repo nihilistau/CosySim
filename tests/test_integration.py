@@ -223,8 +223,8 @@ class TestMCPSkillsIntegration:
             mock_rag.return_value.search.return_value = [
                 {"content": "Luna likes coffee", "score": 0.9}
             ]
-            from engine.mcp.cosysim_server import search_memory
-            fn = getattr(search_memory, 'fn', search_memory)
+            from engine.mcp.tools.memory import search_memory
+            fn = search_memory
             result = fn("coffee", character_id="luna_01")
             assert "coffee" in result.lower()
 
@@ -236,8 +236,8 @@ class TestMCPSkillsIntegration:
                 "id": "luna_01", "name": "Luna", "mood": "happy",
                 "relationship_level": 0.7, "arousal": 0.3,
             }
-            from engine.mcp.cosysim_server import get_character_state
-            fn = getattr(get_character_state, 'fn', get_character_state)
+            from engine.mcp.tools.character import get_character_state
+            fn = get_character_state
             result = fn("luna_01")
             # Returns a JSON string — verify it's parseable
             assert isinstance(result, str)

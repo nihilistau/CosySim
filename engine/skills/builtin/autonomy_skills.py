@@ -149,7 +149,7 @@ def news_fetch_and_store(category: str = "", max_articles: int = 20) -> str:
                 category="news",
             )
         except Exception:
-            pass
+            logger.debug("Failed to store news digest in Nexus", exc_info=True)
 
     return json.dumps({
         "fetched": len(articles),

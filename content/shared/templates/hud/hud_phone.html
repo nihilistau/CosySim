@@ -1,0 +1,20 @@
+{# hud/hud_phone.html — Phone overlay iframe #}
+<div class="cs-phone-overlay" id="cs-phone-overlay" aria-hidden="true" role="dialog" aria-label="SIGNAL Phone">
+  <div class="cs-phone-overlay__shell">
+    <div class="cs-phone-overlay__topbar">
+      <span class="cs-phone-overlay__carrier">SIGNAL OS</span>
+      <div class="cs-phone-overlay__actions">
+        <button class="cs-phone-overlay__btn" id="phone-overlay-detach" type="button" title="Open full screen" aria-label="Open phone fullscreen">⤢</button>
+        <button class="cs-phone-overlay__btn cs-phone-overlay__btn--close" id="phone-overlay-close" type="button" title="Close phone" aria-label="Close phone">✕</button>
+      </div>
+    </div>
+    <iframe
+      id="cs-phone-frame"
+      class="cs-phone-overlay__frame"
+      src=""
+      title="SIGNAL OS"
+      allow="microphone; autoplay"
+      loading="lazy"
+    ></iframe>
+  </div>
+</div>

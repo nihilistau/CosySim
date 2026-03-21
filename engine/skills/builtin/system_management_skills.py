@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
-import socket
 from typing import Any, Dict, List, Optional
 
 from engine.skills.skill import skill, SkillCategory
+from engine.utils import port_is_open
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +29,6 @@ def _control_plane():
 # ── Service Health ────────────────────────────────────────────────
 
 
-def _check_port(host: str, port: int, timeout: float = 1.0) -> bool:
-    """Return True if a TCP connection to host:port succeeds."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except (OSError, ConnectionRefusedError, TimeoutError):
-        return False
-
-
 @skill(
     pack="system",
     description="Check health of all registered services by probing their ports",
@@ -52,7 +43,7 @@ def service_health_check(timeout: float = 1.0) -> str:
 
     for name in sorted(registry._ports.keys()):
         port = registry.get(name)
-        is_up = _check_port("localhost", port, timeout=timeout)
+        is_up = port_is_open(port, "localhost", timeout=timeout)
         if is_up:
             online_count += 1
         results.append({
@@ -219,7 +210,7 @@ def system_overview(timeout: float = 0.5) -> str:
     for svc in key_services:
         try:
             port = registry.get(svc)
-            up = _check_port("localhost", port, timeout=timeout)
+            up = port_is_open(port, "localhost", timeout=timeout)
             svc_health.append({"service": svc, "port": port, "status": "online" if up else "offline"})
         except KeyError:
             svc_health.append({"service": svc, "status": "unknown"})
@@ -265,3 +256,70 @@ def system_overview(timeout: float = 0.5) -> str:
         overview["scheduler"] = {"error": "unavailable"}
 
     return json.dumps(overview)
+
+
+# ── Google Auth Health + Recovery ─────────────────────────────────────────────
+
+
+@skill(
+    pack="system",
+    description="Check Google auth health (NLM cookies + Gemini API keys) via CDP. Returns status summary.",
+    category=SkillCategory.SYSTEM,
+    cooldown=30.0,
+    cost=0.5,
+    tags=["auth", "google", "health", "nlm", "gemini"],
+)
+def google_auth_check() -> str:
+    """Check whether Google auth (NLM + Gemini keys) is healthy. Run this before reporting auth failures."""
+    try:
+        from engine.nexus.cdp_auth_recovery import run_check
+        status = run_check()
+        result = {
+            "healthy": status.healthy,
+            "cdp": status.cdp_available,
+            "nlm": status.nlm_logged_in,
+            "aistudio": status.aistudio_logged_in,
+            "working_keys": len(status.working_api_keys),
+            "dead_keys": len(status.dead_api_keys),
+            "summary": status.summary(),
+        }
+        if status.errors:
+            result["errors"] = status.errors
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc), "healthy": False})
+
+
+@skill(
+    pack="system",
+    description="Auto-recover Google auth: inject cookies, navigate to NLM + AI Studio, harvest fresh API keys. Run when google_auth_check reports unhealthy.",
+    category=SkillCategory.SYSTEM,
+    cooldown=120.0,
+    cost=2.0,
+    tags=["auth", "google", "recovery", "nlm", "gemini", "cookies", "api-keys"],
+)
+def google_auth_recover(keys_only: bool = False) -> str:
+    """Recover Google auth via CDP — no browser window needed. Fixes cookies and dead API keys automatically.
+
+    Args:
+        keys_only: If True, only harvest and rotate API keys (skip cookie refresh).
+    """
+    try:
+        from engine.nexus.cdp_auth_recovery import run_recovery
+        status = run_recovery(keys_only=keys_only)
+        result = {
+            "healthy": status.healthy,
+            "nlm_logged_in": status.nlm_logged_in,
+            "aistudio_logged_in": status.aistudio_logged_in,
+            "cookies_saved": status.cookies_saved,
+            "working_keys": len(status.working_api_keys),
+            "keys_updated": status.keys_updated,
+            "harvested": len(status.harvested_keys),
+            "duration_s": round(status.duration_s, 1),
+            "summary": status.summary(),
+        }
+        if status.errors:
+            result["errors"] = status.errors
+        return json.dumps(result)
+    except Exception as exc:
+        return json.dumps({"error": str(exc), "healthy": False})

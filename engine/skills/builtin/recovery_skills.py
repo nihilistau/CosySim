@@ -11,7 +11,6 @@ import logging
 import os
 import re
 import shutil
-import socket
 import sqlite3
 import subprocess
 import sys
@@ -19,7 +18,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from engine.config import get_config
 from engine.skills.skill import skill, SkillCategory
+from engine.utils import port_is_open
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +46,6 @@ def _port_registry():
     """Lazy import for the port registry singleton."""
     from engine.port_registry import get_port_registry
     return get_port_registry()
-
-
-def _check_port(host: str, port: int, timeout: float = 1.0) -> bool:
-    """Return True if a TCP connection to host:port succeeds."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except (OSError, ConnectionRefusedError, TimeoutError):
-        return False
 
 
 def _ensure_dir(path: Path) -> None:
@@ -85,7 +77,7 @@ def restart_service(service_name: str) -> str:
                 "error": f"Unknown service: {service_name}",
             })
 
-        was_up = _check_port("localhost", port)
+        was_up = port_is_open(port, "localhost")
         logger.info(
             "restart_service: %s (port %d) — pre-restart status: %s",
             service_name, port, "online" if was_up else "offline",
@@ -204,6 +196,7 @@ def _is_valid_sqlite(path: Path) -> bool:
         conn.close()
         return True
     except Exception:
+        logger.debug("SQLite validation failed for %s", path, exc_info=True)
         return False
 
 
@@ -414,7 +407,7 @@ def health_recover(service: str = "") -> str:
                 report.append(entry)
                 continue
 
-            is_up = _check_port("localhost", port)
+            is_up = port_is_open(port, "localhost")
             entry["status"] = "online" if is_up else "offline"
 
             if is_up:
@@ -650,7 +643,8 @@ def system_diagnostics() -> str:
         # LMStudio status
         try:
             import urllib.request
-            req = urllib.request.Request("http://localhost:1234/api/v1/models")
+            lms_url = get_config().get("lmstudio.base_url", "http://127.0.0.1:1234")
+            req = urllib.request.Request(f"{lms_url}/api/v1/models")
             with urllib.request.urlopen(req, timeout=3) as resp:
                 data = json.loads(resp.read())
                 models = data.get("data", [])
@@ -691,7 +685,7 @@ def system_diagnostics() -> str:
         for svc in services_to_check:
             try:
                 port = registry.get(svc)
-                up = _check_port("localhost", port, timeout=0.5)
+                up = port_is_open(port, "localhost", timeout=0.5)
                 service_status.append({
                     "service": svc,
                     "port": port,

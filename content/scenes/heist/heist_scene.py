@@ -754,7 +754,7 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
         }
 
     def start(self) -> None:
-        print(f"THE SCORE — Dark Renaissance heist scene starting on port {self.port}...")
+        logger.info(f"THE SCORE — Dark Renaissance heist scene starting on port {self.port}...")
         # Wire engine subsystems (all optional — graceful fallback if unavailable)
         try:
             from engine.content.content_engine import get_content_engine
@@ -824,7 +824,7 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
             get_framework().save_state()
         except Exception:
             pass
-        print("Heist scene stopped.")
+        logger.info("Heist scene stopped.")
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:

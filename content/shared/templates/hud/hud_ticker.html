@@ -1,0 +1,36 @@
+{# hud/hud_ticker.html — Event history panel (center-click) #}
+<div class="cs-hud__panel" id="cs-hud-panel" aria-hidden="true" role="dialog" aria-label="World event history">
+  <div class="cs-hud__panel-header">
+    <span class="cs-hud__panel-title">⚡ NEON CITY FEED</span>
+    <button class="cs-hud__panel-close" id="hud-panel-close" type="button" aria-label="Close event feed">✕</button>
+  </div>
+  <div class="cs-hud__panel-body">
+    <div class="cs-hud__panel-stats">
+      <div class="cs-hud__stat">
+        <span class="cs-hud__stat-label">CREDITS</span>
+        <span class="cs-hud__stat-value cs-hud__stat--credits" id="panel-credits">₵ 5,000</span>
+      </div>
+      <div class="cs-hud__stat">
+        <span class="cs-hud__stat-label">REPUTATION</span>
+        <span class="cs-hud__stat-value cs-hud__stat--rep" id="panel-rep">50 / 100</span>
+      </div>
+      <div class="cs-hud__stat">
+        <span class="cs-hud__stat-label">HEAT</span>
+        <span class="cs-hud__stat-value cs-hud__stat--heat" id="panel-heat">0%</span>
+      </div>
+      <div class="cs-hud__stat">
+        <span class="cs-hud__stat-label">LOCATION</span>
+        <span class="cs-hud__stat-value" id="panel-location">NEON CITY</span>
+      </div>
+    </div>
+
+    <div class="cs-hud__faction-grid" id="panel-factions">
+      <div class="cs-hud__faction-title">FACTION STANDINGS</div>
+    </div>
+
+    <div class="cs-hud__event-list-header">RECENT EVENTS</div>
+    <ul class="cs-hud__event-list" id="hud-event-list" aria-label="Recent world events">
+      <li class="cs-hud__event-item cs-hud__event-item--placeholder">No events yet.</li>
+    </ul>
+  </div>
+</div>
