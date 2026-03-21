@@ -381,21 +381,32 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     _launch_group(internals, "Services")
     _launch_group(scene_names, "Scenes")
 
-    # Step 4: Single wait, then check everything
-    print("\n  Waiting for all ports...", end="", flush=True)
-    time.sleep(25)
-    print(" done.\n  Health:")
+    # Step 4: Poll until all ports are up (or 60s timeout)
     all_names = list(service_names) + list(scene_names)
-    for name in all_names:
-        port = ALL_TARGETS[name]["port"]
-        label = ALL_TARGETS[name]["label"]
-        up = _port_up(port)
-        icon = "[UP]" if up else "[--]"
-        print(f"    {icon} {label:.<35s} :{port}")
-        if not up and name not in failed:
-            failed.append(name)
+    expected_ports = {name: ALL_TARGETS[name]["port"] for name in all_names}
+    pending = set(all_names)
+    deadline = time.monotonic() + 60
 
-    print(f"\n  {total} target(s) launched.  Hub -> {_hub_url()}\n")
+    print(f"\n  Monitoring {len(pending)} targets...", flush=True)
+    while pending and time.monotonic() < deadline:
+        time.sleep(1)
+        newly_up = []
+        for name in list(pending):
+            if _port_up(expected_ports[name]):
+                label = ALL_TARGETS[name]["label"]
+                elapsed = int(60 - (deadline - time.monotonic()))
+                print(f"    [UP] {label:.<35s} :{expected_ports[name]}  ({elapsed}s)")
+                newly_up.append(name)
+        for name in newly_up:
+            pending.discard(name)
+
+    for name in pending:
+        label = ALL_TARGETS[name]["label"]
+        print(f"    [--] {label:.<35s} :{expected_ports[name]}  (timeout)")
+        failed.append(name)
+
+    up_count = len(all_names) - len(pending)
+    print(f"\n  {up_count}/{len(all_names)} targets UP.  Hub -> {_hub_url()}\n")
 
     # ── Watchdog loop ────────────────────────────────────────────────
     # v1.51.1 — 1s ticks for Windows Ctrl+C compat (handler installed above)
