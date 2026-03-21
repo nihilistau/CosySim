@@ -302,7 +302,8 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
         ])
         self.app.config["SECRET_KEY"] = "neoncity_v083_social_layer"
         CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        # v1.51.0 [2026-03-22] — Added async_mode="threading" (was missing, caused hangs in launcher)
+        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
         register_shared_assets(self.app)
 
         # BaseScene standard route mounts

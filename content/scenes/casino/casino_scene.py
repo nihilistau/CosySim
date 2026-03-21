@@ -110,7 +110,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         self.register_inventory_route(self.app)
         self.app.config["SECRET_KEY"] = "midnight_casino_noir_2026"
         CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
+        # v1.51.0 [2026-03-22] — Added async_mode="threading" (was missing, caused hangs in launcher)
+        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False, async_mode="threading")
 
         # Mount control overlay
         from engine.overlay import mount_overlay
