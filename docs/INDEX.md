@@ -1,14 +1,15 @@
 # CosySim Documentation Index
 
-> v1.42 -- Three-Pillar Architecture, Smart Test System, Managed Nexus KMS.
+> v1.49 -- Interactive Systems, Creation Kit, API-First Architecture.
 
 ## Quick Reference
 
 | Metric | Value |
 |--------|-------|
-| Version | v1.42 Pillar Wiring and Hub Modernization |
-| Scenes | 20 Flask (14 game + 11 service + 5 creation) |
+| Version | v1.49 Interactive Systems + Creation Kit + API-First |
+| Scenes | 20 Flask (14 game + 11 service + 6 creation) |
 | Skills | 178+ across 38 packs via @skill decorator |
+| Components | 37 Creation Kit components across 7 categories |
 | Interceptors | 26 pre/post-call hooks in the agent pipeline |
 | Tests | ~15K across 400+ files (smart runner: ~53s smoke) |
 | Scheduler | 86 autonomous tasks |

@@ -4,6 +4,77 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.49] — "INTERACTIVE SYSTEMS + CREATION KIT + API-FIRST" — 2026-03-22
+
+Major sprint: 3 interactive game UIs, a complete visual scene editor,
+API-first architecture, and long-standing 3D bug fixes.
+
+### v1.46 — NeonCity Interactive Systems
+- **Rich event feed** — color-coded cards with type icons (7 types), severity dots (0–3), impact badges (economy/heat/rep), click-to-expand descriptions, actor/faction tags
+- **Board game UI overhaul** — movement range highlighting, storm gradient visualization, player health overlays with mini HP bars, turn transition banners, game over screen with stats, resume existing game, weapon selection dropdown
+- **Cyberspace intrusion UI** — canvas-based network graph at `/cyberspace`, node navigation with click-to-move, ICE combat (break/cloak/siphon/virus), program deployment sidebar, data extraction, detection meter (green/amber/red), session summary overlay, CRT phosphor-green aesthetic
+- 15+ new REST endpoints wired to CyberspaceEngine
+- Cyberspace link added to NeonCity hacker_den district card
+
+### v1.47–v1.48 — Creation Kit (Visual Scene Editor)
+- **37 components** across 7 categories: Layout (7), Display (7), Input (5), Data (6), Game (4), Nav (4), Media (3)
+- **Component types:** glass_panel, column_layout, sidebar, section_divider, spacer, divider_line, custom_html, stat_bar, portrait, ticker, progress_tracker, alert_banner, timer_display, text_block, chat_log, button, tab_bar, button_group, select_dropdown, card_grid, inventory_grid, faction_bars, event_feed, economy_panel, data_table, crew_roster, mission_board, skill_tree, npc_roster, scene_header, modal, map_widget, toast_container, particle_canvas, image_display, canvas_widget, hud_badge_row
+- **Nested layouts** — container components (glass_panel, column_layout, sidebar, modal) have slot drop zones; components drop into named slots
+- **Drag-drop editor** — palette sidebar with search, canvas with drag reorder, property inspector with type-aware fields (text, color, select, boolean, number, textarea)
+- **Live auto-preview** — debounced split-view iframe refreshes on every change
+- **Save/load** — layouts persist as JSON in `data/layouts/`
+- Registered in control_plane_registry (creation pillar, port 5592)
+
+### v1.49 — Scene Factory (HTML + CSS + JS Generation)
+- **CSS generation engine** — derives full color palette from accent color (9 variants), generates component-specific CSS for only used types, responsive breakpoints, scrollbar styling
+- **JS generation engine** — generates `TavernScene`-style class with Socket.IO connection, stat bar auto-updaters, chat log handler with Enter key, button click wiring (auto-detects drink-* patterns → order_drink), HUD badge updaters, toast notification system, scene lifecycle
+- **API-first data fetchers** — auto-generates `fetch()` + client-side render functions for data-driven components (inventory, events, factions, NPCs, missions, crew, data tables)
+- **Full export pipeline** — writes HTML template + scene CSS + scene JS to scene directory
+
+### v1.49 — Grid Scene Live Swap (API-First Proof)
+- Rebuilt THE GRID through Creation Kit (27 component instances)
+- **Removed all Jinja2 data rendering** — no `{% for %}` loops, no `{{ variable }}` data injection
+- `render_template("grid.html")` with **zero context arguments**
+- Market items rendered client-side via `loadMarketItems()` → `/api/market/items`
+- Faction cards rendered client-side via `loadFactionData()` → `/api/faction/standings`
+- Structural Jinja2 preserved (extends, blocks) for neon_base.html composition
+- Original template preserved as `grid_original.html`
+
+### v1.49.1 — Penthouse 3D Fix (6 Bugs)
+- **Characters Y=0 sinking** → use `location.pos.y` for furniture height
+- **Director avatar disappearing** → only remove on explicit user action, not state fetch omissions; added `_explicitRemove` flag
+- **depthTest:false on sprites** → enabled `depthTest: true, depthWrite: false`, set `renderOrder: 10` (labels) and `11` (bubbles)
+- **Location Y ignored** → `updateCharPositions()` uses `pos.y`
+- **Director race condition** → guard checks `group.parent` before animate
+- **Sprite z-ordering** → `renderOrder` above character body but respects scene depth
+
+### Tests
+- 335 NeonCity tests pass, 115 cyberspace tests pass
+- 89 Grid tests pass (API-first), 172 Penthouse tests pass
+- 22 scene registration/import tests pass (including creation_kit)
+- All templates parse cleanly (Jinja2 validation)
+
+### Files
+- 19 files changed, +7,501 lines, -454 deletions
+
+---
+
+## [1.45] — "NEONCITY PLAYABLE DASHBOARD" — 2026-03-21
+
+Interactive missions, crew operations, shop, skills, hacking, heat warnings.
+
+- Mission detail modal (objectives checklist, progress bar, rewards, complete/abandon)
+- Crew operations modal (6 op types, crew selector, countdown timers)
+- Inventory context menu (use/equip/sell actions, rarity glow)
+- Shop integration (shared shop component wired with buy/sell)
+- Skill progression panel (8 skills with XP bars, global level)
+- Hacking trigger (target browser, CosyHack wired)
+- Heat warning system (amber/red/critical visual thresholds, WANTED badge)
+- Fixed API bugs (double dict serialization, crew format, recruit tuple)
+- 7 new REST endpoints, +2102 lines, all 51 tests pass
+
+---
+
 ## [1.44] — "LMSTUDIO OVERHAUL + NEONCITY DASHBOARD" — 2026-03-21
 
 Complete LMStudio subsystem refactor and NeonCity HUD overhaul.
