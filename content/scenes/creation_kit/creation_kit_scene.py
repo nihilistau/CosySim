@@ -1411,6 +1411,19 @@ class CreationKitScene(BaseScene):
                 logger.error("Scene export failed: %s", exc, exc_info=True)
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
+    def stop(self) -> None:
+        """Stop the Creation Kit."""
+        logger.info("Creation Kit stopped")
+
+    def get_plugin_info(self) -> Dict[str, Any]:
+        """Return plugin metadata for hub discovery."""
+        return {
+            **self.SCENE_METADATA,
+            "url": f"http://localhost:{self.port}",
+            "health_url": f"http://localhost:{self.port}/health",
+            "components": get_component_count(),
+        }
+
     def start(self) -> None:
         """Start the Creation Kit server."""
         logger.info("Creation Kit opening on %s:%d", self.host, self.port)
