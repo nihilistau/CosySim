@@ -324,39 +324,47 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                 print(f"    [OK] {info['label']} -> :{info['port']}")
             time.sleep(0.4)
 
-    # ── v1.51.0 [2026-03-22] — Four-phase launch with proper ordering ────
-    # Phase A: External services (Nexus KMS) — wait for port UP
-    # Phase B: World infrastructure (daemons BEFORE scenes)
-    # Phase C: Flask/FastAPI services
-    # Phase D: Game scenes — with per-target health verification
+    # ── v1.51.2 [2026-03-22] — Launch everything, wait once ─────────
+    # 1. External services (Nexus KMS — needs port wait before anything else)
+    # 2. Everything else in parallel (services + daemons + scenes)
+    # 3. Single 25s settle, then health check all at once
 
-    # ── Phase A: External + internal services ────────────────────────
+    # Step 1: External services first (Nexus KMS must be up for others)
     service_names_sorted = sorted(
         service_names,
         key=lambda n: ALL_TARGETS[n].get("start_priority", 50),
     )
-    _launch_group(service_names_sorted, "Services")
+    externals = [n for n in service_names_sorted if ALL_TARGETS[n]["type"] == "external"]
+    internals = [n for n in service_names_sorted if ALL_TARGETS[n]["type"] != "external"]
 
-    # ── Phase B: World infrastructure (BEFORE scenes) ────────────────
-    # v1.51.0 — Daemons start before scenes so event subscriptions work
+    if externals:
+        print("  Starting external services...")
+        for name in externals:
+            info = ALL_TARGETS[name]
+            proc = _start_external_proc(info, failed)
+            if proc:
+                all_procs.append(proc)
+                port = info["port"]
+                for _wait in range(15):
+                    if _port_up(port):
+                        break
+                    time.sleep(1)
+                status = "UP" if _port_up(port) else "starting"
+                print(f"    [OK] {info['label']} (PID {proc.pid}, {status})")
+
+    # Step 2: World daemons (before scenes so event subscriptions work)
     if scene_names:
-        print("\n  Starting World Infrastructure...")
-        _daemons = [
-            ("WorldSim",       "engine.world.world_sim",           "get_world_sim",        "start"),
-            ("CrossSceneRelay","engine.events.cross_scene_relay",  "get_cross_scene_relay", "start"),
-            ("EventCascade",   "engine.world.event_cascade",       "get_event_cascade",     "start"),
-        ]
-        for label, mod, getter, method in _daemons:
+        for label, mod, getter, method in [
+            ("WorldSim",       "engine.world.world_sim",          "get_world_sim",        "start"),
+            ("CrossSceneRelay","engine.events.cross_scene_relay", "get_cross_scene_relay", "start"),
+            ("EventCascade",   "engine.world.event_cascade",      "get_event_cascade",     "start"),
+        ]:
             try:
                 import importlib as _il
                 m = _il.import_module(mod)
-                obj = getattr(m, getter)()
-                getattr(obj, method)()
-                print(f"    [OK] {label}")
-            except Exception as exc:
-                print(f"    [--] {label}: {exc}")
-
-        # Scheduler + feedback loops (non-critical, best-effort)
+                getattr(getattr(m, getter)(), method)()
+            except Exception:
+                pass
         for label, mod, getter, setup in [
             ("Scheduler", "engine.nexus.scheduler_daemon", "get_scheduler_daemon", "start"),
             ("AutoLoop",  "engine.nexus.auto_loop",        "get_auto_loop",        "register_tasks"),
@@ -365,35 +373,27 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
             try:
                 import importlib as _il
                 m = _il.import_module(mod)
-                obj = getattr(m, getter)()
-                result = getattr(obj, setup)()
-                detail = f" ({result} tasks)" if isinstance(result, int) else ""
-                print(f"    [OK] {label}{detail}")
-            except Exception as exc:
-                print(f"    [--] {label}: {exc}")
+                getattr(getattr(m, getter)(), setup)()
+            except Exception:
+                pass
 
-    # ── Phase C+D: Scenes ────────────────────────────────────────────
-    if service_names_sorted and scene_names:
-        time.sleep(1)
+    # Step 3: Fire off all services + scenes (no waiting between them)
+    _launch_group(internals, "Services")
     _launch_group(scene_names, "Scenes")
 
-    # ── Health verification ─────────────────────────────────────────
-    # v1.51.1 [2026-03-22] — Wait for ALL scenes to settle, then check once.
-    # Scenes with NexusMixin take 5-15s to init. Checking each sequentially
-    # would eat 80+ seconds for 8 scenes. Instead, give them all 20s to bind.
+    # Step 4: Single wait, then check everything
+    print("\n  Waiting for all ports...", end="", flush=True)
+    time.sleep(25)
+    print(" done.\n  Health:")
     all_names = list(service_names) + list(scene_names)
-    if all_names:
-        print("\n  Waiting for ports (20s)...", end="", flush=True)
-        time.sleep(20)
-        print(" checking:")
-        for name in all_names:
-            port = ALL_TARGETS[name]["port"]
-            label = ALL_TARGETS[name]["label"]
-            up = _port_up(port)
-            icon = "[UP]" if up else "[--]"
-            print(f"    {icon} {label:.<35s} :{port}")
-            if not up and name not in failed:
-                failed.append(name)
+    for name in all_names:
+        port = ALL_TARGETS[name]["port"]
+        label = ALL_TARGETS[name]["label"]
+        up = _port_up(port)
+        icon = "[UP]" if up else "[--]"
+        print(f"    {icon} {label:.<35s} :{port}")
+        if not up and name not in failed:
+            failed.append(name)
 
     print(f"\n  {total} target(s) launched.  Hub -> {_hub_url()}\n")
 
