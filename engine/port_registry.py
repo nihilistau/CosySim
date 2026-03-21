@@ -12,7 +12,7 @@ import logging
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from engine.control_plane_registry import SCENE_IDS, get_target_metadata_catalogue
+from engine.control_plane_registry import PILLAR_IDS, SCENE_IDS, get_target_metadata_catalogue
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,8 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "canvas_api": 5595,
     "nlm_proxy": 8800,
     "system_control": 5575,
+    # Launcher-managed external services
+    "nexus_kms": 8700,
     # External / sidecar infrastructure
     "orpheus_tts": 5005,
     "cosyvoice_tts": 5050,
@@ -58,7 +60,6 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "canvas_sidecar": 5591,
     "lmstudio": 1234,
     "comfyui": 8188,
-    "nexus": 8700,
 }
 
 _ALIASES: Dict[str, str] = {
@@ -66,6 +67,7 @@ _ALIASES: Dict[str, str] = {
     "web_bridge": "bridge",
     "nexus_canvas": "canvas",
     "notebooklm_proxy": "nlm_proxy",
+    "nexus": "nexus_kms",
 }
 
 
@@ -81,9 +83,13 @@ SERVICE_GROUPS: Dict[str, List[str]] = {
     "streamlit": ["hub", "dashboard", "admin", "assets", "creator"],
     "tts": ["qwen3_tts", "orpheus_tts", "cosyvoice_tts", "whisper_stt"],
     "infrastructure": [
-        "web_bridge", "lmstudio", "comfyui", "nexus", "notebooklm_proxy",
+        "web_bridge", "lmstudio", "comfyui", "nexus_kms", "notebooklm_proxy",
         "nexus_canvas", "canvas_api", "canvas_sidecar",
     ],
+    # Pillar-based groupings (derived from control_plane_registry)
+    "game_scenes": list(PILLAR_IDS.get("game", ())),
+    "system_services": list(PILLAR_IDS.get("service", ())),
+    "creation_tools": list(PILLAR_IDS.get("creation", ())),
 }
 
 
@@ -140,7 +146,7 @@ HUB_CATALOGUE_TARGETS: Tuple[str, ...] = (
 
 HUB_HEALTH_TARGETS: Tuple[str, ...] = (
     "lmstudio",
-    "nexus",
+    "nexus_kms",
     "comfyui",
     "tts",
     "bridge",
@@ -168,7 +174,6 @@ HUB_HEALTH_TARGETS: Tuple[str, ...] = (
 
 TUI_EXTERNAL_TARGETS: Tuple[str, ...] = (
     "lmstudio",
-    "nexus",
     "comfyui",
     "tts",
     "nlm_proxy",
@@ -176,7 +181,7 @@ TUI_EXTERNAL_TARGETS: Tuple[str, ...] = (
 )
 
 SYSTEM_CONTROL_TARGETS: Tuple[str, ...] = (
-    "nexus",
+    "nexus_kms",
     "nlm_proxy",
     "hub",
     "nexus_panel",
@@ -218,7 +223,7 @@ _HEALTH_PATH_OVERRIDES: Dict[str, str] = {
 }
 
 _HEALTH_NAME_OVERRIDES: Dict[str, str] = {
-    "nexus": "Nexus KMS",
+    "nexus_kms": "Nexus KMS",
     "nlm_proxy": "NLM Proxy",
     "hub": "Scene Hub",
     "nexus_panel": "Nexus Panel",

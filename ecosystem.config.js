@@ -62,6 +62,13 @@ function sceneService(sceneName, pmName) {
 module.exports = {
   apps: [
 
+    // ──── Nexus KMS (must start before all CosySim services) ────────
+
+    pyService('nexus-kms', path.join('scripts', 'pm2', 'start_nexus_kms.py'), {
+      max_restarts: 10,
+      restart_delay: 5000,
+    }),
+
     // ──── Core Services ──────────────────────────────────────────────
 
     pyService('launcher', 'launcher.py', {

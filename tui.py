@@ -40,6 +40,7 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 from launcher import SERVICES, SCENES, ALL_TARGETS, VERSION, _port_up  # noqa: E402
+from engine.control_plane_registry import PILLAR_IDS  # noqa: E402
 from engine.port_registry import TUI_EXTERNAL_TARGETS, build_target_listing  # noqa: E402
 
 from textual import on, work
@@ -258,6 +259,9 @@ class CosySimTUI(App[None]):
         Binding("h",       "show_health",       "Health",       show=True,  priority=True),
         Binding("l",       "show_log",          "Log",          show=True,  priority=True),
         Binding("r",       "refresh_status",    "Refresh",      show=True,  priority=True),
+        Binding("g",       "launch_game",       "Game",         show=True,  priority=True),
+        Binding("v",       "launch_services",   "Services",     show=False, priority=True),
+        Binding("k",       "launch_creation",   "Creation",     show=False, priority=True),
         Binding("i",       "import_har",        "Import HAR",   show=False, priority=True),
         Binding("up",      "cursor_up",         "Up",           show=False, priority=True),
         Binding("down",    "cursor_down",       "Down",         show=False, priority=True),
@@ -283,17 +287,24 @@ class CosySimTUI(App[None]):
         with Horizontal():
             # Left panel — target list
             with Vertical(id="left-panel"):
-                yield Static("  SERVICES", classes="section-title")
-                for name, info in SERVICES.items():
-                    row = TargetRow(name, info, "service")
-                    self._rows.append(row)
-                    yield row
-                yield Rule()
-                yield Static("  SCENES", classes="section-title")
-                for name, info in SCENES.items():
-                    row = TargetRow(name, info, "scene")
-                    self._rows.append(row)
-                    yield row
+                # Three pillar sections
+                pillar_sections = [
+                    ("  NEONCITY", "game"),
+                    ("  SERVICES", "service"),
+                    ("  CREATION KIT", "creation"),
+                ]
+                for idx, (section_label, pillar) in enumerate(pillar_sections):
+                    if idx > 0:
+                        yield Rule()
+                    yield Static(section_label, classes="section-title")
+                    for tid in PILLAR_IDS.get(pillar, ()):
+                        info = ALL_TARGETS.get(tid)
+                        if not info:
+                            continue
+                        group = "service" if tid in SERVICES else "scene"
+                        row = TargetRow(tid, info, group)
+                        self._rows.append(row)
+                        yield row
 
             # Center panel — tabbed content
             with Vertical(id="center-panel"):
@@ -725,6 +736,46 @@ class CosySimTUI(App[None]):
         self.action_show_log()
         threading.Thread(target=self._autostart_worker, daemon=True, name="cosysim-autostart").start()
 
+    def action_launch_game(self) -> None:
+        """Launch all game pillar targets."""
+        self._launch_pillar("game")
+
+    def action_launch_services(self) -> None:
+        """Launch all service pillar targets."""
+        self._launch_pillar("service")
+
+    def action_launch_creation(self) -> None:
+        """Launch all creation pillar targets."""
+        self._launch_pillar("creation")
+
+    def _launch_pillar(self, pillar: str) -> None:
+        """Launch all targets in a pillar via background thread."""
+        self.action_show_log()
+        threading.Thread(
+            target=self._pillar_worker, args=(pillar,),
+            daemon=True, name=f"cosysim-{pillar}",
+        ).start()
+
+    def _pillar_worker(self, pillar: str) -> None:
+        """Worker: start all targets in the given pillar."""
+        target_ids = PILLAR_IDS.get(pillar, ())
+        self._log_ts(f"[{pillar}] launching {len(target_ids)} targets")
+        for tid in target_ids:
+            info = ALL_TARGETS.get(tid)
+            if not info:
+                continue
+            if _port_up(info["port"]):
+                self._log_ts(f"[{pillar}] {tid} already up")
+                continue
+            try:
+                self._start_one(tid, info)
+                self._log_ts(f"[{pillar}] started {tid}")
+            except Exception as exc:
+                self._log_ts(f"[{pillar}] FAILED {tid}: {exc}")
+            time.sleep(0.5)
+        time.sleep(5)
+        self.call_from_thread(self._refresh_all_status)
+
     def _autostart_worker(self) -> None:
         """Worker: start all auto_start targets sequentially with stagger."""
         import traceback as _tb
@@ -736,7 +787,12 @@ class CosySimTUI(App[None]):
 
         dbg("[autostart] worker started")
         try:
-            for name, info in ALL_TARGETS.items():
+            # Sort targets so external dependencies (start_priority=0) launch first
+            sorted_targets = sorted(
+                ALL_TARGETS.items(),
+                key=lambda kv: kv[1].get("start_priority", 50),
+            )
+            for name, info in sorted_targets:
                 if not info.get("auto_start"):
                     continue
                 port = info["port"]
@@ -820,6 +876,15 @@ class CosySimTUI(App[None]):
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             self._launched_procs[name] = proc
+        elif t == "external":
+            cwd = info.get("cwd", ".")
+            cmd = info.get("cmd", [])
+            if cmd and Path(cwd).is_dir():
+                proc = subprocess.Popen(
+                    cmd, cwd=cwd,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                self._launched_procs[name] = proc
 
     def _log_ts(self, msg: str) -> None:
         """Thread-safe log helper (can be called from any thread)."""
