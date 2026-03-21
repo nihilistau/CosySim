@@ -282,25 +282,40 @@ class LMSClient:
         return info
 
     def resolve_model(self, hint: Optional[str] = None) -> str:
-        """Resolve best model ID to use."""
+        """Resolve best model ID to use for chat inference.
+
+        Filters out embedding models — only returns LLM/VLM models.
+        """
         if hint:
             return hint
         now = time.monotonic()
         if self._resolved_model and (now - self._resolved_at) < _MODEL_CACHE_TTL:
             return self._resolved_model
 
-        models = self.get_models(raw=True)
-        model_ids = [m.get("id", "") for m in models if m.get("id")]
-
-        if self._default_model and self._default_model in model_ids:
-            resolved = self._default_model
-        elif model_ids:
-            resolved = model_ids[0]
-        else:
-            resolved = self._default_model or ""
+        # v1.43.0 — Use typed models to filter out embedding models
+        try:
+            models = self.get_models(loaded_only=True)
+            llm_models = [m for m in models if m.type != "embedding"]
+            if self._default_model:
+                for m in llm_models:
+                    if m.key == self._default_model:
+                        resolved = m.key
+                        break
+                else:
+                    resolved = llm_models[0].key if llm_models else self._default_model
+            elif llm_models:
+                resolved = llm_models[0].key
+            else:
+                resolved = self._default_model or ""
+        except Exception:
+            # Fallback to raw if typed parsing fails
+            models_raw = self.get_models(raw=True)
+            model_ids = [m.get("id", "") for m in models_raw if m.get("id")]
+            resolved = model_ids[0] if model_ids else self._default_model or ""
 
         self._resolved_model = resolved
         self._resolved_at = now
+        logger.info("Resolved chat model: %s", resolved)
         return resolved
 
     def invalidate_model_cache(self) -> None:
