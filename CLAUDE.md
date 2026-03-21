@@ -208,12 +208,26 @@ def _start_external_proc(...):
 - PATCH: Within-session refinements
 - Current: **v1.44** (LMStudio Overhaul + NeonCity Dashboard)
 
-### Rules
+### Navigational Comments
 
-- Always add/update the Change Log when modifying a file
-- Use section dividers to organize files with 100+ lines
-- Add inline comments for non-obvious logic (not for self-evident code)
-- Never remove existing version stamps — they are historical record
+Tag code blocks with what they connect to, who calls them, and what they emit:
+
+```python
+# CONNECTS: PlayerState, EconomyManager, MissionSystem
+# CALLED BY: district_chat handler, NPC interaction flow
+# EMITS: hud_update Socket.IO event
+```
+
+### Rules (MANDATORY — no exceptions)
+
+- **Every edit** gets a version stamp: `# v1.44.0 [2026-03-21] — description`
+- **Every new/modified file** gets a module header with Change Log
+- **Always add/update the Change Log** when modifying a file
+- **Use section dividers** to organize files with 50+ lines
+- **Add navigational comments** on functions that connect systems (CONNECTS, CALLED BY, EMITS)
+- **Add inline comments** for non-obvious logic — explain WHY, not WHAT
+- **Never remove existing version stamps** — they are historical record
+- **JS/CSS** use `/** ... */` or `/* ... */` with the same version stamp rules
 
 ## Docs
 
