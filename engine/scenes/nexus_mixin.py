@@ -46,10 +46,23 @@ class NexusSceneMixin:
         self._nexus_last_flush: float = 0.0
         self._nexus_flush_interval: float = 60.0  # seconds between auto-flushes
 
+        # v1.50.1 [2026-03-22] — Non-blocking Nexus availability check.
+        # Old code called is_available() synchronously (30s timeout × 2 retries = 60s)
+        # which blocked scene __init__ and prevented socketio.run() from starting.
         try:
             from engine.nexus.client import get_nexus_client
             self._nexus_client = get_nexus_client()
-            self._nexus_available = self._nexus_client.is_available()
+            # Quick 2s probe instead of the default 30s health check
+            import urllib.request
+            try:
+                base = self._nexus_client._base_url
+                req = urllib.request.Request(f"{base}/api/health")
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    import json as _json
+                    data = _json.loads(resp.read().decode())
+                    self._nexus_available = data.get("ok", False)
+            except Exception:
+                self._nexus_available = False
         except Exception:
             self._nexus_available = False
 
