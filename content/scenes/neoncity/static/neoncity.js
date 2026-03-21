@@ -484,12 +484,35 @@ class NeonCityScene {
      * Enter a district (placeholder for future scene navigation).
      * @param {string} districtKey
      */
-    _enterDistrict(districtKey) {
+    // v1.43.0 [2026-03-21] — Wire district entry to CityMap travel API
+    async _enterDistrict(districtKey) {
         this.closeModal();
-        this._appendChatEntry(
-            'system', '[CITY]',
-            `Entering ${districtKey.replace('_', ' ').toUpperCase()}…`
-        );
+        const label = districtKey.replace(/_/g, ' ').toUpperCase();
+        this._appendChatEntry('system', '[CITY]', `Initiating travel to ${label}...`);
+
+        try {
+            const res = await fetch('/api/district/enter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ district: districtKey }),
+            });
+            const data = await res.json();
+
+            if (data.success && data.url) {
+                const cost = [];
+                if (data.energy_cost) cost.push(`-${data.energy_cost} energy`);
+                if (data.heat_add)    cost.push(`+${data.heat_add} heat`);
+                const costStr = cost.length ? ` (${cost.join(', ')})` : '';
+                this._appendChatEntry('system', '[CITY]',
+                    `Arrived at ${data.scene}.${costStr} Redirecting...`);
+                setTimeout(() => { window.location.href = data.url; }, 1500);
+            } else {
+                this._appendChatEntry('system', '[CITY]',
+                    `Travel failed: ${data.message || data.error || 'Unknown error'}`);
+            }
+        } catch (err) {
+            this._appendChatEntry('system', '[CITY]', `Network error: ${err.message}`);
+        }
     }
 
     /**

@@ -163,6 +163,15 @@ _DISTRICTS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# v1.43.0 [2026-03-21] — District-to-scene mapping for CityMap travel
+_DISTRICT_TO_SCENE: Dict[str, str] = {
+    "black_market":     "THE SCORE",
+    "corporate_tower":  "THE PENTHOUSE",
+    "underground_club": "THE VELVET PIT",
+    "hacker_den":       "THE GRID",
+    "street_level":     "NEON CITY",
+}
+
 _TICKER_TEMPLATES: List[str] = [
     "[OMNICORP] Market share up {pct}% in lower districts",
     "[GHOST_NET] Security breach at SynthSec tower. Data released.",
@@ -492,6 +501,33 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             delta = int(data.get("delta", 0))
             new_val = get_player_state().update_faction_standing(faction, delta)
             return jsonify({"faction": faction, "delta": delta, "new_standing": new_val})
+
+        # v1.43.0 [2026-03-21] — District travel via CityMap
+        @self.app.route("/api/district/enter", methods=["POST"])
+        def enter_district():
+            data = request.json or {}
+            district_key = data.get("district", "")
+            scene_name = _DISTRICT_TO_SCENE.get(district_key)
+            if not scene_name:
+                return jsonify({"success": False, "error": f"Unknown district: {district_key}"}), 400
+            try:
+                from engine.world.city_map import get_city_map, SCENE_PORTS
+                cm = get_city_map()
+                result = cm.travel(scene_name)
+                port = SCENE_PORTS.get(scene_name, 0)
+                return jsonify({
+                    "success": result.success,
+                    "scene": scene_name,
+                    "port": port,
+                    "url": f"http://localhost:{port}" if port else None,
+                    "message": result.message,
+                    "energy_cost": result.energy_cost,
+                    "heat_add": result.heat_add,
+                    "travel_time": result.travel_time,
+                })
+            except Exception as exc:
+                logger.warning("District travel failed: %s", exc)
+                return jsonify({"success": False, "error": str(exc)}), 500
 
         # ── Board game routes (legacy) ──────────────────────────────────
 
