@@ -206,7 +206,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.44** (LMStudio Overhaul + NeonCity Dashboard)
+- Current: **v1.49** (Interactive Systems + Creation Kit + API-First)
 
 ### Navigational Comments
 
