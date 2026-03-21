@@ -1,14 +1,12 @@
-# CosySim Interceptor Pipeline — v0.84b
+# CosySim Interceptor Pipeline
 
-The interceptor pipeline is the governance layer that wraps every agent LLM call.
-Interceptors modify prompts **before** the LLM runs (`pre_call`) and process
+> Governance layer wrapping every agent LLM call — v1.42+.
+
+The interceptor pipeline modifies prompts **before** the LLM runs (`pre_call`) and processes
 replies **after** it returns (`post_call`). This gives CosySim fine-grained
 control over agent behavior without changing agent code.
 
 > **Source:** `engine/agents/interceptors/` (26 modules) · `engine/mcp/comms_framework.py`
->
-> **v0.84b:** Monolithic `interceptors.py` split into 26 individual module files with auto-registry.
-> See [Project Hindsight](./PROJECT_HINDSIGHT.md) for migration details.
 >
 > See also: [MCP Framework](./MCP_FRAMEWORK.md) · [Skills](./SKILLS.md) · [Architecture](./ARCHITECTURE.md)
 

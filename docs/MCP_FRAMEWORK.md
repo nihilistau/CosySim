@@ -1,13 +1,12 @@
 # MCP Framework
 
-> CosySim v0.91b — Model Context Protocol implementation powering agent
-> governance, skill dispatch, interceptor pipelines, state management,
-> and character-scene coordination.
+> Model Context Protocol implementation powering agent governance, skill dispatch,
+> interceptor pipelines, state management, and character-scene coordination — v1.42+.
 
 The MCP Framework is CosySim's core runtime substrate. Every character
 reply flows through this pipeline: skill discovery → pre-call interceptors
 → LLM inference → post-call interceptors → tag extraction → state sync.
-The framework manages 43 MCP tool files, 45 skill packs, 28 interceptor
+The framework manages 178+ skills across 38 packs, 26 interceptor
 classes, and 10 singleton subsystems.
 
 ---

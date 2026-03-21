@@ -411,7 +411,7 @@ The economy is deeply woven into NeonCity's living world:
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — System overview
 - [GAME_SYSTEMS.md](GAME_SYSTEMS.md) — All game mechanics
-- [LIVING_WORLD.md](LIVING_WORLD.md) — World simulation
+- [GAME_SYSTEMS.md](GAME_SYSTEMS.md) — World simulation, economy, factions, NPCs
 - [ARENA_GUIDE.md](ARENA_GUIDE.md) — Arena betting integration
 - [CHARACTER_SYSTEM.md](CHARACTER_SYSTEM.md) — Character economy interactions
 - [CONTENT_GUIDE.md](CONTENT_GUIDE.md) — Creating new content

@@ -345,9 +345,8 @@ NPC dialogue, and economy events.
 
 ## See Also
 
-- [LIVING\_WORLD.md](./LIVING_WORLD.md) — WorldSim, economy tick, event lifecycle
+- [GAME\_SYSTEMS.md](./GAME_SYSTEMS.md) — WorldSim, economy, factions, NPCs, events
 - [THE\_GRID.md](./THE_GRID.md) — Scene that most heavily uses PlayerState
-- [WORLD\_SYSTEM.md](./WORLD_SYSTEM.md) — WorldSim daemon, EventBus, NPCScheduler
 - [SKILLS.md](./SKILLS.md) — `world` skill pack (10 skills), `inventory` (7), `crew` (8)
 
 ---
