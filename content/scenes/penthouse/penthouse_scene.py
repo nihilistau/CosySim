@@ -1658,9 +1658,22 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
             def _respond() -> None:
                 try:
+                    logger.info("[CHAT] Generating response for: %s", msg[:50])
                     self._generate_chat_response(name, msg)
+                    logger.info("[CHAT] Response emitted successfully")
                 except Exception as exc:
-                    logger.warning("Chat response generation failed: %s", exc)
+                    logger.error("[CHAT] Response generation FAILED: %s", exc, exc_info=True)
+                    try:
+                        from engine.observability.structured_logger import get_structured_logger, LogLevel
+                        get_structured_logger().log(
+                            LogLevel.ERROR,
+                            f"Penthouse chat failed: {exc}",
+                            service="penthouse",
+                            tags=["chat", "inference", "error"],
+                            context={"message": msg[:100], "error": str(exc)},
+                        )
+                    except Exception:
+                        pass
 
             threading.Thread(target=_respond, daemon=True, name="chat-respond").start()
 
