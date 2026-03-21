@@ -1329,11 +1329,13 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         Designed to run in a daemon thread so the chat handler returns
         immediately.
         """
+        # v1.43.0 — If no characters loaded, use default agent via orchestrator
         if not self.characters:
-            return
-
-        char_id, char = next(iter(self.characters.items()))
-        char_name: str = getattr(char, "name", char_id)
+            char_id = "aria"
+            char_name = "Aria"
+        else:
+            char_id, char = next(iter(self.characters.items()))
+            char_name = getattr(char, "name", char_id)
 
         self.socketio.emit("agent_typing", {"character_name": char_name})
 
