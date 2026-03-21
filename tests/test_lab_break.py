@@ -285,10 +285,10 @@ class TestLabBreakScene:
         assert scene.game_active is True
 
     def test_get_plugin_info(self, scene):
+        # v1.51.0 — get_plugin_info() now comes from FlaskScene, uses SCENE_METADATA
         info = scene.get_plugin_info()
-        assert info["name"] == "lab_break"
+        assert info["name"] == "LAB BREAK"
         assert info["port"] == 5571
-        assert "game_active" in info
 
     def test_generate_victory_message_kind_path(self, scene):
         scene.game_start_time = 0
@@ -335,9 +335,9 @@ class TestLabBreakScene:
 class TestLabBreakRoutes:
     @pytest.fixture
     def scene_with_app(self):
+        # v1.51.0 — FlaskScene.__init__ creates Flask, SocketIO, registers
+        # routes automatically; no separate _setup_flask() needed
         scene = LabBreakScene(config={})
-        scene._setup_flask()
-        scene._register_routes()
         scene.game_start_time = 0
         return scene
 

@@ -1,4 +1,5 @@
 """THE GRID — CosySim v0.75 "NEON CITY".
+==========================================
 
 The underground marketplace, travel hub, faction den, and information broker
 of Neon City.  Port 5569.
@@ -11,6 +12,14 @@ Four zones accessible via tab navigation:
 - **BROKER** — Nexus-powered intel trading and 0xGH0ST terminal
 
 All zones react to the living world via Socket.IO and the EventCascade.
+
+Version: v1.51.0 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
+    v1.49.2 [2026-03-22] — API-first: template is a pure structural shell
+    v0.75   [2026-03-21] — Initial THE GRID scene
 """
 from __future__ import annotations
 
@@ -20,12 +29,10 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, Response, json, request
-from flask_socketio import SocketIO
+from flask import Response, json, request
 
-from engine.scenes.base_scene import BaseScene
+from engine.scenes.flask_scene import FlaskScene
 from engine.skills.skill import skill
-from content.shared import register_shared_assets
 
 logger = logging.getLogger(__name__)
 
@@ -289,10 +296,16 @@ def _get_grid_state() -> _GridState:
 
 # ──── Scene ───────────────────────────────────────────────────────────────────
 
-class GridScene(BaseScene):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class GridScene(FlaskScene):
     """THE GRID — underground market, travel hub, faction den, broker.
 
     Port 5569.  Accent #00ff88.
+
+    CONNECTS: FlaskScene, EventBus, PlayerState, NexusKMS, WorldState
+    CALLED BY: launcher.py, TUI
+    EMITS: price_update, inventory_update, faction_update, quest_complete,
+           intel_update, world_event Socket.IO events
     """
 
     SCENE_METADATA = {
@@ -307,63 +320,32 @@ class GridScene(BaseScene):
     }
 
     def __init__(self, config: Any = None) -> None:
-        super().__init__(scene_name="grid", port=self.SCENE_METADATA["port"])
-        self.scene_name = "grid"
-        self.app: Optional[Flask] = None
-        self.socketio: Optional[SocketIO] = None
+        super().__init__(host="0.0.0.0", port=self.SCENE_METADATA["port"])
         self._state = _get_grid_state()
         self._event_sub_id: Optional[str] = None
 
-    # ── BaseScene overrides ───────────────────────────────────────────────────
-
-    def start(self) -> None:
-        """Start the Flask app and register all routes."""
-        from engine.mcp import get_framework
-        from jinja2 import ChoiceLoader, FileSystemLoader
-        import os
-
-        self.app = Flask(
-            __name__,
-            static_folder=os.path.join(os.path.dirname(__file__), "static"),
-            template_folder=os.path.join(os.path.dirname(__file__), "templates"),
-        )
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
-
-        # Shared templates (navbar_v2.html, neon_hud.html, etc.)
-        shared_tpl = os.path.join(
-            os.path.dirname(__file__), "..", "..", "shared", "templates"
-        )
-        self.app.jinja_loader = ChoiceLoader([
-            FileSystemLoader(os.path.join(os.path.dirname(__file__), "templates")),
-            FileSystemLoader(os.path.normpath(shared_tpl)),
-        ])
-
-        register_shared_assets(self.app)
+        # Scene-specific route registrations (FlaskScene handles Flask, SocketIO,
+        # CORS, shared assets, Jinja2 ChoiceLoader, health, hud, announcer,
+        # inventory, and TTS routes automatically)
         self._register_routes()
-        self._wire_event_cascade()
-        self.register_health_route(self.app)
         self.register_bench_route(self.app, self.socketio)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         self.register_shop_route(self.app)
         self.register_hack_route(self.app)
         self.register_city_route(self.app)
         self.register_mission_route(self.app)
 
+    # ── FlaskScene Lifecycle Hooks ────────────────────────────────────────────
+    # v1.51.0 [2026-03-22] — FlaskScene handles start()/stop(); use hooks
+
+    def on_before_serve(self) -> None:
+        """Pre-serve setup: wire event cascade and register skills."""
+        self._wire_event_cascade()
+
         # Import skills so they register with SKILL_REGISTRY
         import content.scenes.grid.grid_skills  # noqa: F401
 
-        fw = get_framework()
-        node = fw.register_scene(self.scene_name)
-        node.update_state({"status": "running", "port": self.SCENE_METADATA["port"]})
-
-        logger.info("THE GRID started on port %d", self.SCENE_METADATA["port"])
-        self.socketio.run(self.app, host="0.0.0.0", port=self.SCENE_METADATA["port"],
-                          allow_unsafe_werkzeug=True)
-
-    def stop(self) -> None:
-        """Stop and clean up."""
+    def on_shutdown(self) -> None:
+        """Scene-specific cleanup on shutdown."""
         try:
             from engine.mcp import get_framework
             fw = get_framework()
@@ -371,17 +353,6 @@ class GridScene(BaseScene):
             node.update_state({"status": "stopped"})
         except Exception:
             pass
-
-    def get_plugin_info(self) -> Dict[str, Any]:
-        return {
-            "name": self.SCENE_METADATA["display_name"],
-            "scene_key": self.scene_name,
-            "port": self.SCENE_METADATA["port"],
-            "type": self.SCENE_METADATA["type"],
-            "accent_color": self.SCENE_METADATA["accent_color"],
-            "description": self.SCENE_METADATA["description"],
-            "status": "running",
-        }
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 

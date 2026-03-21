@@ -86,13 +86,16 @@ def test_grid_scene_metadata():
 
 
 def test_grid_get_plugin_info():
+    """get_plugin_info() comes from FlaskScene and uses SCENE_METADATA."""
     from content.scenes.grid.grid_scene import GridScene
+    # v1.51.0 — FlaskScene.get_plugin_info() needs self.port and self.scene_name
     scene = object.__new__(GridScene)
     scene.scene_name = "grid"
+    scene.port = 5569
     scene.SCENE_METADATA = GridScene.SCENE_METADATA
     info = scene.get_plugin_info()
     assert info["port"] == 5569
-    assert info["scene_key"] == "grid"
+    assert info["name"] == "THE GRID"
     assert info["accent_color"] == "#00ff88"
 
 

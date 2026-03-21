@@ -28,18 +28,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, render_template, jsonify, request
-import jinja2
-from flask_socketio import SocketIO, emit
-from flask_cors import CORS
+from flask import render_template, jsonify, request
+from flask_socketio import emit
 
 import sys
 from engine.paths import ROOT as _root
 sys.path.insert(0, str(_root))
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin
+from engine.scenes.flask_scene import FlaskScene
 from content.scenes.lounge.lounge_mcp import (
     register_lounge_rules,
     SCENE_ID, LOLA_ID, VIKTOR_ID,
@@ -66,7 +62,8 @@ LOUNGE_PORT = 5557
 #  LOUNGE SCENE
 # ──────────────────────────────────────────────────────────────────────────────
 
-class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class LoungeScene(FlaskScene):
     """THE VELVET PIT — v0.68 'Dark Renaissance'.
 
     Underground lounge beneath the streets. Amber-lit. Heat never drops to zero.
@@ -95,31 +92,13 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = LOUNGE_PORT) -> None:
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
-        # ── Flask app ───────────────────────────────────────────────────────
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
-        _shared_tmpl = str(Path(__file__).parent.parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.register_shop_route(self.app)
-        self.register_tts_route(self.app)
         self.app.config["SECRET_KEY"] = "velvet_lounge_secret_1920s"
-        CORS(self.app)
-        # v1.51.0 [2026-03-22] — Added async_mode="threading" (was missing, caused hangs in launcher)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False, async_mode="threading")
         self.register_bench_route(self.app, self.socketio)
 
         # Mount control overlay
@@ -147,7 +126,6 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         # ── Setup ────────────────────────────────────────────────────────────
         self._setup_routes()
         self._setup_socketio()
-        self._mcp_init()
         register_lounge_rules()
         self._seed_lounge_registry()
 
@@ -160,8 +138,6 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
         # ── Start first song ─────────────────────────────────────────────────
         self._start_next_song()
-
-        self.nexus_init("lounge")
 
         # ── EventBus subscription ────────────────────────────────────────────
         try:
@@ -1415,10 +1391,10 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     #  BaseScene abstract methods
     # ══════════════════════════════════════════════════════════════════════════
 
-    def stop(self) -> None:
-        """Gracefully stop the lounge scene."""
-        self.nexus_flush()
-        logger.info("The Velvet Lounge closing")
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
+
+    def on_shutdown(self) -> None:
+        """Hook: unsubscribe world events and save framework state."""
         if hasattr(self, "_event_bus") and self._event_bus:
             try:
                 self._event_bus.unsubscribe("world.tick", self._on_world_tick)
@@ -1462,16 +1438,13 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     #  BaseScene START
     # ══════════════════════════════════════════════════════════════════════════
 
-    def start(self) -> None:
-        logger.info("THE VELVET PIT opening on port %d — Dark Renaissance v0.68", self.port)
-        # Wire up framework event bus for cross-scene events
+    def on_before_serve(self) -> None:
+        """Hook: wire framework event bus for cross-scene events."""
         try:
             self._fw.on("environment_change", lambda evt: self._on_env_event(evt))
             self._fw.on("story_beat", lambda evt: self._on_story_beat(evt))
         except Exception:
             pass
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
-                          allow_unsafe_werkzeug=True)
 
     def _on_env_event(self, evt) -> None:
         """React to environment changes from the event bus."""

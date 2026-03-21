@@ -21,14 +21,12 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask import jsonify, render_template, request
+from flask_socketio import emit
 
-from engine.scenes.base_scene import BaseScene, get_all_active_scenes, get_active_scene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
-from content.shared import register_shared_assets
+from engine.scenes.base_scene import get_all_active_scenes, get_active_scene
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
 
@@ -38,13 +36,18 @@ SCENE_ID = "command_center"
 DEFAULT_PORT = 5566
 
 
-class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class CommandCenterScene(FlaskScene):
     """Real-time system observatory dashboard with live scene monitoring and control."""
 
     SCENE_METADATA = {
+        "name": "command_center",
+        "display_name": "COMMAND CENTER",
+        "port": DEFAULT_PORT,
         "title": "Command Center",
         "description": "System observatory dashboard showing real-time metrics, pipeline status, "
                        "cross-scene activity, live scene monitoring, and remote scene control.",
+        "type": "admin",
         "genre": "system_monitoring",
         "max_characters": 0,
         "features": ["metrics_dashboard", "pipeline_monitoring", "cross_scene_view",
@@ -52,26 +55,9 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                      "character_viewer"],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "127.0.0.1", port: int = DEFAULT_PORT):
-        scene_dir = Path(__file__).parent
-        self.app = Flask(
-            __name__,
-            template_folder=str(scene_dir / "templates"),
-            static_folder=str(scene_dir / "static"),
-        )
-        import jinja2
-        _shared_tmpl = str(scene_dir.parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
-        register_shared_assets(self.app)
-        CORS(self.app)
-        self.socketio = SocketIO(
-            self.app, cors_allowed_origins="*", async_mode="threading"
-        )
-
-        super().__init__(scene_name="command_center", host=host, port=port)
+        super().__init__(host=host, port=port)
 
         self._collector = None
         self._metrics_db = None
@@ -85,10 +71,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
         self._register_monitoring_routes()
         self._register_scene_control_routes()
         self._register_socketio()
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
+
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
 
         # Framework integration
         self._state_mgr = get_scene_state_manager()
@@ -100,8 +84,6 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             register_command_center_rules()
         except Exception as exc:
             log.warning("Failed to register command center rules: %s", exc)
-
-        self.nexus_init("command_center")
 
     # ------------------------------------------------------------------
     # Lazy accessors for singletons
@@ -1197,28 +1179,18 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def start(self):
-        # NOTE: health/hud/announcer routes already registered in __init__
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-        # Wire MetricsCollector emit_fn to our SocketIO
+    def on_before_serve(self) -> None:
+        """Hook: wire MetricsCollector emit and start ticker."""
         collector = self._get_collector()
         if collector and hasattr(collector, "emit_fn"):
             collector.emit_fn = lambda event, data: self.socketio.emit(event, data)
-
         self._start_ticker()
-        log.info("Command Center starting on %s:%s", self.host, self.port)
-        self.socketio.run(
-            self.app,
-            host=self.host,
-            port=self.port,
-            allow_unsafe_werkzeug=True,
-        )
 
-    def stop(self):
-        self.nexus_flush()
+    def on_shutdown(self) -> None:
+        """Hook: stop the ticker."""
         self._stop_ticker()
-        self._mcp_deregister_scene()
-        log.info("Command Center stopped")
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {

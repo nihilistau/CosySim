@@ -17,9 +17,8 @@ Director tools
 • Adjust Stat    — tweak any stat for any character directly
 """
 
-from flask import Flask, render_template, jsonify, request
-from flask_socketio import SocketIO, emit
-from flask_cors import CORS
+from flask import render_template, jsonify, request
+from flask_socketio import emit
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass, field, asdict
 import json, random, threading, time
@@ -34,16 +33,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin
+from engine.scenes.flask_scene import FlaskScene
 from engine.agents.agent_loop import AgentLoop
 from content.scenes.penthouse.penthouse_rules import register_penthouse_rules
 from engine.spatial.location import Location
 from engine.spatial.scene_map import SceneMap
 from content.simulation.database.db import Database
 from content.simulation.character_system.character import Character
-from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
 from engine.mcp.interaction_trees import PENTHOUSE_INTERACTIONS, get_interaction_result
@@ -1074,7 +1070,8 @@ def _build_penthouse_map() -> SceneMap:
     return sm
 
 
-class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInventoryMixin, PenthouseSocialMixin, BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="penthouse"):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene (replaced BaseScene+MCPSceneMixin+NexusSceneMixin)
+class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInventoryMixin, PenthouseSocialMixin, FlaskScene):
     """Adult multi-agent roleplay penthouse — v4."""
 
     SCENE_METADATA = {
@@ -1096,8 +1093,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = 5556):
-        super().__init__(scene_name="penthouse", host=host, port=port)
+        super().__init__(host=host, port=port)
         self.db = Database()
         self.scene_map = _build_penthouse_map()
 
@@ -1141,32 +1139,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         }
         self._refresh_location_state()
 
-        # Nexus knowledge integration
-        self.nexus_init("penthouse")
-
-        # Flask
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
-        # Multi-folder Jinja loader: scene templates + shared templates
-        import jinja2
-        _shared_tmpl = str(Path(__file__).parent.parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
-        self.register_bench_route(self.app, None)# socketio not yet created
-        self.register_tts_route(self.app)
+        # v1.51.0 — FlaskScene handles Flask, SocketIO, Nexus, MCP, health/hud/announcer/inventory/tts
         self.app.config["SECRET_KEY"] = "penthouse_v4_roleplay_secret"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
+        self.register_bench_route(self.app, self.socketio)
 
         # Mount control overlay
         from engine.overlay import mount_overlay
@@ -1174,7 +1149,6 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
         self._setup_routes()
         self._setup_socketio()
-        self._mcp_init()
         register_penthouse_rules()
 
         # SceneStateManager — bridge penthouse state to MCP framework
@@ -1803,13 +1777,10 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
             "tags": ["penthouse", "penthouse", "roleplay", "adult", "multi-agent", "spatial", "intimate", "mcp"],
         }
 
-    def start(self) -> None:
-        logger.info("THE PENTHOUSE — v0.68 Dark Renaissance — igniting...")
-        logger.info(f"Access at: http://{self.host}:{self.port}")
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-        # Re-register bench with socketio now available
-        self.register_bench_route(self.app, self.socketio)
-
+    def on_before_serve(self) -> None:
+        """Hook: wire all engine subsystems before serving."""
         # Wire up framework event bus
         try:
             from engine.mcp.framework import get_framework
@@ -1892,9 +1863,6 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
             logger.warning("NPC scheduler init failed: %s", exc)
             self._npc_scheduler = None
 
-        self.socketio.run(self.app, host=self.host, port=self.port,
-                          debug=False, allow_unsafe_werkzeug=True)
-
     # ── New engine event handlers ─────────────────────────────────────
 
     def _on_emotion_changed(self, payload: dict) -> None:
@@ -1911,7 +1879,8 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         except Exception:
             pass
 
-    def stop(self) -> None:
+    def on_shutdown(self) -> None:
+        """Hook: stop agent loop, NPC scheduler, and save framework state."""
         if self.agent_loop:
             self.agent_loop.stop()
         # Stop NPC scheduler if we started it
@@ -1926,9 +1895,6 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
             get_framework().save_state()
         except Exception:
             pass
-        # Flush Nexus event buffer
-        self.nexus_flush()
-        logger.info("Penthouse scene stopped.")
 
 if __name__ == "__main__":
     scene = PenthouseScene(host="0.0.0.0", port=5556)

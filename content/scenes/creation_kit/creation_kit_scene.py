@@ -8,10 +8,11 @@ scenes from the shared component library without hand-coding HTML/JS/CSS.
 Components are defined in ``engine.creation.component_registry``.
 Layouts are saved as JSON and exported to working scene directories.
 
-Version: v1.50.0 [2026-03-22]
+Version: v1.51.0 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
     v1.50.0 [2026-03-22] — Asset browser API, 8 new component export helpers
                             (dice_roller, action_menu, combat_log, leaderboard,
                             resource_bar, dialogue_choice, poker_table, mini_map),
@@ -31,10 +32,9 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
+from flask import jsonify, render_template, request
 
-from engine.scenes.base_scene import BaseScene
+from engine.scenes.flask_scene import FlaskScene
 from engine.port_registry import get_port
 from engine.creation.component_registry import (
     CATEGORIES,
@@ -45,7 +45,6 @@ from engine.creation.component_registry import (
     list_components_by_category,
 )
 from engine.creation.scene_template import create_scene
-from content.shared import register_shared_assets
 
 logger = logging.getLogger(__name__)
 
@@ -1762,10 +1761,11 @@ def _flatten_components(components: List[Dict[str, Any]]) -> List[Dict[str, Any]
 
 # ──── Flask Scene ─────────────────────────────────────────────────────────
 
-class CreationKitScene(BaseScene):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class CreationKitScene(FlaskScene):
     """Creation Kit — visual scene editor.
 
-    CONNECTS: component_registry, scene_template, asset_registry
+    CONNECTS: component_registry, scene_template, asset_registry, FlaskScene
     CALLED BY: launcher.py, TUI
     EMITS: REST API for editor UI
     """
@@ -1780,17 +1780,13 @@ class CreationKitScene(BaseScene):
     }
 
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
-        self.app = Flask(
-            __name__,
-            template_folder=str(_SCENE_DIR / "templates"),
-            static_folder=str(_SCENE_DIR / "static"),
-            static_url_path=f"/{SCENE_ID}/static",
-        )
-        CORS(self.app)
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
+        # Custom static URL path for the creation kit
+        self.app.static_url_path = f"/{SCENE_ID}/static"
+
+        # Scene-specific routes (FlaskScene handles Flask, SocketIO, CORS,
+        # shared assets, and health routes)
         self._setup_routes()
 
     # v1.47.0 [2026-03-21] — Creation Kit routes
@@ -2066,20 +2062,8 @@ class CreationKitScene(BaseScene):
                 logger.error("Scene export failed: %s", exc, exc_info=True)
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
-    def stop(self) -> None:
-        """Stop the Creation Kit."""
+    # v1.51.0 [2026-03-22] — FlaskScene handles start()/stop(); use hooks
+
+    def on_shutdown(self) -> None:
+        """Scene-specific cleanup on shutdown."""
         logger.info("Creation Kit stopped")
-
-    def get_plugin_info(self) -> Dict[str, Any]:
-        """Return plugin metadata for hub discovery."""
-        return {
-            **self.SCENE_METADATA,
-            "url": f"http://localhost:{self.port}",
-            "health_url": f"http://localhost:{self.port}/health",
-            "components": get_component_count(),
-        }
-
-    def start(self) -> None:
-        """Start the Creation Kit server."""
-        logger.info("Creation Kit opening on %s:%d", self.host, self.port)
-        self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)

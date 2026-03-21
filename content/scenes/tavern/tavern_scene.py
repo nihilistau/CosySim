@@ -4,7 +4,7 @@ Port 5558.  Flask + SocketIO.
 
 A showcase scene demonstrating *every* major MCP framework feature:
 
-    ✅  BaseScene + MCPSceneMixin      — proper lifecycle
+    ✅  FlaskScene base class          — unified lifecycle
     ✅  MCPSceneNode                   — state, rules, events
     ✅  SceneStateManager              — persistent character stats
     ✅  DialogSystem / ResponseDirective — forced NPC lines
@@ -23,6 +23,12 @@ A showcase scene demonstrating *every* major MCP framework feature:
     ✅  Web UI                         — Flask + SocketIO + HTML
 
 Created as a reference implementation for new scene developers.
+
+Version: v1.51.0 [2026-03-22]
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
+    v0.68   [2026-03-20] — Dark Renaissance gritty dockside tavern
 """
 
 from __future__ import annotations
@@ -36,13 +42,9 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-import jinja2
-from flask import Flask, jsonify, render_template, request
-from flask_socketio import SocketIO
+from flask import jsonify, render_template, request
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
 
 try:
     from engine.world.world_state import get_world_state
@@ -65,11 +67,11 @@ DEFAULT_PORT = 5558
 #  Scene class
 # ---------------------------------------------------------------------------
 
-class TavernScene(BaseScene, NexusSceneMixin):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class TavernScene(FlaskScene):
     """The Dragon's Flagon — a fantasy tavern.
 
-    Inherits BaseScene for lifecycle management and uses MCPSceneMixin
-    (applied via __init_subclass__ if available, or manual wiring).
+    Inherits FlaskScene for unified lifecycle, MCP, and Nexus integration.
     """
 
     SCENE_METADATA = {
@@ -101,48 +103,27 @@ class TavernScene(BaseScene, NexusSceneMixin):
     #  Init
     # ------------------------------------------------------------------
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
         # Lazy imports to avoid circular deps at module level
         from .tavern_state import TavernState
 
         self.tavern_state = TavernState()
 
-        # Flask app
-        self.app = Flask(
-            __name__,
-            template_folder=os.path.join(os.path.dirname(__file__), "templates"),
-            static_folder=os.path.join(os.path.dirname(__file__), "static"),
-        )
-        _shared_tmpl = str(Path(os.path.dirname(__file__)).parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
-        register_shared_assets(self.app)
-
         self._register_routes()
         self._register_socketio()
 
-        # MCP wiring
+        # MCP wiring (scene-specific lifecycle hooks beyond FlaskScene._connect_mcp)
         self._wire_mcp()
-
-        # Background ticker
-        self._ticker_running = False
-        self._ticker_thread: Optional[threading.Thread] = None
-
-        self.nexus_init("tavern")
 
         # ── World State ──────────────────────────────────────────────
         self._world_state = None
-        self._event_bus = None
+        self._event_bus_ref = None
         if _WORLD_AVAILABLE:
             self._world_state = get_world_state()
-            self._event_bus = get_event_bus()
-            self._event_bus.subscribe("world.tick", self._on_world_tick)
-            self._event_bus.subscribe("world.time_change", self._on_time_change)
+            self._event_bus_ref = get_event_bus()
 
         log.info("TavernScene created on port %d", port)
 
@@ -380,22 +361,15 @@ class TavernScene(BaseScene, NexusSceneMixin):
                 log.error("Consequences API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
 
-        # Health route for service discovery
-        self.register_health_route(app)
-        self.register_hud_route(app)
-        self.register_announcer_route(app)
-        self.register_inventory_route(app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
+        # Scene-specific extra routes
         self.register_shop_route(app)
 
-        # Bench metrics + TTS endpoints
+        # Bench metrics
         try:
             self.register_bench_route(app, self.socketio)
         except Exception as exc:
             log.debug("Bench route: %s", exc)
-        try:
-            self.register_tts_route(app)
-        except Exception as exc:
-            log.debug("TTS route: %s", exc)
 
         # Overlay + skills server
         try:
@@ -559,22 +533,22 @@ class TavernScene(BaseScene, NexusSceneMixin):
     #  BaseScene interface
     # ------------------------------------------------------------------
 
-    def start(self) -> None:
-        log.info("Starting TavernScene on %s:%d", self.host, self.port)
-        self._start_ticker()
-        self.socketio.run(self.app, host=self.host, port=self.port,
-                          allow_unsafe_werkzeug=True)
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-    def stop(self) -> None:
-        self.nexus_flush()
-        log.info("Stopping TavernScene")
-        if hasattr(self, "_event_bus") and self._event_bus:
+    def on_before_serve(self) -> None:
+        """Hook: subscribe to world events before the server starts."""
+        if _WORLD_AVAILABLE and self._event_bus_ref:
+            self._event_bus_ref.subscribe("world.tick", self._on_world_tick)
+            self._event_bus_ref.subscribe("world.time_change", self._on_time_change)
+
+    def on_shutdown(self) -> None:
+        """Hook: unsubscribe from world events during shutdown."""
+        if hasattr(self, "_event_bus_ref") and self._event_bus_ref:
             try:
-                self._event_bus.unsubscribe("world.tick", self._on_world_tick)
-                self._event_bus.unsubscribe("world.time_change", self._on_time_change)
+                self._event_bus_ref.unsubscribe("world.tick", self._on_world_tick)
+                self._event_bus_ref.unsubscribe("world.time_change", self._on_time_change)
             except Exception:
                 pass
-        self._stop_ticker()
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:
