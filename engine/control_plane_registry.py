@@ -14,77 +14,98 @@ LAUNCHER_CONFIG_PATH = PROJECT_ROOT / "config" / "launcher.yaml"
 # ──── Canonical launcher target definitions ──────────────────────────────────
 
 SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
+    "nexus_kms": {
+        "type": "external",
+        "label": "Nexus KMS",
+        "auto_start": True,
+        "pillar": "service",
+        "cwd": "C:/Files/Nexus",
+        "cmd": ["python", "-m", "nexus", "api"],
+        "start_priority": 0,  # must start before everything else
+    },
     "hub": {
         "type": "flask",
         "cls": "content.scenes.hub.hub_flask.HubScene",
         "label": "CosySim Hub",
         "auto_start": True,
+        "pillar": "service",
     },
     "nexus_panel": {
         "type": "flask",
         "cls": "content.scenes.nexus_panel.nexus_panel_scene.NexusPanelScene",
         "label": "Nexus Control Panel",
         "auto_start": True,
+        "pillar": "service",
     },
     "dashboard": {
         "type": "streamlit",
         "script": "content/scenes/dashboard/dashboard_v2.py",
         "label": "System Dashboard",
         "auto_start": False,
+        "pillar": "service",
     },
     "admin": {
         "type": "streamlit",
         "script": "content/scenes/admin/admin_panel.py",
         "label": "Admin Panel",
         "auto_start": False,
+        "pillar": "service",
     },
     "assets": {
         "type": "streamlit",
         "script": "content/scenes/assets/asset_generator.py",
         "label": "Asset Generator",
         "auto_start": False,
+        "pillar": "creation",
     },
     "creator": {
         "type": "streamlit",
         "script": "content/scenes/hub/scene_creator.py",
         "label": "Scene Creator",
         "auto_start": False,
+        "pillar": "creation",
     },
     "tts": {
         "type": "fastapi",
         "factory": "engine.tts.qwen3_server.create_tts_app",
         "label": "TTS Server",
         "auto_start": False,
+        "pillar": "service",
     },
     "bridge": {
         "type": "fastapi",
         "factory": "engine.mcp.web_bridge.create_bridge_app",
         "label": "MCP Bridge",
         "auto_start": True,
+        "pillar": "service",
     },
     "canvas": {
         "type": "node",
         "script": "content/apps/notebook_canvas",
         "label": "Nexus Canvas",
         "auto_start": True,
+        "pillar": "creation",
     },
     "canvas_api": {
         "type": "fastapi",
         "factory": "engine.api.canvas_api.create_app",
         "label": "Canvas API",
         "auto_start": True,
+        "pillar": "creation",
     },
     "nlm_proxy": {
         "type": "flask",
         "cls": "engine.mcp.nlm_live_proxy.NLMProxyServer",
         "label": "NLM Live Proxy",
         "auto_start": True,
+        "pillar": "service",
     },
     "system_control": {
         "type": "flask",
         "cls": "content.scenes.system_control.system_control_scene.SystemControlScene",
         "label": "System Control Panel",
         "auto_start": True,
+        "pillar": "service",
     },
 }
 
@@ -94,102 +115,119 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "cls": "content.scenes.phone.phone_scene_v2.PhoneSceneV2",
         "label": "SIGNAL",
         "auto_start": True,
+        "pillar": "game",
     },
     "penthouse": {
         "type": "flask",
         "cls": "content.scenes.penthouse.penthouse_scene.PenthouseScene",
         "label": "THE PENTHOUSE",
         "auto_start": True,
+        "pillar": "game",
     },
     "lounge": {
         "type": "flask",
         "cls": "content.scenes.lounge.lounge_scene.LoungeScene",
         "label": "THE VELVET PIT",
         "auto_start": False,
+        "pillar": "game",
     },
     "tavern": {
         "type": "flask",
         "cls": "content.scenes.tavern.tavern_scene.TavernScene",
         "label": "THE RUSTY ANCHOR",
         "auto_start": False,
+        "pillar": "game",
     },
     "casino": {
         "type": "flask",
         "cls": "content.scenes.casino.casino_scene.CasinoScene",
         "label": "CLUB NOIR",
         "auto_start": False,
+        "pillar": "game",
     },
     "gallery": {
         "type": "flask",
         "cls": "content.scenes.gallery.gallery_scene.GalleryScene",
         "label": "THE OBSCURA",
         "auto_start": False,
+        "pillar": "game",
     },
     "arena": {
         "type": "flask",
         "cls": "content.scenes.arena.ArenaScene",
         "label": "THE COLOSSEUM",
         "auto_start": False,
+        "pillar": "game",
     },
     "realm": {
         "type": "flask",
         "cls": "content.scenes.realm.realm_scene.RealmScene",
         "label": "THE SHATTERED THRONE",
         "auto_start": False,
+        "pillar": "game",
     },
     "neoncity": {
         "type": "flask",
         "cls": "content.scenes.neoncity.neoncity_scene.NeonCityScene",
         "label": "NEON CITY",
         "auto_start": True,
+        "pillar": "game",
     },
     "coders": {
         "type": "flask",
         "cls": "content.scenes.coders.coders_scene.CodersRoomScene",
         "label": "THE LAB",
         "auto_start": False,
+        "pillar": "game",
     },
     "heist": {
         "type": "flask",
         "cls": "content.scenes.heist.heist_scene.HeistScene",
         "label": "THE SCORE",
         "auto_start": False,
+        "pillar": "game",
     },
     "command_center": {
         "type": "flask",
         "cls": "content.scenes.command_center.command_center_scene.CommandCenterScene",
         "label": "Command Center",
         "auto_start": False,
+        "pillar": "service",
     },
     "games": {
         "type": "flask",
         "cls": "content.scenes.games.games_scene.GamesScene",
         "label": "THE ARCADE",
         "auto_start": False,
+        "pillar": "game",
     },
     "grid": {
         "type": "flask",
         "cls": "content.scenes.grid.grid_scene.GridScene",
         "label": "THE GRID",
         "auto_start": False,
+        "pillar": "game",
     },
     "intel_hub": {
         "type": "flask",
         "cls": "content.scenes.intel_hub.intel_hub_scene.IntelHubScene",
         "label": "THE BRIEFING ROOM",
         "auto_start": True,
+        "pillar": "service",
     },
     "asset_studio": {
         "type": "flask",
         "cls": "content.scenes.asset_studio.asset_studio_scene.AssetStudioScene",
         "label": "ASSET STUDIO",
         "auto_start": False,
+        "pillar": "creation",
     },
     "lab_break": {
         "type": "flask",
         "cls": "content.scenes.lab_break.lab_break_scene.LabBreakScene",
         "label": "LAB BREAK",
         "auto_start": False,
+        "pillar": "game",
     },
 }
 
@@ -248,8 +286,35 @@ def get_target_metadata_catalogue() -> Dict[str, Dict[str, Any]]:
                 "label": info["label"],
                 "type": info["type"],
                 "auto_start": bool(info.get("auto_start")),
+                "pillar": info.get("pillar", "service"),
             }
     return metadata
+
+
+def get_targets_by_pillar(pillar: str) -> Dict[str, Dict[str, Any]]:
+    """Return all SERVICE_DEFS + SCENE_DEFS entries matching *pillar*."""
+    result: Dict[str, Dict[str, Any]] = {}
+    for catalogue in (SERVICE_DEFS, SCENE_DEFS):
+        for target_id, info in catalogue.items():
+            if info.get("pillar") == pillar:
+                result[target_id] = info
+    return result
+
+
+PILLAR_IDS: Dict[str, Tuple[str, ...]] = {
+    "game": tuple(
+        tid for tid, info in {**SERVICE_DEFS, **SCENE_DEFS}.items()
+        if info.get("pillar") == "game"
+    ),
+    "service": tuple(
+        tid for tid, info in {**SERVICE_DEFS, **SCENE_DEFS}.items()
+        if info.get("pillar") == "service"
+    ),
+    "creation": tuple(
+        tid for tid, info in {**SERVICE_DEFS, **SCENE_DEFS}.items()
+        if info.get("pillar") == "creation"
+    ),
+}
 
 
 def build_launcher_catalogues(

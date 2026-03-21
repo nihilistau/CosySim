@@ -36,7 +36,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from engine.control_plane_registry import LAUNCHER_CONFIG_PATH, build_launcher_catalogues
+from engine.control_plane_registry import LAUNCHER_CONFIG_PATH, PILLAR_IDS, build_launcher_catalogues
 from engine.port_registry import get_port, get_target_metadata
 
 # Unicode on Windows cp1252 consoles
@@ -130,6 +130,13 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
     elif t == "node":
         script_dir = PROJECT_ROOT / info["script"]
         subprocess.run(["npm", "run", "dev"], cwd=str(script_dir))
+    elif t == "external":
+        cwd = info.get("cwd", ".")
+        cmd = info.get("cmd", [])
+        if not cmd:
+            print(f"No 'cmd' defined for external target '{name}'")
+            sys.exit(1)
+        subprocess.run(cmd, cwd=cwd)
     else:
         print(f"Unknown type '{t}' for '{name}'")
         sys.exit(1)
@@ -194,6 +201,30 @@ def _start_node_proc(info: Dict[str, Any],
         return None
 
 
+def _start_external_proc(info: Dict[str, Any],
+                          failed: List[str]) -> Optional[subprocess.Popen]:
+    """Start an external service via subprocess (e.g. Nexus KMS)."""
+    cwd = info.get("cwd", ".")
+    cmd = info.get("cmd", [])
+    if not cmd:
+        print(f"  {info['label']}: no cmd defined, skipping")
+        failed.append(info["label"])
+        return None
+    if not Path(cwd).is_dir():
+        print(f"  {info['label']}: directory {cwd} not found, skipping")
+        failed.append(info["label"])
+        return None
+    try:
+        return subprocess.Popen(
+            cmd, cwd=cwd,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        print(f"  {info['label']}: {exc}")
+        failed.append(info["label"])
+        return None
+
+
 def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     """
     Launch services first (let them settle), then scenes.
@@ -242,13 +273,30 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                 if proc:
                     all_procs.append(proc)
                     print(f"    [OK] {info['label']} (PID {proc.pid})")
+            elif info["type"] == "external":
+                proc = _start_external_proc(info, failed)
+                if proc:
+                    all_procs.append(proc)
+                    # Wait up to 15s for external service to come online
+                    port = info["port"]
+                    for _wait in range(15):
+                        if _port_up(port):
+                            break
+                        time.sleep(1)
+                    status = "UP" if _port_up(port) else "starting"
+                    print(f"    [OK] {info['label']} (PID {proc.pid}, {status})")
             else:
                 _start_in_thread(name, info, failed)
                 print(f"    [OK] {info['label']} -> :{info['port']}")
             time.sleep(0.4)
 
-    _launch_group(service_names, "Services")
-    if service_names and scene_names:
+    # Sort services so external dependencies (start_priority=0) launch first
+    service_names_sorted = sorted(
+        service_names,
+        key=lambda n: ALL_TARGETS[n].get("start_priority", 50),
+    )
+    _launch_group(service_names_sorted, "Services")
+    if service_names_sorted and scene_names:
         time.sleep(2)
     _launch_group(scene_names, "Scenes")
 
@@ -372,6 +420,18 @@ def launch_all() -> None:
     launch_multi(list(SERVICES), list(SCENES))
 
 
+def launch_pillar(pillar: str) -> None:
+    """Start all targets belonging to *pillar* (game, service, creation)."""
+    target_ids = PILLAR_IDS.get(pillar, ())
+    if not target_ids:
+        print(f"  Unknown pillar: '{pillar}'")
+        sys.exit(1)
+    svcs = [t for t in target_ids if t in SERVICES]
+    scns = [t for t in target_ids if t in SCENES]
+    print(f"\n  Launching {pillar.upper()} pillar ({len(svcs)} services, {len(scns)} scenes)")
+    launch_multi(svcs, scns)
+
+
 def launch_single(name: str) -> None:
     info = ALL_TARGETS.get(name)
     if not info:
@@ -389,14 +449,21 @@ def launch_single(name: str) -> None:
 def cmd_list() -> None:
     print(f"\n  CosySim v{VERSION} -- Target List")
     print(f"  Config: {_LAUNCHER_CFG}\n")
-    for group_label, catalogue in (("SERVICES", SERVICES), ("SCENES", SCENES)):
-        print(f"  -- {group_label} " + "-" * 45)
+
+    # Show pillar-grouped view
+    pillar_labels = {"game": "NEONCITY (GAME)", "service": "SYSTEM SERVICES", "creation": "CREATION KIT"}
+    for pillar, label in pillar_labels.items():
+        ids = PILLAR_IDS.get(pillar, ())
+        print(f"  -- {label} ({len(ids)}) " + "-" * 40)
         print(f"  {'name':<20}  {'port':>5}  auto  status  label")
         print(f"  {'-' * 56}")
-        for name, info in catalogue.items():
+        for tid in ids:
+            info = ALL_TARGETS.get(tid, {})
+            if not info:
+                continue
             up   = "UP  " if _port_up(info["port"]) else "down"
             auto = "[x]" if info.get("auto_start") else "   "
-            print(f"  {name:<20}  {info['port']:>5}  {auto}  {up}    {info['label']}")
+            print(f"  {tid:<20}  {info['port']:>5}  {auto}  {up}    {info['label']}")
         print()
 
 
@@ -405,7 +472,7 @@ def cmd_status() -> None:
     print(f"  Python {sys.version.split()[0]}  |  {PROJECT_ROOT}\n")
 
     print("  External Services:")
-    for target_id in ("lmstudio", "nexus"):
+    for target_id in ("lmstudio", "comfyui"):
         meta = get_target_metadata(target_id)
         print(f"    {'[UP]' if _port_up(meta['port']) else '[--]'} {meta['label']:.<22} :{meta['port']}")
 
@@ -548,6 +615,8 @@ Examples:
     parser.add_argument("--scenes",    action="store_true", help="Start auto_start scenes only")
     parser.add_argument("--all",       action="store_true", help="Start every known target")
     parser.add_argument("--list",      action="store_true", help="List all targets + port status")
+    parser.add_argument("--game",      action="store_true", help="Start all game pillar scenes")
+    parser.add_argument("--creation",  action="store_true", help="Start all creation pillar targets")
     parser.add_argument("--status",    action="store_true", help="System health check")
     parser.add_argument("--test",      action="store_true", help="Run test suite")
     parser.add_argument("--init-db",   action="store_true", dest="init_db",
@@ -589,6 +658,10 @@ Examples:
         hk.watch() if args.watch else hk.run_all()
     elif args.core:
         launch_core()
+    elif args.game:
+        launch_pillar("game")
+    elif args.creation:
+        launch_pillar("creation")
     elif args.services:
         launch_services_cmd()
     elif args.scenes:

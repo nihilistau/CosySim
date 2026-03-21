@@ -216,17 +216,17 @@ tts:
   backends:
     piper:
       enabled: true
-      model_path: "C:\\Files\\Models\\tts\\piper\\en_US-amy-medium.onnx"
+      model_path: "${PIPER_MODEL_PATH:-C:\\Files\\Models\\tts\\piper\\en_US-amy-medium.onnx}"
       sample_rate: 22050
     orpheus:
       enabled: false                     # LMStudio-backed (conflicts with other models)
       server_url: "http://localhost:5005"
       default_voice: "tara"
       timeout: 120
-      model_dir: "D:\\Files\\Models\\Orpheous"
+      model_dir: "${ORPHEUS_MODEL_DIR:-D:\\Files\\Models\\Orpheous}"
     orpheus_native:
       enabled: true                      # Direct GGUF — no LMStudio dependency
-      model_dir: "D:\\Files\\Models\\Orpheous"
+      model_dir: "${ORPHEUS_MODEL_DIR:-D:\\Files\\Models\\Orpheous}"
       default_quant: null                # null=auto-select by text length (q2_k/q4_k_m)
       gpu_layers: -1                     # -1=all layers on GPU (CUDA build active)
       default_voice: "tara"
@@ -265,7 +265,7 @@ lmstudio:
   base_url: "http://127.0.0.1:1234"
   # API authentication (optional — LMStudio defaults to no auth)
   # Generate a token in LMStudio → Developer → Server Settings → Manage Tokens
-  api_token: "sk-lm-j8v22Hz0:XmuG1AdltLqaegp2OEAd"  # Bearer token
+  api_token: "${LMSTUDIO_API_TOKEN:-sk-lm-j8v22Hz0:XmuG1AdltLqaegp2OEAd}"
   # API version: "v1" = legacy OpenAI-compat, "api_v1" = new LMStudio protocol
   api_version: "v1"
   # Default model-load options (tuned for RTX 2060 12 GB)
@@ -795,10 +795,10 @@ nexus:
     plan_digest_limit: 10
   embeddings:
     enabled: true
-    provider: "gemini"           # "gemini" (primary), "local" (LMStudio), "auto"
-    model: "gemini-embedding-exp-03-07"  # Gemini Embedding 2
+    provider: "auto"             # "gemini" (primary), "local" (LMStudio), "auto"
+    model: "gemini-embedding-001"  # Gemini Embedding (v1beta)
     dimensions: 768              # MRL: 768 (fast), 1536 (balanced), 3072 (max quality)
-    local_model: ""              # LMStudio embedding model key (fallback)
+    local_model: "text-embedding-nomic-embed-text-v1.5"  # LMStudio embedding model key (fallback)
     cache_size: 10000            # In-memory embedding cache entries
     batch_size: 100              # Max texts per batch API call
     auto_embed: true             # Auto-embed new Nexus entries
