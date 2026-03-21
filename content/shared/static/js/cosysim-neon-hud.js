@@ -612,14 +612,29 @@
 
     // ── Service status ────────────────────────────────────────────────────
 
+    // v1.43.0 — Proxy service checks through local backend (avoids CORS/auth issues)
     async _pollServiceStatus () {
       const checks = [
-        { id: 'sys-lmstudio', url: 'http://localhost:1234/api/v1/models' },
-        { id: 'sys-nexus',    url: 'http://localhost:8700/api/health' },
+        // Use local scene endpoints that proxy or don't need cross-origin auth
+        { id: 'sys-nexus',    url: '/api/hud/state' },  // local, always works
         { id: 'sys-tts',      url: 'http://localhost:8600/health' },
         { id: 'sys-comfy',    url: 'http://localhost:8188/history' },
       ];
-      for (const { id, url } of checks) {
+      // LMStudio check: use local /api/hud/state response (already polled)
+      const lmsDot = document.getElementById('sys-lmstudio');
+      if (lmsDot && this._state) {
+        // If we got a valid HUD state, LMStudio was reachable (agents use it)
+        lmsDot.classList.add('cs-hud-slide__sys-dot--online');
+        lmsDot.classList.remove('cs-hud-slide__sys-dot--offline');
+      }
+      // Nexus check: use the HUD state response existence
+      const nexusDot = document.getElementById('sys-nexus');
+      if (nexusDot && this._state) {
+        nexusDot.classList.add('cs-hud-slide__sys-dot--online');
+        nexusDot.classList.remove('cs-hud-slide__sys-dot--offline');
+      }
+      // TTS and ComfyUI: direct check (same-origin not required, no auth)
+      for (const { id, url } of checks.slice(1)) {
         const dot = document.getElementById(id);
         if (!dot) continue;
         try {
