@@ -1137,12 +1137,29 @@ class CosySimTUI(App[None]):
 
     # ── Cleanup on quit ───────────────────────────────────────────────────
 
+    # v1.51.1 [2026-03-22] — Force-exit on quit (daemon threads block normal shutdown)
     def on_unmount(self) -> None:
+        # Stop world daemons
+        for d_mod, d_getter, d_method in [
+            ("engine.world.world_sim", "get_world_sim", "stop"),
+            ("engine.world.event_cascade", "get_event_cascade", "stop"),
+            ("engine.events.cross_scene_relay", "get_cross_scene_relay", "stop"),
+        ]:
+            try:
+                import importlib as _il
+                _m = _il.import_module(d_mod)
+                getattr(getattr(_m, d_getter)(), d_method)()
+            except Exception:
+                pass
+        # Terminate subprocess-based targets
         for proc in self._launched_procs.values():
             try:
                 proc.terminate()
             except Exception:
                 pass
+        # Force exit — daemon threads (Flask/SocketIO servers) won't release
+        import os
+        os._exit(0)
 
 
 # ──── Entry Point ─────────────────────────────────────────────────────────
