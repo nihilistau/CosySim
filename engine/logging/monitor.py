@@ -109,7 +109,7 @@ class SystemMonitor:
         services = {}
 
         services["lmstudio"] = self._ping_http(
-            self._resolve_base("lmstudio", "lmstudio.base_url", "http://localhost:1234") + "/v1/models"
+            self._resolve_base("lmstudio", "lmstudio.base_url", "http://localhost:1234") + "/api/v1/models"
         )
         services["comfyui"] = self._ping_http(
             self._resolve_base("comfyui", "comfyui.base_url", "http://localhost:8188") + "/system_stats"
@@ -162,7 +162,7 @@ class SystemMonitor:
         try:
             import requests
             url = self._resolve_base("lmstudio", "lmstudio.base_url", "http://localhost:1234")
-            resp = requests.get(f"{url}/v1/models", timeout=3)
+            resp = requests.get(f"{url}/api/v1/models", timeout=3)
             if resp.status_code == 200:
                 data = resp.json()
                 models = data.get("data", [])

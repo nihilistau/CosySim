@@ -193,7 +193,7 @@ class FinetunedRouter:
         }).encode("utf-8")
 
         req = urllib.request.Request(
-            f"http://{host}:{port}/v1/completions",
+            f"http://{host}:{port}/api/v1/completions",
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",

@@ -256,7 +256,7 @@ class LMStudioEmbeddingProvider:
     # v1.43.0 [2026-03-21] — Better error detection for LMStudio embedding endpoint
     def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         resp = self._session.post(
-            f"{self._base_url}/v1/embeddings",
+            f"{self._base_url}/api/v1/embeddings",
             headers=self._headers(),
             json=payload,
             timeout=30,
