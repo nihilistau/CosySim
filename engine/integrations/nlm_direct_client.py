@@ -73,8 +73,12 @@ _NLM_META_PATH = Path(__file__).resolve().parents[2] / "data" / "nlm_meta.json"
 _NLM_BUILD_LABEL_PREFIX = "boq_labs-tailwind-frontend_"
 
 # Chrome DevTools Protocol — used for live token refresh from running NLM tabs
-_CDP_PORT = 9222
-_CDP_TABS_URL = f"http://localhost:{_CDP_PORT}/json"
+def _cdp_port() -> int:
+    from engine.config import get_config
+    return int(get_config().get("cdp.port", 9222))
+
+def _cdp_tabs_url() -> str:
+    return f"http://localhost:{_cdp_port()}/json"
 
 # Audio type constants (from sqTeoe GET_AUDIO_OPTIONS)
 AUDIO_DEEP_DIVE = 1   # ~30 minutes, two-host conversation
@@ -417,10 +421,10 @@ class NLMDirectClient:
             return False
 
         try:
-            tabs_resp = requests.get(_CDP_TABS_URL, timeout=3)
+            tabs_resp = requests.get(_cdp_tabs_url(), timeout=3)
             tabs = tabs_resp.json()
         except Exception:
-            logger.debug("Chrome CDP not reachable at port %d", _CDP_PORT)
+            logger.debug("Chrome CDP not reachable at port %d", _cdp_port())
             return False
 
         nlm_tabs = [

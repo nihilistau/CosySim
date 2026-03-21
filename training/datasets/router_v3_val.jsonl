@@ -1,79 +1,63 @@
-{"instruction": "Complete the task.", "input": "Can you what did we talk about last time??", "output": "memory_recall", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to write a love letter from viktor to lola.", "output": "creative_generation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: Trigger scene_director_tick.", "output": "skill_call", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "What were the results of the last heist?", "output": "memory_recall", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you what does this rune mean??", "output": "information_lookup", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: How does she feel about what I did?", "output": "character_emotion", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: My character lands the killing blow.", "output": "combat_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: I need comfort right now.", "output": "emotional_support", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you this is a horror scene. make it disturbing.?", "output": "adult_content", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you describe the battle scene cinematically.?", "output": "creative_generation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you do you remember when i told you about my sister??", "output": "memory_recall", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Attack the guard with my sword.", "output": "game_action", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "i made a terrible mistake.", "output": "emotional_support", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "What model is loaded.", "output": "system_command", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Look up the trade route.", "output": "information_lookup", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: Search the crime scene for clues.", "output": "investigation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to visit the arena. Please.", "output": "scene_transition", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to go back to the hub.", "output": "scene_transition", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to visit the obscura gallery.", "output": "scene_transition", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to what's the political situation?", "output": "world_query", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Lola is smiling. What does that mean.", "output": "character_emotion", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to i feel alone.", "output": "emotional_support", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: Add moral ambiguity to my character's choice.", "output": "adult_content", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: What is the legend of the black sword?", "output": "story_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to how do i unlock this achievement?", "output": "information_lookup", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "what happened to the old government?", "output": "world_query", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Add dark, mature themes to this story. Please.", "output": "adult_content", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Which districts are safe at night.", "output": "world_query", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "What did we talk about last time? Please.", "output": "memory_recall", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to the assassin strikes from the shadows.", "output": "combat_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Write a poem about the neon city.", "output": "creative_generation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Use the ability to freeze him.", "output": "game_action", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: My character barely escapes. Describe it.", "output": "combat_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: Describe the shield bash in slow motion.", "output": "combat_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "express my character's grief.", "output": "character_emotion", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Generate a character backstory.", "output": "creative_generation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "When was the last time I visited this scene? Please.", "output": "memory_recall", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to show me the admin panel.", "output": "system_command", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "What does Aria think of me now? Please.", "output": "character_emotion", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "How do I unlock this achievement? Please.", "output": "information_lookup", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Write the scene description for the opening. Please.", "output": "creative_generation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "search for information about the artifact.", "output": "information_lookup", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: Is he angry with me?", "output": "character_emotion", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to navigate to the penthouse.", "output": "scene_transition", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Write the scene description for the opening.", "output": "creative_generation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "who are the major players in the underworld?", "output": "world_query", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "you seem tired.", "output": "small_talk", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Use the ability to freeze him. Please.", "output": "game_action", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you she's jealous. deal with that.?", "output": "character_emotion", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: I just need someone to talk to.", "output": "emotional_support", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you what are the stats of this weapon??", "output": "information_lookup", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "How much is the bounty worth.", "output": "economic_action", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "What does the fingerprint tell us? Please.", "output": "investigation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: Write the underground fight with no rules.", "output": "adult_content", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Express my character's grief. Please.", "output": "character_emotion", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "What's up.", "output": "small_talk", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "My character barely escapes. Describe it.", "output": "combat_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you recall the last quest we did together.?", "output": "memory_recall", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I'm scared. Please.", "output": "emotional_support", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you begin the chapter.?", "output": "story_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you generate an image prompt for the casino floor.?", "output": "creative_generation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "what is the quest for this dungeon?", "output": "story_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Call arena_start_match. Please.", "output": "skill_call", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you what is omnicorp's agenda??", "output": "world_query", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "The interrogation gets brutal. Continue. Please.", "output": "adult_content", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: The arrow flies \u2014 narrate its path.", "output": "combat_narrative", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: How does the economy work in NeonCity?", "output": "world_query", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Take me to NeonCity.", "output": "scene_transition", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Describe the battle scene cinematically. Please.", "output": "creative_generation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to attack the guard with my sword.", "output": "game_action", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to what did aria say about the artifact?", "output": "memory_recall", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "what happened at the casino last week?", "output": "memory_recall", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: Check the scheduler.", "output": "system_command", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Who is the mastermind? Please.", "output": "investigation", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "He's in love with her, isn't he?", "output": "character_emotion", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Player: Use the healing potion.", "output": "game_action", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "this character has a traumatic past. explore it.", "output": "adult_content", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "Can you add moral ambiguity to my character's choice.?", "output": "adult_content", "model_type": "router_v3"}
-{"instruction": "Complete the task.", "input": "I want to i'm really stressed out today.", "output": "emotional_support", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "What's the political situation?", "output": "world_query", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "He dodges my attack. Describe it.", "output": "combat_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "You remind me of someone I used to know.", "output": "small_talk", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: Craft a fire arrow.", "output": "game_action", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you throw the smoke bomb.?", "output": "game_action", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Catch you later.", "output": "small_talk", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Restart the world sim. Please.", "output": "system_command", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Which race is dominant in this realm? Please.", "output": "world_query", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to run the roll_dice skill.", "output": "skill_call", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: She's jealous. Deal with that.", "output": "character_emotion", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "What model is loaded? Please.", "output": "system_command", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to generate a character backstory.", "output": "creative_generation", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to list all skills.", "output": "system_command", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "track the suspect's movements.", "output": "investigation", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I'm grieving. Say something kind.", "output": "emotional_support", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Take me to NeonCity. Please.", "output": "scene_transition", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Where did I leave the key.", "output": "memory_recall", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you tell me about the history of this city.?", "output": "story_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you negotiate a better price.?", "output": "economic_action", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to react to the betrayal.", "output": "character_emotion", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to execute casino_spin_slots.", "output": "skill_call", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: How do I unlock this achievement?", "output": "information_lookup", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to can you just listen for a minute?", "output": "emotional_support", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to use my lockpicking skill.", "output": "game_action", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to the cavalry charges. narrate the impact.", "output": "combat_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: Who is the villain in this arc?", "output": "story_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to when was the last time i visited this scene?", "output": "memory_recall", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to who runs the black market here?", "output": "world_query", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: Decode the cipher.", "output": "investigation", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "how much does this cost?", "output": "economic_action", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Execute deal_blackjack_hand. Please.", "output": "skill_call", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to add moral ambiguity to my character's choice.", "output": "adult_content", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you my character lands the killing blow.?", "output": "combat_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Show Viktor's rage at the news. Please.", "output": "character_emotion", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to set the scene for the confrontation.", "output": "story_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you how much is the bounty worth??", "output": "economic_action", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "What does this rune mean?", "output": "information_lookup", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to question the suspect.", "output": "investigation", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you switch to the tavern scene.?", "output": "scene_transition", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Equip the leather armor.", "output": "game_action", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Leave the lounge.", "output": "scene_transition", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Follow the money trail.", "output": "investigation", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Take the elevator down. Please.", "output": "scene_transition", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "The explosion goes off. Narrate the aftermath. Please.", "output": "combat_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Make this villain truly terrifying. Please.", "output": "adult_content", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you the cavalry charges. narrate the impact.?", "output": "combat_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Describe this character in vivid detail.", "output": "creative_generation", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: When was the last time I visited this scene?", "output": "memory_recall", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Write the seduction scene.", "output": "adult_content", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: The cavalry charges. Narrate the impact.", "output": "combat_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Tell me about the history of this city.", "output": "story_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to what is the quest for this dungeon?", "output": "story_narrative", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to this scene should feel dangerous and forbidden.", "output": "adult_content", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you thanks for everything.?", "output": "small_talk", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Can you been a while. how have you been??", "output": "small_talk", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "show viktor's rage at the news.", "output": "character_emotion", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to remember the agreement we made?", "output": "memory_recall", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "How do I unlock this achievement?", "output": "information_lookup", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "I want to make this scene more intense and violent.", "output": "adult_content", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "what factions control this city?", "output": "world_query", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: Show Nexus health.", "output": "system_command", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "Player: React to the betrayal.", "output": "character_emotion", "model_type": "router_v3"}
+{"instruction": "Complete the task.", "input": "How does she feel about what I did.", "output": "character_emotion", "model_type": "router_v3"}

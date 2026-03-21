@@ -1,32 +1,31 @@
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please use whisper to transcribe this file", "output": "stt_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "what is the current version of CosySim", "output": "nexus_ask", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "convert my voice recording to text", "output": "stt_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please generate audio for the assistant reply", "output": "tts_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "turn off all scenes", "output": "scene_control", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "how does the interceptor pipeline work", "output": "nexus_ask", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "initialize the gaming scene", "output": "scene_control", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "can you explain port is lmstudio on??", "output": "nexus_ask", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "generate speech from this text", "output": "tts_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "configure the nexus knowledge base URL", "output": "config_update", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please preview the selected voice", "output": "tts_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "begin the tutorial scene", "output": "scene_control", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "What port is LMStudio on?", "output": "nexus_ask", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "reload the config from disk", "output": "config_update", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please upload source files to the cosysim notebook", "output": "nlm_research", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "what conventions apply to Python files", "output": "nexus_ask", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please what is the @skill decorator signature", "output": "nexus_ask", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please transcribe this audio", "output": "stt_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "synthesize speech for the dialog line", "output": "tts_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "decode this mp3 to text", "output": "stt_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "turn audio into readable text", "output": "stt_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "research NLM best practices", "output": "nlm_research", "model_type": "router_v2"}
 {"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "change the lmstudio port to 1235", "output": "config_update", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please make a checkpoint of all databases", "output": "backup_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "delete the old research notebook", "output": "nlm_research", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "how do I add a character to a scene", "output": "nexus_ask", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please how does the interceptor pipeline work", "output": "nexus_ask", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "read this paragraph aloud", "output": "tts_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "transcribe this audio", "output": "stt_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "how does state sync to the MCP tree", "output": "nexus_ask", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "say hello world using aria's voice", "output": "tts_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please speak this text out loud", "output": "tts_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "delete old backups older than 30 days", "output": "backup_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "what nexus entries cover for interceptor docs?", "output": "nexus_search", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please how do I register a new skill", "output": "nexus_ask", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please run the backup now", "output": "backup_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please announce the system status via TTS", "output": "tts_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "speech to text for the audio clip", "output": "stt_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please start voice recognition", "output": "stt_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "search for snippets about async agents", "output": "nexus_search", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please what nexus entries cover for interceptor docs?", "output": "nexus_search", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "save a backup of the knowledge base", "output": "backup_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "transcribe the scene audio file", "output": "stt_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please transcribe this audio", "output": "stt_request", "model_type": "router_v2"}
-{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "preview the selected voice", "output": "tts_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please list all active scenes", "output": "scene_control", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please read the current config for the bedroom scene", "output": "config_update", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "voice this message using qwen3 TTS", "output": "tts_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please launch the phone scene", "output": "scene_control", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please preview the selected voice", "output": "tts_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "list all active scenes", "output": "scene_control", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please what was the last breaking change in cosysim", "output": "nexus_ask", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "what is the @skill decorator signature", "output": "nexus_ask", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "Search for interceptor docs", "output": "nexus_search", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please verify the backup integrity", "output": "backup_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "distill conversation from the NLM notebook", "output": "nlm_research", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "Run the backup now", "output": "backup_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "what port is lmstudio on", "output": "nexus_ask", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please synthesize speech for the dialog line", "output": "tts_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please create a full system snapshot", "output": "backup_request", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "Start the penthouse scene", "output": "scene_control", "model_type": "router_v2"}
+{"instruction": "Classify this request to the most appropriate CosySim subsystem handler.", "input": "please please search for snippets about async agents", "output": "nexus_search", "model_type": "router_v2"}
