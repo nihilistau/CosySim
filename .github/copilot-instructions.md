@@ -206,6 +206,21 @@ python scripts/smart_test.py --smoke    # standalone script, same engine
 python scripts/smart_test.py --list     # dry-run: show what would run
 ```
 
+## Browser Testing & Telemetry (v1.43.0)
+
+**MANDATORY**: After ANY change to JS, CSS, HTML, or Jinja2 templates, run:
+```powershell
+python scripts/browser_test.py                    # Full Playwright test (39+ checks)
+python scripts/browser_test.py --report           # Read telemetry without testing
+```
+
+Never commit UI changes without a passing browser test. The test suite clicks every HUD panel, popup, overlay, keyboard shortcut, and district card in a real headless browser.
+
+**Telemetry**: `cosysim-telemetry.js` auto-captures clicks, errors, hotkeys, network failures on every scene page. Events POST to `/api/telemetry` and persist to `data/structured_logs.jsonl` via StructuredLogger. Check telemetry when diagnosing issues:
+```powershell
+python -c "import json; [print(json.loads(l).get('msg','')[:100]) for l in open('data/structured_logs.jsonl') if 'browser' in l]"
+```
+
 ## Code Versioning & Comment Standards (v1.42.1)
 
 All code files created or significantly modified MUST include versioning metadata and structured comments. This is a **standing rule** for all agents (Copilot, Claude Code, local LLM agents).
