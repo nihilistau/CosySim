@@ -594,6 +594,7 @@
       }
       if (overlay) {
         overlay.setAttribute('aria-hidden', 'false');
+        overlay.classList.add('open');  // v1.43.0 — phone-panel.css uses .open class
         overlay.classList.toggle('cs-phone-overlay--edge', !this._rightOpen);
       }
       if (phoneDot) phoneDot.classList.add('cs-hud__phone-dot--active');
@@ -606,7 +607,10 @@
       const phoneDot = document.querySelector('.cs-hud__phone-dot');
       const btn      = document.getElementById('hud-toggle-phone');
       // Hide overlay but keep iframe loaded to preserve phone state + badge
-      if (overlay) overlay.setAttribute('aria-hidden', 'true');
+      if (overlay) {
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.classList.remove('open');  // v1.43.0 — phone-panel.css .open class
+      }
       if (phoneDot) phoneDot.classList.remove('cs-hud__phone-dot--active');
       if (btn) btn.classList.remove('cs-hud__toggle--active');
     }
