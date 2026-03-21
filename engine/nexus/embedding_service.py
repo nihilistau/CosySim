@@ -262,30 +262,55 @@ class LMStudioEmbeddingProvider:
             headers["Authorization"] = f"Bearer {self._api_token}"
         return headers
 
-    # v1.43.0 [2026-03-21] — Better error detection for LMStudio embedding endpoint
+    # v1.50.1 [2026-03-22] — Retry logic + dual endpoint fallback for LMStudio
+    # CONNECTS: LMStudio REST API (/v1/embeddings or /api/v0/embeddings)
+    # CALLED BY: embed(), embed_batch()
+    _ENDPOINTS = ["/v1/embeddings", "/api/v0/embeddings"]
+
     def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        resp = self._session.post(
-            # Embeddings use OpenAI-compat /v1/embeddings (NOT native /api/v1/)
-            f"{self._base_url}/v1/embeddings",
-            headers=self._headers(),
-            json=payload,
-            timeout=30,
+        last_exc: Optional[Exception] = None
+        for attempt in range(3):
+            for endpoint in self._ENDPOINTS:
+                try:
+                    resp = self._session.post(
+                        f"{self._base_url}{endpoint}",
+                        headers=self._headers(),
+                        json=payload,
+                        timeout=45,
+                    )
+                    if resp.status_code >= 400:
+                        raise RuntimeError(
+                            f"LMStudio embed HTTP {resp.status_code} on {endpoint}: "
+                            f"{resp.text[:200]}"
+                        )
+                    try:
+                        data = resp.json()
+                    except Exception as exc:
+                        raise RuntimeError(f"LMStudio embed invalid JSON: {exc}") from exc
+                    # LMStudio may return 200 with error body when no model loaded
+                    if "error" in data:
+                        err_msg = data.get("error", {})
+                        if isinstance(err_msg, dict):
+                            err_msg = err_msg.get("message", str(err_msg))
+                        raise RuntimeError(f"LMStudio embed error: {err_msg}")
+                    if not data.get("data"):
+                        raise RuntimeError(
+                            "LMStudio embed returned no data — is an embedding model loaded?"
+                        )
+                    return data
+                except Exception as exc:
+                    last_exc = exc
+                    logger.debug(
+                        "LMStudio embed attempt %d/%d on %s failed: %s",
+                        attempt + 1, 3, endpoint, exc,
+                    )
+            # Brief pause before retry (model may be loading)
+            if attempt < 2:
+                time.sleep(1.0 * (attempt + 1))
+        raise RuntimeError(
+            f"LMStudio embed failed after 3 attempts across {len(self._ENDPOINTS)} "
+            f"endpoints. Last error: {last_exc}"
         )
-        if resp.status_code >= 400:
-            raise RuntimeError(f"LMStudio embed HTTP {resp.status_code}: {resp.text[:200]}")
-        try:
-            data = resp.json()
-        except Exception as exc:
-            raise RuntimeError(f"LMStudio embed invalid JSON: {exc}") from exc
-        # LMStudio may return 200 with an error body when no embedding model is loaded
-        if "error" in data:
-            err_msg = data.get("error", {})
-            if isinstance(err_msg, dict):
-                err_msg = err_msg.get("message", str(err_msg))
-            raise RuntimeError(f"LMStudio embed error: {err_msg}")
-        if not data.get("data"):
-            raise RuntimeError("LMStudio embed returned no data — is an embedding model loaded?")
-        return data
 
     def _extract_embeddings(self, data: Dict[str, Any]) -> List[List[float]]:
         items = data.get("data") or []

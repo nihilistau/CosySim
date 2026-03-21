@@ -28,7 +28,9 @@
   font-size: 11px;
   letter-spacing: 0.02em;
   overflow: hidden;
-  pointer-events: auto;
+  /* v1.50.1 [2026-03-22] — Default to pointer-events:none so invisible ticker
+     doesn't block clicks. Only enable when --visible is added. */
+  pointer-events: none;
   transition: opacity 0.4s ease, transform 0.3s ease;
   opacity: 0;
   transform: translateY(100%);
@@ -37,6 +39,7 @@
 .cs-ticker--visible {
   opacity: 1;
   transform: translateY(0);
+  pointer-events: auto;
 }
 
 .cs-ticker--hidden {
