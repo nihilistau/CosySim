@@ -308,105 +308,112 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                 print(f"    [OK] {info['label']} -> :{info['port']}")
             time.sleep(0.4)
 
-    # v1.42.1 [2026-03-21] — Priority-sorted service launch (external deps first)
-    # Services with start_priority=0 (e.g. Nexus KMS) launch before Flask scenes
+    # ── v1.51.0 [2026-03-22] — Four-phase launch with proper ordering ────
+    # Phase A: External services (Nexus KMS) — wait for port UP
+    # Phase B: World infrastructure (daemons BEFORE scenes)
+    # Phase C: Flask/FastAPI services
+    # Phase D: Game scenes — with per-target health verification
+
+    # ── Phase A: External + internal services ────────────────────────
     service_names_sorted = sorted(
         service_names,
         key=lambda n: ALL_TARGETS[n].get("start_priority", 50),
     )
     _launch_group(service_names_sorted, "Services")
+
+    # ── Phase B: World infrastructure (BEFORE scenes) ────────────────
+    # v1.51.0 — Daemons start before scenes so event subscriptions work
+    if scene_names:
+        print("\n  Starting World Infrastructure...")
+        _daemons = [
+            ("WorldSim",       "engine.world.world_sim",           "get_world_sim",        "start"),
+            ("CrossSceneRelay","engine.events.cross_scene_relay",  "get_cross_scene_relay", "start"),
+            ("EventCascade",   "engine.world.event_cascade",       "get_event_cascade",     "start"),
+        ]
+        for label, mod, getter, method in _daemons:
+            try:
+                import importlib as _il
+                m = _il.import_module(mod)
+                obj = getattr(m, getter)()
+                getattr(obj, method)()
+                print(f"    [OK] {label}")
+            except Exception as exc:
+                print(f"    [--] {label}: {exc}")
+
+        # Scheduler + feedback loops (non-critical, best-effort)
+        for label, mod, getter, setup in [
+            ("Scheduler", "engine.nexus.scheduler_daemon", "get_scheduler_daemon", "start"),
+            ("AutoLoop",  "engine.nexus.auto_loop",        "get_auto_loop",        "register_tasks"),
+            ("ConvSync",  "engine.nexus.conversation_sync", "get_conversation_sync","register_task"),
+        ]:
+            try:
+                import importlib as _il
+                m = _il.import_module(mod)
+                obj = getattr(m, getter)()
+                result = getattr(obj, setup)()
+                detail = f" ({result} tasks)" if isinstance(result, int) else ""
+                print(f"    [OK] {label}{detail}")
+            except Exception as exc:
+                print(f"    [--] {label}: {exc}")
+
+    # ── Phase C+D: Scenes ────────────────────────────────────────────
     if service_names_sorted and scene_names:
-        time.sleep(2)
+        time.sleep(1)
     _launch_group(scene_names, "Scenes")
 
-    # After all scenes are started, activate the living world
-    try:
-        from engine.world.world_sim import get_world_sim
-        _world_sim = get_world_sim()
-        _world_sim.start()
-        print("  🌍 WorldSim daemon started")
-    except Exception as exc:
-        print(f"  ⚠️  WorldSim start failed: {exc}")
+    # ── Per-target health verification ───────────────────────────────
+    # v1.51.0 — Wait for each scene to actually bind its port
+    if scene_names:
+        print("\n  Health check (waiting for ports)...")
+        for name in scene_names:
+            port = ALL_TARGETS[name]["port"]
+            label = ALL_TARGETS[name]["label"]
+            up = False
+            for _ in range(20):  # 10 seconds max
+                if _port_up(port):
+                    up = True
+                    break
+                time.sleep(0.5)
+            icon = "[UP]" if up else "[FAIL]"
+            print(f"    {icon} {label:.<35s} :{port}")
+            if not up:
+                failed.append(name)
 
-    try:
-        from engine.events.cross_scene_relay import get_cross_scene_relay
-        get_cross_scene_relay().start()
-        print("  🔗 Cross-scene relay active")
-    except Exception as exc:
-        print(f"  ⚠️  Cross-scene relay: {exc}")
+    # Service health (quick check, already running)
+    if service_names:
+        for name in service_names:
+            port = ALL_TARGETS[name]["port"]
+            label = ALL_TARGETS[name]["label"]
+            icon = "[UP]" if _port_up(port) else "[--]"
+            print(f"    {icon} {label:.<35s} :{port}")
 
-    try:
-        from engine.world.event_cascade import get_event_cascade
-        get_event_cascade().start()
-        print("  🌊 EventCascade active")
-    except Exception as exc:
-        print(f"  ⚠️  EventCascade start failed: {exc}")
-
-    # Start scheduler daemon + autonomous feedback loops
-    try:
-        from engine.nexus.scheduler_daemon import get_scheduler_daemon
-        _scheduler = get_scheduler_daemon()
-        _scheduler.start()
-        task_count = len(_scheduler.list_tasks())
-        print(f"  ⏱️  Scheduler daemon started ({task_count} tasks)")
-    except Exception as exc:
-        print(f"  ⚠️  Scheduler daemon: {exc}")
-
-    try:
-        from engine.nexus.auto_loop import get_auto_loop
-        _auto_loop = get_auto_loop()
-        registered = _auto_loop.register_tasks()
-        print(f"  🔄 Auto-loop registered ({registered} feedback tasks)")
-    except Exception as exc:
-        print(f"  ⚠️  Auto-loop: {exc}")
-
-    try:
-        from engine.nexus.conversation_sync import get_conversation_sync
-        _conv_sync = get_conversation_sync()
-        _conv_sync.register_task()
-        print("  💬 Conversation sync active")
-    except Exception as exc:
-        print(f"  ⚠️  Conversation sync: {exc}")
-
-    time.sleep(5)
-    print("\n  Health check:")
-    for name in service_names + scene_names:
-        port = ALL_TARGETS[name]["port"]
-        label = ALL_TARGETS[name]["label"]
-        icon = "[UP]" if _port_up(port) else "[--]"
-        note = " FAILED" if name in failed else ""
-        print(f"    {icon} {label:.<35s} :{port}{note}")
     print(f"\n  {total} target(s) launched.  Hub -> {_hub_url()}\n")
 
+    # ── Watchdog loop ────────────────────────────────────────────────
+    # v1.51.0 — Reports dead scenes every 30s instead of 60s
     try:
         signal.signal(signal.SIGINT, signal.default_int_handler)
         while True:
-            time.sleep(60)
+            time.sleep(30)
             down = [n for n in service_names + scene_names
                     if not _port_up(ALL_TARGETS[n]["port"])]
             if down:
-                print(f"  Warning: not responding: {', '.join(down)}")
+                labels = [ALL_TARGETS[n]["label"] for n in down]
+                print(f"  [WARN] Not responding: {', '.join(labels)}")
     except KeyboardInterrupt:
         print("\n  Shutting down...")
-        # Gracefully stop the living world systems before killing subprocesses
-        try:
-            from engine.world.world_sim import get_world_sim
-            get_world_sim().stop()
-            print("  WorldSim stopped.")
-        except Exception:
-            pass
-        try:
-            from engine.world.event_cascade import get_event_cascade
-            get_event_cascade().stop()
-            print("  EventCascade stopped.")
-        except Exception:
-            pass
-        try:
-            from engine.events.cross_scene_relay import get_cross_scene_relay
-            get_cross_scene_relay().stop()
-        except Exception:
-            pass
-        # Terminate subprocess-based targets (streamlit, node)
+        # Gracefully stop world systems before killing subprocesses
+        for mod, getter, method in [
+            ("engine.world.world_sim", "get_world_sim", "stop"),
+            ("engine.world.event_cascade", "get_event_cascade", "stop"),
+            ("engine.events.cross_scene_relay", "get_cross_scene_relay", "stop"),
+        ]:
+            try:
+                import importlib as _il
+                m = _il.import_module(mod)
+                getattr(getattr(m, getter)(), method)()
+            except Exception:
+                pass
         for proc in all_procs:
             try:
                 proc.terminate()
