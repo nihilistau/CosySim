@@ -2607,3 +2607,162 @@
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   VISUAL POLISH — v1.43 Neon HUD Enhancements
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Panel slide staggered fade-in ─────────────────────────────── */
+@keyframes cs-section-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cs-hud-slide__section {
+  animation: cs-section-in 0.3s ease both;
+}
+.cs-hud-slide__section:nth-child(1) { animation-delay: 0ms; }
+.cs-hud-slide__section:nth-child(2) { animation-delay: 50ms; }
+.cs-hud-slide__section:nth-child(3) { animation-delay: 100ms; }
+.cs-hud-slide__section:nth-child(4) { animation-delay: 150ms; }
+.cs-hud-slide__section:nth-child(5) { animation-delay: 200ms; }
+.cs-hud-slide__section:nth-child(6) { animation-delay: 250ms; }
+.cs-hud-slide__section:nth-child(7) { animation-delay: 300ms; }
+.cs-hud-slide__section:nth-child(8) { animation-delay: 350ms; }
+
+/* ── Scanline overlay on slide body ────────────────────────────── */
+.cs-hud-slide__body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 3px,
+    rgba(255, 255, 255, 0.015) 3px,
+    rgba(255, 255, 255, 0.015) 4px
+  );
+}
+
+/* ── Credit change animation ───────────────────────────────────── */
+@keyframes cs-credit-gain {
+  0%   { color: #22c55e; transform: scale(1.15); }
+  100% { color: inherit; transform: scale(1); }
+}
+@keyframes cs-credit-spend {
+  0%   { color: #f43f5e; transform: scale(0.95); }
+  100% { color: inherit; transform: scale(1); }
+}
+
+.cs-hud__credits--gain {
+  animation: cs-credit-gain 0.7s ease-out;
+  text-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+.cs-hud__credits--spend {
+  animation: cs-credit-spend 0.7s ease-out;
+  text-shadow: 0 0 8px rgba(244, 63, 94, 0.6);
+}
+
+/* ── Floating credit change text ───────────────────────────────── */
+@keyframes cs-float-up {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-24px); }
+}
+
+/* ── Weather-reactive HUD ──────────────────────────────────────── */
+body[data-weather="neon_rain"] .cs-hud {
+  border-bottom-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
+}
+
+@keyframes cs-flicker {
+  0%, 94%, 100% { opacity: 1; }
+  95%           { opacity: 0.7; }
+  97%           { opacity: 0.9; }
+}
+body[data-weather="storm"] .cs-hud {
+  animation: cs-flicker 2s infinite;
+}
+
+body[data-weather="blackout"] .cs-hud {
+  opacity: 0.6;
+  border-bottom-color: rgba(244, 63, 94, 0.3);
+}
+
+body[data-weather="clear"] .cs-hud {
+  border-bottom-color: rgba(0, 229, 255, 0.3);
+}
+
+/* ── Notification dot pulse ────────────────────────────────────── */
+@keyframes cs-notify-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.4); opacity: 0.7; }
+}
+
+.cs-hud__toggle--notify::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00e5ff;
+  animation: cs-notify-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── Level-up celebration banner ───────────────────────────────── */
+@keyframes cs-levelup {
+  0%   { opacity: 0; transform: translateY(-20px) scale(0.8); }
+  20%  { opacity: 1; transform: translateY(0) scale(1.05); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+
+.cs-hud-levelup {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 10px 32px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+  font-family: var(--cs-font-mono, 'Cascadia Code', monospace);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4);
+  animation: cs-levelup 2s ease-out forwards;
+  pointer-events: none;
+}
+
+/* ── Mission card hover ────────────────────────────────────────── */
+.cs-mission__card:hover {
+  transform: translateY(-2px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cs-mission__accept-btn:hover {
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+}
+
+/* ── Inventory rarity glow ─────────────────────────────────────── */
+.cs-hud-slide__inv-slot[data-rarity="uncommon"]:hover {
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+}
+.cs-hud-slide__inv-slot[data-rarity="rare"]:hover {
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+}
+.cs-hud-slide__inv-slot[data-rarity="epic"]:hover {
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+}
+.cs-hud-slide__inv-slot[data-rarity="legendary"]:hover {
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+}
+

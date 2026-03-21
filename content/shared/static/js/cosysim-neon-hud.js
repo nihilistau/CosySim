@@ -239,6 +239,10 @@
           const gain = d.credits_delta > 0;
           this._state.credits = data.credits ?? this._state.credits;
           this._animateCredits(gain);
+          this._showCreditChange(d.credits_delta);
+        }
+        if ('level_up' in d || 'level_change' in d) {
+          this._showLevelUp(data.level ?? d.level_up ?? d.level_change);
         }
         if ('rep_delta' in d) this._state.reputation = data.reputation ?? this._state.reputation;
         if ('heat_delta' in d || 'heat' in d) this._state.heat = data.heat ?? this._state.heat;
@@ -452,6 +456,35 @@
       setTimeout(() => el.classList.remove(cls), 700);
     }
 
+    // ── Floating credit change text ──────────────────────────────────────
+
+    _showCreditChange (delta) {
+      const el = document.getElementById('hud-credits');
+      if (!el || !delta) return;
+      // Flash class
+      el.classList.add(delta > 0 ? 'cs-hud__credits--gain' : 'cs-hud__credits--spend');
+      setTimeout(() => el.classList.remove('cs-hud__credits--gain', 'cs-hud__credits--spend'), 700);
+      // Floating text
+      const float = document.createElement('span');
+      float.className = 'cs-hud__credit-float';
+      float.textContent = (delta > 0 ? '+' : '') + delta.toLocaleString();
+      float.style.color = delta > 0 ? '#22c55e' : '#f43f5e';
+      const rect = el.getBoundingClientRect();
+      float.style.cssText += `position:fixed;left:${rect.left}px;top:${rect.top - 4}px;font-size:11px;font-weight:700;pointer-events:none;z-index:999;animation:cs-float-up 1.2s ease-out forwards;`;
+      document.body.appendChild(float);
+      setTimeout(() => float.remove(), 1200);
+    }
+
+    // ── Level-up celebration banner ───────────────────────────────────────
+
+    _showLevelUp (level) {
+      const banner = document.createElement('div');
+      banner.className = 'cs-hud-levelup';
+      banner.innerHTML = `<span>LEVEL UP!</span> <strong>Level ${level}</strong>`;
+      document.body.appendChild(banner);
+      setTimeout(() => banner.remove(), 2500);
+    }
+
     // ── Panel ────────────────────────────────────────────────────────────
 
     _togglePanel () {
@@ -661,6 +694,7 @@
         slots[i].title       = `${item.name || 'Item'} (${item.rarity || 'common'}) x${item.qty || 1}`;
         slots[i].classList.add('cs-hud-slide__inv-slot--occupied');
         slots[i].dataset.itemId = item.id;
+        slots[i].dataset.rarity = item.rarity || 'common';
         slots[i].onclick = () => this._showItemPopup(item, slots[i]);
       });
       if (cntEl) cntEl.textContent = `${items.length}/${slots.length}`;

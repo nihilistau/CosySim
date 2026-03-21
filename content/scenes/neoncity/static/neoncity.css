@@ -369,7 +369,7 @@ html, body {
 }
 
 .district-card:hover {
-    transform: translateY(-4px);
+    transform: translateY(-3px) perspective(800px) rotateX(2deg);
     box-shadow:
         0 8px 24px rgba(0,0,0,0.5),
         0 0 20px rgba(var(--nc-accent-rgb) / 0.08),
@@ -1077,4 +1077,39 @@ html, body {
 }
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(var(--nc-accent-rgb) / 0.6);
+}
+
+/* ══════════════════════════════════════════════════════════
+   v1.43 — Dangerous district pulsing border
+   ══════════════════════════════════════════════════════════ */
+@keyframes nc-danger-pulse {
+    0%, 100% { border-color: var(--district-color, var(--nc-accent)); }
+    50%      { border-color: rgba(244, 63, 94, 0.6); box-shadow: 0 0 16px rgba(244, 63, 94, 0.15); }
+}
+.district-card--dangerous {
+    animation: nc-danger-pulse 2.5s ease-in-out infinite;
+}
+
+/* Faction color glow bleed on hover */
+.district-card:hover .card-glow {
+    opacity: 0.25;
+    width: 120px;
+    height: 120px;
+    filter: blur(30px);
+}
+
+/* Active district indicator */
+.district-card.active::after {
+    content: '◉';
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--district-color, var(--nc-accent));
+    font-size: 10px;
+    text-shadow: 0 0 8px var(--district-color, var(--nc-accent));
+    animation: nc-active-dot 1.5s ease-in-out infinite;
+}
+@keyframes nc-active-dot {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
 }
