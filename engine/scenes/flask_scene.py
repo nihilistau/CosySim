@@ -165,7 +165,6 @@ class FlaskScene(BaseScene, NexusSceneMixin):
         """Register health, hud, and other standard API routes."""
         self.register_health_route(self.app)
         self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
         self.register_inventory_route(self.app)
         self.register_tts_route(self.app)
 
