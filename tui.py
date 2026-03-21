@@ -824,6 +824,33 @@ class CosySimTUI(App[None]):
                 except Exception as exc:
                     dbg(f"[autostart] _start_one({name}) FAILED: {exc}\n{_tb.format_exc()}")
                 time.sleep(0.5)
+            # v1.51.0 [2026-03-22] — Start world daemons after services, before checking
+            dbg("[autostart] starting world infrastructure...")
+            for d_label, d_mod, d_getter, d_method in [
+                ("WorldSim",       "engine.world.world_sim",          "get_world_sim",        "start"),
+                ("CrossSceneRelay","engine.events.cross_scene_relay", "get_cross_scene_relay", "start"),
+                ("EventCascade",   "engine.world.event_cascade",      "get_event_cascade",     "start"),
+            ]:
+                try:
+                    import importlib as _il
+                    _m = _il.import_module(d_mod)
+                    getattr(getattr(_m, d_getter)(), d_method)()
+                    dbg(f"[autostart] {d_label} OK")
+                except Exception as _exc:
+                    dbg(f"[autostart] {d_label}: {_exc}")
+            for d_label, d_mod, d_getter, d_setup in [
+                ("Scheduler", "engine.nexus.scheduler_daemon",  "get_scheduler_daemon",  "start"),
+                ("AutoLoop",  "engine.nexus.auto_loop",         "get_auto_loop",         "register_tasks"),
+                ("ConvSync",  "engine.nexus.conversation_sync", "get_conversation_sync", "register_task"),
+            ]:
+                try:
+                    import importlib as _il
+                    _m = _il.import_module(d_mod)
+                    getattr(getattr(_m, d_getter)(), d_setup)()
+                    dbg(f"[autostart] {d_label} OK")
+                except Exception as _exc:
+                    dbg(f"[autostart] {d_label}: {_exc}")
+
             dbg("[autostart] loop done, waiting 8s for ports")
             time.sleep(8)
             for name, info in ALL_TARGETS.items():
