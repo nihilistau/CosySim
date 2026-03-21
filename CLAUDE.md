@@ -146,6 +146,8 @@ Always use `get_config().get("dot.path", default)`. Never hardcode values.
 - **File naming**: `test_{module_name}.py` → `test_{behavior}()`
 - **Seeded characters**: lola, viktor, aria, frankie, mira are always present in DB fixtures.
 - Ignore `tests/test_agent_loop.py` and `tests/live_wire_test.py` (require live services).
+- **Browser testing**: After ANY JS/CSS/HTML change, run `python scripts/browser_test.py` (Playwright). Never commit UI changes without a passing browser test. Read telemetry: `python scripts/browser_test.py --report`
+- **Telemetry**: `cosysim-telemetry.js` captures all browser clicks, errors, hotkeys → `POST /api/telemetry` → `data/structured_logs.jsonl`. Always check telemetry after user reports issues.
 
 ## Frontend
 
