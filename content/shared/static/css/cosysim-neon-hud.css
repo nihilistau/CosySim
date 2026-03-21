@@ -2143,6 +2143,13 @@
 .cs-hud-popup__rarity--rare    { color: #3b82f6; }
 .cs-hud-popup__rarity--epic    { color: #a855f7; }
 .cs-hud-popup__rarity--legendary { color: #f59e0b; }
+/* Close button for popups */
+.cs-hud-popup__close {
+  position: absolute; top: 6px; right: 8px; background: none; border: none;
+  color: rgba(255,255,255,0.4); font-size: 14px; cursor: pointer; padding: 2px 6px; z-index: 1;
+}
+.cs-hud-popup__close:hover { color: #f43f5e; }
+.cs-hud-popup { position: relative; }  /* for close button absolute positioning */
 .cs-hud-popup__qty { color: #94a3b8; margin-bottom: 8px; }
 .cs-hud-popup__detail { margin-bottom: 8px; line-height: 1.6; }
 .cs-hud-popup__detail div { color: #cbd5e1; }
@@ -2594,8 +2601,18 @@
 }
 
 /* ── Mission board overlay positioning ──────────────────────────── */
+/* Overlays must be above neon-layout (z-index:1) and pointer-events must pass through */
 .cs-mission-board {
-  z-index: 310;
+  z-index: 9000;
+  pointer-events: auto;
+}
+.cs-shop {
+  z-index: 9000 !important;
+  pointer-events: auto;
+}
+.cs-hud-popup {
+  z-index: 9500 !important;
+  pointer-events: auto;
 }
 
 .cs-mission-board[aria-hidden="true"] { display: none !important; }

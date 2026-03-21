@@ -164,12 +164,13 @@
 
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
-          if (this._missionBoardOpen) this._closeMissionBoard();
+          if (this._activePopup)       this._closePopup();
+          else if (this._missionBoardOpen) this._closeMissionBoard();
           else if (this._shopOpen)     this._closeShop();
-          else if (this._phoneOpen)   this._closePhoneOverlay();
-          else if (this._rightOpen)  this._closeRightPanel();
-          else if (this._leftOpen)   this._closeLeftPanel();
-          else if (this._expanded)   this._closePanel();
+          else if (this._phoneOpen)    this._closePhoneOverlay();
+          else if (this._rightOpen)    this._closeRightPanel();
+          else if (this._leftOpen)     this._closeLeftPanel();
+          else if (this._expanded)     this._closePanel();
         }
         if (e.key === 'i' || e.key === 'I') {
           if (!e.target.matches('input, textarea, [contenteditable]'))
@@ -721,6 +722,7 @@
       const popup = document.createElement('div');
       popup.className = 'cs-hud-popup cs-hud-popup--item';
       popup.innerHTML = `
+        <button class="cs-hud-popup__close" data-action="close">✕</button>
         <div class="cs-hud-popup__header">
           <span class="cs-hud-popup__icon">${item.icon || '📦'}</span>
           <span class="cs-hud-popup__title">${_esc(item.name)}</span>
@@ -734,18 +736,19 @@
           }
           <button class="cs-hud-popup__btn cs-hud-popup__btn--danger" data-action="drop">Drop</button>
         </div>`;
-      // Position near the anchor
-      const rect = anchorEl.getBoundingClientRect();
+      // Position: centered in viewport, above everything
       popup.style.position = 'fixed';
-      popup.style.left = (rect.right + 8) + 'px';
-      popup.style.top  = rect.top + 'px';
-      popup.style.zIndex = '300';
+      popup.style.top = '50%';
+      popup.style.left = '50%';
+      popup.style.transform = 'translate(-50%, -50%)';
+      popup.style.zIndex = '400';
       document.body.appendChild(popup);
       this._activePopup = popup;
 
       popup.addEventListener('click', async (e) => {
-        const action = e.target.dataset?.action;
+        const action = e.target.dataset?.action || e.target.closest('[data-action]')?.dataset?.action;
         if (!action) return;
+        if (action === 'close') { this._closePopup(); return; }
         try {
           if (action === 'equip') {
             await fetch('/api/inventory/equip', {
@@ -841,6 +844,7 @@
       const popup = document.createElement('div');
       popup.className = 'cs-hud-popup cs-hud-popup--crew';
       popup.innerHTML = `
+        <button class="cs-hud-popup__close" data-action="close">✕</button>
         <div class="cs-hud-popup__header">
           <span class="cs-hud-popup__icon">${member.role_icon || '👤'}</span>
           <span class="cs-hud-popup__title">${_esc(member.id)}</span>
@@ -854,17 +858,18 @@
         <div class="cs-hud-popup__actions">
           <button class="cs-hud-popup__btn cs-hud-popup__btn--danger" data-action="dismiss">Dismiss</button>
         </div>`;
-      const rect = anchorEl.getBoundingClientRect();
       popup.style.position = 'fixed';
-      popup.style.left = (rect.left - 220) + 'px';
-      popup.style.top  = rect.top + 'px';
-      popup.style.zIndex = '300';
+      popup.style.top = '50%';
+      popup.style.left = '50%';
+      popup.style.transform = 'translate(-50%, -50%)';
+      popup.style.zIndex = '400';
       document.body.appendChild(popup);
       this._activePopup = popup;
 
       popup.addEventListener('click', async (e) => {
-        const action = e.target.dataset?.action;
+        const action = e.target.dataset?.action || e.target.closest('[data-action]')?.dataset?.action;
         if (!action) return;
+        if (action === 'close') { this._closePopup(); return; }
         if (action === 'dismiss') {
           if (!confirm(`Dismiss ${member.id} from crew?`)) return;
           try {
