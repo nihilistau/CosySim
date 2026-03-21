@@ -70,9 +70,29 @@
     <button class="vendor-tab" data-vendor="broker">BROKER<small>Intel</small></button>
   </div>
 
-  <!-- v1.49.2 — Market items rendered client-side via loadMarketItems() -->
+  <!-- Market item grid (server-rendered via Jinja2) -->
   <div class="market-grid" id="market-grid">
-    <p class="inventory-empty">Loading market...</p>
+    {% for item in market_items %}
+    <div class="market-item" data-vendor="{{ item.vendor }}" data-id="{{ item.id }}" data-rarity="{{ item.rarity }}">
+      <div class="market-item__header">
+        <span class="market-item__name">{{ item.name }}</span>
+        <span class="market-item__rarity rarity--{{ item.rarity }}">{{ item.rarity }}</span>
+      </div>
+      <div class="market-item__body">
+        <div class="market-item__price {% if item.trend == 'rising' %}price--rising{% elif item.trend == 'falling' %}price--falling{% endif %}">
+          <span class="price-symbol">&#8354;</span>
+          <span class="price-val" data-item="{{ item.id }}">{{ item.price }}</span>
+          <span class="price-trend">{% if item.trend == 'rising' %}&#9650;{% elif item.trend == 'falling' %}&#9660;{% else %}&#9473;{% endif %}</span>
+        </div>
+        <div class="market-item__stock">Stock: {{ item.stock }}</div>
+      </div>
+      <div class="market-item__actions">
+        <button class="btn btn--buy" data-item="{{ item.id }}" data-price="{{ item.price }}" {% if item.stock == 0 %}disabled{% endif %}>
+          BUY &#8354;{{ item.price }}
+        </button>
+      </div>
+    </div>
+    {% endfor %}
   </div>
 
   <!-- Inventory panel -->
@@ -123,9 +143,28 @@
     <h2 class="zone-title">THE DEN</h2>
     <p class="zone-sub">Faction politics. Power plays. Allegiance has a price.</p>
   </div>
-  <!-- v1.49.2 — Faction cards rendered client-side via loadFactionData() -->
   <div class="den-grid" id="den-grid">
-    <p class="inventory-empty">Loading factions...</p>
+    {% for faction in faction_data %}
+    <div class="faction-card" data-faction="{{ faction.id }}" style="--faction-accent:{{ faction.accent }};">
+      <div class="faction-card__header">
+        <span class="faction-card__name">{{ faction.label }}</span>
+        <span class="faction-card__arch">{{ faction.archetype }}</span>
+      </div>
+      <div class="faction-card__power-wrap">
+        <div class="faction-card__power-bar">
+          <div class="faction-card__power-fill" data-faction="{{ faction.id }}" style="width:50%"></div>
+        </div>
+        <span class="faction-card__power-val" id="fp-{{ faction.id }}">50</span>
+      </div>
+      <div class="faction-card__actions">
+        <button class="btn btn--pledge" data-faction="{{ faction.id }}">PLEDGE &#8593;</button>
+        <button class="btn btn--quest" data-faction="{{ faction.id }}">QUEST &#9654;</button>
+      </div>
+      <div class="faction-quest-panel" id="quest-{{ faction.id }}" style="display:none">
+        <p class="quest-loading">Loading quest...</p>
+      </div>
+    </div>
+    {% endfor %}
   </div>
   <div class="den-feedback" id="den-feedback" aria-live="polite"></div>
 </section>
@@ -171,9 +210,7 @@
 {% block body_scripts %}
   <script>window.SCENE_PARTICLE_CONFIG = { effect:"neon_rain", color:"#00ff88", count:80, speed:1.2 };</script>
   <script src="/shared/js/cosysim-transitions.js" defer></script>
-  <!-- v1.50.0 — Kit controller + extension (replaces monolithic grid.js) -->
-  <script src="/static/js/grid_kit.js" defer></script>
-  <script src="/static/js/grid_ext.js" defer></script>
+  <script src="/static/js/grid.js" defer></script>
   <script src="/shared/js/cosysim-voice.js"></script>
   {% include 'shop_modal.html' %}
 {% endblock %}

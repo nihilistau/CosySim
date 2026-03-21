@@ -17,10 +17,14 @@ Components are JSON-serializable definitions with:
 - css_classes: shared CSS classes this component uses
 - slots: named child areas (for container components)
 
-Version: v1.48.0 [2026-03-21]
+Version: v1.50.0 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.50.0 [2026-03-22] — Added 8 game/interaction components (dice_roller,
+                            action_menu, combat_log, leaderboard, resource_bar,
+                            dialogue_choice, poker_table, mini_map) — 45 total.
+                            Added asset_hint metadata on portrait + image_display.
     v1.48.0 [2026-03-21] — Added 10 new components (economy, map, skills,
                             particles, progress, alerts, tables, images,
                             spacer, divider) — 28 total
@@ -216,7 +220,7 @@ COMPONENTS: Dict[str, Dict[str, Any]] = {
              "options": ["sm", "md", "lg", "xl"]},
             {"key": "status",         "label": "Status", "type": "select",
              "options": ["online", "away", "offline", "speaking"]},
-            {"key": "image_url",      "label": "Image URL", "type": "text"},
+            {"key": "image_url",      "label": "Image URL", "type": "text", "asset_hint": "image"},
             {"key": "character_name", "label": "Name",   "type": "text"},
         ],
         "slots": [],
@@ -776,7 +780,7 @@ COMPONENTS: Dict[str, Dict[str, Any]] = {
             "border_radius": "6px",
         },
         "prop_schema": [
-            {"key": "src",           "label": "Image URL",     "type": "text"},
+            {"key": "src",           "label": "Image URL",     "type": "text", "asset_hint": "image"},
             {"key": "alt",           "label": "Alt Text",      "type": "text"},
             {"key": "caption",       "label": "Caption",       "type": "text"},
             {"key": "glow_color",    "label": "Glow Color",    "type": "color"},
@@ -1057,6 +1061,244 @@ COMPONENTS: Dict[str, Dict[str, Any]] = {
             '  {heading_html}\n'
             '  <p>{text}</p>\n'
             '</div>'
+        ),
+    },
+
+    # ── v1.50.0 [2026-03-22] — Game & interaction components ─────
+
+    "dice_roller": {
+        "type": "dice_roller",
+        "label": "Dice Roller",
+        "category": "game",
+        "icon": "&#127922;",
+        "description": "Interactive dice roller with configurable sides and count.",
+        "css_classes": [],
+        "default_props": {
+            "sides": "d6",
+            "dice_count": 2,
+            "roll_id": "dice-roller",
+            "title": "ROLL DICE",
+        },
+        "prop_schema": [
+            {"key": "sides",      "label": "Dice Type", "type": "select",
+             "options": ["d4", "d6", "d8", "d10", "d12", "d20", "d100"]},
+            {"key": "dice_count", "label": "Dice Count", "type": "number", "min": 1, "max": 6},
+            {"key": "roll_id",    "label": "Element ID",  "type": "text"},
+            {"key": "title",      "label": "Title",       "type": "text"},
+        ],
+        "slots": [],
+        "html_template": (
+            '<div class="ck-dice-roller" id="{roll_id}">\n'
+            '  <div class="ck-dice-display">\n'
+            '    {dice_faces}\n'
+            '  </div>\n'
+            '  <div class="ck-dice-result" id="{roll_id}-result">—</div>\n'
+            '  <button class="cs-glass-btn cs-glass-btn--accent" id="{roll_id}-btn">'
+            '{title}</button>\n'
+            '</div>'
+        ),
+    },
+
+    "action_menu": {
+        "type": "action_menu",
+        "label": "Action Menu",
+        "category": "input",
+        "icon": "&#9776;",
+        "description": "Button group with cost badges — for drinks, bets, or ability actions.",
+        "css_classes": [],
+        "default_props": {
+            "items": "Ale:3:default:drink-ale,Wine:8:accent:drink-wine,Mead:5:default:drink-mead",
+            "direction": "horizontal",
+            "menu_id": "action-menu",
+            "show_cost": True,
+        },
+        "prop_schema": [
+            {"key": "items",     "label": "Items (name:cost:variant:id,...)", "type": "textarea"},
+            {"key": "direction", "label": "Direction", "type": "select",
+             "options": ["horizontal", "vertical"]},
+            {"key": "menu_id",   "label": "Menu ID",  "type": "text"},
+            {"key": "show_cost", "label": "Show Cost", "type": "boolean"},
+        ],
+        "slots": [],
+        "html_template": (
+            '<div class="ck-action-menu ck-action-menu--{direction}" id="{menu_id}">\n'
+            '  {action_items}\n'
+            '</div>'
+        ),
+    },
+
+    "combat_log": {
+        "type": "combat_log",
+        "label": "Combat Log",
+        "category": "game",
+        "icon": "&#9876;",
+        "description": "Scrollable log for combat events, damage numbers, and status effects.",
+        "css_classes": [],
+        "default_props": {
+            "log_id": "combat-log",
+            "max_entries": 50,
+            "title": "COMBAT LOG",
+            "max_height": "260px",
+        },
+        "prop_schema": [
+            {"key": "log_id",      "label": "Element ID",  "type": "text"},
+            {"key": "max_entries",  "label": "Max Entries",  "type": "number", "min": 10, "max": 200},
+            {"key": "title",        "label": "Title",        "type": "text"},
+            {"key": "max_height",   "label": "Max Height",   "type": "text"},
+        ],
+        "slots": [],
+        "html_template": (
+            '<section class="cs-glass-panel ck-combat-log-panel">\n'
+            '  <h3 class="panel-title">&#9876; {title}</h3>\n'
+            '  <div class="ck-combat-log" id="{log_id}" '
+            'style="max-height:{max_height};overflow-y:auto">\n'
+            '    <div class="ck-combat-entry system">Awaiting combat...</div>\n'
+            '  </div>\n'
+            '</section>'
+        ),
+    },
+
+    "leaderboard": {
+        "type": "leaderboard",
+        "label": "Leaderboard",
+        "category": "data",
+        "icon": "&#127942;",
+        "description": "Ranked table with highlighted top positions.",
+        "css_classes": [],
+        "default_props": {
+            "board_id": "leaderboard",
+            "columns": "Rank,Name,Score",
+            "rows": 5,
+            "title": "RANKINGS",
+        },
+        "prop_schema": [
+            {"key": "board_id", "label": "Element ID",       "type": "text"},
+            {"key": "columns",  "label": "Columns (comma-sep)", "type": "text"},
+            {"key": "rows",     "label": "Placeholder Rows",    "type": "number", "min": 3, "max": 20},
+            {"key": "title",    "label": "Title",              "type": "text"},
+        ],
+        "slots": [],
+        "html_template": (
+            '<section class="cs-glass-panel ck-leaderboard-panel">\n'
+            '  <h3 class="panel-title">&#127942; {title}</h3>\n'
+            '  <table class="ck-leaderboard" id="{board_id}">\n'
+            '    <thead><tr>{header_cells}</tr></thead>\n'
+            '    <tbody>{leaderboard_rows}</tbody>\n'
+            '  </table>\n'
+            '</section>'
+        ),
+    },
+
+    "resource_bar": {
+        "type": "resource_bar",
+        "label": "Resource Bar",
+        "category": "display",
+        "icon": "&#9608;",
+        "description": "Compact horizontal multi-resource display (gold, heat, rep, etc.).",
+        "css_classes": [],
+        "default_props": {
+            "resources": "gold:50:#f59e0b,heat:0:#ef4444,rep:50:#8b5cf6",
+            "bar_id": "resource-bar",
+        },
+        "prop_schema": [
+            {"key": "resources", "label": "Resources (name:value:color,...)", "type": "textarea"},
+            {"key": "bar_id",    "label": "Element ID",                       "type": "text"},
+        ],
+        "slots": [],
+        "html_template": (
+            '<div class="ck-resource-bar" id="{bar_id}">\n'
+            '  {resource_items}\n'
+            '</div>'
+        ),
+    },
+
+    "dialogue_choice": {
+        "type": "dialogue_choice",
+        "label": "Dialogue Choice",
+        "category": "input",
+        "icon": "&#128172;",
+        "description": "Branching dialogue options — clickable choice cards.",
+        "css_classes": [],
+        "default_props": {
+            "choices": "Ask about the job:choice-job,Threaten them:choice-threaten,Walk away:choice-leave",
+            "choice_id": "dialogue-choices",
+            "title": "",
+        },
+        "prop_schema": [
+            {"key": "choices",   "label": "Choices (text:id,...)", "type": "textarea"},
+            {"key": "choice_id", "label": "Element ID",           "type": "text"},
+            {"key": "title",     "label": "Title",                "type": "text"},
+        ],
+        "slots": [],
+        "html_template": (
+            '<div class="ck-dialogue-choices" id="{choice_id}">\n'
+            '  {title_html}\n'
+            '  {choice_items}\n'
+            '</div>'
+        ),
+    },
+
+    "poker_table": {
+        "type": "poker_table",
+        "label": "Poker Table",
+        "category": "game",
+        "icon": "&#9824;",
+        "description": "Card game table with community cards, player hand, and pot display.",
+        "css_classes": [],
+        "default_props": {
+            "table_id": "poker-table",
+            "max_players": 4,
+            "show_pot": True,
+        },
+        "prop_schema": [
+            {"key": "table_id",    "label": "Element ID",  "type": "text"},
+            {"key": "max_players", "label": "Max Players", "type": "number", "min": 2, "max": 8},
+            {"key": "show_pot",    "label": "Show Pot",    "type": "boolean"},
+        ],
+        "slots": [],
+        "html_template": (
+            '<div class="ck-poker-table" id="{table_id}">\n'
+            '  <div class="ck-poker-community" id="{table_id}-community">\n'
+            '    <div class="ck-card back"></div>\n'
+            '    <div class="ck-card back"></div>\n'
+            '    <div class="ck-card back"></div>\n'
+            '    <div class="ck-card back"></div>\n'
+            '    <div class="ck-card back"></div>\n'
+            '  </div>\n'
+            '  {pot_html}\n'
+            '  <div class="ck-poker-hand" id="{table_id}-hand">\n'
+            '    <div class="ck-card back"></div>\n'
+            '    <div class="ck-card back"></div>\n'
+            '  </div>\n'
+            '  <div class="ck-poker-players" id="{table_id}-players">\n'
+            '    {player_seats}\n'
+            '  </div>\n'
+            '</div>'
+        ),
+    },
+
+    "mini_map": {
+        "type": "mini_map",
+        "label": "Mini Map",
+        "category": "nav",
+        "icon": "&#127758;",
+        "description": "Zone navigator — clickable zone buttons with active state.",
+        "css_classes": [],
+        "default_props": {
+            "map_id": "mini-map",
+            "zones": "Market:market,Station:station,Den:den,Broker:broker",
+            "current_zone": "market",
+        },
+        "prop_schema": [
+            {"key": "map_id",       "label": "Element ID",            "type": "text"},
+            {"key": "zones",        "label": "Zones (label:id,...)",   "type": "textarea"},
+            {"key": "current_zone", "label": "Default Active Zone",   "type": "text"},
+        ],
+        "slots": [],
+        "html_template": (
+            '<nav class="ck-mini-map" id="{map_id}">\n'
+            '  {zone_buttons}\n'
+            '</nav>'
         ),
     },
 }

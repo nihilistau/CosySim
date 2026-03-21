@@ -1,0 +1,197 @@
+{% extends 'neon_base.html' %}
+{% set scene_key = 'arena' %}
+{% set scene_display_name = 'THE COLOSSEUM' %}
+{% set scene_accent = '#dc2626' %}
+{% set scene_accent_rgb = '220 38 38' %}
+
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='arena.css') }}">
+{% endblock %}
+
+{% block scene_content %}
+  <!-- ═══════════════════════════════════════════════════════ MAIN LAYOUT -->
+  <main class="arena-layout">
+
+    <!-- ─────────────── FIGHTER A (left) ─────────────── -->
+    <div class="arena-fighter arena-fighter--a" id="fighter-a">
+
+      <div class="arena-fighter__portrait cs-portrait-frame cs-portrait-frame--lg">
+        <img id="fighter-a-img" src="" alt="Fighter A" onerror="this.style.display='none'">
+        <div class="arena-fighter__name" id="fighter-a-name">—</div>
+      </div>
+
+      <!-- HP bar -->
+      <div class="cs-stat-bar cs-stat-bar--hp cs-stat-bar--thick">
+        <div class="cs-stat-bar__fill" id="fighter-a-hp" style="width:100%"></div>
+      </div>
+      <div class="arena-fighter__stats" id="fighter-a-stats">HP: 100 / 100</div>
+
+      <!-- Reasoning panel -->
+      <div class="cs-glass-panel arena-reasoning" id="fighter-a-reasoning">
+        <div class="cs-bench-label">REASONING</div>
+        <div class="arena-reasoning__text" id="fighter-a-reason-text">Waiting for match…</div>
+
+        <!-- Last card played -->
+        <div class="arena-last-card" id="fighter-a-card">
+          <div class="cs-arena-card" id="fighter-a-card-display" data-type="attack">
+            <div class="cs-arena-card__type-badge"></div>
+            <div class="cs-arena-card__name">—</div>
+            <div class="cs-arena-card__power">—</div>
+            <div class="cs-arena-card__flavor"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────── CENTER: Arena floor + controls ─────────────── -->
+    <div class="arena-center">
+
+      <!-- Arena floor — 3-D perspective CSS grid with blood-red glow -->
+      <div class="arena-floor" id="arena-floor">
+        <div class="arena-floor__particles" id="arena-particles"></div>
+        <div class="arena-floor__grid"></div>
+        <!-- VS badge -->
+        <div class="arena-vs-badge" id="arena-vs">VS</div>
+        <!-- Clash flash overlay -->
+        <div class="arena-clash-flash" id="arena-clash-flash"></div>
+      </div>
+
+      <!-- Round counter + status bar -->
+      <div class="arena-status-bar">
+        <div class="arena-round-counter" id="arena-round">Round 0 / 7</div>
+        <div class="arena-match-status cs-chip" id="arena-match-status">PENDING</div>
+        <div class="arena-timer" id="arena-timer"></div>
+      </div>
+
+      <!-- Commentary feed -->
+      <div class="arena-commentary cs-glass-panel" id="arena-commentary"
+           role="log" aria-live="polite">
+        <div class="cs-glass-panel__title">COMMENTARY</div>
+        <div class="arena-commentary__feed" id="commentary-feed">
+          <p class="arena-commentary__line arena-commentary__line--intro">
+            The Colosseum awaits its champions…
+          </p>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="arena-controls">
+        <!-- Fighter selectors -->
+        <div class="arena-fighter-select">
+          <select class="cs-hack-input" id="select-fighter-a" title="Fighter A">
+            <option value="shadow">Shadow</option>
+            <option value="blaze">Blaze</option>
+            <option value="iron">Iron</option>
+            <option value="vex">Vex</option>
+          </select>
+          <span class="arena-vs-mini">VS</span>
+          <select class="cs-hack-input" id="select-fighter-b" title="Fighter B">
+            <option value="blaze">Blaze</option>
+            <option value="shadow">Shadow</option>
+            <option value="iron">Iron</option>
+            <option value="vex">Vex</option>
+          </select>
+        </div>
+
+        <div class="arena-controls__row">
+          <button class="cs-glass-btn cs-glass-btn--accent" id="create-match-btn">
+            ⚔ New Match
+          </button>
+          <button class="cs-glass-btn" id="play-round-btn" disabled>
+            ▶ Play Round
+          </button>
+          <button class="cs-glass-btn cs-glass-btn--icon" id="auto-play-btn"
+                  title="Toggle Auto-play" aria-pressed="false">⚡</button>
+          <button class="cs-glass-btn cs-glass-btn--icon" id="bet-panel-btn"
+                  title="Place Bet" aria-controls="arena-bet-panel">₵</button>
+        </div>
+      </div>
+
+    </div><!-- /arena-center -->
+
+    <!-- ─────────────── FIGHTER B (right — mirror) ─────────────── -->
+    <div class="arena-fighter arena-fighter--b" id="fighter-b">
+
+      <div class="arena-fighter__portrait cs-portrait-frame cs-portrait-frame--lg">
+        <img id="fighter-b-img" src="" alt="Fighter B" onerror="this.style.display='none'">
+        <div class="arena-fighter__name" id="fighter-b-name">—</div>
+      </div>
+
+      <!-- HP bar -->
+      <div class="cs-stat-bar cs-stat-bar--hp cs-stat-bar--thick">
+        <div class="cs-stat-bar__fill" id="fighter-b-hp" style="width:100%"></div>
+      </div>
+      <div class="arena-fighter__stats" id="fighter-b-stats">HP: 100 / 100</div>
+
+      <!-- Reasoning panel -->
+      <div class="cs-glass-panel arena-reasoning" id="fighter-b-reasoning">
+        <div class="cs-bench-label">REASONING</div>
+        <div class="arena-reasoning__text" id="fighter-b-reason-text">Waiting for match…</div>
+
+        <!-- Last card played -->
+        <div class="arena-last-card" id="fighter-b-card">
+          <div class="cs-arena-card" id="fighter-b-card-display" data-type="defense">
+            <div class="cs-arena-card__type-badge"></div>
+            <div class="cs-arena-card__name">—</div>
+            <div class="cs-arena-card__power">—</div>
+            <div class="cs-arena-card__flavor"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main><!-- /arena-layout -->
+
+  <!-- ═══════════════════════════════════════════════════ BETTING SIDEBAR -->
+  <aside class="arena-bet-panel cs-glass-panel" id="arena-bet-panel"
+         aria-label="Place Bet" hidden>
+    <div class="arena-bet-panel__header">
+      <h3 class="cs-glass-panel__title">PLACE BET</h3>
+      <button class="cs-glass-btn cs-glass-btn--icon arena-bet-panel__close"
+              id="bet-panel-close" aria-label="Close">✕</button>
+    </div>
+
+    <div class="arena-bet-section">
+      <label class="arena-bet-label">Bet type</label>
+      <div class="arena-bet-types">
+        <button class="cs-glass-btn arena-bet-type arena-bet-type--active"
+                data-type="match_winner">Match Winner</button>
+        <button class="cs-glass-btn arena-bet-type"
+                data-type="round_winner">Next Round</button>
+      </div>
+    </div>
+
+    <div class="arena-bet-section">
+      <label class="arena-bet-label">Fighter</label>
+      <div class="arena-bet-targets">
+        <button class="cs-glass-btn arena-bet-target arena-bet-target--a"
+                data-target="fighter_a" id="bet-target-a">Fighter A</button>
+        <button class="cs-glass-btn arena-bet-target arena-bet-target--b"
+                data-target="fighter_b" id="bet-target-b">Fighter B</button>
+      </div>
+    </div>
+
+    <div class="arena-bet-section">
+      <label class="arena-bet-label" for="bet-amount">Amount</label>
+      <input type="number" class="cs-hack-input" id="bet-amount"
+             min="10" max="10000" value="100" step="10">
+    </div>
+
+    <button class="cs-glass-btn cs-glass-btn--accent arena-bet-submit"
+            id="place-bet-btn">Place Bet ₵</button>
+
+    <div class="cs-economy-ticker" id="arena-credits">₵ —</div>
+
+    <div class="arena-active-bets" id="arena-active-bets">
+      <div class="arena-bet-label">Active Bets</div>
+    </div>
+  </aside>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="/shared/js/cosysim-particles3d.js"></script>
+  <script src="/shared/js/cosysim-bench.js"></script>
+  <script src="{{ url_for('static', filename='arena.js') }}"></script>
+  <script src="/shared/js/cosysim-voice.js"></script>
+  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'arena' };</script>
+{% endblock %}
