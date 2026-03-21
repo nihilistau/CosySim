@@ -92,6 +92,18 @@ class BaseSceneRoutesMixin:
         # Auto-wire pillar-grouped scene registry route
         self.register_scene_registry_route(app)
 
+        # v1.43.0 [2026-03-21] — Auto-wire game mechanic routes on every scene
+        # Guard: skip if scene already registered these routes manually
+        _existing = {rule.rule for rule in app.url_map.iter_rules()}
+        if "/api/crew" not in _existing:
+            self.register_crew_route(app)
+        if "/api/mission/board" not in _existing:
+            self.register_mission_route(app)
+        if "/api/city/map" not in _existing:
+            self.register_city_route(app)
+        if "/api/shop/catalog" not in _existing:
+            self.register_shop_route(app)
+
     def register_character_routes(self, app) -> None:
         """Register character info API routes used by the portrait overlay.
 
@@ -213,6 +225,23 @@ class BaseSceneRoutesMixin:
             except Exception as _exc:
                 _bslogger.debug("HUD: crew unavailable: %s", _exc)
                 data.setdefault("crew", [])
+
+            # v1.43.0 [2026-03-21] — Active missions for HUD tracker
+            try:
+                from engine.world.mission import get_mission_manager
+                mm = get_mission_manager()
+                data["missions"] = mm.list_active()
+            except Exception as _exc:
+                _bslogger.debug("HUD: missions unavailable: %s", _exc)
+                data.setdefault("missions", [])
+
+            # v1.43.0 [2026-03-21] — Skill progression for HUD display
+            try:
+                from engine.world.skill_progression import get_skill_manager
+                sm = get_skill_manager()
+                data["skill_progression"] = sm.to_dict()
+            except Exception as _exc:
+                _bslogger.debug("HUD: skill_progression unavailable: %s", _exc)
 
             data["scene"] = scene_ref.scene_name
             data["updated_at"] = int(_time.time() * 1000)

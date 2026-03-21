@@ -2108,6 +2108,122 @@
   text-shadow: 0 0 8px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.4);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   v1.43.0 [2026-03-21] — Interactive popups, missions, factions
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Item / Crew popup ─────────────────────────────────────────────── */
+.cs-hud-popup {
+  min-width: 180px;
+  max-width: 240px;
+  background: linear-gradient(135deg, rgba(15,23,42,0.96) 0%, rgba(30,41,59,0.94) 100%);
+  border: 1px solid rgba(0,229,255,0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6), 0 0 20px rgba(0,229,255,0.1);
+  animation: cs-popup-in 0.2s ease-out;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+@keyframes cs-popup-in {
+  from { opacity: 0; transform: scale(0.9) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.cs-hud-popup__header {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 6px; padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.cs-hud-popup__icon { font-size: 18px; }
+.cs-hud-popup__title { font-weight: 600; color: #fff; flex: 1; }
+.cs-hud-popup__rarity { font-size: 10px; text-transform: uppercase; padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.08); }
+.cs-hud-popup__rarity--common  { color: #94a3b8; }
+.cs-hud-popup__rarity--uncommon { color: #22c55e; }
+.cs-hud-popup__rarity--rare    { color: #3b82f6; }
+.cs-hud-popup__rarity--epic    { color: #a855f7; }
+.cs-hud-popup__rarity--legendary { color: #f59e0b; }
+.cs-hud-popup__qty { color: #94a3b8; margin-bottom: 8px; }
+.cs-hud-popup__detail { margin-bottom: 8px; line-height: 1.6; }
+.cs-hud-popup__detail div { color: #cbd5e1; }
+.cs-hud-popup__actions { display: flex; gap: 6px; }
+.cs-hud-popup__btn {
+  flex: 1; padding: 5px 8px; border: none; border-radius: 4px;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  transition: background 0.15s, transform 0.1s;
+}
+.cs-hud-popup__btn:hover { transform: translateY(-1px); }
+.cs-hud-popup__btn--primary   { background: rgba(0,229,255,0.2); color: #00e5ff; border: 1px solid rgba(0,229,255,0.3); }
+.cs-hud-popup__btn--secondary { background: rgba(139,92,246,0.2); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); }
+.cs-hud-popup__btn--danger    { background: rgba(244,63,94,0.15); color: #f43f5e; border: 1px solid rgba(244,63,94,0.2); }
+.cs-hud-popup__btn--primary:hover   { background: rgba(0,229,255,0.35); }
+.cs-hud-popup__btn--secondary:hover { background: rgba(139,92,246,0.35); }
+.cs-hud-popup__btn--danger:hover    { background: rgba(244,63,94,0.3); }
+
+/* ── Inventory slot interactivity ──────────────────────────────────── */
+.cs-hud-slide__inv-slot--occupied { cursor: pointer; }
+.cs-hud-slide__inv-slot--occupied:hover {
+  transform: scale(1.12);
+  box-shadow: 0 0 12px rgba(0,229,255,0.3);
+  border-color: rgba(0,229,255,0.5);
+}
+
+/* ── Crew row interactivity ────────────────────────────────────────── */
+.cs-hud-slide__crew-row { cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.cs-hud-slide__crew-row:hover {
+  background: rgba(0,229,255,0.06);
+  border-left: 2px solid rgba(0,229,255,0.5);
+  padding-left: 6px;
+}
+
+/* ── Mission tracker ───────────────────────────────────────────────── */
+.cs-hud-slide__count {
+  font-size: 10px; background: rgba(0,229,255,0.15); color: #00e5ff;
+  padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+}
+.cs-hud-slide__mission-list { display: flex; flex-direction: column; gap: 8px; }
+.cs-hud-slide__mission-empty { color: #64748b; font-size: 11px; font-style: italic; }
+.cs-hud-slide__mission-row {
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px; padding: 8px 10px;
+}
+.cs-hud-slide__mission-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.cs-hud-slide__mission-title { font-weight: 600; color: #e2e8f0; font-size: 12px; }
+.cs-hud-slide__mission-diff { color: #f59e0b; font-size: 10px; letter-spacing: 1px; }
+.cs-hud-slide__mission-bar {
+  height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; margin-bottom: 6px; overflow: hidden;
+}
+.cs-hud-slide__mission-fill { height: 100%; background: #00e5ff; border-radius: 2px; transition: width 0.4s ease; }
+.cs-hud-slide__mission-objectives { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.cs-hud-slide__mission-obj {
+  display: flex; align-items: center; gap: 4px; font-size: 11px; color: #94a3b8; cursor: pointer;
+}
+.cs-hud-slide__mission-obj input[type="checkbox"] { accent-color: #00e5ff; cursor: pointer; }
+.cs-hud-slide__mission-obj--done { color: #22c55e; text-decoration: line-through; }
+.cs-hud-slide__mission-reward { font-size: 10px; color: #f59e0b; margin-bottom: 4px; }
+.cs-hud-slide__mission-abandon { font-size: 9px; padding: 2px 8px; }
+
+/* ── Faction reputation bars ───────────────────────────────────────── */
+.cs-hud-slide__faction-list { display: flex; flex-direction: column; gap: 4px; }
+.cs-hud-slide__faction-row { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.cs-hud-slide__faction-name { width: 70px; font-weight: 500; text-align: right; font-size: 10px; }
+.cs-hud-slide__faction-bar {
+  flex: 1; height: 6px; background: rgba(255,255,255,0.06);
+  border-radius: 3px; position: relative; overflow: hidden;
+}
+.cs-hud-slide__faction-center {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 1px;
+  background: rgba(255,255,255,0.15);
+}
+.cs-hud-slide__faction-fill {
+  position: absolute; top: 0; bottom: 0;
+  border-radius: 3px; transition: width 0.4s ease;
+}
+.cs-hud-slide__faction-fill--right { left: 50%; }
+.cs-hud-slide__faction-fill--left  { right: 50%; }
+.cs-hud-slide__faction-val { width: 32px; font-size: 10px; text-align: right; font-weight: 600; }
+
 /* ── Credits: warm glow ── */
 .cs-hud__credits {
   text-shadow: 0 0 8px rgba(245, 158, 11, 0.3);

@@ -49,6 +49,7 @@
       this._leftOpen  = false;
       this._rightOpen = false;
       this._phoneOpen = false;
+      this._activePopup = null;  // v1.43.0 — active item/crew popup reference
 
       // DOM refs — resolved after DOMContentLoaded
       this._els = {};
@@ -625,19 +626,90 @@
       if (state.energy  !== undefined) { _setBar('left-energy-bar',  state.energy);  _setText('left-energy-val',  state.energy);  }
       if (state.inventory) this._renderInventory(state.inventory);
       if (state.skills)    this._renderSkills(state.skills);
+      if (state.faction_standings) this._renderFactions(state.faction_standings);
     }
 
+    // v1.43.0 [2026-03-21] — Interactive inventory with item action popup
     _renderInventory (items) {
       const grid = document.getElementById('left-inventory');
       const cntEl = document.getElementById('left-inv-count');
       if (!grid) return;
       const slots = grid.querySelectorAll('.cs-hud-slide__inv-slot');
+      // Clear all slots first
+      slots.forEach(s => {
+        s.textContent = '';
+        s.title = '';
+        s.classList.remove('cs-hud-slide__inv-slot--occupied');
+        s.removeAttribute('data-item-id');
+        s.onclick = null;
+      });
       items.slice(0, slots.length).forEach((item, i) => {
-        slots[i].textContent = item.icon || '';
-        slots[i].title       = item.name || 'Item';
-        slots[i].classList.toggle('cs-hud-slide__inv-slot--occupied', !!item.name);
+        slots[i].textContent = item.icon || '📦';
+        slots[i].title       = `${item.name || 'Item'} (${item.rarity || 'common'}) x${item.qty || 1}`;
+        slots[i].classList.add('cs-hud-slide__inv-slot--occupied');
+        slots[i].dataset.itemId = item.id;
+        slots[i].onclick = () => this._showItemPopup(item, slots[i]);
       });
       if (cntEl) cntEl.textContent = `${items.length}/${slots.length}`;
+    }
+
+    /** Show item action popup anchored to a slot element. */
+    _showItemPopup (item, anchorEl) {
+      this._closePopup();
+      const popup = document.createElement('div');
+      popup.className = 'cs-hud-popup cs-hud-popup--item';
+      popup.innerHTML = `
+        <div class="cs-hud-popup__header">
+          <span class="cs-hud-popup__icon">${item.icon || '📦'}</span>
+          <span class="cs-hud-popup__title">${_esc(item.name)}</span>
+          <span class="cs-hud-popup__rarity cs-hud-popup__rarity--${item.rarity || 'common'}">${_esc(item.rarity || 'common')}</span>
+        </div>
+        <div class="cs-hud-popup__qty">Qty: ${item.qty || 1}</div>
+        <div class="cs-hud-popup__actions">
+          ${item.equipped
+            ? '<button class="cs-hud-popup__btn cs-hud-popup__btn--secondary" data-action="unequip">Unequip</button>'
+            : '<button class="cs-hud-popup__btn cs-hud-popup__btn--primary" data-action="equip">Equip</button>'
+          }
+          <button class="cs-hud-popup__btn cs-hud-popup__btn--danger" data-action="drop">Drop</button>
+        </div>`;
+      // Position near the anchor
+      const rect = anchorEl.getBoundingClientRect();
+      popup.style.position = 'fixed';
+      popup.style.left = (rect.right + 8) + 'px';
+      popup.style.top  = rect.top + 'px';
+      popup.style.zIndex = '300';
+      document.body.appendChild(popup);
+      this._activePopup = popup;
+
+      popup.addEventListener('click', async (e) => {
+        const action = e.target.dataset?.action;
+        if (!action) return;
+        try {
+          if (action === 'equip') {
+            await fetch('/api/inventory/equip', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item_id: item.id, slot: 'auto' }),
+            });
+          } else if (action === 'unequip') {
+            await fetch('/api/inventory/unequip', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item_id: item.id }),
+            });
+          } else if (action === 'drop') {
+            await fetch('/api/inventory/remove', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item_id: item.id, quantity: 1 }),
+            });
+          }
+          this._closePopup();
+          this._poll();  // Refresh state
+        } catch (err) {
+          console.error('[HUD] Item action failed:', err);
+        }
+      });
     }
 
     _renderSkills (skills) {
@@ -657,9 +729,11 @@
 
     _renderRightPanel (state) {
       if (!state) return;
-      if (state.crew)    this._renderCrew(state.crew);
+      if (state.crew)     this._renderCrew(state.crew);
+      if (state.missions) this._renderMissions(state.missions);
     }
 
+    // v1.43.0 [2026-03-21] — Interactive crew rows with detail popup
     _renderCrew (crew) {
       const list = document.getElementById('hud-crew-list');
       if (!list) return;
@@ -667,7 +741,7 @@
         list.innerHTML = '<div class="cs-hud-slide__crew-empty">No crew yet. Build relationships to recruit.</div>';
         return;
       }
-      const TIER_ICONS  = { fixer: '🔧', hacker: '💻', muscle: '💪', thief: '🗡️', tech: '⚙️' };
+      const TIER_ICONS  = { fixer: '🔧', hacker: '💻', muscle: '💪', thief: '🗡️', tech: '⚙️', medic: '🩺', driver: '🏎️', lookout: '👁️', face: '🎭', supplier: '📦' };
       const LOYALTY_COLOR = (l) => l >= 80 ? '#00e5ff' : l >= 60 ? '#22c55e' : l >= 40 ? '#f97316' : '#f43f5e';
       list.innerHTML = crew.map(m => {
         const roleIcon  = m.role_icon || TIER_ICONS[m.role] || '👤';
@@ -675,7 +749,7 @@
         const loyaltyClr = LOYALTY_COLOR(loyalty);
         const tier      = loyalty >= 80 ? '★★★' : loyalty >= 60 ? '★★' : loyalty >= 40 ? '★' : '·';
         const available = m.available ? '' : ' cs-hud-slide__crew-row--busy';
-        return `<div class="cs-hud-slide__crew-row${available}" title="${_esc(m.id)} — ${m.role || '?'} (Loyalty ${loyalty})">
+        return `<div class="cs-hud-slide__crew-row${available}" data-crew-id="${_esc(m.id)}" title="${_esc(m.id)} — ${m.role || '?'} (Loyalty ${loyalty})">
           <span class="cs-hud-slide__crew-icon">${roleIcon}</span>
           <span class="cs-hud-slide__crew-name">${_esc(m.id)}</span>
           <span class="cs-hud-slide__crew-role">${_esc(m.role || '?')}</span>
@@ -683,6 +757,166 @@
             <div class="cs-hud-slide__crew-loyalty-fill" style="width:${loyalty}%;background:${loyaltyClr}"></div>
           </div>
           <span class="cs-hud-slide__crew-tier" style="color:${loyaltyClr}">${tier}</span>
+        </div>`;
+      }).join('');
+
+      // Attach click handlers for crew detail popup
+      list.querySelectorAll('.cs-hud-slide__crew-row').forEach(row => {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', () => {
+          const crewId = row.dataset.crewId;
+          const member = crew.find(m => m.id === crewId);
+          if (member) this._showCrewPopup(member, row);
+        });
+      });
+    }
+
+    /** Show crew member detail popup anchored to a row element. */
+    _showCrewPopup (member, anchorEl) {
+      this._closePopup();
+      const loyalty = Math.max(0, Math.min(100, member.loyalty ?? 50));
+      const LOYALTY_COLOR = (l) => l >= 80 ? '#00e5ff' : l >= 60 ? '#22c55e' : l >= 40 ? '#f97316' : '#f43f5e';
+      const popup = document.createElement('div');
+      popup.className = 'cs-hud-popup cs-hud-popup--crew';
+      popup.innerHTML = `
+        <div class="cs-hud-popup__header">
+          <span class="cs-hud-popup__icon">${member.role_icon || '👤'}</span>
+          <span class="cs-hud-popup__title">${_esc(member.id)}</span>
+        </div>
+        <div class="cs-hud-popup__detail">
+          <div>Role: <strong>${_esc(member.role || '?')}</strong></div>
+          <div>Level: <strong>${member.level || 1}</strong></div>
+          <div>Loyalty: <strong style="color:${LOYALTY_COLOR(loyalty)}">${loyalty}%</strong></div>
+          <div>Status: ${member.available ? '<span style="color:#22c55e">Available</span>' : '<span style="color:#f97316">On Assignment</span>'}</div>
+        </div>
+        <div class="cs-hud-popup__actions">
+          <button class="cs-hud-popup__btn cs-hud-popup__btn--danger" data-action="dismiss">Dismiss</button>
+        </div>`;
+      const rect = anchorEl.getBoundingClientRect();
+      popup.style.position = 'fixed';
+      popup.style.left = (rect.left - 220) + 'px';
+      popup.style.top  = rect.top + 'px';
+      popup.style.zIndex = '300';
+      document.body.appendChild(popup);
+      this._activePopup = popup;
+
+      popup.addEventListener('click', async (e) => {
+        const action = e.target.dataset?.action;
+        if (!action) return;
+        if (action === 'dismiss') {
+          if (!confirm(`Dismiss ${member.id} from crew?`)) return;
+          try {
+            await fetch('/api/crew/dismiss', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ character_id: member.id }),
+            });
+            this._closePopup();
+            this._poll();
+          } catch (err) {
+            console.error('[HUD] Crew dismiss failed:', err);
+          }
+        }
+      });
+    }
+
+    /** Close any active popup. */
+    _closePopup () {
+      if (this._activePopup) {
+        this._activePopup.remove();
+        this._activePopup = null;
+      }
+    }
+
+    // v1.43.0 [2026-03-21] — Mission rendering for right panel
+    _renderMissions (missions) {
+      const list = document.getElementById('hud-mission-list');
+      const countEl = document.getElementById('hud-mission-count');
+      if (!list) return;
+      if (countEl) countEl.textContent = missions.length;
+
+      if (!missions || missions.length === 0) {
+        list.innerHTML = '<div class="cs-hud-slide__mission-empty">No active missions.</div>';
+        return;
+      }
+      list.innerHTML = missions.map(m => {
+        const stars = '★'.repeat(m.difficulty || 1) + '☆'.repeat(5 - (m.difficulty || 1));
+        const pct = m.progress?.pct || 0;
+        return `<div class="cs-hud-slide__mission-row" data-mission-id="${_esc(m.id)}">
+          <div class="cs-hud-slide__mission-header">
+            <span class="cs-hud-slide__mission-title">${_esc(m.title)}</span>
+            <span class="cs-hud-slide__mission-diff" title="Difficulty">${stars}</span>
+          </div>
+          <div class="cs-hud-slide__mission-bar">
+            <div class="cs-hud-slide__mission-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="cs-hud-slide__mission-objectives">
+            ${(m.objectives || []).map(obj => `
+              <label class="cs-hud-slide__mission-obj ${obj.completed ? 'cs-hud-slide__mission-obj--done' : ''}"
+                     data-obj-id="${_esc(obj.id)}" data-mission-id="${_esc(m.id)}">
+                <input type="checkbox" ${obj.completed ? 'checked disabled' : ''}>
+                ${_esc(obj.description)}${obj.optional ? ' <em>(optional)</em>' : ''}
+              </label>
+            `).join('')}
+          </div>
+          <div class="cs-hud-slide__mission-reward">
+            Reward: ₵${m.reward?.credits || 0} · ${m.reward?.xp || 0} XP
+          </div>
+          <button class="cs-hud-popup__btn cs-hud-popup__btn--danger cs-hud-slide__mission-abandon"
+                  data-abandon="${_esc(m.id)}">Abandon</button>
+        </div>`;
+      }).join('');
+
+      // Wire objective checkboxes and abandon buttons
+      list.querySelectorAll('.cs-hud-slide__mission-obj input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', async () => {
+          const label = cb.closest('.cs-hud-slide__mission-obj');
+          const missionId = label.dataset.missionId;
+          const objId = label.dataset.objId;
+          try {
+            await fetch('/api/mission/objective', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mission_id: missionId, objective_id: objId }),
+            });
+            cb.disabled = true;
+            label.classList.add('cs-hud-slide__mission-obj--done');
+            this._poll();
+          } catch (err) { console.error('[HUD] Objective update failed:', err); }
+        });
+      });
+      list.querySelectorAll('.cs-hud-slide__mission-abandon').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const missionId = btn.dataset.abandon;
+          if (!confirm('Abandon this mission?')) return;
+          try {
+            await fetch('/api/mission/abandon', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mission_id: missionId }),
+            });
+            this._poll();
+          } catch (err) { console.error('[HUD] Mission abandon failed:', err); }
+        });
+      });
+    }
+
+    // v1.43.0 [2026-03-21] — Faction reputation bars for left panel
+    _renderFactions (factionStandings) {
+      const container = document.getElementById('left-factions');
+      if (!container || !factionStandings) return;
+      container.innerHTML = Object.entries(factionStandings).map(([name, standing]) => {
+        const color = FACTION_COLORS[name] || '#94a3b8';
+        const pct = Math.abs(standing);
+        const dir = standing >= 0 ? 'right' : 'left';
+        return `<div class="cs-hud-slide__faction-row">
+          <span class="cs-hud-slide__faction-name" style="color:${color}">${_esc(name)}</span>
+          <div class="cs-hud-slide__faction-bar">
+            <div class="cs-hud-slide__faction-center"></div>
+            <div class="cs-hud-slide__faction-fill cs-hud-slide__faction-fill--${dir}"
+                 style="width:${pct / 2}%;background:${color}"></div>
+          </div>
+          <span class="cs-hud-slide__faction-val" style="color:${color}">${standing > 0 ? '+' : ''}${standing}</span>
         </div>`;
       }).join('');
     }
