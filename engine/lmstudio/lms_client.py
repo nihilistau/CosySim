@@ -170,6 +170,25 @@ class LMSClient:
         """Check if LMStudio is responding on the native v1 API."""
         try:
             r = self._client.get(f"{self.base_url}/api/v1/models", timeout=3.0)
+            # v1.43.0 — Surface auth failures through structured logging
+            if r.status_code == 401:
+                logger.error(
+                    "LMStudio auth failed (401) — check lmstudio.api_token in config. "
+                    "Token present: %s", bool(self._api_token)
+                )
+                try:
+                    from engine.observability.structured_logger import get_structured_logger, LogLevel
+                    get_structured_logger().log(
+                        LogLevel.ERROR,
+                        "LMStudio auth failure — Bearer token rejected or missing",
+                        service="lmstudio",
+                        tags=["auth", "lmstudio", "critical"],
+                        context={"status_code": 401, "token_present": bool(self._api_token),
+                                 "base_url": self.base_url},
+                    )
+                except Exception:
+                    pass
+                return False
             return r.status_code == 200
         except Exception as exc:
             logger.debug("LMStudio availability check failed: %s", exc)
@@ -1258,4 +1277,15 @@ def get_lms_client(**kwargs) -> LMSClient:
     global _lms_instance
     if _lms_instance is None:
         _lms_instance = LMSClient(**kwargs)
+        # v1.43.0 — Log startup diagnostics
+        auth = "Bearer auth" if _lms_instance._api_token else "NO AUTH"
+        logger.info(
+            "LMSClient initialized: %s (%s)",
+            _lms_instance.base_url, auth,
+        )
+        if not _lms_instance._api_token:
+            logger.warning(
+                "LMSClient has no API token — LMStudio will reject requests if auth is enabled. "
+                "Set lmstudio.api_token in config/default.yaml"
+            )
     return _lms_instance
