@@ -4,6 +4,51 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.44] — "LMSTUDIO OVERHAUL + NEONCITY DASHBOARD" — 2026-03-21
+
+Complete LMStudio subsystem refactor and NeonCity HUD overhaul.
+
+### LMStudio Refactor (engine/lmstudio/)
+- **Unified `chat.py` facade** — `chat()`, `chat_response()`, `chat_stateful()`, `chat_structured()`, `quick_reply()` functions; every scene and service calls one module
+- **Eliminated direct HTTP** — benchmark.py, finetuned_router.py, auto_tuner.py, inference_monitor.py all rewired through LMSClient
+- **Fixed 8 silent exception swallows** — task_queue, orchestrator, lms_client, router callbacks now log instead of silently passing
+- **Speculative decoding wired end-to-end** — auto-enables from config on orchestrator startup, `_test_speculative()` benchmark implemented
+- **Unified metrics** — InferenceMonitor wired into chat.py facade and TaskQueue; `record_from_response()` convenience method added
+- **Deprecated `get_lmstudio_headers()`** — all engine/lmstudio/ callers migrated, deprecation warning added to engine/utils.py
+- **60+ callers consolidated** — scenes (penthouse, lab_break, neoncity, phone, coders, intel_hub), engine modules, and health checks all use unified path
+
+### NeonCity 3-Column Dashboard (content/scenes/neoncity/)
+- **Full layout redesign** — left sidebar (player stats + city map + inventory), center (districts + factions + chat/economy/events), right sidebar (crew + missions)
+- **Player stats panel** — HP/Energy/Heat/Rep bars with live values, skill chips, location indicator
+- **Inventory grid** — 4x3 grid with item icons, rarity borders (rare/epic/legendary), quantity badges, equipped tags
+- **Crew roster** — member cards with name/role/level, loyalty gradient bars, check operations button
+- **Mission board** — tabbed available/active, type-colored labels (recon/heist/deal/extraction/hit), difficulty stars, accept buttons, reward display
+- **City map panel** — current location display, neighbor list with travel costs (energy/heat), click-to-travel
+
+### Living City (engine/world/ + navbar)
+- **LivingWorld daemon started** — world events, faction AI, weather, NPC routines all tick every 60s from NeonCity scene start
+- **NPC district chat** — 15 unique NPC personalities, LMStudio-powered replies via `chat()`, world context injected
+- **Mission offers from NPCs** — 20% chance per NPC interaction to offer available missions
+- **Crew operation auto-polling** — every 60s, completed ops detected, rewards applied, HUD notified
+- **Navbar travel interceptor** — all scene nav links routed through `POST /api/city/travel` with energy/heat costs, travel toast UI, error handling
+- **City map integration** — `/api/city/neighbors` endpoint rendered in HUD, click-to-travel with cost display
+
+### Backend APIs Added (NeonCity)
+- `GET /api/player` — full player state
+- `GET /api/inventory` + `POST /api/inventory/use` — inventory with equip/sell/use
+- `GET /api/crew` + `POST /api/crew/recruit` — crew management
+- `GET /api/missions` + `POST /api/missions/accept` — mission board
+- `GET /api/hud` — combined HUD data (single call)
+- Socket.IO: `get_hud` → `hud_state`, `district_chat` → `city_event`
+
+### Tests
+- 491 smoke tests pass (1 pre-existing scheduler count failure)
+- 62 scene import/route tests pass
+- 248 LMStudio + arena + compute router tests pass
+- All 24 engine/lmstudio modules import cleanly
+
+---
+
 ## [1.40] — "HEALTH CHECK DASHBOARD + SERVICE DISCOVERY" — 2026-03
 
 Unified health check aggregator polling all system services concurrently, a

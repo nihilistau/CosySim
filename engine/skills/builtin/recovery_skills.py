@@ -640,22 +640,15 @@ def system_diagnostics() -> str:
     try:
         report: Dict[str, Any] = {}
 
-        # LMStudio status
+        # v1.43.1 [2026-03-21] — LMStudio status via unified client
         try:
-            import urllib.request
-            from engine.utils import get_lmstudio_headers
-            lms_url = get_config().get("lmstudio.base_url", "http://127.0.0.1:1234")
-            req = urllib.request.Request(f"{lms_url}/api/v1/models")
-            for k, v in get_lmstudio_headers().items():
-                req.add_header(k, v)
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                data = json.loads(resp.read())
-                models = data.get("data", [])
-                report["lmstudio"] = {
-                    "status": "online",
-                    "models_loaded": len(models),
-                    "model_ids": [m.get("id", "?") for m in models[:5]],
-                }
+            from engine.lmstudio.chat import is_ready, get_models
+            models = get_models(loaded_only=True)
+            report["lmstudio"] = {
+                "status": "online" if is_ready() else "offline",
+                "models_loaded": len(models),
+                "model_ids": [getattr(m, "key", str(m)) for m in models[:5]],
+            }
         except Exception:
             report["lmstudio"] = {"status": "offline"}
 

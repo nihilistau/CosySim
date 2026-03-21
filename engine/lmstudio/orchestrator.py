@@ -147,7 +147,59 @@ class InferenceOrchestrator:
         except Exception:
             logger.debug("RouterDataCollector unavailable", exc_info=True)
 
+        # v1.44.0 [2026-03-21] — Auto-enable speculative decoding from config
+        self._maybe_enable_speculative()
+
         logger.info("InferenceOrchestrator initialized")
+
+    # ── Speculative Decoding Auto-Start ──────────────────────────────
+
+    def _maybe_enable_speculative(self) -> None:
+        """Auto-enable speculative decoding if configured.
+
+        Reads ``lmstudio.speculative.enabled`` and ``lmstudio.speculative.draft_model``
+        from config. Loads both models in a background thread so startup is not blocked.
+        """
+        enabled = self._config.get("lmstudio.speculative.enabled", False)
+        draft_model = self._config.get("lmstudio.speculative.draft_model", "")
+        if not enabled or not draft_model:
+            logger.debug("Speculative decoding: disabled (enabled=%s, draft=%s)",
+                         enabled, draft_model)
+            return
+
+        main_model = self._config.get("lmstudio.speculative.main_model", "")
+
+        def _enable_in_background() -> None:
+            try:
+                if not main_model:
+                    resolved = self.client.resolve_model()
+                else:
+                    resolved = main_model
+                if not resolved:
+                    logger.warning("Speculative decoding: no main model resolved, skipping")
+                    return
+                main_result, draft_result = self.client.enable_speculative(
+                    resolved, draft_model,
+                )
+                if main_result.status == "loaded" and draft_result.status == "loaded":
+                    logger.info(
+                        "Speculative decoding: active (main=%s, draft=%s)",
+                        resolved, draft_model,
+                    )
+                else:
+                    logger.warning(
+                        "Speculative decoding: incomplete (main=%s, draft=%s)",
+                        main_result.status, draft_result.status,
+                    )
+            except Exception as exc:
+                logger.warning("Speculative decoding startup failed: %s", exc)
+
+        import threading
+        threading.Thread(
+            target=_enable_in_background,
+            daemon=True,
+            name="spec-decode-startup",
+        ).start()
 
     # ── Configuration ────────────────────────────────────────────────
 
@@ -322,7 +374,7 @@ class InferenceOrchestrator:
                         error=str(e)[:200],
                     )
                 except Exception:
-                    pass
+                    logger.debug("InferenceMonitor error-path record failed", exc_info=True)
             # Capture failed routing decision
             if self._router_collector:
                 try:
@@ -340,7 +392,7 @@ class InferenceOrchestrator:
                         error=str(e)[:200],
                     ))
                 except Exception:
-                    pass
+                    logger.debug("RouterDataCollector error-path capture failed", exc_info=True)
             raise
 
     def infer_quick(self, prompt: str, *, agent_id: str = "", **kwargs) -> str:
@@ -538,13 +590,32 @@ class InferenceOrchestrator:
 
         return status
 
+    # v1.44.0 [2026-03-21] — Enriched with InferenceMonitor data
     def get_performance(self, tier: Optional[str] = None) -> Dict[str, Any]:
-        """Get performance metrics, optionally filtered by tier."""
+        """Get performance metrics, optionally filtered by tier.
+
+        Combines local tier routing stats with InferenceMonitor's
+        detailed per-model metrics.
+        """
         with self._lock:
             if tier:
                 p = self._perf.get(tier)
-                return {tier: p.to_dict()} if p else {}
-            return {k: v.to_dict() for k, v in self._perf.items()}
+                local = {tier: p.to_dict()} if p else {}
+            else:
+                local = {k: v.to_dict() for k, v in self._perf.items()}
+
+        # Enrich with InferenceMonitor data when available
+        if self._inference_monitor:
+            try:
+                monitor_status = self._inference_monitor.get_status()
+                local["_monitor"] = {
+                    "total_requests": monitor_status.get("total_requests", 0),
+                    "error_rate": monitor_status.get("error_rate", 0),
+                    "models": monitor_status.get("models", {}),
+                }
+            except Exception:
+                pass
+        return local
 
     def update_config(self, **kwargs) -> Dict[str, Any]:
         """

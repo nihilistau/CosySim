@@ -1,9 +1,18 @@
 """
-InferenceMonitor — Live transaction monitoring for LMStudio inference.
+InferenceMonitor — Live transaction monitoring for LMStudio inference
+=====================================================================
 
 Hooks into the InferenceOrchestrator to track every inference call.
 Records queue depth, latency, TPS, error rate, and model utilization.
 Stores periodic snapshots to Nexus.
+
+Version: v1.44.0 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.44.0 [2026-03-21] — Replaced direct Nexus HTTP with NexusClient;
+                            added record_from_response() convenience
+    v1.43.0 [2026-03-21] — Initial inference monitor
 
 Usage::
 
@@ -25,10 +34,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
 
-import requests
-
 from engine.config import get_config
-from engine.utils import get_lmstudio_headers
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +110,6 @@ class InferenceMonitor:
 
     def __init__(self, config: Optional[Any] = None) -> None:
         self._config = config or get_config()
-        self._nexus_url = self._config.get("nexus.url", "http://localhost:8700/api")
 
         # Per-model metrics
         self._model_metrics: Dict[str, ModelMetrics] = defaultdict(
@@ -180,6 +185,38 @@ class InferenceMonitor:
             if tier not in self._tier_metrics:
                 self._tier_metrics[tier] = ModelMetrics(model=tier)
             self._tier_metrics[tier].record(tx)
+
+    # v1.44.0 [2026-03-21] — Convenience method for LMSResponse objects
+    def record_from_response(
+        self,
+        resp: Any,
+        *,
+        agent_id: str = "anonymous",
+        tier: str = "direct",
+        task_type: str = "chat",
+    ) -> None:
+        """Record metrics extracted from an LMSResponse.
+
+        Convenience wrapper that pulls latency, tokens, TPS, and model
+        from the response object.
+
+        Args:
+            resp: LMSResponse object from LMSClient.chat().
+            agent_id: Agent making the request.
+            tier: Inference tier used.
+            task_type: Task type (chat, act, classify, etc.).
+        """
+        self.record(
+            agent_id=agent_id,
+            model=getattr(resp, "model", "") or "unknown",
+            tier=tier,
+            task_type=task_type,
+            latency_ms=getattr(resp, "latency_ms", 0.0) or 0.0,
+            tokens=getattr(resp, "output_tokens", 0) or 0,
+            tps=getattr(resp, "server_tps", 0.0) or 0.0,
+            success=bool(getattr(resp, "content", "")),
+            error="" if getattr(resp, "content", "") else "empty_response",
+        )
 
     def update_queue_depth(self, depth: int) -> None:
         """Record current queue depth."""
@@ -299,21 +336,19 @@ class InferenceMonitor:
 
         content = "\n".join(lines)
 
+        # v1.44.0 [2026-03-21] — Uses NexusClient instead of raw HTTP
         try:
-            resp = requests.post(
-                f"{self._nexus_url}/entries",
-                json={
-                    "title": f"Monitor Snapshot — {time.strftime('%Y-%m-%d %H:%M')}",
-                    "content": content,
-                    "content_type": "audit",
-                    "category": "performance",
-                    "tags": ["monitor", "snapshot", "auto-generated"],
-                },
-                headers=get_lmstudio_headers(),
-                timeout=10,
+            from engine.nexus.client import get_nexus_client
+
+            client = get_nexus_client()
+            entry_id = client.add_entry(
+                title=f"Monitor Snapshot — {time.strftime('%Y-%m-%d %H:%M')}",
+                content=content,
+                content_type="audit",
+                category="performance",
+                tags=["monitor", "snapshot", "auto-generated"],
             )
-            if resp.ok:
-                entry_id = resp.json().get("id", "?")
+            if entry_id:
                 logger.debug("Monitor snapshot stored: %s", entry_id)
                 return entry_id
         except Exception as e:

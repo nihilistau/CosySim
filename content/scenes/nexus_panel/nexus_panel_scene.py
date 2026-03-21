@@ -509,17 +509,11 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                 else:
                     status["tiers"]["nlm"] = {"available": False, "label": "NotebookLM (disabled)"}
 
-                # Check Tier 4: LLM fallback
+                # v1.43.1 [2026-03-21] — Check Tier 4 via unified client
                 try:
-                    import urllib.request
-                    lms_url = cfg.get("lmstudio.host", "localhost")
-                    lms_port = cfg.get("lmstudio.port", 1234)
-                    from engine.utils import get_lmstudio_headers
-                    req = urllib.request.Request(f"http://{lms_url}:{lms_port}/api/v1/models", method="GET")
-                    for k, v in get_lmstudio_headers().items():
-                        req.add_header(k, v)
-                    with urllib.request.urlopen(req, timeout=3) as resp:
-                        status["tiers"]["llm"] = {"available": resp.status == 200, "label": "LMStudio LLM"}
+                    from engine.lmstudio.chat import is_ready
+                    lms_ok = is_ready()
+                    status["tiers"]["llm"] = {"available": lms_ok, "label": "LMStudio LLM" if lms_ok else "LMStudio (offline)"}
                 except Exception:
                     status["tiers"]["llm"] = {"available": False, "label": "LMStudio (offline)"}
 

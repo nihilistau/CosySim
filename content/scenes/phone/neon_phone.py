@@ -467,25 +467,23 @@ class NeonPhone(BaseScene):
                 self._ghost_message_count += 1
             self._advance_ghost_arc()
 
+        # v1.43.1 [2026-03-21] — Use unified chat()
         try:
-            from engine.lmstudio.lms_client import get_lms_client
-            client = get_lms_client()
+            from engine.lmstudio.chat import chat
 
             with self._lock:
                 history = list(self._threads[contact_id])[-8:]
 
-            messages: List[Dict[str, str]] = [
-                {"role": "system", "content": contact["system_prompt"]}
-            ]
+            messages: List[Dict[str, str]] = []
             for msg in history:
                 role = "user" if msg["from"] == "user" else "assistant"
                 messages.append({"role": role, "content": msg["text"]})
 
-            reply_text: str = client.chat(
+            reply_text = chat(
                 messages,
+                system=contact["system_prompt"],
                 temperature=0.85,
                 max_tokens=120,
-                store=False,
             ) or "..."
             reply_text = reply_text.strip()
 

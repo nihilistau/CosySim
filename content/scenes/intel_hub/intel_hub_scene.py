@@ -912,11 +912,14 @@ class IntelHubScene(BaseScene):
                 }
         except Exception:
             pass
+        # v1.43.1 [2026-03-21] — Use unified client for model listing
         try:
-            from engine.lmstudio.lms_client import get_lms_client
-            client = get_lms_client()
-            lms_models = client.get_models(loaded_only=False, raw=True)
-            overview["lmstudio"] = {"available": True, "models": [m.get("id") for m in lms_models]}
+            from engine.lmstudio.chat import is_ready, get_models
+            models = get_models(loaded_only=False)
+            overview["lmstudio"] = {
+                "available": is_ready(),
+                "models": [getattr(m, "key", str(m)) for m in models],
+            }
         except Exception as exc:
             logger.warning("LMStudio model check failed: %s", exc)
         try:

@@ -187,7 +187,7 @@ class LMSClient:
                                  "base_url": self.base_url},
                     )
                 except Exception:
-                    pass
+                    logger.debug("Structured logger unavailable for auth failure", exc_info=True)
                 return False
             return r.status_code == 200
         except Exception as exc:

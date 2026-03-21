@@ -454,18 +454,20 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
 
         # ── LMStudio status ────────────────────────────────────────────────────
 
+        # v1.43.1 [2026-03-21] — LMStudio status via unified client
         @app.route("/api/lmstudio")
         def lmstudio_status():
             """Get LMStudio model list and status."""
-            data = _http_get(get_service_url("lmstudio", path="/api/v1/models"))
-            if data is None:
+            try:
+                from engine.lmstudio.chat import is_ready, get_models
+                models = get_models(loaded_only=True)
+                return jsonify({
+                    "online": is_ready(),
+                    "model_count": len(models),
+                    "models": [{"id": getattr(m, "key", str(m)), "type": getattr(m, "type", "llm")} for m in models],
+                })
+            except Exception:
                 return jsonify({"online": False, "error": f"LMStudio unreachable at :{get_port('lmstudio')}"})
-            models = data.get("data", [])
-            return jsonify({
-                "online": True,
-                "model_count": len(models),
-                "models": [{"id": m.get("id"), "type": m.get("type")} for m in models],
-            })
 
         # ── Log viewer ────────────────────────────────────────────────────────
 

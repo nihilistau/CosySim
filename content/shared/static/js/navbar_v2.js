@@ -144,6 +144,8 @@ class CosyNavbar {
         this._setupMoreDropdown();
         this._setupSocketListeners();
         this._startPingLoop();
+        // v1.44.0 — Intercept scene nav clicks to use city_map travel API
+        this._setupTravelInterceptor();
     }
 
     // -----------------------------------------------------------------
@@ -680,6 +682,121 @@ class CosyNavbar {
         a.appendChild(statusDot);
 
         return a;
+    }
+
+    // -----------------------------------------------------------------
+    // v1.44.0 — City Map Travel Integration
+    // -----------------------------------------------------------------
+
+    /**
+     * Intercept scene navigation clicks to route through the city map
+     * travel API. Applies energy/heat costs and tracks player location.
+     * Falls back to direct navigation if the travel API is unavailable.
+     */
+    _setupTravelInterceptor() {
+        // Scene key → city map node name mapping
+        const SCENE_TO_NODE = {
+            'phone':          'SIGNAL',
+            'penthouse':      'THE PENTHOUSE',
+            'lounge':         'THE VELVET PIT',
+            'tavern':         'THE RUSTY ANCHOR',
+            'casino':         'CLUB NOIR',
+            'gallery':        'THE OBSCURA',
+            'arena':          'THE COLOSSEUM',
+            'realm':          'THE SHATTERED THRONE',
+            'neoncity':       'NEON CITY',
+            'coders':         'THE LAB',
+            'heist':          'THE SCORE',
+            'games':          'THE ARCADE',
+            'grid':           'THE GRID',
+            'intel':          'THE BRIEFING ROOM',
+            'command_center': 'Command Center',
+            'asset_studio':   'ASSET STUDIO',
+        };
+
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('[data-scene-nav]');
+            if (!link) return;
+
+            const sceneKey = link.getAttribute('data-scene-key');
+            const scenePort = link.getAttribute('data-scene-port');
+            if (!sceneKey || !scenePort) return;
+
+            // Skip if clicking current scene
+            if (sceneKey === this.currentScene) return;
+
+            // Skip system scenes (admin, nexus, hub) — direct nav
+            const systemScenes = ['admin', 'nexus_panel', 'system_control', 'command_center', 'hub', 'canvas'];
+            if (systemScenes.includes(sceneKey)) return;
+
+            const destination = SCENE_TO_NODE[sceneKey];
+            if (!destination) return; // Unknown scene — let default nav handle it
+
+            e.preventDefault();
+            this._travelTo(destination, `http://localhost:${scenePort}/`, link);
+        });
+    }
+
+    /**
+     * Execute travel via the city map API.
+     * Shows travel cost, applies energy/heat, then navigates.
+     *
+     * @param {string} destination - City map node name.
+     * @param {string} url - Target URL to navigate to.
+     * @param {HTMLElement} link - The clicked nav link (for visual feedback).
+     */
+    async _travelTo(destination, url, link) {
+        // Add travelling indicator
+        if (link) link.classList.add('cs-navbar__nav-item--travelling');
+
+        try {
+            const res = await fetch('/api/city/travel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ destination }),
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                // Show travel cost notification
+                const costs = [];
+                if (data.energy_cost) costs.push(`-${data.energy_cost} energy`);
+                if (data.heat_add)    costs.push(`+${data.heat_add} heat`);
+                if (data.travel_time) costs.push(`${data.travel_time_min || data.travel_time} min`);
+                const costStr = costs.length ? costs.join(' | ') : 'Free travel';
+
+                this._showTravelToast(destination, costStr);
+
+                // Navigate after brief delay for toast visibility
+                setTimeout(() => { window.location.href = url; }, 800);
+            } else {
+                // Travel failed (not enough energy, no route, etc.)
+                this._showTravelToast(destination, data.message || 'Travel blocked', true);
+                if (link) link.classList.remove('cs-navbar__nav-item--travelling');
+            }
+        } catch (err) {
+            // API unavailable — fall back to direct navigation
+            console.warn('[Navbar] Travel API unavailable, navigating directly:', err.message);
+            window.location.href = url;
+        }
+    }
+
+    /**
+     * Show a travel notification toast.
+     * @param {string} destination - Where the player is going.
+     * @param {string} detail - Cost/status text.
+     * @param {boolean} [isError=false] - Red styling for failures.
+     */
+    _showTravelToast(destination, detail, isError = false) {
+        const toast = document.createElement('div');
+        toast.className = 'cs-travel-toast' + (isError ? ' cs-travel-toast--error' : '');
+        toast.innerHTML = `
+            <div class="cs-travel-toast__title">${isError ? 'TRAVEL BLOCKED' : 'TRAVELLING'}</div>
+            <div class="cs-travel-toast__dest">${destination}</div>
+            <div class="cs-travel-toast__detail">${detail}</div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), isError ? 4000 : 1500);
     }
 }
 

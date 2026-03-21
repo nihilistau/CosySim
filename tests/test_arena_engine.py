@@ -26,7 +26,8 @@ _NEXUS_PATH = f"{_MOD}.get_nexus_client"
 _ECONOMY_PATH = f"{_MOD}.get_economy_manager"
 _EVENTBUS_PATH = f"{_MOD}.get_event_bus"
 _CONFIG_PATH = f"{_MOD}.get_config"
-_REQUESTS_POST = f"{_MOD}.requests.post"
+_REQUESTS_POST = f"{_MOD}.requests.post"  # legacy — kept for other tests
+_CHAT_FN = "engine.lmstudio.chat.chat"
 
 # ---------------------------------------------------------------------------
 # Mock factories
@@ -72,6 +73,11 @@ def _make_lmstudio_response(card_name: str, reason: str = "Good choice.") -> Mag
         "content": f"CARD: {card_name}\nREASON: {reason}",
     }
     return resp
+
+
+def _make_chat_reply(card_name: str, reason: str = "Good choice.") -> str:
+    """Return a plain text reply for the unified chat() mock."""
+    return f"CARD: {card_name}\nREASON: {reason}"
 
 
 # ---------------------------------------------------------------------------
@@ -504,9 +510,6 @@ class TestResolveRound:
 
 
 class TestPlayRound:
-    def _mock_lmstudio(self, card_name: str) -> MagicMock:
-        return _make_lmstudio_response(card_name)
-
     def test_play_round_updates_hp(self, engine, arena_mod) -> None:
         """HP changes after a round (at least one fighter takes damage or healing)."""
         match = engine.create_match("a", "b")
@@ -516,11 +519,8 @@ class TestPlayRound:
         card_a = match.fighter_a.hand[0]
         card_b = match.fighter_b.hand[0]
 
-        with patch(_REQUESTS_POST) as mock_post:
-            mock_post.side_effect = [
-                _make_lmstudio_response(card_a.name),
-                _make_lmstudio_response(card_b.name),
-            ]
+        replies = iter([_make_chat_reply(card_a.name), _make_chat_reply(card_b.name)])
+        with patch(_CHAT_FN, side_effect=lambda *a, **kw: next(replies)):
             outcome = engine.play_round(match.id)
 
         assert isinstance(outcome, arena_mod.RoundOutcome)
@@ -539,11 +539,8 @@ class TestPlayRound:
         card_a = match.fighter_a.hand[0]
         card_b = match.fighter_b.hand[0]
 
-        with patch(_REQUESTS_POST) as mock_post:
-            mock_post.side_effect = [
-                _make_lmstudio_response(card_a.name),
-                _make_lmstudio_response(card_b.name),
-            ]
+        replies = iter([_make_chat_reply(card_a.name), _make_chat_reply(card_b.name)])
+        with patch(_CHAT_FN, side_effect=lambda *a, **kw: next(replies)):
             engine.play_round(match.id)
 
         calls = [
@@ -555,15 +552,12 @@ class TestPlayRound:
         """Each play_round call appends to match.rounds."""
         match = engine.create_match("a", "b")
 
-        def side_effects():
-            for _ in range(6):  # 3 rounds × 2 fighters
-                yield _make_lmstudio_response(match.fighter_a.hand[0].name
-                                              if match.fighter_a.hand else "Iron Fist")
-                yield _make_lmstudio_response(match.fighter_b.hand[0].name
-                                              if match.fighter_b.hand else "Iron Fist")
+        def side_effects(*args, **kwargs):
+            name = (match.fighter_a.hand[0].name
+                    if match.fighter_a.hand else "Iron Fist")
+            return _make_chat_reply(name)
 
-        gen = side_effects()
-        with patch(_REQUESTS_POST, side_effect=lambda *a, **kw: next(gen)):
+        with patch(_CHAT_FN, side_effect=side_effects):
             for _ in range(3):
                 if match.status == arena_mod.MatchStatus.IN_PROGRESS:
                     engine.play_round(match.id)
@@ -580,11 +574,7 @@ class TestPlayRound:
         match = engine.create_match("a", "b")
         match.max_rounds = 2
 
-        responses = []
-        for _ in range(4):
-            responses.append(_make_lmstudio_response("Iron Fist"))
-
-        with patch(_REQUESTS_POST, side_effect=responses):
+        with patch(_CHAT_FN, return_value=_make_chat_reply("Iron Fist")):
             for _ in range(2):
                 if match.status == arena_mod.MatchStatus.IN_PROGRESS:
                     engine.play_round(match.id)
@@ -605,10 +595,8 @@ class TestPlayRound:
                  for c in match.fighter_a.hand) else match.fighter_a.hand[0]
         card_b = match.fighter_b.hand[0]
 
-        with patch(_REQUESTS_POST, side_effect=[
-            _make_lmstudio_response(card_a.name),
-            _make_lmstudio_response(card_b.name),
-        ]):
+        replies = iter([_make_chat_reply(card_a.name), _make_chat_reply(card_b.name)])
+        with patch(_CHAT_FN, side_effect=lambda *a, **kw: next(replies)):
             engine.play_round(match.id)
 
         # fighter_b is dead → match should be complete with fighter_a winning
@@ -630,8 +618,7 @@ class TestAgentPickCard:
         fa = match.fighter_a
         target_card = fa.hand[0]
 
-        resp = _make_lmstudio_response(target_card.name, "Best play here.")
-        with patch(_REQUESTS_POST, return_value=resp):
+        with patch(_CHAT_FN, return_value=_make_chat_reply(target_card.name, "Best play here.")):
             card, reasoning = engine._agent_pick_card(fa, match)
 
         assert card.name == target_card.name
@@ -642,11 +629,7 @@ class TestAgentPickCard:
         match = engine.create_match("x", "y")
         fa = match.fighter_a
 
-        bad_resp = MagicMock()
-        bad_resp.raise_for_status.return_value = None
-        bad_resp.json.return_value = {"content": "I don't know what to play!"}
-
-        with patch(_REQUESTS_POST, return_value=bad_resp):
+        with patch(_CHAT_FN, return_value="I don't know what to play!"):
             card, reasoning = engine._agent_pick_card(fa, match)
 
         assert card is not None
@@ -657,7 +640,7 @@ class TestAgentPickCard:
         match = engine.create_match("x", "y")
         fa = match.fighter_a
 
-        with patch(_REQUESTS_POST, side_effect=Exception("Connection refused")):
+        with patch(_CHAT_FN, side_effect=Exception("Connection refused")):
             card, reasoning = engine._agent_pick_card(fa, match)
 
         assert card is not None
@@ -669,8 +652,7 @@ class TestAgentPickCard:
         initial_hand_size = len(fa.hand)
         target = fa.hand[0]
 
-        resp = _make_lmstudio_response(target.name)
-        with patch(_REQUESTS_POST, return_value=resp):
+        with patch(_CHAT_FN, return_value=_make_chat_reply(target.name)):
             engine._agent_pick_card(fa, match)
 
         assert len(fa.hand) == initial_hand_size - 1

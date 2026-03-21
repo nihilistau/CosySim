@@ -461,16 +461,27 @@ class LMLinkManager:
 
         return result
 
+    # v1.44.0 [2026-03-21] — Build peer auth from config (peers may have different tokens)
+    def _peer_headers(self, peer: LMLinkPeer) -> Dict[str, str]:
+        """Build auth headers for a peer from config."""
+        headers: Dict[str, str] = {}
+        try:
+            token = self._config.get("lmstudio.api_token", "")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+        except Exception:
+            pass
+        return headers
+
     def _query_peer_models(self, peer: LMLinkPeer) -> List[Dict[str, Any]]:
         """Query a remote peer for its loaded models via REST API."""
         import httpx
 
-        from engine.utils import get_lmstudio_headers
         url = f"{peer.api_base}/api/v1/models"
         timeout = self._health_timeout_ms / 1000
 
         try:
-            resp = httpx.get(url, headers=get_lmstudio_headers(), timeout=timeout)
+            resp = httpx.get(url, headers=self._peer_headers(peer), timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
             return data.get("data", [])
@@ -487,12 +498,11 @@ class LMLinkManager:
         """
         import httpx
 
-        from engine.utils import get_lmstudio_headers
         url = f"{peer.api_base}/api/v1/models"
         timeout = self._health_timeout_ms / 1000
 
         try:
-            resp = httpx.get(url, headers=get_lmstudio_headers(), timeout=timeout)
+            resp = httpx.get(url, headers=self._peer_headers(peer), timeout=timeout)
             peer.reachable = resp.status_code == 200
             peer.last_check = time.time()
             peer.consecutive_failures = 0 if peer.reachable else peer.consecutive_failures

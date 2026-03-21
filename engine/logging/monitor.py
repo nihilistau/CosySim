@@ -127,12 +127,14 @@ class SystemMonitor:
         """Ping a URL, return ``{up: bool, latency_ms: float, error: str}``."""
         try:
             import requests
-            # v1.43.0 — Include LMStudio auth headers on all health pings
-            headers = {}
+            # v1.43.1 [2026-03-21] — Use client auth for LMStudio pings
+            headers: Dict[str, str] = {}
             if "1234" in url or "lmstudio" in url.lower():
                 try:
-                    from engine.utils import get_lmstudio_headers
-                    headers = get_lmstudio_headers()
+                    from engine.lmstudio.lms_client import get_lms_client
+                    token = get_lms_client()._api_token
+                    if token:
+                        headers["Authorization"] = f"Bearer {token}"
                 except Exception:
                     pass
             start = time.perf_counter()
@@ -164,19 +166,12 @@ class SystemMonitor:
         except Exception:
             return self._get_url(config_key, fallback)
 
-    # ── LMStudio model info ─────────────────────────────────────────────
+    # v1.43.1 [2026-03-21] — Use unified client for model info
     def get_loaded_model(self) -> Optional[str]:
         """Ask LMStudio which model is loaded."""
         try:
-            import requests
-            url = self._resolve_base("lmstudio", "lmstudio.base_url", "http://localhost:1234")
-            from engine.utils import get_lmstudio_headers
-            resp = requests.get(f"{url}/api/v1/models", timeout=3, headers=get_lmstudio_headers())
-            if resp.status_code == 200:
-                data = resp.json()
-                models = data.get("data", [])
-                if models:
-                    return models[0].get("id", "unknown")
+            from engine.lmstudio.lms_client import get_lms_client
+            return get_lms_client().resolve_model() or None
         except Exception:
             logger.debug("Suppressed exception", exc_info=True)
         return None
