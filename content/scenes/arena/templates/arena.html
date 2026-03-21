@@ -4,79 +4,148 @@
 {% set scene_accent = '#dc2626' %}
 {% set scene_accent_rgb = '220 38 38' %}
 
+{#
+  THE COLOSSEUM — CosySim Arena Scene (Kit Rebuild)
+  ==================================================
+  Rebuilt from arena_rebuild.json via Creation Kit pattern.
+  Uses arena_kit.js (ArenaScene) + arena_ext.js (game logic).
+  Original template archived as arena_original.html.
+
+  Version: v1.50.0 [2026-03-22]
+  Change Log:
+    v1.50.0 [2026-03-22] — Kit rebuild. ArenaScene class,
+                             arena_ext.js extensions, new layout.
+#}
+
 {% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='arena_kit.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='arena.css') }}">
 {% endblock %}
 
 {% block scene_content %}
-  <!-- ═══════════════════════════════════════════════════════ MAIN LAYOUT -->
-  <main class="arena-layout">
 
-    <!-- ─────────────── FIGHTER A (left) ─────────────── -->
-    <div class="arena-fighter arena-fighter--a" id="fighter-a">
+  <!-- ══════════════════════════════════════════════════════════════
+       SCENE HEADER — title, subtitle, HUD badges
+       v1.50.0 [2026-03-22] — Kit scene_header component
+  ══════════════════════════════════════════════════════════════ -->
+  <header class="ck-scene-header">
+    <div class="ck-scene-identity">
+      <h1 class="ck-scene-title">THE COLOSSEUM</h1>
+      <p class="ck-scene-subtitle">Two minds. One arena. Place your bets.</p>
+    </div>
+    <div class="ck-scene-hud">
+      <span class="ck-hud-badge">&#x20B5; <span id="arena-credits">&mdash;</span></span>
+      <span class="ck-hud-badge" id="arena-match-status-badge">
+        STATUS <span id="arena-match-status" class="arena-match-status cs-chip">PENDING</span>
+      </span>
+    </div>
+  </header>
 
-      <div class="arena-fighter__portrait cs-portrait-frame cs-portrait-frame--lg">
-        <img id="fighter-a-img" src="" alt="Fighter A" onerror="this.style.display='none'">
-        <div class="arena-fighter__name" id="fighter-a-name">—</div>
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN 3-COLUMN LAYOUT — Fighter A | Arena Floor | Fighter B
+       v1.50.0 [2026-03-22] — Kit column_layout (3 cols, 16px gap)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="ck-columns" data-cols="3">
+
+    <!-- ─── COLUMN 1: Fighter A ─────────────────────────────── -->
+    <div class="ck-col">
+
+      <!-- Fighter A Portrait -->
+      <div class="ck-glass-panel">
+        <div class="arena-fighter__portrait cs-portrait-frame cs-portrait-frame--lg">
+          <img id="fighter-a-img" src="" alt="Fighter A" onerror="this.style.display='none'">
+          <div class="arena-fighter__name" id="fighter-a-name">&mdash;</div>
+        </div>
       </div>
 
-      <!-- HP bar -->
-      <div class="cs-stat-bar cs-stat-bar--hp cs-stat-bar--thick">
+      <!-- Fighter A HP Bar (Kit stat bar) -->
+      <div class="ck-glass-panel" style="margin-top: 8px;">
+        <div class="ck-glass-body">
+          <div class="ck-stat-bar" id="stat-hp-a">
+            <span class="ck-stat-label">HP</span>
+            <div class="ck-stat-track">
+              <div class="ck-stat-fill" id="fighter-a-hp-fill"
+                   style="width: 100%; background: linear-gradient(90deg, #dc2626, #ef4444, #fca5a5);"></div>
+            </div>
+            <span class="ck-stat-val" id="fighter-a-hp-val">100</span>
+          </div>
+          <div class="arena-fighter__stats" id="fighter-a-stats">HP: 100 / 100</div>
+        </div>
+      </div>
+
+      <!-- Fighter A HP (original hidden bar for compatibility) -->
+      <div class="cs-stat-bar cs-stat-bar--hp cs-stat-bar--thick" style="display: none;">
         <div class="cs-stat-bar__fill" id="fighter-a-hp" style="width:100%"></div>
       </div>
-      <div class="arena-fighter__stats" id="fighter-a-stats">HP: 100 / 100</div>
 
-      <!-- Reasoning panel -->
-      <div class="cs-glass-panel arena-reasoning" id="fighter-a-reasoning">
-        <div class="cs-bench-label">REASONING</div>
-        <div class="arena-reasoning__text" id="fighter-a-reason-text">Waiting for match…</div>
+      <!-- Fighter A Reasoning Panel -->
+      <div class="ck-glass-panel ck-glass-panel--glow" style="margin-top: 8px;">
+        <div class="ck-glass-title">REASONING</div>
+        <div class="ck-glass-body">
+          <div class="arena-reasoning__text" id="fighter-a-reason-text">Waiting for match...</div>
 
-        <!-- Last card played -->
-        <div class="arena-last-card" id="fighter-a-card">
-          <div class="cs-arena-card" id="fighter-a-card-display" data-type="attack">
-            <div class="cs-arena-card__type-badge"></div>
-            <div class="cs-arena-card__name">—</div>
-            <div class="cs-arena-card__power">—</div>
-            <div class="cs-arena-card__flavor"></div>
+          <!-- Last card played -->
+          <div class="arena-last-card" id="fighter-a-card">
+            <div class="cs-arena-card" id="fighter-a-card-display" data-type="attack">
+              <div class="cs-arena-card__type-badge"></div>
+              <div class="cs-arena-card__name">&mdash;</div>
+              <div class="cs-arena-card__power">&mdash;</div>
+              <div class="cs-arena-card__flavor"></div>
+            </div>
           </div>
         </div>
       </div>
+
     </div>
 
-    <!-- ─────────────── CENTER: Arena floor + controls ─────────────── -->
-    <div class="arena-center">
+    <!-- ─── COLUMN 2: Arena Floor + Controls ────────────────── -->
+    <div class="ck-col">
 
-      <!-- Arena floor — 3-D perspective CSS grid with blood-red glow -->
+      <!-- Arena Floor — 3-D perspective grid with blood-red glow -->
       <div class="arena-floor" id="arena-floor">
         <div class="arena-floor__particles" id="arena-particles"></div>
         <div class="arena-floor__grid"></div>
-        <!-- VS badge -->
         <div class="arena-vs-badge" id="arena-vs">VS</div>
-        <!-- Clash flash overlay -->
         <div class="arena-clash-flash" id="arena-clash-flash"></div>
       </div>
 
-      <!-- Round counter + status bar -->
-      <div class="arena-status-bar">
+      <!-- Round Counter + Status Bar -->
+      <div class="arena-status-bar" style="margin-top: 8px;">
         <div class="arena-round-counter" id="arena-round">Round 0 / 7</div>
-        <div class="arena-match-status cs-chip" id="arena-match-status">PENDING</div>
         <div class="arena-timer" id="arena-timer"></div>
       </div>
 
-      <!-- Commentary feed -->
-      <div class="arena-commentary cs-glass-panel" id="arena-commentary"
-           role="log" aria-live="polite">
-        <div class="cs-glass-panel__title">COMMENTARY</div>
-        <div class="arena-commentary__feed" id="commentary-feed">
-          <p class="arena-commentary__line arena-commentary__line--intro">
-            The Colosseum awaits its champions…
-          </p>
+      <!-- Round Progress Tracker -->
+      <div class="ck-progress-tracker" id="round-progress" style="margin-top: 4px;">
+        <div class="ck-step">R1</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">R2</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">R3</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">R4</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">R5</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">R6</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">R7</div>
+      </div>
+
+      <!-- Commentary Feed -->
+      <div class="ck-glass-panel" style="margin-top: 8px; flex: 1; min-height: 0;">
+        <div class="ck-glass-title">COMMENTARY</div>
+        <div class="ck-glass-body arena-commentary" style="padding: 0;">
+          <div class="arena-commentary__feed" id="commentary-feed" role="log" aria-live="polite">
+            <p class="arena-commentary__line arena-commentary__line--intro">
+              The Colosseum awaits its champions...
+            </p>
+          </div>
         </div>
       </div>
 
-      <!-- Controls -->
-      <div class="arena-controls">
-        <!-- Fighter selectors -->
+      <!-- Fighter Selectors + Controls -->
+      <div class="arena-controls" style="margin-top: 8px;">
         <div class="arena-fighter-select">
           <select class="cs-hack-input" id="select-fighter-a" title="Fighter A">
             <option value="shadow">Shadow</option>
@@ -94,69 +163,102 @@
         </div>
 
         <div class="arena-controls__row">
-          <button class="cs-glass-btn cs-glass-btn--accent" id="create-match-btn">
-            ⚔ New Match
+          <button class="ck-btn ck-btn--accent" id="create-match-btn">
+            &#9876; New Match
           </button>
-          <button class="cs-glass-btn" id="play-round-btn" disabled>
-            ▶ Play Round
+          <button class="ck-btn" id="play-round-btn" disabled>
+            &#9654; Play Round
           </button>
-          <button class="cs-glass-btn cs-glass-btn--icon" id="auto-play-btn"
-                  title="Toggle Auto-play" aria-pressed="false">⚡</button>
-          <button class="cs-glass-btn cs-glass-btn--icon" id="bet-panel-btn"
-                  title="Place Bet" aria-controls="arena-bet-panel">₵</button>
+          <button class="ck-btn ck-btn--icon" id="auto-play-btn"
+                  title="Toggle Auto-play" aria-pressed="false">&#9889;</button>
+          <button class="ck-btn ck-btn--icon" id="bet-panel-btn"
+                  title="Place Bet" aria-controls="arena-bet-panel">&#x20B5;</button>
         </div>
       </div>
 
-    </div><!-- /arena-center -->
+    </div>
 
-    <!-- ─────────────── FIGHTER B (right — mirror) ─────────────── -->
-    <div class="arena-fighter arena-fighter--b" id="fighter-b">
+    <!-- ─── COLUMN 3: Fighter B ─────────────────────────────── -->
+    <div class="ck-col">
 
-      <div class="arena-fighter__portrait cs-portrait-frame cs-portrait-frame--lg">
-        <img id="fighter-b-img" src="" alt="Fighter B" onerror="this.style.display='none'">
-        <div class="arena-fighter__name" id="fighter-b-name">—</div>
+      <!-- Fighter B Portrait -->
+      <div class="ck-glass-panel">
+        <div class="arena-fighter__portrait cs-portrait-frame cs-portrait-frame--lg">
+          <img id="fighter-b-img" src="" alt="Fighter B" onerror="this.style.display='none'">
+          <div class="arena-fighter__name" id="fighter-b-name">&mdash;</div>
+        </div>
       </div>
 
-      <!-- HP bar -->
-      <div class="cs-stat-bar cs-stat-bar--hp cs-stat-bar--thick">
+      <!-- Fighter B HP Bar (Kit stat bar) -->
+      <div class="ck-glass-panel" style="margin-top: 8px;">
+        <div class="ck-glass-body">
+          <div class="ck-stat-bar" id="stat-hp-b">
+            <span class="ck-stat-label">HP</span>
+            <div class="ck-stat-track">
+              <div class="ck-stat-fill" id="fighter-b-hp-fill"
+                   style="width: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd);"></div>
+            </div>
+            <span class="ck-stat-val" id="fighter-b-hp-val">100</span>
+          </div>
+          <div class="arena-fighter__stats" id="fighter-b-stats">HP: 100 / 100</div>
+        </div>
+      </div>
+
+      <!-- Fighter B HP (original hidden bar for compatibility) -->
+      <div class="cs-stat-bar cs-stat-bar--hp cs-stat-bar--thick" style="display: none;">
         <div class="cs-stat-bar__fill" id="fighter-b-hp" style="width:100%"></div>
       </div>
-      <div class="arena-fighter__stats" id="fighter-b-stats">HP: 100 / 100</div>
 
-      <!-- Reasoning panel -->
-      <div class="cs-glass-panel arena-reasoning" id="fighter-b-reasoning">
-        <div class="cs-bench-label">REASONING</div>
-        <div class="arena-reasoning__text" id="fighter-b-reason-text">Waiting for match…</div>
+      <!-- Fighter B Reasoning Panel -->
+      <div class="ck-glass-panel ck-glass-panel--glow" style="margin-top: 8px;">
+        <div class="ck-glass-title">REASONING</div>
+        <div class="ck-glass-body">
+          <div class="arena-reasoning__text" id="fighter-b-reason-text">Waiting for match...</div>
 
-        <!-- Last card played -->
-        <div class="arena-last-card" id="fighter-b-card">
-          <div class="cs-arena-card" id="fighter-b-card-display" data-type="defense">
-            <div class="cs-arena-card__type-badge"></div>
-            <div class="cs-arena-card__name">—</div>
-            <div class="cs-arena-card__power">—</div>
-            <div class="cs-arena-card__flavor"></div>
+          <!-- Last card played -->
+          <div class="arena-last-card" id="fighter-b-card">
+            <div class="cs-arena-card" id="fighter-b-card-display" data-type="defense">
+              <div class="cs-arena-card__type-badge"></div>
+              <div class="cs-arena-card__name">&mdash;</div>
+              <div class="cs-arena-card__power">&mdash;</div>
+              <div class="cs-arena-card__flavor"></div>
+            </div>
           </div>
         </div>
       </div>
+
+      <!-- Leaderboard Panel -->
+      <div class="ck-glass-panel" style="margin-top: 8px;">
+        <div class="ck-glass-title">LEADERBOARD</div>
+        <div class="ck-glass-body">
+          <div id="leaderboard-list">
+            <p class="arena-empty">No matches played yet.</p>
+          </div>
+        </div>
+      </div>
+
     </div>
 
-  </main><!-- /arena-layout -->
+  </div>
 
-  <!-- ═══════════════════════════════════════════════════ BETTING SIDEBAR -->
+  <!-- ══════════════════════════════════════════════════════════════
+       BETTING SIDEBAR — fixed position overlay
+       v1.50.0 [2026-03-22] — Kit glass panel, slide-in from right
+  ══════════════════════════════════════════════════════════════ -->
   <aside class="arena-bet-panel cs-glass-panel" id="arena-bet-panel"
          aria-label="Place Bet" hidden>
     <div class="arena-bet-panel__header">
       <h3 class="cs-glass-panel__title">PLACE BET</h3>
-      <button class="cs-glass-btn cs-glass-btn--icon arena-bet-panel__close"
-              id="bet-panel-close" aria-label="Close">✕</button>
+      <button class="ck-btn ck-btn--icon arena-bet-panel__close"
+              id="bet-panel-close" aria-label="Close">&times;</button>
     </div>
 
     <div class="arena-bet-section">
       <label class="arena-bet-label">Bet type</label>
       <div class="arena-bet-types">
-        <button class="cs-glass-btn arena-bet-type arena-bet-type--active"
+        <button class="ck-btn arena-bet-type arena-bet-type--active"
                 data-type="match_winner">Match Winner</button>
-        <button class="cs-glass-btn arena-bet-type"
+        <button class="ck-btn arena-bet-type"
                 data-type="round_winner">Next Round</button>
       </div>
     </div>
@@ -164,9 +266,9 @@
     <div class="arena-bet-section">
       <label class="arena-bet-label">Fighter</label>
       <div class="arena-bet-targets">
-        <button class="cs-glass-btn arena-bet-target arena-bet-target--a"
+        <button class="ck-btn arena-bet-target arena-bet-target--a"
                 data-target="fighter_a" id="bet-target-a">Fighter A</button>
-        <button class="cs-glass-btn arena-bet-target arena-bet-target--b"
+        <button class="ck-btn arena-bet-target arena-bet-target--b"
                 data-target="fighter_b" id="bet-target-b">Fighter B</button>
       </div>
     </div>
@@ -177,21 +279,33 @@
              min="10" max="10000" value="100" step="10">
     </div>
 
-    <button class="cs-glass-btn cs-glass-btn--accent arena-bet-submit"
-            id="place-bet-btn">Place Bet ₵</button>
+    <button class="ck-btn ck-btn--accent arena-bet-submit"
+            id="place-bet-btn">Place Bet &#x20B5;</button>
 
-    <div class="cs-economy-ticker" id="arena-credits">₵ —</div>
+    <div class="ck-economy-panel" style="margin-top: 8px; justify-content: center;">
+      <span class="ck-economy-label">Balance</span>
+      <span class="ck-economy-val" id="arena-credits-sidebar">&mdash;</span>
+    </div>
 
     <div class="arena-active-bets" id="arena-active-bets">
       <div class="arena-bet-label">Active Bets</div>
     </div>
   </aside>
+
+  <!-- ── Toast Container ──────────────────────────────────────── -->
+  <div class="ck-toast-container ck-toast--bottom-center" id="toast-container"></div>
+
+{% endblock %}
+
+{% block scene_overlays %}
+{% include 'shop_modal.html' %}
 {% endblock %}
 
 {% block body_scripts %}
-  <script src="/shared/js/cosysim-particles3d.js"></script>
-  <script src="/shared/js/cosysim-bench.js"></script>
-  <script src="{{ url_for('static', filename='arena.js') }}"></script>
-  <script src="/shared/js/cosysim-voice.js"></script>
-  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'arena' };</script>
+<script src="/shared/js/cosysim-particles3d.js"></script>
+<script src="/shared/js/cosysim-bench.js"></script>
+<script src="{{ url_for('static', filename='arena_kit.js') }}"></script>
+<script src="{{ url_for('static', filename='arena_ext.js') }}"></script>
+<script src="/shared/js/cosysim-voice.js"></script>
+<script>window.SCENE_PARTICLE_CONFIG = { scene: 'arena' };</script>
 {% endblock %}

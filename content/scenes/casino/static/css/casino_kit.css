@@ -1,0 +1,322 @@
+/* ============================================================
+   CLUB NOIR — Kit Scene Styles
+   ==============================
+   Generated from casino_rebuild.json layout.
+   Accent: #f97316 (neon orange)
+
+   Version: v1.50.0 [2026-03-22]
+   Change Log:
+     v1.50.0 [2026-03-22] — Initial Kit-generated palette + component styles.
+                              Derived from existing casino.css accent color.
+   ============================================================ */
+
+/* ── Scene palette (derived from accent #f97316) ──────────── */
+:root {
+  --scene-accent: #f97316;
+  --scene-accent-rgb: 249 115 22;
+  --scene-accent-dim: rgb(180, 83, 16);
+  --scene-accent-light: rgb(251, 146, 60);
+  --scene-accent-faint: rgba(249, 115, 22, 0.08);
+  --scene-accent-glow: rgba(249, 115, 22, 0.25);
+  --scene-accent-border: rgba(249, 115, 22, 0.3);
+  --scene-bg: #09090b;
+  --scene-panel: #111115;
+  --scene-panel-alt: #16161c;
+  --scene-border: #2a2a35;
+  --scene-text: #d4cfca;
+  --scene-muted: #6b6860;
+  --scene-gold: #d4a933;
+  --scene-green: #22c55e;
+  --scene-red: #e03e3e;
+}
+
+/* ── Kit Column Layout ────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — CK-prefixed column layout for casino
+   CONNECTS: casino.html .ck-columns elements */
+.ck-columns {
+  display: grid;
+  gap: 16px;
+  padding: 12px;
+}
+.ck-columns[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+.ck-columns[data-cols="3"] { grid-template-columns: 220px 1fr 260px; }
+
+/* ── Scene Header ─────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Kit scene_header for Casino */
+.ck-scene-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 24px;
+  background: linear-gradient(90deg, #0d0d12 0%, #14141e 60%, #0d0d12 100%);
+  border-bottom: 1px solid var(--scene-accent-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.ck-scene-title {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 1.6rem;
+  font-weight: 400;
+  letter-spacing: 0.25em;
+  color: var(--scene-accent);
+  text-shadow: 0 0 18px rgba(249, 115, 22, 0.5);
+}
+.ck-scene-title--bold {
+  font-weight: 700;
+}
+.ck-scene-subtitle {
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  color: var(--scene-muted);
+  text-transform: uppercase;
+  margin-left: 12px;
+}
+.ck-scene-hud {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* ── Glass Panel ──────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Kit glass panel for Casino sidebar panels */
+.ck-glass-panel {
+  background: var(--scene-panel);
+  border: 1px solid var(--scene-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.ck-glass-panel--glow {
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.2),
+              inset 0 0 8px rgba(249, 115, 22, 0.05);
+}
+.ck-glass-panel--strong {
+  background: var(--scene-panel-alt);
+  border-color: rgba(249, 115, 22, 0.5);
+}
+.ck-glass-title {
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  color: var(--scene-accent-light);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding: 12px 12px 6px;
+  border-bottom: 1px solid var(--scene-accent-border);
+}
+.ck-glass-body {
+  padding: 12px;
+}
+
+/* ── HUD Badges ───────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Kit HUD badges for world status */
+.ck-hud-badges {
+  display: flex;
+  gap: 12px;
+  padding: 6px 12px;
+  background: rgba(249, 115, 22, 0.04);
+  border: 1px solid rgba(249, 115, 22, 0.12);
+  border-radius: 4px;
+  margin: 6px 0;
+}
+.ck-hud-badge {
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--scene-text);
+}
+.ck-hud-badge span {
+  font-weight: 600;
+  color: var(--scene-accent-light);
+}
+
+/* ── Alert Banner ─────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Kit alert_banner for Casino announcements */
+.ck-alert-banner {
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  color: var(--scene-text);
+  border-left: 3px solid var(--scene-accent);
+  background: var(--scene-accent-faint);
+}
+.ck-alert-banner[data-severity="info"] {
+  border-left-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.06);
+}
+.ck-alert-banner[data-severity="warning"] {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
+}
+.ck-alert-banner[data-severity="danger"] {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Kit buttons for Casino */
+.ck-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.18s;
+  background: var(--scene-panel-alt);
+  color: var(--scene-text);
+  text-transform: uppercase;
+}
+.ck-btn:hover:not(:disabled) {
+  background: var(--scene-accent);
+  color: #000;
+  border-color: var(--scene-accent-light);
+}
+.ck-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.ck-btn--accent {
+  background: var(--scene-accent);
+  border-color: var(--scene-accent);
+  color: #000;
+  font-weight: 700;
+}
+.ck-btn--accent:hover:not(:disabled) {
+  background: var(--scene-accent-light);
+  border-color: var(--scene-accent-light);
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.5);
+}
+.ck-btn--danger {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+.ck-btn--danger:hover:not(:disabled) {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+/* ── Economy Panel ────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Kit economy panel for balance display */
+.ck-economy-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--scene-panel);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 6px;
+}
+.ck-economy-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+}
+.ck-economy-val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--scene-gold);
+}
+
+/* ── Progress Tracker ─────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Kit progress tracker for game flow */
+.ck-progress-tracker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.ck-step {
+  flex: 1;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+  padding: 6px 4px;
+  border-bottom: 2px solid rgba(249, 115, 22, 0.15);
+  transition: all 0.3s ease;
+}
+.ck-step.active {
+  color: var(--scene-accent-light);
+  border-bottom-color: var(--scene-accent);
+}
+.ck-step.current {
+  color: var(--scene-gold);
+  border-bottom-color: var(--scene-gold);
+}
+.ck-step-connector {
+  width: 16px;
+  height: 1px;
+  background: rgba(249, 115, 22, 0.2);
+  flex-shrink: 0;
+}
+
+/* ── Divider Line ─────────────────────────────────────────── */
+.ck-divider {
+  border: none;
+  height: 1px;
+  background: var(--scene-accent);
+  opacity: 0.3;
+  margin: 8px 12px;
+}
+
+/* ── Toast Container ──────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Kit toast notifications */
+.ck-toast-container {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.ck-toast--bottom-center {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+}
+.ck-toast {
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid var(--scene-accent-border);
+  border-left: 3px solid var(--scene-accent);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--scene-text);
+  pointer-events: all;
+  animation: ck-toast-in 0.3s ease-out;
+  max-width: 420px;
+  text-align: center;
+  white-space: pre-line;
+}
+@keyframes ck-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--scene-bg); }
+::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scene-accent); }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ck-columns { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 600px) {
+  .ck-columns { grid-template-columns: 1fr !important; }
+  .ck-scene-header { flex-direction: column; align-items: flex-start; }
+}

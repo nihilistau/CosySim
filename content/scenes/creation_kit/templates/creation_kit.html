@@ -450,6 +450,138 @@ body {
   margin-bottom: 8px;
 }
 
+/* ── Asset browser drawer ──────────────────────────────── */
+/* v1.50.0 [2026-03-22] — slide-over panel inside inspector */
+.ck-asset-browser {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: var(--ck-panel);
+  z-index: 10;
+  overflow-y: auto;
+  padding: 12px;
+  animation: ck-ab-slide 0.2s ease-out;
+}
+@keyframes ck-ab-slide {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.ck-asset-browser.open { display: block; }
+.ck-ab-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ck-ab-header h3 {
+  flex: 1;
+  font-family: var(--ck-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--ck-accent);
+  text-transform: uppercase;
+  margin: 0;
+}
+.ck-ab-close {
+  background: none;
+  border: none;
+  color: var(--ck-text-dim);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.ck-ab-close:hover { color: var(--ck-text); }
+.ck-ab-search {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 3px;
+  color: var(--ck-text);
+  font-family: var(--ck-mono);
+  font-size: 0.72rem;
+  margin-bottom: 6px;
+}
+.ck-ab-search:focus { outline: none; border-color: var(--ck-accent); }
+.ck-ab-filters {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.ck-ab-filter-btn {
+  padding: 2px 8px;
+  font-size: 0.6rem;
+  font-family: var(--ck-mono);
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 3px;
+  color: var(--ck-text-dim);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ck-ab-filter-btn:hover { color: var(--ck-text); border-color: var(--ck-accent); }
+.ck-ab-filter-btn.active {
+  background: rgba(245,158,11,0.1);
+  border-color: var(--ck-accent);
+  color: var(--ck-accent);
+}
+.ck-ab-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.ck-ab-card {
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  text-align: center;
+}
+.ck-ab-card:hover { border-color: var(--ck-accent); }
+.ck-ab-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #0a0a0f;
+}
+.ck-ab-card-name {
+  font-size: 0.55rem;
+  color: var(--ck-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.ck-ab-card .ck-ab-fav { color: #f59e0b; font-size: 0.6rem; }
+.ck-ab-card .ck-ab-source {
+  font-size: 0.5rem;
+  color: var(--ck-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ck-ab-empty {
+  text-align: center;
+  color: var(--ck-text-dim);
+  font-size: 0.72rem;
+  padding: 30px 10px;
+}
+.ck-ab-placeholder {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ck-bg);
+  border-radius: 3px;
+  font-size: 1.4rem;
+  color: var(--ck-text-dim);
+}
+
 /* ── Bottom bar ─────────────────────────────────────────── */
 .ck-bottombar {
   grid-column: 1 / -1;
@@ -724,7 +856,26 @@ body {
   </div>
 
   <!-- ── Right — Property inspector ─────────────────────── -->
-  <div class="ck-inspector" id="ck-inspector">
+  <div class="ck-inspector" id="ck-inspector" style="position:relative">
+
+    <!-- v1.50.0 [2026-03-22] — Asset browser drawer -->
+    <div class="ck-asset-browser" id="ck-asset-browser">
+      <div class="ck-ab-header">
+        <h3>&#128194; Assets</h3>
+        <button class="ck-ab-close" onclick="CK.closeAssetBrowser()" title="Close">&#10005;</button>
+      </div>
+      <input type="text" class="ck-ab-search" id="ck-ab-search"
+             placeholder="Search assets..." oninput="CK._filterAssets()">
+      <div class="ck-ab-filters" id="ck-ab-filters">
+        <button class="ck-ab-filter-btn active" data-type="" onclick="CK._setAssetFilter(this)">All</button>
+        <button class="ck-ab-filter-btn" data-type="image" onclick="CK._setAssetFilter(this)">Image</button>
+        <button class="ck-ab-filter-btn" data-type="audio" onclick="CK._setAssetFilter(this)">Audio</button>
+        <button class="ck-ab-filter-btn" data-type="model" onclick="CK._setAssetFilter(this)">3D</button>
+        <button class="ck-ab-filter-btn" data-type="video" onclick="CK._setAssetFilter(this)">Video</button>
+      </div>
+      <div class="ck-ab-grid" id="ck-ab-grid"></div>
+    </div>
+
     <div class="ck-insp-title">Properties</div>
     <div class="ck-insp-empty" id="ck-insp-empty">
       Select a component on the canvas to edit its properties
@@ -1202,6 +1353,21 @@ const CK = {
                  oninput="CK._setPropById('${instId}','${prop.key}',Number(this.value))">
         </div>`;
       }
+      // v1.50.0 — Asset hint: add Browse button for asset-accepting props
+      if (prop.asset_hint) {
+        return `<div class="ck-prop-field">
+          <label class="ck-prop-label">${prop.label}</label>
+          <div style="display:flex;gap:4px">
+            <input type="text" class="ck-prop-input" value="${escaped}" style="flex:1"
+                   oninput="CK._setPropById('${instId}','${prop.key}',this.value)">
+            <button class="ck-btn" style="font-size:0.6rem;white-space:nowrap"
+                    onclick="CK.openAssetBrowser('${prop.asset_hint}', (url) => {
+                      CK._setPropById('${instId}','${prop.key}', url);
+                      CK._renderInspector();
+                    })">Browse</button>
+          </div>
+        </div>`;
+      }
       return `<div class="ck-prop-field">
         <label class="ck-prop-label">${prop.label}</label>
         <input type="text" class="ck-prop-input" value="${escaped}"
@@ -1401,6 +1567,92 @@ const CK = {
         alert(`Export failed: ${result.error}`);
       }
     } catch (e) { alert('Export failed: ' + e.message); }
+  },
+
+  // ── Asset browser ─────────────────────────────────────────────
+  // v1.50.0 [2026-03-22] — browse and pick assets for component props
+  // CONNECTS: /api/assets/combined, inspector prop fields
+  // CALLED BY: Browse button on asset_hint props
+
+  _assetCallback: null,
+  _assetFilter: '',
+  _assetCache: [],
+
+  openAssetBrowser(assetType, callback) {
+    this._assetCallback = callback;
+    this._assetFilter = assetType || '';
+    const panel = document.getElementById('ck-asset-browser');
+    panel.classList.add('open');
+    document.getElementById('ck-ab-search').value = '';
+    // Set active filter button
+    document.querySelectorAll('.ck-ab-filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.type === (assetType || ''));
+    });
+    this._loadAssets();
+  },
+
+  closeAssetBrowser() {
+    document.getElementById('ck-asset-browser').classList.remove('open');
+    this._assetCallback = null;
+  },
+
+  _setAssetFilter(btn) {
+    document.querySelectorAll('.ck-ab-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    this._assetFilter = btn.dataset.type || '';
+    this._loadAssets();
+  },
+
+  async _loadAssets() {
+    const query = document.getElementById('ck-ab-search')?.value || '';
+    const type = this._assetFilter;
+    let url = '/api/assets/combined?limit=60';
+    if (type) url += `&type=${encodeURIComponent(type)}`;
+    if (query) url += `&q=${encodeURIComponent(query)}`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      this._assetCache = data.assets || [];
+      this._renderAssetGrid(this._assetCache);
+    } catch (e) {
+      this._renderAssetGrid([]);
+    }
+  },
+
+  _filterAssets() {
+    clearTimeout(this._abDebounce);
+    this._abDebounce = setTimeout(() => this._loadAssets(), 250);
+  },
+
+  _renderAssetGrid(assets) {
+    const grid = document.getElementById('ck-ab-grid');
+    if (!assets.length) {
+      grid.innerHTML = '<div class="ck-ab-empty" style="grid-column:1/-1">No assets found</div>';
+      return;
+    }
+    grid.innerHTML = assets.map(a => {
+      const isImage = (a.type === 'image' || a.type === 'portrait');
+      const thumb = isImage
+        ? `<img src="/api/assets/file/${encodeURIComponent(a.url)}" alt="${this._escAttr(a.name)}" loading="lazy">`
+        : `<div class="ck-ab-placeholder">${this._typeIcon(a.type)}</div>`;
+      const fav = a.favorite ? '<span class="ck-ab-fav">&#9733;</span> ' : '';
+      return `<div class="ck-ab-card" onclick="CK._pickAsset('${this._escAttr(a.url)}')">
+        ${thumb}
+        <div class="ck-ab-card-name">${fav}${this._escHtml(a.name)}</div>
+        <div class="ck-ab-source">${a.source}</div>
+      </div>`;
+    }).join('');
+  },
+
+  _typeIcon(type) {
+    const icons = {image:'&#128444;', audio:'&#9835;', video:'&#127910;', model:'&#127922;', portrait:'&#128100;'};
+    return icons[type] || '&#128196;';
+  },
+
+  _pickAsset(url) {
+    if (this._assetCallback) this._assetCallback(url);
+    this.closeAssetBrowser();
   },
 
   // ── Helpers ──────────────────────────────────────────────────────

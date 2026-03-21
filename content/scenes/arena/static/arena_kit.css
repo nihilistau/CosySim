@@ -1,0 +1,330 @@
+/* ============================================================
+   THE COLOSSEUM — Kit Scene Styles
+   =================================
+   Generated from arena_rebuild.json layout.
+   Accent: #dc2626 (blood red)
+
+   Version: v1.50.0 [2026-03-22]
+   Change Log:
+     v1.50.0 [2026-03-22] — Initial Kit-generated palette + component styles.
+   ============================================================ */
+
+/* ── Scene palette (derived from accent #dc2626) ──────────── */
+:root {
+  --scene-accent: #dc2626;
+  --scene-accent-rgb: 220 38 38;
+  --scene-accent-dim: rgb(153, 27, 27);
+  --scene-accent-light: rgb(248, 68, 68);
+  --scene-accent-faint: rgba(220, 38, 38, 0.08);
+  --scene-accent-glow: rgba(220, 38, 38, 0.25);
+  --scene-accent-border: rgba(220, 38, 38, 0.3);
+  --scene-bg: #0a0608;
+  --scene-panel: #140a0c;
+  --scene-border: #2e1216;
+  --scene-text: #e8ccd0;
+  --scene-muted: #6b3040;
+}
+
+/* ── Kit Column Layout ────────────────────────────────────── */
+.ck-columns {
+  display: grid;
+  gap: 16px;
+  padding: 12px;
+}
+.ck-columns[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+.ck-columns[data-cols="3"] { grid-template-columns: 1fr 1.4fr 1fr; }
+
+/* ── Scene Header ─────────────────────────────────────────── */
+.ck-scene-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--scene-bg) 0%, var(--scene-panel) 100%);
+  border-bottom: 2px solid var(--scene-accent-border);
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.35);
+}
+.ck-scene-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--scene-accent-light);
+  text-shadow: 0 0 18px rgba(248, 68, 68, 0.6);
+  font-family: var(--cs-font-display, 'Cinzel', serif);
+}
+.ck-scene-subtitle {
+  font-size: 0.75rem;
+  color: var(--scene-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+.ck-scene-hud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── HUD Badges ───────────────────────────────────────────── */
+.ck-hud-badges {
+  display: flex;
+  gap: 12px;
+  padding: 6px 12px;
+  background: rgba(220, 38, 38, 0.04);
+  border: 1px solid rgba(220, 38, 38, 0.12);
+  border-radius: 4px;
+  margin: 6px 0;
+}
+.ck-hud-badge {
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--scene-text);
+}
+.ck-hud-badge span {
+  font-weight: 600;
+  color: var(--scene-accent-light);
+}
+
+/* ── Glass Panel ──────────────────────────────────────────── */
+.ck-glass-panel {
+  background: rgba(20, 10, 12, 0.85);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+.ck-glass-panel--glow {
+  box-shadow: 0 0 16px rgba(220, 38, 38, 0.2), inset 0 0 8px rgba(220, 38, 38, 0.05);
+}
+.ck-glass-panel--strong {
+  background: rgba(46, 18, 22, 0.92);
+  border-color: rgba(220, 38, 38, 0.5);
+}
+.ck-glass-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--scene-accent-light);
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid rgba(220, 38, 38, 0.15);
+}
+.ck-glass-body {
+  padding: 12px;
+}
+
+/* ── Stat Bars (HP bars, fighter stats) ──────────────────── */
+.ck-stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.ck-stat-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+  width: 60px;
+  flex-shrink: 0;
+}
+.ck-stat-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(220, 38, 38, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ck-stat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.ck-stat-val {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--scene-text);
+  min-width: 24px;
+  text-align: right;
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.ck-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  background: var(--scene-panel);
+  color: var(--scene-text);
+}
+.ck-btn:hover {
+  background: var(--scene-accent);
+  color: var(--scene-bg);
+  border-color: var(--scene-accent-light);
+}
+.ck-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.ck-btn--accent {
+  background: var(--scene-accent);
+  color: #fff;
+  border-color: var(--scene-accent-light);
+}
+.ck-btn--accent:hover {
+  background: var(--scene-accent-light);
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.5);
+}
+.ck-btn--icon {
+  min-width: 36px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+.ck-btn--danger {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+.ck-btn--danger:hover {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fff;
+}
+.ck-btn--secondary {
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+.ck-btn--secondary:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+}
+
+/* ── Economy Panel ────────────────────────────────────────── */
+.ck-economy-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--scene-panel);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 6px;
+}
+.ck-economy-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+}
+.ck-economy-val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #22c55e;
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+}
+
+/* ── Progress Tracker (match rounds) ─────────────────────── */
+.ck-progress-tracker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.ck-step {
+  flex: 1;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+  padding: 6px 4px;
+  border-bottom: 2px solid rgba(220, 38, 38, 0.15);
+  transition: all 0.3s ease;
+}
+.ck-step.active {
+  color: var(--scene-accent-light);
+  border-bottom-color: var(--scene-accent);
+}
+.ck-step.current {
+  color: #fbbf24;
+  border-bottom-color: #fbbf24;
+}
+.ck-step-connector {
+  width: 16px;
+  height: 1px;
+  background: rgba(220, 38, 38, 0.2);
+  flex-shrink: 0;
+}
+
+/* ── Divider Line ─────────────────────────────────────────── */
+.ck-divider {
+  border: none;
+  height: 1px;
+  background: var(--scene-accent);
+  opacity: 0.3;
+  margin: 8px 12px;
+}
+
+/* ── Toast Container ──────────────────────────────────────── */
+.ck-toast-container {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.ck-toast--bottom-center {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+}
+.ck-toast--top-right {
+  top: 80px;
+  right: 20px;
+  align-items: flex-end;
+}
+.ck-toast {
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid var(--scene-accent-border);
+  border-left: 3px solid var(--scene-accent);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--scene-text);
+  pointer-events: all;
+  animation: ck-toast-in 0.3s ease-out;
+  max-width: 420px;
+  text-align: center;
+  white-space: pre-line;
+}
+@keyframes ck-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--scene-bg); }
+::-webkit-scrollbar-thumb { background: var(--scene-accent); border-radius: 2px; }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ck-columns { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 600px) {
+  .ck-columns { grid-template-columns: 1fr !important; }
+  .ck-scene-header { flex-direction: column; align-items: flex-start; }
+}

@@ -8,10 +8,14 @@ scenes from the shared component library without hand-coding HTML/JS/CSS.
 Components are defined in ``engine.creation.component_registry``.
 Layouts are saved as JSON and exported to working scene directories.
 
-Version: v1.48.0 [2026-03-21]
+Version: v1.50.0 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.50.0 [2026-03-22] — Asset browser API, 8 new component export helpers
+                            (dice_roller, action_menu, combat_log, leaderboard,
+                            resource_bar, dialogue_choice, poker_table, mini_map),
+                            extension hook in JS generator
     v1.48.0 [2026-03-21] — v2: nested layouts, 10 new components, live
                             preview, drag reorder, export helpers
     v1.47.0 [2026-03-21] — Initial Creation Kit: visual editor, component
@@ -367,6 +371,109 @@ def _export_component_html(comp: Dict[str, Any]) -> str:
     if comp.get("type") == "text_block":
         heading = props.get("heading", "")
         props["heading_html"] = f'<h3 class="ck-text-heading">{heading}</h3>' if heading else ""
+
+    # v1.50.0 [2026-03-22] — Dice roller faces
+    if comp.get("type") == "dice_roller":
+        count = int(props.get("dice_count", 2))
+        sides = props.get("sides", "d6")
+        props["dice_faces"] = "\n".join(
+            f'    <span class="ck-die" data-sides="{sides}">?</span>'
+            for _ in range(count)
+        )
+
+    # v1.50.0 [2026-03-22] — Action menu items (with cost badges)
+    if comp.get("type") == "action_menu":
+        items = []
+        show_cost = props.get("show_cost", True)
+        for entry in props.get("items", "").split(","):
+            parts = entry.strip().split(":")
+            if len(parts) >= 4:
+                name, cost, variant, bid = parts[0], parts[1], parts[2], parts[3]
+                cost_badge = (
+                    f'<span class="ck-action-cost">{cost}g</span>'
+                    if show_cost else ""
+                )
+                items.append(
+                    f'  <button class="cs-glass-btn cs-glass-btn--{variant} '
+                    f'ck-action-btn" id="{bid}">'
+                    f'{name}{cost_badge}</button>'
+                )
+        props["action_items"] = "\n".join(items)
+
+    # v1.50.0 [2026-03-22] — Leaderboard rows (ranked)
+    if comp.get("type") == "leaderboard":
+        cols = [c.strip() for c in props.get("columns", "").split(",")]
+        props["header_cells"] = "".join(f"<th>{c}</th>" for c in cols)
+        rows = int(props.get("rows", 5))
+        lb_rows = []
+        for i in range(1, rows + 1):
+            rank_cls = " ck-rank-gold" if i == 1 else (" ck-rank-silver" if i == 2 else (" ck-rank-bronze" if i == 3 else ""))
+            cells = "".join(
+                f"<td>{i if j == 0 else '&mdash;'}</td>" for j in range(len(cols))
+            )
+            lb_rows.append(f'    <tr class="ck-lb-row{rank_cls}">{cells}</tr>')
+        props["leaderboard_rows"] = "\n".join(lb_rows)
+
+    # v1.50.0 [2026-03-22] — Resource bar items
+    if comp.get("type") == "resource_bar":
+        items = []
+        for entry in props.get("resources", "").split(","):
+            parts = entry.strip().split(":")
+            if len(parts) >= 3:
+                name, value, color = parts[0], parts[1], parts[2]
+                rid = name.lower().replace(" ", "_")
+                items.append(
+                    f'  <div class="ck-resource" id="res-{rid}">\n'
+                    f'    <span class="ck-resource__label">{name}</span>\n'
+                    f'    <span class="ck-resource__value" style="color:{color}">{value}</span>\n'
+                    f'  </div>'
+                )
+        props["resource_items"] = "\n".join(items)
+
+    # v1.50.0 [2026-03-22] — Dialogue choices
+    if comp.get("type") == "dialogue_choice":
+        items = []
+        for entry in props.get("choices", "").split(","):
+            parts = entry.strip().split(":")
+            if len(parts) >= 2:
+                text, cid = parts[0], parts[1]
+                items.append(
+                    f'  <button class="ck-dialogue-option" id="{cid}" '
+                    f'data-choice="{cid}">{text}</button>'
+                )
+        props["choice_items"] = "\n".join(items)
+        title = props.get("title", "")
+        props["title_html"] = (
+            f'<div class="ck-dialogue-prompt">{title}</div>' if title else ""
+        )
+
+    # v1.50.0 [2026-03-22] — Poker table helpers
+    if comp.get("type") == "poker_table":
+        props["pot_html"] = (
+            f'<div class="ck-poker-pot" id="{props.get("table_id", "poker-table")}-pot">'
+            f'<span class="ck-pot-label">POT</span> '
+            f'<span class="ck-pot-value">0</span></div>'
+        ) if props.get("show_pot") else ""
+        seats = int(props.get("max_players", 4))
+        props["player_seats"] = "\n".join(
+            f'    <div class="ck-poker-seat" data-seat="{i}">Seat {i}</div>'
+            for i in range(1, seats + 1)
+        )
+
+    # v1.50.0 [2026-03-22] — Mini map zone buttons
+    if comp.get("type") == "mini_map":
+        buttons = []
+        current = props.get("current_zone", "")
+        for entry in props.get("zones", "").split(","):
+            parts = entry.strip().split(":")
+            if len(parts) >= 2:
+                label, zid = parts[0], parts[1]
+                active = " ck-zone--active" if zid == current else ""
+                buttons.append(
+                    f'  <button class="ck-zone-btn{active}" data-zone="{zid}">'
+                    f'{label}</button>'
+                )
+        props["zone_buttons"] = "\n".join(buttons)
 
     # Render template with safe formatting
     try:
@@ -771,6 +878,283 @@ def export_scene_css(layout: Dict[str, Any]) -> str:
 
 """
 
+    # v1.50.0 [2026-03-22] — New game/interaction component styles
+
+    if "dice_roller" in types:
+        css += f"""/* ── Dice roller ───────────────────────────────────────── */
+.ck-dice-roller {{
+  text-align: center;
+  padding: 12px;
+  background: rgba({r},{g},{b},0.04);
+  border: 1px solid rgba({r},{g},{b},0.15);
+  border-radius: 6px;
+  margin: 6px 0;
+}}
+.ck-dice-display {{
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}}
+.ck-die {{
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; font-weight: 700;
+  background: rgba(0,0,0,0.4);
+  border: 2px solid rgba({r},{g},{b},0.3);
+  border-radius: 6px;
+  color: var(--scene-accent);
+  transition: transform 0.3s ease;
+}}
+.ck-die.rolling {{ animation: ck-die-roll 0.4s ease-in-out; }}
+@keyframes ck-die-roll {{
+  0%,100% {{ transform: rotateX(0); }}
+  25% {{ transform: rotateX(90deg) scale(0.9); }}
+  50% {{ transform: rotateX(180deg) scale(1.1); }}
+  75% {{ transform: rotateX(270deg) scale(0.9); }}
+}}
+.ck-dice-result {{
+  font-size: 1.6rem; font-weight: 700;
+  color: var(--scene-accent);
+  margin-bottom: 8px;
+  text-shadow: 0 0 12px var(--scene-accent-glow);
+}}
+
+"""
+
+    if "action_menu" in types:
+        css += f"""/* ── Action menu ───────────────────────────────────────── */
+.ck-action-menu {{
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}}
+.ck-action-menu--vertical {{ flex-direction: column; }}
+.ck-action-btn {{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}}
+.ck-action-cost {{
+  font-size: 0.6rem;
+  padding: 1px 5px;
+  background: rgba({r},{g},{b},0.15);
+  border-radius: 3px;
+  color: var(--scene-accent);
+  font-weight: 600;
+}}
+
+"""
+
+    if "combat_log" in types:
+        css += f"""/* ── Combat log ────────────────────────────────────────── */
+.ck-combat-log {{
+  font-size: 0.75rem;
+  line-height: 1.5;
+}}
+.ck-combat-entry {{
+  padding: 3px 8px;
+  border-left: 2px solid transparent;
+  margin: 2px 0;
+}}
+.ck-combat-entry.attack {{ border-left-color: #ef4444; color: #fca5a5; }}
+.ck-combat-entry.defend {{ border-left-color: #3b82f6; color: #93bbfc; }}
+.ck-combat-entry.heal   {{ border-left-color: #22c55e; color: #86efac; }}
+.ck-combat-entry.system {{ border-left-color: rgba({r},{g},{b},0.3); color: var(--scene-muted); }}
+.ck-combat-entry .ck-dmg {{
+  font-weight: 700;
+  color: #ef4444;
+  text-shadow: 0 0 6px rgba(239,68,68,0.4);
+}}
+
+"""
+
+    if "leaderboard" in types:
+        css += f"""/* ── Leaderboard ───────────────────────────────────────── */
+.ck-leaderboard {{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}}
+.ck-leaderboard th {{
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--scene-accent);
+  border-bottom: 1px solid var(--scene-border);
+}}
+.ck-leaderboard td {{
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--scene-text);
+}}
+.ck-lb-row:hover td {{ background: rgba(255,255,255,0.02); }}
+.ck-rank-gold td:first-child   {{ color: #fbbf24; font-weight: 700; }}
+.ck-rank-silver td:first-child {{ color: #94a3b8; font-weight: 600; }}
+.ck-rank-bronze td:first-child {{ color: #d97706; font-weight: 600; }}
+.ck-rank-gold   {{ background: rgba(251,191,36,0.04); }}
+.ck-rank-silver {{ background: rgba(148,163,184,0.03); }}
+.ck-rank-bronze {{ background: rgba(217,119,6,0.03); }}
+
+"""
+
+    if "resource_bar" in types:
+        css += f"""/* ── Resource bar ──────────────────────────────────────── */
+.ck-resource-bar {{
+  display: flex;
+  gap: 16px;
+  padding: 6px 12px;
+  background: rgba({r},{g},{b},0.04);
+  border: 1px solid rgba({r},{g},{b},0.12);
+  border-radius: 4px;
+  margin: 6px 0;
+}}
+.ck-resource {{
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}}
+.ck-resource__label {{
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--scene-muted);
+}}
+.ck-resource__value {{
+  font-weight: 700;
+  font-size: 0.85rem;
+}}
+
+"""
+
+    if "dialogue_choice" in types:
+        css += f"""/* ── Dialogue choices ──────────────────────────────────── */
+.ck-dialogue-choices {{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}}
+.ck-dialogue-prompt {{
+  font-size: 0.78rem;
+  color: var(--scene-muted);
+  font-style: italic;
+  margin-bottom: 4px;
+}}
+.ck-dialogue-option {{
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  background: rgba({r},{g},{b},0.04);
+  border: 1px solid rgba({r},{g},{b},0.15);
+  border-left: 3px solid rgba({r},{g},{b},0.3);
+  border-radius: 4px;
+  color: var(--scene-text);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}}
+.ck-dialogue-option:hover {{
+  background: rgba({r},{g},{b},0.1);
+  border-left-color: var(--scene-accent);
+  color: var(--scene-accent);
+  transform: translateX(4px);
+}}
+
+"""
+
+    if "poker_table" in types:
+        css += f"""/* ── Poker table ───────────────────────────────────────── */
+.ck-poker-table {{
+  padding: 16px;
+  background: radial-gradient(ellipse, rgba(34,80,50,0.4) 0%, rgba(10,10,15,0.6) 100%);
+  border: 2px solid rgba({r},{g},{b},0.2);
+  border-radius: 120px / 60px;
+  text-align: center;
+  margin: 8px 0;
+}}
+.ck-poker-community, .ck-poker-hand {{
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+}}
+.ck-card {{
+  width: 48px; height: 68px;
+  background: linear-gradient(135deg, #1a1a2e, #0f0f1a);
+  border: 1px solid rgba({r},{g},{b},0.25);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; font-weight: 700;
+  color: var(--scene-text);
+}}
+.ck-card.back {{
+  background: repeating-linear-gradient(45deg, rgba({r},{g},{b},0.05), rgba({r},{g},{b},0.05) 4px, transparent 4px, transparent 8px);
+}}
+.ck-poker-pot {{
+  font-size: 0.85rem;
+  color: #fbbf24;
+  font-weight: 600;
+}}
+.ck-pot-label {{ font-size: 0.6rem; color: var(--scene-muted); text-transform: uppercase; }}
+.ck-poker-players {{
+  display: flex;
+  justify-content: space-around;
+  margin-top: 10px;
+}}
+.ck-poker-seat {{
+  padding: 4px 12px;
+  font-size: 0.7rem;
+  border: 1px solid var(--scene-border);
+  border-radius: 4px;
+  color: var(--scene-muted);
+}}
+
+"""
+
+    if "mini_map" in types:
+        css += f"""/* ── Mini map ──────────────────────────────────────────── */
+.ck-mini-map {{
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 6px;
+  background: rgba({r},{g},{b},0.04);
+  border: 1px solid rgba({r},{g},{b},0.12);
+  border-radius: 4px;
+  margin: 6px 0;
+}}
+.ck-zone-btn {{
+  padding: 6px 14px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--scene-border);
+  border-radius: 4px;
+  color: var(--scene-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}}
+.ck-zone-btn:hover {{
+  color: var(--scene-text);
+  border-color: rgba({r},{g},{b},0.4);
+}}
+.ck-zone-btn.ck-zone--active {{
+  color: var(--scene-accent);
+  border-color: var(--scene-accent);
+  background: rgba({r},{g},{b},0.1);
+  box-shadow: 0 0 8px var(--scene-accent-glow);
+}}
+
+"""
+
     # Always include scrollbar
     css += """/* ── Scrollbar ─────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
@@ -851,10 +1235,13 @@ class {class_name} {{
 
   // ── Lifecycle ───────────────────────────────────────────────────
 
+  // v1.50.0 [2026-03-22] — Extension hook: add methods via
+  // {class_name}.prototype._initExtensions = function() {{ ... }}
   init() {{
     this._setupSocket();
     this._setupUI();
     this._loadInitialState();
+    if (typeof this._initExtensions === 'function') this._initExtensions();
   }}
 
   _setupSocket() {{
@@ -944,6 +1331,49 @@ class {class_name} {{
         this._sendMessage(chatInput.value.trim());
         chatInput.value = '';
       }}
+    }});
+"""
+
+    # v1.50.0 [2026-03-22] — Wire new interactive components in _setupUI
+
+    # Dice roller buttons
+    for dc in [c for c in _flatten_components(components) if c.get("type") == "dice_roller"]:
+        rid = dc.get("props", {}).get("roll_id", "dice-roller")
+        fn_name = f"_rollDice_{rid.replace('-', '_')}"
+        js += f"    document.getElementById('{rid}-btn')?.addEventListener('click', () => this.{fn_name}());\n"
+
+    # Action menu buttons
+    for ac in [c for c in _flatten_components(components) if c.get("type") == "action_menu"]:
+        for entry in ac.get("props", {}).get("items", "").split(","):
+            parts = entry.strip().split(":")
+            if len(parts) >= 4:
+                name, cost, variant, bid = parts[0], parts[1], parts[2], parts[3]
+                if bid.startswith("drink-"):
+                    drink = bid.replace("drink-", "")
+                    js += f"    document.getElementById('{bid}')?.addEventListener('click', () => this._action('order_drink', {{drink: '{drink}', cost: {cost}}}));\n"
+                else:
+                    js += f"    document.getElementById('{bid}')?.addEventListener('click', () => this._action('{bid}', {{cost: {cost}}}));\n"
+
+    # Dialogue choice buttons
+    for dc in [c for c in _flatten_components(components) if c.get("type") == "dialogue_choice"]:
+        cid = dc.get("props", {}).get("choice_id", "dialogue-choices")
+        js += f"""
+    // Dialogue choices: {cid}
+    document.querySelectorAll('#{cid} .ck-dialogue-option')?.forEach(btn => {{
+      btn.addEventListener('click', () => this._action('dialogue_choice', {{ choice: btn.dataset.choice }}));
+    }});
+"""
+
+    # Mini map zone buttons
+    for mc in [c for c in _flatten_components(components) if c.get("type") == "mini_map"]:
+        mid = mc.get("props", {}).get("map_id", "mini-map")
+        js += f"""
+    // Mini map zone nav: {mid}
+    document.querySelectorAll('#{mid} .ck-zone-btn')?.forEach(btn => {{
+      btn.addEventListener('click', () => {{
+        this._setActiveZone(btn.dataset.zone);
+        this._action('navigate_zone', {{ zone: btn.dataset.zone }});
+      }});
     }});
 """
 
@@ -1193,6 +1623,95 @@ class {class_name} {{
 
 """
 
+    # v1.50.0 [2026-03-22] — Dice roller JS
+    dice_comps = [c for c in all_comps if c.get("type") == "dice_roller"]
+    if dice_comps:
+        for dc in dice_comps:
+            rid = dc.get("props", {}).get("roll_id", "dice-roller")
+            sides_str = dc.get("props", {}).get("sides", "d6")
+            js += f"""  // ── Dice roller: {rid} ─────────────────────────────────────
+
+  _rollDice_{rid.replace('-', '_')}() {{
+    const sides = parseInt('{sides_str}'.replace('d', ''));
+    const dice = document.querySelectorAll('#{rid} .ck-die');
+    const resultEl = document.getElementById('{rid}-result');
+    let total = 0;
+    dice.forEach(die => {{
+      die.classList.add('rolling');
+      const val = Math.floor(Math.random() * sides) + 1;
+      total += val;
+      setTimeout(() => {{
+        die.textContent = val;
+        die.classList.remove('rolling');
+      }}, 400);
+    }});
+    setTimeout(() => {{
+      if (resultEl) resultEl.textContent = total;
+      this._action('dice_roll', {{ sides: '{sides_str}', result: total }});
+    }}, 450);
+  }}
+
+"""
+
+    # v1.50.0 [2026-03-22] — Combat log JS
+    combat_comps = [c for c in all_comps if c.get("type") == "combat_log"]
+    if combat_comps:
+        lid = combat_comps[0].get("props", {}).get("log_id", "combat-log")
+        max_entries = combat_comps[0].get("props", {}).get("max_entries", 50)
+        js += f"""  // ── Combat log: {lid} ─────────────────────────────────────
+
+  _addCombatEntry(text, type = 'system') {{
+    const log = document.getElementById('{lid}');
+    if (!log) return;
+    const entry = document.createElement('div');
+    entry.className = 'ck-combat-entry ' + type;
+    entry.innerHTML = text;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+    while (log.children.length > {max_entries}) log.removeChild(log.firstChild);
+  }}
+
+"""
+
+    # v1.50.0 [2026-03-22] — Dialogue choice JS
+    dialogue_comps = [c for c in all_comps if c.get("type") == "dialogue_choice"]
+    if dialogue_comps:
+        cid = dialogue_comps[0].get("props", {}).get("choice_id", "dialogue-choices")
+        js += f"""  // ── Dialogue choices: {cid} ──────────────────────────────
+
+  _setChoices(choices) {{
+    const el = document.getElementById('{cid}');
+    if (!el) return;
+    const buttons = el.querySelectorAll('.ck-dialogue-option');
+    buttons.forEach(b => b.remove());
+    choices.forEach(c => {{
+      const btn = document.createElement('button');
+      btn.className = 'ck-dialogue-option';
+      btn.dataset.choice = c.id;
+      btn.textContent = c.text;
+      btn.addEventListener('click', () => this._action('dialogue_choice', {{ choice: c.id }}));
+      el.appendChild(btn);
+    }});
+  }}
+
+"""
+
+    # v1.50.0 [2026-03-22] — Mini map JS
+    minimap_comps = [c for c in all_comps if c.get("type") == "mini_map"]
+    if minimap_comps:
+        mid = minimap_comps[0].get("props", {}).get("map_id", "mini-map")
+        js += f"""  // ── Mini map: {mid} ──────────────────────────────────────
+
+  _setActiveZone(zoneId) {{
+    const map = document.getElementById('{mid}');
+    if (!map) return;
+    map.querySelectorAll('.ck-zone-btn').forEach(btn => {{
+      btn.classList.toggle('ck-zone--active', btn.dataset.zone === zoneId);
+    }});
+  }}
+
+"""
+
     # Add data loading calls to _loadInitialState
     load_calls = []
     if inv_comps:
@@ -1333,6 +1852,142 @@ class CreationKitScene(BaseScene):
                 path.unlink()
                 return jsonify({"ok": True})
             return jsonify({"error": "Not found"}), 404
+
+        # ── Asset browsing ─────────────────────────────────────────
+        # v1.50.0 [2026-03-22] — Asset library + registry browsing
+        # CONNECTS: engine.asset_studio.asset_library, engine.creation.asset_registry
+        # CALLED BY: Creation Kit asset browser drawer
+        # EMITS: JSON asset lists for thumbnail grid
+
+        @self.app.route("/api/assets/library")
+        def api_asset_library():
+            """List assets from the Asset Library (generated assets)."""
+            try:
+                from engine.asset_studio.asset_library import get_asset_library
+                lib = get_asset_library()
+                assets = lib.list_assets(
+                    asset_type=request.args.get("type"),
+                    scene=request.args.get("scene"),
+                    character_id=request.args.get("character"),
+                    favorites_only=request.args.get("favorites") == "1",
+                    limit=int(request.args.get("limit", 50)),
+                    offset=int(request.args.get("offset", 0)),
+                    search=request.args.get("q"),
+                )
+                return jsonify({"assets": assets, "source": "library"})
+            except Exception as exc:
+                logger.warning("Asset library query failed: %s", exc)
+                return jsonify({"assets": [], "source": "library", "error": str(exc)})
+
+        @self.app.route("/api/assets/library/stats")
+        def api_asset_library_stats():
+            """Return asset library stats (counts by type)."""
+            try:
+                from engine.asset_studio.asset_library import get_asset_library
+                return jsonify(get_asset_library().stats())
+            except Exception as exc:
+                return jsonify({"total": 0, "by_type": {}, "error": str(exc)})
+
+        @self.app.route("/api/assets/registry")
+        def api_asset_registry():
+            """List assets from the Asset Registry (filesystem scan)."""
+            try:
+                from engine.creation.asset_registry import AssetRegistry
+                registry = AssetRegistry()
+                asset_type = request.args.get("type")
+                query = request.args.get("q", "")
+
+                if query:
+                    entries = registry.search(query, asset_type)
+                else:
+                    entries = registry.scan()
+                    if asset_type:
+                        entries = [e for e in entries if e.asset_type == asset_type]
+
+                return jsonify({
+                    "assets": [e.to_dict() for e in entries],
+                    "total": len(entries),
+                    "source": "registry",
+                })
+            except Exception as exc:
+                logger.warning("Asset registry scan failed: %s", exc)
+                return jsonify({"assets": [], "total": 0, "source": "registry", "error": str(exc)})
+
+        @self.app.route("/api/assets/combined")
+        def api_asset_combined():
+            """Combined search across Asset Library + Asset Registry."""
+            asset_type = request.args.get("type")
+            query = request.args.get("q", "")
+            limit = int(request.args.get("limit", 50))
+            combined = []
+
+            # Library (generated assets)
+            try:
+                from engine.asset_studio.asset_library import get_asset_library
+                lib = get_asset_library()
+                lib_assets = lib.list_assets(
+                    asset_type=asset_type,
+                    search=query or None,
+                    limit=limit,
+                )
+                for a in lib_assets:
+                    combined.append({
+                        "id": a.get("id", ""),
+                        "name": a.get("title", ""),
+                        "url": a.get("url", ""),
+                        "type": a.get("asset_type", ""),
+                        "source": "library",
+                        "favorite": a.get("favorite", False),
+                    })
+            except Exception as exc:
+                logger.debug("Asset library unavailable: %s", exc)
+
+            # Registry (filesystem assets)
+            try:
+                from engine.creation.asset_registry import AssetRegistry
+                registry = AssetRegistry()
+                if query:
+                    reg_entries = registry.search(query, asset_type)
+                else:
+                    reg_entries = registry.scan()
+                    if asset_type:
+                        reg_entries = [e for e in reg_entries if e.asset_type == asset_type]
+
+                seen_urls = {a["url"] for a in combined}
+                for e in reg_entries:
+                    url = str(e.path)
+                    if url not in seen_urls:
+                        combined.append({
+                            "id": e.asset_id,
+                            "name": e.name,
+                            "url": url,
+                            "type": e.asset_type,
+                            "source": "registry",
+                            "favorite": False,
+                        })
+            except Exception as exc:
+                logger.debug("Asset registry unavailable: %s", exc)
+
+            return jsonify({
+                "assets": combined[:limit],
+                "total": len(combined),
+            })
+
+        @self.app.route("/api/assets/file/<path:asset_path>")
+        def api_asset_file(asset_path: str):
+            """Serve an asset file for thumbnail preview (sandboxed to project root)."""
+            from flask import send_from_directory, abort
+            project_root = Path(__file__).resolve().parents[3]
+            full_path = (project_root / asset_path).resolve()
+            # Security: ensure path stays within project
+            if not str(full_path).startswith(str(project_root)):
+                abort(403)
+            if not full_path.is_file():
+                abort(404)
+            return send_from_directory(
+                str(full_path.parent),
+                full_path.name,
+            )
 
         # ── Export ────────────────────────────────────────────────────
 

@@ -1,205 +1,296 @@
 {% extends 'neon_base.html' %}
 {% set scene_key = 'lounge' %}
 {% set scene_display_name = 'THE VELVET PIT' %}
-{% set scene_accent = '#f43f5e' %}
-{% set scene_accent_rgb = '244 63 94' %}
+{% set scene_accent = '#f59e0b' %}
+{% set scene_accent_rgb = '245 158 11' %}
+
+{#
+  THE VELVET PIT — CosySim Lounge Scene (Kit Rebuild)
+  ====================================================
+  Rebuilt from lounge_rebuild.json via Creation Kit pattern.
+  Uses lounge_kit.js (LoungeScene) + lounge_ext.js (game logic).
+  Original template archived as lounge_original.html.
+
+  Version: v1.50.0 [2026-03-22]
+  Change Log:
+    v1.50.0 [2026-03-22] — Kit rebuild. LoungeScene class,
+                             lounge_ext.js extensions, new layout.
+                             3-column lounge layout: seating/staff,
+                             bar/stage/events, chat/actions.
+#}
 
 {% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='lounge_kit.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='lounge.css') }}">
 {% endblock %}
 
 {% block scene_content %}
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     HEAT METER — top of viewport, amber → crimson
-═══════════════════════════════════════════════════════════════════════ -->
-<div class="heat-meter-rail" title="Heat Level">
-  <div class="heat-meter" id="heatMeter" style="width:0%"></div>
-  <span class="heat-meter-label" id="heatMeterLabel">HEAT 0</span>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     LOUNGE HEADER
-═══════════════════════════════════════════════════════════════════════ -->
-<header class="lounge-header">
-  <div class="lounge-title-block">
-    <span class="lounge-the">THE</span>
-    <span class="lounge-name">VELVET PIT</span>
-    <span class="lounge-sub">UNDERGROUND LOUNGE · EST. 1924</span>
+  <!-- ══════════════════════════════════════════════════════════════
+       HEAT METER — top of viewport, amber to crimson
+       v1.50.0 [2026-03-22] — Ported from original, kept as fixed rail
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="heat-meter-rail" title="Heat Level">
+    <div class="heat-meter" id="heat-meter" style="width:0%"></div>
+    <span class="heat-meter-label" id="heat-meter-label">HEAT 0</span>
   </div>
-  <div class="lounge-header-meta">
-    <span class="time-badge" id="timeBadge">{{ world_time | default('EVENING') }}</span>
-    <span class="version-badge">v0.68 DARK RENAISSANCE</span>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SCENE HEADER — title, subtitle, HUD badges
+       v1.50.0 [2026-03-22] — Kit scene_header component
+  ══════════════════════════════════════════════════════════════ -->
+  <header class="ck-scene-header">
+    <div class="ck-scene-identity">
+      <h1 class="ck-scene-title">THE VELVET PIT</h1>
+      <p class="ck-scene-subtitle">Underground Lounge &middot; Est. 1924</p>
+    </div>
+    <div class="ck-scene-hud">
+      <span class="ck-hud-badge">&#x1F4B0; <span id="econ-value">&mdash;</span></span>
+      <span class="ck-hud-badge" id="time-badge">{{ world_time | default('EVENING') }}</span>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN 3-COLUMN LAYOUT — Seating/Staff | Bar/Stage/Events | Chat
+       v1.50.0 [2026-03-22] — Kit column_layout (3 cols, matches original proportions)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="ck-columns" data-cols="3">
+
+    <!-- ─── COLUMN 1: Seating Map + Staff + Trust ────────────── -->
+    <div class="ck-col">
+
+      <!-- Seating Map Panel -->
+      <div class="ck-glass-panel">
+        <div class="ck-glass-title">SEATING MAP</div>
+        <div class="ck-glass-body">
+          <div class="seating-map" id="seatingMap">
+            <div class="table-node" id="table_1" data-id="table_1" title="Table 1">
+              <span class="table-label">T1</span>
+            </div>
+            <div class="table-node" id="table_2" data-id="table_2" title="Table 2">
+              <span class="table-label">T2</span>
+            </div>
+            <div class="table-node" id="table_3" data-id="table_3" title="Table 3">
+              <span class="table-label">T3</span>
+            </div>
+            <div class="table-node table-occupied" id="table_4" data-id="table_4" title="Table 4">
+              <span class="table-label">T4</span>
+            </div>
+            <div class="table-node" id="table_5" data-id="table_5" title="Table 5">
+              <span class="table-label">T5</span>
+            </div>
+            <div class="table-node table-occupied" id="table_6" data-id="table_6" title="Table 6">
+              <span class="table-label">T6</span>
+            </div>
+            <div class="table-node" id="table_7" data-id="table_7" title="Table 7">
+              <span class="table-label">T7</span>
+            </div>
+            <div class="table-node" id="table_8" data-id="table_8" title="Table 8">
+              <span class="table-label">T8</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Staff Panel -->
+      <div class="ck-glass-panel" style="margin-top: 8px;">
+        <div class="ck-glass-title">STAFF</div>
+        <div class="ck-glass-body" style="display:flex;flex-direction:column;gap:6px;">
+          <div class="ck-staff-card">
+            <div class="ck-staff-name">VIKTOR MARLOWE</div>
+            <div class="ck-staff-role">Bartender</div>
+            <div class="ck-staff-mood" id="viktor-mood">watchful</div>
+          </div>
+          <div class="ck-staff-card">
+            <div class="ck-staff-name">LOLA VOSS</div>
+            <div class="ck-staff-role">Singer &middot; Owner</div>
+            <div class="ck-staff-mood" id="lola-mood">performing</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trust Meter -->
+      <div class="ck-glass-panel" style="margin-top: 8px;">
+        <div class="ck-glass-body">
+          <div class="ck-stat-bar">
+            <span class="ck-stat-label">Trust</span>
+            <div class="ck-stat-track">
+              <div class="ck-stat-fill" id="trust-fill"
+                   style="width: 10%; background: linear-gradient(90deg, #92400e, #f59e0b, #fbbf24);"></div>
+            </div>
+            <span class="ck-stat-val" id="trust-value">10</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ─── COLUMN 2: Bar + Stage + Events + Scene Log ───────── -->
+    <div class="ck-col">
+
+      <!-- Smoke particle canvas -->
+      <div class="smoke-canvas" id="smoke-canvas"></div>
+
+      <!-- Bar Banner -->
+      <div class="ck-glass-panel ck-glass-panel--glow">
+        <div class="ck-glass-title">THE BAR</div>
+        <div class="ck-glass-body">
+          <p style="font-size:0.78rem;color:var(--scene-muted);font-style:italic;">
+            Below the streets. Above the law.
+          </p>
+        </div>
+      </div>
+
+      <!-- Stage Area -->
+      <div class="ck-stage-area" style="margin-top: 8px;">
+        <div class="ck-stage-spotlight"></div>
+        <div class="ck-stage-label">THE STAGE</div>
+        <div class="ck-stage-song" id="stage-song">&mdash; ambient jazz &mdash;</div>
+        <div class="ck-song-progress">
+          <div class="ck-song-progress-fill" id="song-progress-fill" style="width:0%"></div>
+        </div>
+        <button class="ck-btn ck-btn--secret" id="btn-request-song" style="margin-top:8px;width:100%;">
+          REQUEST SONG
+        </button>
+      </div>
+
+      <!-- Events Tonight -->
+      <div class="ck-glass-panel" style="margin-top: 8px;">
+        <div class="ck-glass-title">TONIGHT</div>
+        <div class="ck-glass-body">
+          <div class="ck-event-feed" id="events-list">
+            <div class="ck-event-item">Loading events&hellip;</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scene Log (event feed) -->
+      <div class="ck-glass-panel" style="margin-top: 8px; flex: 1;">
+        <div class="ck-glass-title">SCENE LOG</div>
+        <div class="ck-glass-body" style="padding:6px 12px;">
+          <div class="event-feed" id="event-feed" style="max-height:180px;overflow-y:auto;font-size:0.72rem;"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ─── COLUMN 3: Chat + Actions ─────────────────────────── -->
+    <div class="ck-col">
+
+      <!-- Chat Panel -->
+      <div class="ck-chat-panel">
+        <div class="ck-chat-title">SPEAK</div>
+
+        <!-- Target selector (Lola / Viktor) -->
+        <div class="ck-target-row">
+          <button class="btn-target active" data-target="lola">LOLA</button>
+          <button class="btn-target" data-target="viktor">VIKTOR</button>
+        </div>
+
+        <!-- Chat feed -->
+        <div class="ck-chat-feed" id="chat-feed">
+          <div class="chat-line system">Welcome to The Velvet Pit. Watch the smoke.</div>
+        </div>
+
+        <!-- Chat input -->
+        <div class="ck-chat-input-row">
+          <input class="ck-chat-input" id="chat-input" type="text"
+                 placeholder="Say something..." autocomplete="off" maxlength="300" />
+          <button class="ck-btn ck-btn--accent" id="btn-send">&#x25B6;</button>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="margin-top: 8px; display: flex; gap: 6px;">
+        <button class="ck-btn ck-btn--secret" id="btn-ask-secret" style="flex:1;">ASK SECRET</button>
+        <button class="ck-btn ck-btn--danger" id="btn-back-room" style="flex:1;" disabled>BACK ROOM</button>
+      </div>
+
+      <!-- Debug State Accordion -->
+      <details class="ck-glass-panel" style="margin-top: 8px;">
+        <summary class="ck-glass-title" style="cursor:pointer;border-bottom:none;">~ SCENE STATE</summary>
+        <div class="ck-glass-body" style="font-size:0.62rem;color:var(--scene-muted);white-space:pre-wrap;max-height:80px;overflow-y:auto;"
+             id="debug-body"></div>
+      </details>
+
+    </div>
+
   </div>
-</header>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     MAIN CANVAS
-═══════════════════════════════════════════════════════════════════════ -->
-<div class="lounge-layout">
+  <!-- ══════════════════════════════════════════════════════════════
+       DIVIDER
+       v1.50.0 [2026-03-22] — Kit divider_line component
+  ══════════════════════════════════════════════════════════════ -->
+  <hr class="ck-divider" />
 
-  <!-- ── LEFT: SEATING MAP ──────────────────────────────────────────── -->
-  <aside class="lounge-panel panel-left">
-    <div class="panel-heading">◈ SEATING MAP</div>
+  <!-- ══════════════════════════════════════════════════════════════
+       FOOTER: Drink Menu + Economy
+       v1.50.0 [2026-03-22] — Kit column_layout (2 cols)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="ck-columns" data-cols="2">
 
-    <div class="seating-map" id="seatingMap">
-      <!-- 8 table circles — rendered by JS, fallback skeleton here -->
-      <div class="table-node" id="table_1" data-id="table_1" onclick="scene.approachTable('table_1')" title="Table 1">
-        <span class="table-label">T1</span>
-      </div>
-      <div class="table-node" id="table_2" data-id="table_2" onclick="scene.approachTable('table_2')" title="Table 2">
-        <span class="table-label">T2</span>
-      </div>
-      <div class="table-node" id="table_3" data-id="table_3" onclick="scene.approachTable('table_3')" title="Table 3">
-        <span class="table-label">T3</span>
-      </div>
-      <div class="table-node table-occupied" id="table_4" data-id="table_4" onclick="scene.approachTable('table_4')" title="Table 4">
-        <span class="table-label">T4</span>
-      </div>
-      <div class="table-node" id="table_5" data-id="table_5" onclick="scene.approachTable('table_5')" title="Table 5">
-        <span class="table-label">T5</span>
-      </div>
-      <div class="table-node table-occupied" id="table_6" data-id="table_6" onclick="scene.approachTable('table_6')" title="Table 6">
-        <span class="table-label">T6</span>
-      </div>
-      <div class="table-node" id="table_7" data-id="table_7" onclick="scene.approachTable('table_7')" title="Table 7">
-        <span class="table-label">T7</span>
-      </div>
-      <div class="table-node" id="table_8" data-id="table_8" onclick="scene.approachTable('table_8')" title="Table 8">
-        <span class="table-label">T8</span>
+    <!-- ─── Footer Column 1: Drink Menu ───────────────────────── -->
+    <div class="ck-col">
+      <div class="ck-glass-panel ck-glass-panel--strong">
+        <div class="ck-glass-title">BAR MENU</div>
+        <div class="ck-glass-body">
+          <div class="ck-drink-menu" id="drink-menu">
+            <!-- Cocktail cards injected by lounge_ext.js -->
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Staff present -->
-    <div class="panel-heading" style="margin-top:12px">◈ STAFF</div>
-    <div class="staff-list" id="staffList">
-      <div class="staff-card">
-        <div class="staff-name">VIKTOR MARLOWE</div>
-        <div class="staff-role">Bartender</div>
-        <div class="staff-mood" id="viktorMood">watchful</div>
+    <!-- ─── Footer Column 2: Economy + Trust Progress ──────────── -->
+    <div class="ck-col">
+      <div class="ck-economy-panel">
+        <span class="ck-economy-label">Credits</span>
+        <span class="ck-economy-val" id="econ-value-footer">&mdash;</span>
       </div>
-      <div class="staff-card">
-        <div class="staff-name">LOLA VOSS</div>
-        <div class="staff-role">Singer · Owner</div>
-        <div class="staff-mood" id="lolaMood">performing</div>
-      </div>
-    </div>
 
-    <!-- Trust meter -->
-    <div class="meter-row">
-      <span class="meter-lbl">TRUST</span>
-      <div class="meter-track">
-        <div class="meter-fill-trust" id="trustFill" style="width:10%"></div>
-      </div>
-      <span class="meter-val" id="trustValue">10</span>
-    </div>
-  </aside>
-
-  <!-- ── CENTER: BAR + STAGE ────────────────────────────────────────── -->
-  <section class="lounge-panel panel-center">
-
-    <!-- Smoke particle canvas -->
-    <div class="smoke-canvas" id="smokeCanvas"></div>
-
-    <!-- Bar counter -->
-    <div class="lounge-bar">
-      <div class="bar-label">◈ THE BAR</div>
-      <div class="bar-tagline">Below the streets. Above the law.</div>
-    </div>
-
-    <!-- Stage -->
-    <div class="stage-area">
-      <div class="stage-spotlight"></div>
-      <div class="stage-label">THE STAGE</div>
-      <div class="stage-song" id="stageSong">— ambient jazz —</div>
-      <div class="song-progress-bar">
-        <div class="song-progress-fill" id="songProgressFill" style="width:0%"></div>
+      <!-- Trust Progress Tracker -->
+      <div class="ck-progress-tracker" id="trust-progress" style="margin-top: 8px;">
+        <div class="ck-step">Stranger</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">Acquaintance</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">Confidant</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">Inner Circle</div>
       </div>
     </div>
 
-    <!-- Events tonight -->
-    <div class="panel-heading">◈ TONIGHT</div>
-    <div class="events-list" id="eventsList">
-      <div class="event-item">Loading events…</div>
-    </div>
-
-    <!-- Event feed -->
-    <div class="panel-heading" style="margin-top:auto">◈ SCENE LOG</div>
-    <div class="event-feed" id="eventFeed"></div>
-
-  </section>
-
-  <!-- ── RIGHT: CHAT ────────────────────────────────────────────────── -->
-  <aside class="lounge-panel panel-right">
-
-    <div class="panel-heading">◈ SPEAK</div>
-
-    <!-- Target selector -->
-    <div class="target-row">
-      <button class="btn-target active" id="btnTargetLola" onclick="scene.setTarget('lola')">LOLA</button>
-      <button class="btn-target" id="btnTargetViktor" onclick="scene.setTarget('viktor')">VIKTOR</button>
-    </div>
-
-    <!-- Chat window -->
-    <div class="full-chat" id="chatWindow"></div>
-
-    <!-- Input -->
-    <div class="input-row">
-      <input class="chat-input" id="chatInput" type="text" placeholder="Say something…" maxlength="300"
-             onkeydown="if(event.key==='Enter') scene.sendMessage(this.value)"/>
-      <button class="btn-send" onclick="scene.sendMessage(document.getElementById('chatInput').value)">▶</button>
-    </div>
-
-    <!-- Action buttons -->
-    <div class="action-row">
-      <button class="btn-action" onclick="askSecret('lola')">ASK SECRET</button>
-      <button class="btn-action btn-backroom" id="btnBackRoom" onclick="enterBackRoom()" disabled>BACK ROOM</button>
-    </div>
-
-    <!-- Debug state -->
-    <details class="debug-accordion">
-      <summary class="debug-toggle">~ SCENE STATE</summary>
-      <div class="debug-body" id="debugBody"></div>
-    </details>
-
-  </aside>
-
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     BOTTOM: DRINK MENU
-═══════════════════════════════════════════════════════════════════════ -->
-<footer class="lounge-footer">
-  <div class="footer-label">◈ BAR MENU</div>
-  <div class="drink-menu" id="drinkMenu">
-    <!-- populated by JS -->
   </div>
-  <div class="economy-hud" id="economyHud">
-    <span class="econ-label">CREDITS</span>
-    <span class="econ-value" id="econValue">—</span>
-  </div>
-</footer>
 
-<!-- Toasts -->
-<div class="toast-container" id="toastContainer"></div>
-
-<!-- Back room overlay -->
-<div class="overlay" id="backRoomOverlay" style="display:none">
-  <div class="overlay-box">
-    <div class="overlay-title">THE BACK ROOM</div>
-    <p class="overlay-text">Viktor tilts his head toward the curtain. You understand. Behind it: close air, a round table, a single lamp.</p>
-    <button class="btn-overlay" onclick="this.closest('.overlay').style.display='none'">ENTER</button>
+  <!-- ══════════════════════════════════════════════════════════════
+       BACK ROOM OVERLAY
+       v1.50.0 [2026-03-22] — Kit overlay component (trust-gated)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="ck-overlay hidden" id="back-room-overlay">
+    <div class="ck-overlay-box">
+      <div class="ck-overlay-title">THE BACK ROOM</div>
+      <p class="ck-overlay-text">
+        Viktor tilts his head toward the curtain. You understand.
+        Behind it: close air, a round table, a single lamp.
+      </p>
+      <button class="ck-btn ck-btn--accent">ENTER</button>
+    </div>
   </div>
-</div>
 
-<!-- Secret overlay -->
-<div class="overlay" id="secretOverlay" style="display:none">
-  <div class="overlay-box secret-box">
-    <div class="overlay-title" id="secretTitle">···</div>
-    <p class="overlay-text" id="secretContent"></p>
-    <button class="btn-overlay" onclick="this.closest('.overlay').style.display='none'">CLOSE</button>
+  <!-- ══════════════════════════════════════════════════════════════
+       SECRET OVERLAY
+       v1.50.0 [2026-03-22] — Kit overlay component (trust-gated)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="ck-overlay hidden" id="secret-overlay">
+    <div class="ck-overlay-box">
+      <div class="ck-overlay-title" id="secret-title">&middot;&middot;&middot;</div>
+      <p class="ck-overlay-text" id="secret-content"></p>
+      <button class="ck-btn ck-btn--accent">CLOSE</button>
+    </div>
   </div>
-</div>
+
+  <!-- ── Toast Container ────────────────────────────────────────── -->
+  <div class="ck-toast-container ck-toast--bottom-center" id="toast-container"></div>
 
 {% endblock %}
 
@@ -209,7 +300,8 @@
 
 {% block body_scripts %}
 <script src="/shared/js/cosysim-particles3d.js"></script>
-<script src="{{ url_for('static', filename='lounge.js') }}"></script>
+<script src="{{ url_for('static', filename='lounge_kit.js') }}"></script>
+<script src="{{ url_for('static', filename='lounge_ext.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'lounge' };</script>
 {% endblock %}
