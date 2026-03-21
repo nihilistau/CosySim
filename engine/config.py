@@ -67,7 +67,16 @@ class ConfigManager:
                 logger.info(f"Loaded {self.environment} configuration")
             else:
                 logger.warning(f"Environment config not found: {env_config_path}")
-        
+
+        # 2b. Load pillar-specific overlays (game.yaml, services.yaml, creation.yaml)
+        for pillar_name in ("game", "services", "creation"):
+            pillar_path = self.config_dir / f"{pillar_name}.yaml"
+            if pillar_path.exists():
+                pillar_config = self._load_yaml(pillar_path)
+                if pillar_config:
+                    self._config = self._deep_merge(self._config, pillar_config)
+                    logger.info("Loaded pillar config: %s", pillar_path.name)
+
         # 3. Override with environment variables
         self._apply_env_overrides()
         
@@ -127,6 +136,7 @@ class ConfigManager:
             "COSYSIM_MCP_BASE_URL":        "mcp.base_url",
             "COSYSIM_TTS_URL":             "tts.server_url",
             "COSYSIM_GOVERNANCE_ENABLED":  "comms.governance_enabled",
+            "LMSTUDIO_API_TOKEN":          "lmstudio.api_token",
         }
         
         for env_var, config_path in env_mappings.items():
@@ -179,6 +189,17 @@ class ConfigManager:
             else:
                 return default
         
+        # Expand ${ENV_VAR} or ${ENV_VAR:-fallback} patterns in string values
+        if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            inner = value[2:-1]
+            if ":-" in inner:
+                env_name, fallback = inner.split(":-", 1)
+                return os.getenv(env_name, fallback)
+            env_value = os.getenv(inner)
+            if env_value is not None:
+                return env_value
+            return default
+
         return value
     
     def set(self, path: str, value: Any) -> None:

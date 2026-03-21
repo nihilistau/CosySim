@@ -1,0 +1,27 @@
+{# hud/hud_announcer.html — World announcer / street radio widget #}
+<div class="cs-announcer" id="cs-announcer" aria-live="polite" aria-label="World Announcer">
+  <div class="cs-announcer__led" aria-hidden="true"></div>
+  <button class="cs-announcer__toggle" id="announcer-toggle" type="button" aria-label="Toggle world announcer">
+    <span class="cs-announcer__icon">📡</span>
+    <span class="cs-announcer__label">RADIO</span>
+  </button>
+  <div class="cs-announcer__body" id="announcer-body">
+    <div class="cs-announcer__header">
+      <span class="cs-announcer__station" id="announcer-station">NEON CITY RADIO</span>
+      <span class="cs-announcer__freq">99.7 FM</span>
+      <div class="cs-announcer__controls">
+        <button class="cs-announcer__ctrl" id="announcer-prev" title="Previous" aria-label="Previous announcement">⏮</button>
+        <button class="cs-announcer__ctrl" id="announcer-next" title="Next" aria-label="Next announcement">⏭</button>
+        <button class="cs-announcer__ctrl" id="announcer-pin" title="Pin open" aria-label="Pin announcer open">📌</button>
+        <button class="cs-announcer__ctrl cs-announcer__ctrl--close" id="announcer-close" title="Close" aria-label="Close announcer">✕</button>
+      </div>
+    </div>
+    <div class="cs-announcer__feed" id="announcer-feed">
+      <div class="cs-announcer__item cs-announcer__item--active" id="announcer-current">
+        <span class="cs-announcer__badge cs-announcer__badge--world">WORLD</span>
+        <span class="cs-announcer__text" id="announcer-text">Loading Neon City broadcast…</span>
+      </div>
+    </div>
+    <div class="cs-announcer__scroll-list" id="announcer-list" aria-label="Recent broadcasts"></div>
+  </div>
+</div>

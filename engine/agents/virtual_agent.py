@@ -35,9 +35,13 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
 
 from engine.agents.protocols import AgentCapability
+
+if TYPE_CHECKING:
+    from engine.agents.virtual_agent_manager import VirtualAgentManager
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +247,7 @@ class VirtualAgent:
                 from engine.mcp.framework import get_framework
                 get_framework().get_character(character.id).enter_scene(scene)
         except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+            logger.debug("Failed to register character %s with MCP framework", character.id, exc_info=True)
 
         # Restore persisted state if available
         self.load_state()
@@ -438,7 +442,7 @@ class VirtualAgent:
                     "scene": self.scene or "unknown",
                 })
             except Exception:
-                logger.debug("Suppressed exception", exc_info=True)
+                logger.debug("Failed to update MCP state after reply for %s", self.character.id, exc_info=True)
 
             # ActivityBus
             try:
@@ -455,13 +459,13 @@ class VirtualAgent:
                     },
                 )
             except Exception:
-                logger.debug("Suppressed exception", exc_info=True)
+                logger.debug("Failed to publish character_reply to ActivityBus for %s", self.id, exc_info=True)
 
         if self._on_response:
             try:
                 self._on_response(self, response, reply_text)
             except Exception:
-                logger.debug("Suppressed exception", exc_info=True)
+                logger.debug("on_response callback failed for %s", self.id, exc_info=True)
 
         # ── DataCollector — capture conversation for training ────────────
         if reply_text:
@@ -572,7 +576,7 @@ class VirtualAgent:
             return False
 
     @staticmethod
-    def _get_state_db_path():
+    def _get_state_db_path() -> Path:
         """Return the path to the agent state database."""
         from engine.paths import DB_AGENT_STATE, DATA_DIR
         DATA_DIR.mkdir(exist_ok=True)
@@ -597,7 +601,7 @@ class VirtualAgent:
                 fw_char = get_framework().get_character(char.id)
                 mcp_brief = fw_char.brief()
         except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+            logger.debug("Failed to fetch MCP brief for character %s", char.id, exc_info=True)
 
         warmth = getattr(char, "warmth", 0.5)
         formality = getattr(char, "formality", 0.5)
@@ -655,6 +659,7 @@ class VirtualAgent:
                 from content.simulation.database.rag import RAGMemory
                 self._rag = RAGMemory()
             except Exception:
+                logger.debug("Failed to initialize RAGMemory for %s", self.character.id, exc_info=True)
                 return []
         try:
             results = self._rag.search(
@@ -693,11 +698,11 @@ class VirtualAgent:
                     character_id=self.id,
                 )
         except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+            logger.debug("Failed to log event '%s' to EventChain for %s", event_type, self.id, exc_info=True)
 
     # ── Internal ────────────────────────────────────────────────────
 
-    def _get_manager(self):
+    def _get_manager(self) -> "VirtualAgentManager":
         """Get the VirtualAgentManager."""
         if self._manager is not None:
             return self._manager

@@ -2,11 +2,14 @@
 Gallery App - Photo and video gallery
 """
 
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 from engine.paths import MEDIA_ALT_DIR
+
+logger = logging.getLogger(__name__)
 
 
 class Gallery:
@@ -177,7 +180,7 @@ class Gallery:
                     if thumb_path.exists():
                         thumb_path.unlink()
             except Exception as e:
-                print(f"Error deleting files: {e}")
+                logger.error(f"Error deleting files: {e}")
         
         return True
     

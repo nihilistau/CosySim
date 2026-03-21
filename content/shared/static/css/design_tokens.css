@@ -248,12 +248,15 @@
 
     /* ── Z-Index Scale ──────────────────────────────────────── */
     --cs-z-base:        0;
+    --cs-z-hud:         100;
     --cs-z-dropdown:    100;
+    --cs-z-announcer:   150;
+    --cs-z-phone:       200;
     --cs-z-sticky:      200;
+    --cs-z-navbar:      300;
     --cs-z-overlay:     300;
     --cs-z-modal:       400;
     --cs-z-toast:       500;
-    --cs-z-navbar:      600;
     --cs-z-panel:       700;
     --cs-z-admin:       800;
     --cs-z-aria:        900;

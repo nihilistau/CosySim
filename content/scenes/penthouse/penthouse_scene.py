@@ -1797,8 +1797,8 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         }
 
     def start(self) -> None:
-        print("THE PENTHOUSE — v0.68 Dark Renaissance — igniting...")
-        print(f"   Access at: http://{self.host}:{self.port}")
+        logger.info("THE PENTHOUSE — v0.68 Dark Renaissance — igniting...")
+        logger.info(f"Access at: http://{self.host}:{self.port}")
 
         # Re-register bench with socketio now available
         self.register_bench_route(self.app, self.socketio)

@@ -437,17 +437,10 @@ class GridScene(BaseScene):
 
         @app.route("/api/station/map")
         def api_station_map():
-            import socket as _sock
+            from engine.utils import port_is_open
             nodes = []
             for node in CITY_MAP_NODES:
-                online = False
-                try:
-                    s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
-                    s.settimeout(0.3)
-                    online = s.connect_ex(("127.0.0.1", node["port"])) == 0
-                    s.close()
-                except Exception:
-                    pass
+                online = port_is_open(node["port"], timeout=0.3)
                 nodes.append({**node, "online": online})
             return Response(json.dumps({"nodes": nodes}), mimetype="application/json")
 

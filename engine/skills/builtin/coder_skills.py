@@ -72,7 +72,7 @@ def coder_complete(signature_and_docstring: str, context: str = "") -> str:
         from training.data_collector import get_data_collector
         get_data_collector().collect_code(signature_and_docstring, result, language="python", source="coder_complete")
     except Exception:
-        pass
+        logger.debug("Failed to collect training data for coder_complete", exc_info=True)
     return result
 
 
@@ -104,7 +104,7 @@ def coder_fix(buggy_code: str, error_message: str = "") -> str:
         prompt_key = f"{buggy_code[:200]}\n{error_message[:100] if error_message else ''}"
         get_data_collector().collect_code(prompt_key, result, language="python", source="coder_fix")
     except Exception:
-        pass
+        logger.debug("Failed to collect training data for coder_fix", exc_info=True)
     return result
 
 

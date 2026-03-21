@@ -231,15 +231,20 @@ class TestFlaskEndpoints:
         """Create a test Flask client with a mocked cookie store."""
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
 
-        # Redirect cookie file to tmp
-        original = proxy_mod._COOKIES_FILE
-        proxy_mod._COOKIES_FILE = tmp_path / "test_cookies.json"
+        # Redirect cookie file to tmp — nlm_proxy_routes accesses via nlm_auth module
+        tmp_cookies = tmp_path / "test_cookies.json"
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
+        proxy_mod._COOKIES_FILE = tmp_cookies
+        auth_mod._COOKIES_FILE = tmp_cookies
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
 
     def test_health_no_cookies(self, client) -> None:
         resp = client.get("/health")
@@ -316,11 +321,12 @@ class TestFlaskEndpoints:
 
     def test_cookies_refresh_calls_refresh_tokens(self, client, tmp_path: Path) -> None:
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_proxy_routes as routes_mod
         from unittest.mock import patch
         proxy_mod._COOKIES_FILE.write_text(
             json.dumps({"SID": "test", "SSID": "test2"}), encoding="utf-8"
         )
-        with patch.object(proxy_mod, "refresh_session_tokens", return_value=True) as mock_refresh:
+        with patch.object(routes_mod, "refresh_session_tokens", return_value=True) as mock_refresh:
             resp = client.post("/cookies/refresh")
         assert resp.status_code == 200
         data = json.loads(resp.data)
@@ -329,11 +335,12 @@ class TestFlaskEndpoints:
 
     def test_cookies_refresh_returns_false_when_refresh_fails(self, client, tmp_path: Path) -> None:
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_proxy_routes as routes_mod
         from unittest.mock import patch
         proxy_mod._COOKIES_FILE.write_text(
             json.dumps({"SID": "test"}), encoding="utf-8"
         )
-        with patch.object(proxy_mod, "refresh_session_tokens", return_value=False):
+        with patch.object(routes_mod, "refresh_session_tokens", return_value=False):
             resp = client.post("/cookies/refresh")
         assert resp.status_code == 200
         data = json.loads(resp.data)
@@ -525,26 +532,30 @@ class TestWriteFlaskEndpoints:
     def client_with_cookies(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         from unittest.mock import patch
 
         original_cookies = proxy_mod._COOKIES_FILE
+        original_auth = auth_mod._COOKIES_FILE
         original_meta = proxy_mod._META_FILE
         cookies_file = tmp_path / "cookies.json"
         meta_file = tmp_path / "meta.json"
         cookies_file.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
         meta_file.write_text(json.dumps({"bl": "test_bl", "f_sid": "12345"}), encoding="utf-8")
         proxy_mod._COOKIES_FILE = cookies_file
+        auth_mod._COOKIES_FILE = cookies_file
         proxy_mod._META_FILE = meta_file
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
         proxy_mod._COOKIES_FILE = original_cookies
+        auth_mod._COOKIES_FILE = original_auth
         proxy_mod._META_FILE = original_meta
 
     def test_ask_requires_question(self, client_with_cookies) -> None:
         from unittest.mock import patch
-        with patch("engine.mcp.nlm_live_proxy._batchexecute_multi",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute_multi",
                    return_value=[(None, {"error": "mocked"})]):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/ask",
@@ -555,7 +566,7 @@ class TestWriteFlaskEndpoints:
 
     def test_ask_batch_requires_questions_list(self, client_with_cookies) -> None:
         from unittest.mock import patch
-        with patch("engine.mcp.nlm_live_proxy._batchexecute_multi",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute_multi",
                    return_value=[(None, {"error": "mocked"})]):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/ask_batch",
@@ -567,13 +578,17 @@ class TestWriteFlaskEndpoints:
     def test_ask_no_cookies_returns_401(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
-        original = proxy_mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "empty.json"
+        auth_mod._COOKIES_FILE = tmp_path / "empty.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             resp = c.post("/notebooks/nb/ask", json={"question": "Q?"})
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         assert resp.status_code == 401
 
     def test_meta_get(self, client_with_cookies) -> None:
@@ -635,8 +650,10 @@ class TestV21Routes:
     def client_v21(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
 
         original_cookies = proxy_mod._COOKIES_FILE
+        original_auth = auth_mod._COOKIES_FILE
         original_meta = proxy_mod._META_FILE
         cookies_file = tmp_path / "cookies.json"
         meta_file = tmp_path / "meta.json"
@@ -646,12 +663,14 @@ class TestV21Routes:
             encoding="utf-8",
         )
         proxy_mod._COOKIES_FILE = cookies_file
+        auth_mod._COOKIES_FILE = cookies_file
         proxy_mod._META_FILE = meta_file
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
         proxy_mod._COOKIES_FILE = original_cookies
+        auth_mod._COOKIES_FILE = original_auth
         proxy_mod._META_FILE = original_meta
 
     # ── /chat ──────────────────────────────────────────────────────────
@@ -671,9 +690,12 @@ class TestV21Routes:
         """POST /notebooks/<id>/chat without cookies returns 401."""
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
 
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "missing.json"
+        auth_mod._COOKIES_FILE = tmp_path / "missing.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
@@ -682,7 +704,8 @@ class TestV21Routes:
                 json={"question": "What is the main theme?"},
                 content_type="application/json",
             )
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         assert resp.status_code == 401
 
     def test_chat_returns_answer_on_success(self, client_v21) -> None:
@@ -734,9 +757,12 @@ class TestV21Routes:
         """POST /notebooks/<id>/chat_batch without cookies returns 401."""
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
 
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "missing.json"
+        auth_mod._COOKIES_FILE = tmp_path / "missing.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
@@ -745,7 +771,8 @@ class TestV21Routes:
                 json={"questions": ["Q1?", "Q2?"]},
                 content_type="application/json",
             )
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         assert resp.status_code == 401
 
     def test_chat_batch_returns_results(self, client_v21) -> None:
@@ -756,11 +783,7 @@ class TestV21Routes:
         ]
         mock_hybrid = MagicMock()
         mock_hybrid.ask_batch.return_value = mock_results
-        with patch("engine.mcp.nlm_live_proxy.grpc_ask_batch",
-                   return_value=mock_results), \
-             patch("engine.mcp.nlm_live_proxy._batchexecute",
-                   return_value=("wXbhsf", None)), \
-             patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_hybrid):
+        with patch("engine.mcp.nlm_hybrid.get_nlm_hybrid", return_value=mock_hybrid):
             resp = client_v21.post(
                 "/notebooks/nb-xyz/chat_batch",
                 json={"questions": ["Q1?", "Q2?"], "source_ids": []},
@@ -777,14 +800,18 @@ class TestV21Routes:
         """GET /sources/<id>/content without cookies returns 401."""
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
 
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "missing.json"
+        auth_mod._COOKIES_FILE = tmp_path / "missing.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             resp = c.get("/sources/src-abc/content")
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         assert resp.status_code == 401
 
     def test_read_source_returns_content(self, client_v21) -> None:
@@ -794,7 +821,7 @@ class TestV21Routes:
             "content": "# Document Title\n\nFull content here.",
             "word_count": 4,
         }
-        with patch("engine.mcp.nlm_live_proxy.read_source", return_value=mock_result):
+        with patch("engine.mcp.nlm_proxy_routes.read_source", return_value=mock_result):
             resp = client_v21.get("/sources/src-abc/content")
         assert resp.status_code == 200
         data = json.loads(resp.data)
@@ -804,7 +831,7 @@ class TestV21Routes:
 
     def test_read_source_returns_502_on_error(self, client_v21) -> None:
         """GET /sources/<id>/content returns 502 on read_source error."""
-        with patch("engine.mcp.nlm_live_proxy.read_source",
+        with patch("engine.mcp.nlm_proxy_routes.read_source",
                    return_value={"error": "source not found"}):
             resp = client_v21.get("/sources/bad-id/content")
         assert resp.status_code == 502
@@ -815,20 +842,24 @@ class TestV21Routes:
         """GET /user/quota without cookies returns 401."""
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
 
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "missing.json"
+        auth_mod._COOKIES_FILE = tmp_path / "missing.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             resp = c.get("/user/quota")
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         assert resp.status_code == 401
 
     def test_user_quota_returns_data(self, client_v21) -> None:
         """GET /user/quota returns quota dict."""
         mock_result = {"quota_data": {"notebooks": 12, "sources": 150}, "extracted": True}
-        with patch("engine.mcp.nlm_live_proxy.get_user_quota", return_value=mock_result):
+        with patch("engine.mcp.nlm_proxy_routes.get_user_quota", return_value=mock_result):
             resp = client_v21.get("/user/quota")
         assert resp.status_code == 200
         data = json.loads(resp.data)
@@ -836,7 +867,7 @@ class TestV21Routes:
 
     def test_user_quota_returns_502_on_error(self, client_v21) -> None:
         """GET /user/quota returns 502 on RPC error."""
-        with patch("engine.mcp.nlm_live_proxy.get_user_quota",
+        with patch("engine.mcp.nlm_proxy_routes.get_user_quota",
                    return_value={"error": "RPC failed"}):
             resp = client_v21.get("/user/quota")
         assert resp.status_code == 502
@@ -849,37 +880,53 @@ class TestRefreshSessionTokens:
 
     def test_returns_false_when_no_cookies(self, tmp_path: Path) -> None:
         import engine.mcp.nlm_live_proxy as proxy_mod
-        original = proxy_mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "empty_cookies.json"
+        auth_mod._COOKIES_FILE = tmp_path / "empty_cookies.json"
         try:
             result = proxy_mod.refresh_session_tokens()
             assert result is False
         finally:
-            proxy_mod._COOKIES_FILE = original
+            proxy_mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_returns_false_on_http_error(self, tmp_path: Path) -> None:
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         from unittest.mock import patch
-        original = proxy_mod._COOKIES_FILE
-        proxy_mod._COOKIES_FILE = tmp_path / "cookies.json"
-        proxy_mod._COOKIES_FILE.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
+        cookies_file = tmp_path / "cookies.json"
+        cookies_file.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        proxy_mod._COOKIES_FILE = cookies_file
+        auth_mod._COOKIES_FILE = cookies_file
         try:
             import urllib.error
             with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")):
                 result = proxy_mod.refresh_session_tokens()
             assert result is False
         finally:
-            proxy_mod._COOKIES_FILE = original
+            proxy_mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_extracts_tokens_from_wiz_global_data(self, tmp_path: Path) -> None:
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         from unittest.mock import patch, MagicMock
         original_cookies = proxy_mod._COOKIES_FILE
+        original_auth = auth_mod._COOKIES_FILE
         original_meta = proxy_mod._META_FILE
-        proxy_mod._COOKIES_FILE = tmp_path / "cookies.json"
-        proxy_mod._META_FILE = tmp_path / "meta.json"
-        proxy_mod._COOKIES_FILE.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
-        proxy_mod._META_FILE.write_text(json.dumps({"bl": "boq_labs-tailwind-frontend_20260226.08_p0"}), encoding="utf-8")
+        original_auth_meta = auth_mod._META_FILE
+        cookies_file = tmp_path / "cookies.json"
+        cookies_file.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        meta_file = tmp_path / "meta.json"
+        meta_file.write_text(json.dumps({"bl": "boq_labs-tailwind-frontend_20260226.08_p0"}), encoding="utf-8")
+        proxy_mod._COOKIES_FILE = cookies_file
+        auth_mod._COOKIES_FILE = cookies_file
+        proxy_mod._META_FILE = meta_file
+        auth_mod._META_FILE = meta_file
 
         fake_html = (
             'WIZ_global_data = {"FdrFJe": "fresh_fsid_value", "SNlM0e": "fresh_at_token"};'
@@ -893,23 +940,32 @@ class TestRefreshSessionTokens:
             with patch("urllib.request.urlopen", return_value=mock_resp):
                 result = proxy_mod.refresh_session_tokens()
             assert result is True
-            meta = json.loads(proxy_mod._META_FILE.read_text())
+            meta = json.loads(meta_file.read_text())
             assert meta["f_sid"] == "fresh_fsid_value"
             assert meta["at"] == "fresh_at_token"
         finally:
             proxy_mod._COOKIES_FILE = original_cookies
+            auth_mod._COOKIES_FILE = original_auth
             proxy_mod._META_FILE = original_meta
+            auth_mod._META_FILE = original_auth_meta
 
     def test_extracts_fsid_from_alternate_wiz_key(self, tmp_path: Path) -> None:
         """IxjpMA (newer build label) should also be accepted for f.sid."""
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         from unittest.mock import patch, MagicMock
         original_cookies = proxy_mod._COOKIES_FILE
+        original_auth = auth_mod._COOKIES_FILE
         original_meta = proxy_mod._META_FILE
-        proxy_mod._COOKIES_FILE = tmp_path / "cookies2.json"
-        proxy_mod._META_FILE = tmp_path / "meta2.json"
-        proxy_mod._COOKIES_FILE.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
-        proxy_mod._META_FILE.write_text(json.dumps({}), encoding="utf-8")
+        original_auth_meta = auth_mod._META_FILE
+        cookies_file = tmp_path / "cookies2.json"
+        cookies_file.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        meta_file = tmp_path / "meta2.json"
+        meta_file.write_text(json.dumps({}), encoding="utf-8")
+        proxy_mod._COOKIES_FILE = cookies_file
+        auth_mod._COOKIES_FILE = cookies_file
+        proxy_mod._META_FILE = meta_file
+        auth_mod._META_FILE = meta_file
 
         fake_html = (
             'WIZ_global_data = {"IxjpMA": "alternate_fsid", "SNlM0e": "at_value", '
@@ -923,24 +979,30 @@ class TestRefreshSessionTokens:
             with patch("urllib.request.urlopen", return_value=mock_resp):
                 result = proxy_mod.refresh_session_tokens()
             assert result is True
-            meta = json.loads(proxy_mod._META_FILE.read_text())
+            meta = json.loads(meta_file.read_text())
             assert meta["f_sid"] == "alternate_fsid"
             assert meta["at"] == "at_value"
             assert meta["bl"] == "boq_labs-tailwind-frontend_20260301.01_p0"
         finally:
             proxy_mod._COOKIES_FILE = original_cookies
+            auth_mod._COOKIES_FILE = original_auth
             proxy_mod._META_FILE = original_meta
+            auth_mod._META_FILE = original_auth_meta
 
     def test_rejects_identity_frontend_build_labels(self, tmp_path: Path) -> None:
         """Identity/login build labels must not overwrite NotebookLM session metadata."""
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         from unittest.mock import patch, MagicMock
 
         original_cookies = proxy_mod._COOKIES_FILE
+        original_auth = auth_mod._COOKIES_FILE
         original_meta = proxy_mod._META_FILE
-        proxy_mod._COOKIES_FILE = tmp_path / "cookies3.json"
+        cookies_file = tmp_path / "cookies3.json"
+        cookies_file.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
+        proxy_mod._COOKIES_FILE = cookies_file
+        auth_mod._COOKIES_FILE = cookies_file
         proxy_mod._META_FILE = tmp_path / "meta3.json"
-        proxy_mod._COOKIES_FILE.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
         proxy_mod._META_FILE.write_text(
             json.dumps({
                 "bl": "boq_labs-tailwind-frontend_20260305.05_p0",
@@ -969,6 +1031,7 @@ class TestRefreshSessionTokens:
             assert meta["at"] == "existing_at"
         finally:
             proxy_mod._COOKIES_FILE = original_cookies
+            auth_mod._COOKIES_FILE = original_auth
             proxy_mod._META_FILE = original_meta
 
 
@@ -979,78 +1042,97 @@ class TestNLMClient:
 
     def test_singleton_returns_same_instance(self) -> None:
         from engine.mcp.nlm_live_proxy import get_nlm_client
-        import engine.mcp.nlm_live_proxy as mod
-        original = mod._nlm_client
-        mod._nlm_client = None
+        import engine.mcp.nlm_client as client_mod
+        original = client_mod._nlm_client
+        client_mod._nlm_client = None
         try:
             c1 = get_nlm_client()
             c2 = get_nlm_client()
             assert c1 is c2
         finally:
-            mod._nlm_client = original
+            client_mod._nlm_client = original
 
     def test_has_cookies_false_when_no_file(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import NLMClient
         import engine.mcp.nlm_live_proxy as mod
-        original = mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         mod._COOKIES_FILE = tmp_path / "no_cookies.json"
+        auth_mod._COOKIES_FILE = tmp_path / "no_cookies.json"
         try:
             client = NLMClient()
             assert client.has_cookies() is False
         finally:
-            mod._COOKIES_FILE = original
+            mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_has_cookies_true_when_file_exists(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import NLMClient
         import engine.mcp.nlm_live_proxy as mod
-        original = mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         cf = tmp_path / "cookies.json"
         cf.write_text(json.dumps({"SID": "abc", "SSID": "xyz"}), encoding="utf-8")
         mod._COOKIES_FILE = cf
+        auth_mod._COOKIES_FILE = cf
         try:
             client = NLMClient()
             assert client.has_cookies() is True
         finally:
-            mod._COOKIES_FILE = original
+            mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_get_cookies_returns_dict(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import NLMClient
         import engine.mcp.nlm_live_proxy as mod
-        original = mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         cf = tmp_path / "cookies.json"
         cf.write_text(json.dumps({"SID": "sid1", "SSID": "ssid1"}), encoding="utf-8")
         mod._COOKIES_FILE = cf
+        auth_mod._COOKIES_FILE = cf
         try:
             client = NLMClient()
             cookies = client.get_cookies()
             assert isinstance(cookies, dict)
             assert cookies.get("SID") == "sid1"
         finally:
-            mod._COOKIES_FILE = original
+            mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_get_status_no_cookies(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import NLMClient
         import engine.mcp.nlm_live_proxy as mod
-        original = mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         mod._COOKIES_FILE = tmp_path / "empty.json"
+        auth_mod._COOKIES_FILE = tmp_path / "empty.json"
         try:
             client = NLMClient()
             status = client.get_status()
             assert status["has_cookies"] is False
             assert status["cookie_count"] == 0
         finally:
-            mod._COOKIES_FILE = original
+            mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_get_status_with_cookies(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import NLMClient
         import engine.mcp.nlm_live_proxy as mod
+        import engine.mcp.nlm_auth as auth_mod
         original_cf = mod._COOKIES_FILE
+        original_auth = auth_mod._COOKIES_FILE
         original_mf = mod._META_FILE
         cf = tmp_path / "cookies.json"
         mf = tmp_path / "meta.json"
         cf.write_text(json.dumps({"SID": "s", "SAPISID": "sa"}), encoding="utf-8")
         mf.write_text(json.dumps({"bl": "boq_test_20260228.01_p0", "f_sid": "123"}), encoding="utf-8")
         mod._COOKIES_FILE = cf
+        auth_mod._COOKIES_FILE = cf
         mod._META_FILE = mf
         try:
             client = NLMClient()
@@ -1060,13 +1142,18 @@ class TestNLMClient:
             assert "bl" in status
         finally:
             mod._COOKIES_FILE = original_cf
+            auth_mod._COOKIES_FILE = original_auth
             mod._META_FILE = original_mf
 
     def test_import_cookies_from_har(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import NLMClient
         import engine.mcp.nlm_live_proxy as mod
-        original = mod._COOKIES_FILE
-        mod._COOKIES_FILE = tmp_path / "imported.json"
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
+        cookies_file = tmp_path / "imported.json"
+        mod._COOKIES_FILE = cookies_file
+        auth_mod._COOKIES_FILE = cookies_file
         har = _make_har([
             {"name": "SID", "value": "imported_sid"},
             {"name": "HSID", "value": "imported_hsid"},
@@ -1081,33 +1168,42 @@ class TestNLMClient:
             assert count >= 1
             assert client.has_cookies() is True
         finally:
-            mod._COOKIES_FILE = original
+            mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_list_notebooks_without_cookies_returns_error(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import NLMClient
         import engine.mcp.nlm_live_proxy as mod
-        original = mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         mod._COOKIES_FILE = tmp_path / "no_cookies.json"
+        auth_mod._COOKIES_FILE = tmp_path / "no_cookies.json"
         try:
             client = NLMClient()
             result = client.list_notebooks()
             # Without cookies, should return empty list or error dict
             assert isinstance(result, (list, dict))
         finally:
-            mod._COOKIES_FILE = original
+            mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_ask_without_cookies_returns_error(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import NLMClient
         import engine.mcp.nlm_live_proxy as mod
-        original = mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         mod._COOKIES_FILE = tmp_path / "no_cookies.json"
+        auth_mod._COOKIES_FILE = tmp_path / "no_cookies.json"
         try:
             client = NLMClient()
             result = client.ask("nb-id", "What is this about?")
             assert isinstance(result, dict)
             assert "error" in result
         finally:
-            mod._COOKIES_FILE = original
+            mod._COOKIES_FILE = orig_proxy
+            auth_mod._COOKIES_FILE = orig_auth
 
     def test_all_public_methods_exist(self) -> None:
         """Verify all expected public methods are present on NLMClient."""
@@ -1134,32 +1230,40 @@ class TestHistoryFlaskRoute:
     def client_with_cookies(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
 
         original_cf = proxy_mod._COOKIES_FILE
+        original_auth = auth_mod._COOKIES_FILE
         original_mf = proxy_mod._META_FILE
         cf = tmp_path / "cookies.json"
         mf = tmp_path / "meta.json"
         cf.write_text(json.dumps({"SID": "test"}), encoding="utf-8")
         mf.write_text(json.dumps({"bl": "bl_test", "f_sid": "111"}), encoding="utf-8")
         proxy_mod._COOKIES_FILE = cf
+        auth_mod._COOKIES_FILE = cf
         proxy_mod._META_FILE = mf
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
         proxy_mod._COOKIES_FILE = original_cf
+        auth_mod._COOKIES_FILE = original_auth
         proxy_mod._META_FILE = original_mf
 
     def test_history_requires_cookies(self, tmp_path: Path) -> None:
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
-        original = proxy_mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "no.json"
+        auth_mod._COOKIES_FILE = tmp_path / "no.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             resp = c.get("/notebooks/nb-123/history")
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         assert resp.status_code == 401
 
     def test_history_returns_200_with_mocked_rpc(self, client_with_cookies) -> None:
@@ -1167,7 +1271,7 @@ class TestHistoryFlaskRoute:
         # The history route calls hPTbtc for thread IDs, then khqZz per thread.
         # Return empty thread list — valid 200 response.
         mock_data: List = [[]]
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("hPTbtc", mock_data)):
             resp = client_with_cookies.get("/notebooks/nb-123/history")
         assert resp.status_code == 200
@@ -1177,14 +1281,14 @@ class TestHistoryFlaskRoute:
 
     def test_history_returns_502_on_rpc_error(self, client_with_cookies) -> None:
         from unittest.mock import patch
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("hPTbtc", {"error": "RPC timeout"})):
             resp = client_with_cookies.get("/notebooks/nb-123/history")
         assert resp.status_code == 502
 
     def test_history_passes_page_size(self, client_with_cookies) -> None:
         from unittest.mock import patch, call
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("hPTbtc", [])) as mock_rpc:
             resp = client_with_cookies.get(
                 "/notebooks/nb-123/history?page_size=50"
@@ -1205,15 +1309,19 @@ class TestCreateNotebook:
     def client_with_cookies(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         cookie_file = tmp_path / "cookies.json"
         cookie_file.write_text('{"SID": "test123"}')
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = cookie_file
+        auth_mod._COOKIES_FILE = cookie_file
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
 
     def test_create_returns_201(self, client_with_cookies) -> None:
         resp = client_with_cookies.post("/notebooks",
@@ -1238,13 +1346,17 @@ class TestCreateNotebook:
         """Create notebook is cookies-free — it only generates a local UUID."""
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
-        original = proxy_mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "no.json"  # no cookies
+        auth_mod._COOKIES_FILE = tmp_path / "no.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             resp = c.post("/notebooks", json={"title": "x"})
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         # No cookies needed — UUID creation is local only
         assert resp.status_code == 201
 
@@ -1256,27 +1368,35 @@ class TestAddSources:
     def client_with_cookies(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         cookie_file = tmp_path / "cookies.json"
         cookie_file.write_text('{"SID": "test123"}')
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = cookie_file
+        auth_mod._COOKIES_FILE = cookie_file
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
 
     def test_add_sources_requires_cookies(self, tmp_path) -> None:
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
-        original = proxy_mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "no.json"
+        auth_mod._COOKIES_FILE = tmp_path / "no.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             resp = c.post("/notebooks/nb-123/sources",
                           json={"urls": [{"url": "https://example.com"}]})
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         assert resp.status_code == 401
 
     def test_add_sources_requires_urls(self, client_with_cookies) -> None:
@@ -1288,7 +1408,7 @@ class TestAddSources:
     def test_add_sources_with_session_id(self, client_with_cookies) -> None:
         """POST /notebooks/<id>/sources adds URLs via izAoDd."""
         from unittest.mock import patch
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("izAoDd", None)):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/sources",
@@ -1304,7 +1424,7 @@ class TestAddSources:
     def test_add_sources_without_session_starts_research(self, client_with_cookies) -> None:
         """Multiple URLs each get their own izAoDd call."""
         from unittest.mock import patch
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("izAoDd", None)):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/sources",
@@ -1318,7 +1438,7 @@ class TestAddSources:
     def test_add_sources_ljjv0c_failure_returns_502(self, client_with_cookies) -> None:
         """Error result from izAoDd is captured per-URL but route returns 200."""
         from unittest.mock import patch
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("izAoDd", {"error": "timeout"})):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/sources",
@@ -1336,15 +1456,19 @@ class TestStartResearch:
     def client_with_cookies(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         cookie_file = tmp_path / "cookies.json"
         cookie_file.write_text('{"SID": "test123"}')
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = cookie_file
+        auth_mod._COOKIES_FILE = cookie_file
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
 
     def test_research_requires_query(self, client_with_cookies) -> None:
         resp = client_with_cookies.post("/notebooks/nb-123/research",
@@ -1354,7 +1478,7 @@ class TestStartResearch:
 
     def test_research_returns_session_id(self, client_with_cookies) -> None:
         from unittest.mock import patch
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("Ljjv0c", ["sess-xyz"])):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/research",
@@ -1369,7 +1493,7 @@ class TestStartResearch:
 
     def test_research_failure_returns_502(self, client_with_cookies) -> None:
         from unittest.mock import patch
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("Ljjv0c", {"error": "bad"})):
             resp = client_with_cookies.post(
                 "/notebooks/nb-123/research",
@@ -1386,20 +1510,24 @@ class TestThreadRoutes:
     def client_with_cookies(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         cookie_file = tmp_path / "cookies.json"
         cookie_file.write_text('{"SID": "test123"}')
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = cookie_file
+        auth_mod._COOKIES_FILE = cookie_file
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
 
     def test_threads_returns_ids(self, client_with_cookies) -> None:
         from unittest.mock import patch
         mock_data = [[["thread-1"], ["thread-2"]]]
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("hPTbtc", mock_data)):
             resp = client_with_cookies.get("/notebooks/nb-123/threads")
         assert resp.status_code == 200
@@ -1410,19 +1538,23 @@ class TestThreadRoutes:
     def test_threads_no_cookies_returns_401(self, tmp_path) -> None:
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
-        original = proxy_mod._COOKIES_FILE
+        import engine.mcp.nlm_auth as auth_mod
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = tmp_path / "no.json"
+        auth_mod._COOKIES_FILE = tmp_path / "no.json"
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             resp = c.get("/notebooks/nb-123/threads")
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
         assert resp.status_code == 401
 
     def test_thread_messages_route(self, client_with_cookies) -> None:
         from unittest.mock import patch
         mock_data = [[None, [["hello from thread", None, None]]]]
-        with patch("engine.mcp.nlm_live_proxy._batchexecute",
+        with patch("engine.mcp.nlm_proxy_routes._batchexecute",
                    return_value=("khqZz", mock_data)):
             resp = client_with_cookies.get("/notebooks/nb-123/threads/t-99")
         assert resp.status_code == 200
@@ -1438,15 +1570,19 @@ class TestRateLimiterRoute:
     def client_with_cookies(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         cookie_file = tmp_path / "cookies.json"
         cookie_file.write_text('{"SID": "test123"}')
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = cookie_file
+        auth_mod._COOKIES_FILE = cookie_file
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
 
     def test_get_rate_limit(self, client_with_cookies) -> None:
         resp = client_with_cookies.get("/rate_limit")
@@ -1478,15 +1614,19 @@ class TestRPCRegistryRoute:
     def client_with_cookies(self, tmp_path: Path):
         from engine.mcp.nlm_live_proxy import create_nlm_proxy_app
         import engine.mcp.nlm_live_proxy as proxy_mod
+        import engine.mcp.nlm_auth as auth_mod
         cookie_file = tmp_path / "cookies.json"
         cookie_file.write_text('{"SID": "test123"}')
-        original = proxy_mod._COOKIES_FILE
+        orig_proxy = proxy_mod._COOKIES_FILE
+        orig_auth = auth_mod._COOKIES_FILE
         proxy_mod._COOKIES_FILE = cookie_file
+        auth_mod._COOKIES_FILE = cookie_file
         app = create_nlm_proxy_app()
         app.config["TESTING"] = True
         with app.test_client() as c:
             yield c
-        proxy_mod._COOKIES_FILE = original
+        proxy_mod._COOKIES_FILE = orig_proxy
+        auth_mod._COOKIES_FILE = orig_auth
 
     def test_rpc_registry_returns_status(self, client_with_cookies) -> None:
         resp = client_with_cookies.get("/rpc_registry")

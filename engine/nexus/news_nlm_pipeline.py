@@ -26,7 +26,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+try:
+    from engine.observability.structured_logger import get_logger as _get_structured_logger, traced
+    logger = _get_structured_logger(__name__)
+except Exception:
+    logger = logging.getLogger(__name__)  # type: ignore[assignment]
+
+    def traced(*args, **kwargs):  # type: ignore[misc]
+        """No-op traced decorator fallback."""
+        def decorator(func):
+            return func
+        return decorator
 
 # ── State file for notebook ID persistence ──────────────────────────────
 _STATE_FILE = Path(__file__).resolve().parent.parent.parent / ".github" / "hooks" / "logs" / "news_nlm_state.json"
@@ -60,7 +70,7 @@ def _load_state() -> Dict[str, Any]:
         if _STATE_FILE.exists():
             return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
     except Exception:
-        pass
+        logger.debug(f"Failed to load pipeline state from {_STATE_FILE}", exc_info=True)
     return {}
 
 
@@ -70,7 +80,7 @@ def _save_state(state: Dict[str, Any]) -> None:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         _STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
     except Exception as exc:
-        logger.debug("Could not save news NLM state: %s", exc)
+        logger.debug(f"Could not save news NLM state: {exc}")
 
 
 def _get_week_label() -> str:
@@ -97,7 +107,7 @@ def _save_retry_queue(queue: List[Dict[str, Any]]) -> None:
         _RETRY_QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
         _RETRY_QUEUE_FILE.write_text(json.dumps(queue, indent=2), encoding="utf-8")
     except Exception as exc:
-        logger.debug("Could not save retry queue: %s", exc)
+        logger.debug(f"Could not save retry queue: {exc}")
 
 
 def _enqueue_retry(digest_text: str, date_label: str, reason: str) -> None:
@@ -114,7 +124,7 @@ def _enqueue_retry(digest_text: str, date_label: str, reason: str) -> None:
         "attempts": 0,
     })
     _save_retry_queue(queue)
-    logger.info("Retry queue: added failed distillation for %s (%s)", date_label, reason)
+    logger.info(f"Retry queue: added failed distillation for {date_label} ({reason})")
 
 
 # ── Pipeline ─────────────────────────────────────────────────────────────
@@ -157,15 +167,15 @@ class NewsNLMPipeline:
             if account:
                 # Credential guard: verify cookies exist and aren't obviously stale
                 if not account.cookies:
-                    logger.warning("NLM account '%s' has no cookies — auth refresh needed", account.name)
+                    logger.warning(f"NLM account '{account.name}' has no cookies — auth refresh needed")
                     return None
                 if account.is_stale():
-                    logger.warning("NLM account '%s' cookies are stale (>7 days) — auth refresh recommended", account.name)
+                    logger.warning(f"NLM account '{account.name}' cookies are stale (>7 days) — auth refresh recommended")
                 self._direct_client = NLMDirectClient(account)
                 return self._direct_client
             logger.warning("No NotebookLM-capable account in pool — run cookie refresh")
         except Exception as exc:
-            logger.warning("Could not load NLM direct client: %s", exc)
+            logger.warning(f"Could not load NLM direct client: {exc}")
         return None
 
     def _get_nlm_proxy_client(self):
@@ -184,7 +194,7 @@ class NewsNLMPipeline:
                 return self._proxy_client
             logger.debug("NLM proxy client has no cookies")
         except Exception as exc:
-            logger.debug("Could not load NLM proxy client: %s", exc)
+            logger.debug(f"Could not load NLM proxy client: {exc}")
         return None
 
     def _get_hybrid(self):
@@ -283,10 +293,10 @@ class NewsNLMPipeline:
             try:
                 source_id = direct.add_source_text(notebook_id, source_title, digest_text)
                 if source_id:
-                    logger.info("Uploaded news digest to notebook %s via direct client", notebook_id)
+                    logger.info(f"Uploaded news digest to notebook {notebook_id} via direct client")
                     return True
             except Exception as exc:
-                logger.debug("NLMDirectClient.add_source_text failed: %s", exc)
+                logger.debug(f"NLMDirectClient.add_source_text failed: {exc}")
 
         # Secondary: nlm_live_proxy module-level add_text_source()
         try:
@@ -295,13 +305,13 @@ class NewsNLMPipeline:
             if cookies:
                 result = add_text_source(notebook_id, source_title, digest_text, cookies)
                 if isinstance(result, dict) and result.get("source_id"):
-                    logger.info("Uploaded news digest to notebook %s via proxy", notebook_id)
+                    logger.info(f"Uploaded news digest to notebook {notebook_id} via proxy")
                     return True
-                logger.debug("Proxy upload returned: %s", result)
+                logger.debug(f"Proxy upload returned: {result}")
         except Exception as exc:
-            logger.debug("Proxy add_text_source failed: %s", exc)
+            logger.debug(f"Proxy add_text_source failed: {exc}")
 
-        logger.warning("Digest upload failed — no NLM path available for notebook %s", notebook_id)
+        logger.warning(f"Digest upload failed — no NLM path available for notebook {notebook_id}")
         return False
 
     def _run_distillation(
@@ -332,7 +342,7 @@ class NewsNLMPipeline:
             try:
                 results = proxy.ask_batch(notebook_id, active_questions)
             except Exception as exc:
-                logger.debug("NLMClient.ask_batch failed: %s", exc)
+                logger.debug(f"NLMClient.ask_batch failed: {exc}")
 
         # Secondary: NLM hybrid router (tries node bridge then proxy)
         if results is None:
@@ -340,7 +350,7 @@ class NewsNLMPipeline:
                 hybrid = self._get_hybrid()
                 results = hybrid.ask_batch(notebook_id, active_questions)
             except Exception as exc:
-                logger.debug("Hybrid ask_batch failed: %s", exc)
+                logger.debug(f"Hybrid ask_batch failed: {exc}")
                 return []
 
         if results is None:
@@ -355,7 +365,7 @@ class NewsNLMPipeline:
             if answer and "error" not in answer.lower()[:20]:
                 qa_pairs.append({"question": q, "answer": answer})
 
-        logger.info("Distilled %d Q&A pairs from news notebook", len(qa_pairs))
+        logger.info(f"Distilled {len(qa_pairs)} Q&A pairs from news notebook")
         return qa_pairs
 
     def _store_qa_to_nexus(self, qa_pairs: List[Dict[str, str]], date_label: str) -> int:
@@ -379,7 +389,7 @@ class NewsNLMPipeline:
                 stored += 1
                 time.sleep(0.02)
         except Exception as exc:
-            logger.warning("Nexus Q&A storage failed after %d pairs: %s", stored, exc)
+            logger.warning(f"Nexus Q&A storage failed after {stored} pairs: {exc}")
 
         # Feed training flywheel immediately (don't wait for daily sync)
         if stored > 0:
@@ -393,12 +403,13 @@ class NewsNLMPipeline:
                         source="nlm",
                         metadata={"date": date_label, "pipeline": "news_nlm"},
                     )
-                logger.info("Training flywheel: fed %d news Q&A pairs", stored)
+                logger.info(f"Training flywheel: fed {stored} news Q&A pairs")
             except Exception as exc:
-                logger.debug("Training flywheel feed skipped: %s", exc)
+                logger.debug(f"Training flywheel feed skipped: {exc}")
 
         return stored
 
+    @traced("news", "distill_batch")
     def run(
         self,
         articles: Optional[List[Any]] = None,
@@ -507,11 +518,10 @@ class NewsNLMPipeline:
                     tags=["nlm-distilled", "daily-news", date_label],
                 )
             except Exception as exc:
-                logger.debug("Could not store consolidated insights: %s", exc)
+                logger.debug(f"Could not store consolidated insights: {exc}")
 
         logger.info(
-            "News NLM pipeline: uploaded=%s qa=%d stored=%d notebook=%s",
-            uploaded, result["qa_count"], result["stored"], notebook_id,
+            f"News NLM pipeline: uploaded={uploaded} qa={result['qa_count']} stored={result['stored']} notebook={notebook_id}"
         )
         return result
 
@@ -538,7 +548,7 @@ class NewsNLMPipeline:
         for item in queue:
             if item.get("attempts", 0) >= max_retries:
                 dropped += 1
-                logger.info("Retry queue: dropping %s after %d attempts", item["date_label"], max_retries)
+                logger.info(f"Retry queue: dropping {item['date_label']} after {max_retries} attempts")
                 continue
 
             item["attempts"] = item.get("attempts", 0) + 1
@@ -546,7 +556,7 @@ class NewsNLMPipeline:
 
             if result.get("stored", 0) > 0:
                 succeeded += 1
-                logger.info("Retry queue: succeeded for %s (%d Q&A stored)", item["date_label"], result["stored"])
+                logger.info(f"Retry queue: succeeded for {item['date_label']} ({result['stored']} Q&A stored)")
             else:
                 remaining_items.append(item)
 

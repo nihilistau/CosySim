@@ -1412,6 +1412,25 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     except Exception as exc:
         logger.debug("PredictiveRefresh task registration skipped: %s", exc)
 
+    # ──── v1.43 News Intelligence ────
+    try:
+        from engine.nexus.news.scheduler_tasks import register_news_intelligence_tasks
+        register_news_intelligence_tasks(daemon)
+    except Exception as exc:
+        logger.debug("NewsIntelligence task registration skipped: %s", exc)
+
+    # ──── CDP Auth Recovery ────
+    try:
+        from engine.nexus.cdp_auth_recovery import check_and_recover_if_needed
+        daemon.register(
+            "cdp-auth-health",
+            "Google Auth Health Check + Auto-Recovery",
+            "every_30m",
+            check_and_recover_if_needed,
+        )
+    except Exception as exc:
+        logger.debug("CDP auth recovery task registration skipped: %s", exc)
+
 
 def _auto_embedding_callback() -> Dict[str, Any]:
     """Batch-embed new Nexus entries and Q&A pairs into the vector store."""

@@ -84,6 +84,7 @@ class SkillMeta:
     cooldown_secs:  float        = 0.0
     prerequisites:  List[str]    = field(default_factory=list)
     cost:           float        = 1.0
+    pillar:         str          = ""
 
     def __repr__(self) -> str:
         return f"<SkillMeta {self.pack}.{self.name}>"
@@ -176,6 +177,7 @@ def skill(
     prerequisites: List[str]      = None,
     cost:          float          = 1.0,
     nexus_first:   bool           = False,
+    pillar:        str            = "",
 ) -> Any:
     """
     Decorator that registers a function as a CosySim skill.
@@ -236,6 +238,7 @@ def skill(
             cooldown_secs=cooldown,
             prerequisites=list(prerequisites or []),
             cost=cost,
+            pillar=pillar,
         )
         from engine.skills.registry import SKILL_REGISTRY
         SKILL_REGISTRY.register(meta)

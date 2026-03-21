@@ -492,4 +492,69 @@
     .cs-navbar__action-icon {
         font-size: 14px;
     }
+
+    .cs-navbar__pillar-toggle {
+        display: none;
+    }
+}
+
+/* ── Pillar toggle pills ──────────────────────────────────────────── */
+
+.cs-navbar__pillar-toggle {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 2px;
+    flex-shrink: 0;
+}
+
+.cs-navbar__pillar-pill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--cs-text-muted, #6b7280);
+    font-family: var(--cs-font-mono, monospace);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+}
+
+.cs-navbar__pillar-pill:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--cs-text-secondary, #9ca3af);
+}
+
+.cs-navbar__pillar-pill--active {
+    background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.15);
+    color: var(--cs-scene-accent, #00e5ff);
+}
+
+.cs-navbar__pillar-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--cs-text-muted, #6b7280);
+}
+
+.cs-navbar__pillar-pill--active .cs-navbar__pillar-badge {
+    background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.25);
+    color: var(--cs-scene-accent, #00e5ff);
 }

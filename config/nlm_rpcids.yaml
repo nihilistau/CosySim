@@ -2372,11 +2372,11 @@ sheets_gemini:
         '1': Google Docs (inferred)
         '2': Google Slides (inferred)
     known_api_keys: &id001
-    - AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU
-    - AIzaSyCB6OnnfuitFnaYWu4BvtGKaoLFk4cm-GE
-    - AIzaSyDf32okzEbtG3DbBXzU_UvsWsetuHFFUiQ
-    - AIzaSyBvuuU20zeaBQb-M8WEzJVwxQ1lI4k1cXY
-    - AIzaSyD2io-Kkh49oO30SyPhbrurJXHMeUHhpOM
+    - AIzaSyCSt0nZexCAx3F3vQRqBowSHFtsOEcCXf4
+    - AIzaSyBJYe7k9rD5mlZOkSa7ADy2N9v5YuhijII
+    - AIzaSyAUm0Y-FiebN1_g4-AJoTII8NVxP5qZZVI
+    - AIzaSyBZVupqzpydHPgrWGNu0UT0837Fe2BwqB4
+    - AIzaSyBQ8vuVaujV35Gl88_HrPfQ6Xw5ejTaOI0
     response_format:
       type: chunked streaming
       content_type: application/json+protobuf

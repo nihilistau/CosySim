@@ -44,7 +44,7 @@ def _discover_scene_names() -> List[str]:
 SCENE_NAMES: List[str] = _discover_scene_names()
 
 # Scenes known to be stubs or incomplete (no __init__.py / no Python module)
-_STUB_SCENES = {"bedroom", "unknown_scene_xyz"}
+_STUB_SCENES = {"bedroom"}
 
 
 # ──── Fixtures ────

@@ -186,7 +186,9 @@
     _connectSocket () {
       if (typeof io === 'undefined') return;
       try {
-        const socket = io();
+        // Reuse scene socket if available, otherwise create one
+        const socket = window.socket || io();
+        this.socket = socket;
         socket.on('world_event', data => this._onWorldEvent(data));
         socket.on('hud_update',  data => this._onHudUpdate(data));
       } catch (err) {
@@ -538,9 +540,14 @@
       const frame    = document.getElementById('cs-phone-frame');
       const phoneDot = document.querySelector('.cs-hud__phone-dot');
       const btn      = document.getElementById('hud-toggle-phone');
-      if (frame && !frame.src) frame.src = 'http://localhost:5555';
-      if (overlay) overlay.setAttribute('aria-hidden', 'false');
-      if (overlay) overlay.classList.toggle('cs-phone-overlay--edge', !this._rightOpen);
+      // Lazy-load iframe — only set src once to preserve state across toggles
+      if (frame && (!frame.src || frame.src === '' || frame.src === 'about:blank')) {
+        frame.src = 'http://localhost:5555';
+      }
+      if (overlay) {
+        overlay.setAttribute('aria-hidden', 'false');
+        overlay.classList.toggle('cs-phone-overlay--edge', !this._rightOpen);
+      }
       if (phoneDot) phoneDot.classList.add('cs-hud__phone-dot--active');
       if (btn) btn.classList.add('cs-hud__toggle--active');
     }
@@ -550,6 +557,7 @@
       const overlay  = document.getElementById('cs-phone-overlay');
       const phoneDot = document.querySelector('.cs-hud__phone-dot');
       const btn      = document.getElementById('hud-toggle-phone');
+      // Hide overlay but keep iframe loaded to preserve phone state + badge
       if (overlay) overlay.setAttribute('aria-hidden', 'true');
       if (phoneDot) phoneDot.classList.remove('cs-hud__phone-dot--active');
       if (btn) btn.classList.remove('cs-hud__toggle--active');

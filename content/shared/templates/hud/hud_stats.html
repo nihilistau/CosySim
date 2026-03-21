@@ -1,0 +1,137 @@
+{# hud/hud_stats.html — Left slide panel: Player stats, vitals, inventory, skills #}
+<aside class="cs-hud-slide cs-hud-slide--left" id="cs-hud-left-panel" aria-hidden="true" role="complementary" aria-label="Player panel">
+
+  <div class="cs-hud-slide__header">
+    <span class="cs-hud-slide__title">◈ PLAYER STATUS</span>
+    <button class="cs-hud-slide__close" id="hud-left-close" type="button" aria-label="Close player panel">✕</button>
+  </div>
+
+  <div class="cs-hud-slide__body" id="hud-left-body">
+
+    {# Vital bars #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">VITALS</div>
+      <div class="cs-hud-slide__stat-row">
+        <span class="cs-hud-slide__stat-icon">❤️</span>
+        <span class="cs-hud-slide__stat-name">Health</span>
+        <div class="cs-hud-slide__bar-wrap">
+          <div class="cs-hud-slide__bar cs-hud-slide__bar--health" id="left-health-bar" style="width:100%"></div>
+        </div>
+        <span class="cs-hud-slide__stat-val" id="left-health-val">100</span>
+      </div>
+      <div class="cs-hud-slide__stat-row">
+        <span class="cs-hud-slide__stat-icon">🍜</span>
+        <span class="cs-hud-slide__stat-name">Hunger</span>
+        <div class="cs-hud-slide__bar-wrap">
+          <div class="cs-hud-slide__bar cs-hud-slide__bar--hunger" id="left-hunger-bar" style="width:80%"></div>
+        </div>
+        <span class="cs-hud-slide__stat-val" id="left-hunger-val">80</span>
+      </div>
+      <div class="cs-hud-slide__stat-row">
+        <span class="cs-hud-slide__stat-icon">⚡</span>
+        <span class="cs-hud-slide__stat-name">Energy</span>
+        <div class="cs-hud-slide__bar-wrap">
+          <div class="cs-hud-slide__bar cs-hud-slide__bar--energy" id="left-energy-bar" style="width:90%"></div>
+        </div>
+        <span class="cs-hud-slide__stat-val" id="left-energy-val">90</span>
+      </div>
+    </div>
+
+    {# Economy #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">ECONOMY</div>
+      <div class="cs-hud-slide__kv-row">
+        <span class="cs-hud-slide__kv-key">₵ Credits</span>
+        <span class="cs-hud-slide__kv-val cs-accent" id="left-credits">5,000</span>
+      </div>
+      <div class="cs-hud-slide__kv-row">
+        <span class="cs-hud-slide__kv-key">REP</span>
+        <span class="cs-hud-slide__kv-val" id="left-rep">50/100</span>
+      </div>
+      <div class="cs-hud-slide__kv-row">
+        <span class="cs-hud-slide__kv-key">🔥 Heat</span>
+        <span class="cs-hud-slide__kv-val cs-hud-slide__heat-val" id="left-heat">0%</span>
+      </div>
+    </div>
+
+    {# Cyberdeck / Tech #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">CYBERDECK</div>
+      <div class="cs-hud-slide__tech-grid" id="left-cyberdeck">
+        <div class="cs-hud-slide__tech-item cs-hud-slide__tech-item--active">
+          <span class="cs-hud-slide__tech-icon">💻</span>
+          <span class="cs-hud-slide__tech-name">Phantom v2</span>
+          <span class="cs-hud-slide__tech-stat">ICE: 8</span>
+        </div>
+        <div class="cs-hud-slide__tech-item">
+          <span class="cs-hud-slide__tech-icon">📡</span>
+          <span class="cs-hud-slide__tech-name">SigSpoof</span>
+          <span class="cs-hud-slide__tech-stat">LVL 3</span>
+        </div>
+      </div>
+    </div>
+
+    {# Implants #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">IMPLANTS</div>
+      <div class="cs-hud-slide__implant-list" id="left-implants">
+        <div class="cs-hud-slide__implant">
+          <span class="cs-hud-slide__implant-dot cs-hud-slide__implant-dot--active"></span>
+          <span class="cs-hud-slide__implant-name">OculEx Mk.II</span>
+          <span class="cs-hud-slide__implant-type">VISION</span>
+        </div>
+        <div class="cs-hud-slide__implant">
+          <span class="cs-hud-slide__implant-dot cs-hud-slide__implant-dot--active"></span>
+          <span class="cs-hud-slide__implant-name">SynapTap</span>
+          <span class="cs-hud-slide__implant-type">REFLEX</span>
+        </div>
+      </div>
+    </div>
+
+    {# Inventory grid #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">INVENTORY <span id="left-inv-count" class="cs-hud-slide__count">0/12</span></div>
+      <div class="cs-hud-slide__inv-grid" id="left-inventory">
+        {% for i in range(12) %}
+        <div class="cs-hud-slide__inv-slot" data-slot="{{ i }}" title="Empty slot"></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Skills #}
+    <div class="cs-hud-slide__section">
+      <div class="cs-hud-slide__section-label">SKILLS</div>
+      <div class="cs-hud-slide__skill-list" id="left-skills">
+        <div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">Hacking</span>
+          <div class="cs-hud-slide__skill-pips" data-level="3">
+            <span class="pip pip--active"></span><span class="pip pip--active"></span><span class="pip pip--active"></span>
+            <span class="pip"></span><span class="pip"></span>
+          </div>
+        </div>
+        <div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">Social Eng.</span>
+          <div class="cs-hud-slide__skill-pips" data-level="4">
+            <span class="pip pip--active"></span><span class="pip pip--active"></span><span class="pip pip--active"></span>
+            <span class="pip pip--active"></span><span class="pip"></span>
+          </div>
+        </div>
+        <div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">Combat</span>
+          <div class="cs-hud-slide__skill-pips" data-level="2">
+            <span class="pip pip--active"></span><span class="pip pip--active"></span>
+            <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+          </div>
+        </div>
+        <div class="cs-hud-slide__skill-row">
+          <span class="cs-hud-slide__skill-name">Street Cred</span>
+          <div class="cs-hud-slide__skill-pips" data-level="3">
+            <span class="pip pip--active"></span><span class="pip pip--active"></span><span class="pip pip--active"></span>
+            <span class="pip"></span><span class="pip"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>{# /.cs-hud-slide__body #}
+</aside>

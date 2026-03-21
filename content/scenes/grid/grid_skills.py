@@ -146,17 +146,10 @@ def grid_get_travel_map() -> str:
         Newline-delimited scene location list with online status.
     """
     from content.scenes.grid.grid_scene import CITY_MAP_NODES
-    import socket as _sock
+    from engine.utils import port_is_open
     lines = []
     for node in CITY_MAP_NODES:
-        online = False
-        try:
-            s = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
-            s.settimeout(0.2)
-            online = s.connect_ex(("127.0.0.1", node["port"])) == 0
-            s.close()
-        except Exception:
-            pass
+        online = port_is_open(node["port"], timeout=0.2)
         status = "🟢 ONLINE" if online else "🔴 OFFLINE"
         current = " [YOU ARE HERE]" if node.get("is_current") else ""
         lines.append(f"{status}  {node['label']:<22}  port:{node['port']}{current}")

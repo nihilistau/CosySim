@@ -22,29 +22,35 @@ def _call(tool_or_fn, *args, **kwargs):
 @pytest.fixture(autouse=True)
 def mock_db():
     """Mock database for all tests."""
+    from engine.mcp import _lazy
     db = MagicMock()
-    with patch.object(cosysim_server, "_get_db", return_value=db):
-        yield db
+    _lazy._overrides["db"] = db
+    yield db
+    _lazy._overrides.pop("db", None)
 
 
 @pytest.fixture
 def mock_rag():
     """Mock RAG manager."""
+    from engine.mcp import _lazy
     rag = MagicMock()
-    with patch.object(cosysim_server, "_get_rag", return_value=rag):
-        yield rag
+    _lazy._overrides["rag"] = rag
+    yield rag
+    _lazy._overrides.pop("rag", None)
 
 
 @pytest.fixture
 def mock_config():
     """Mock config manager."""
+    from engine.mcp import _lazy
     config = MagicMock()
     config._config = {"system": {"name": "CosySim"}, "lmstudio": {"host": "127.0.0.1"}}
     config.get.side_effect = lambda key, default=None: {
         "scenes.phone.port": 5555,
     }.get(key, default)
-    with patch.object(cosysim_server, "_get_config", return_value=config):
-        yield config
+    _lazy._overrides["config"] = config
+    yield config
+    _lazy._overrides.pop("config", None)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -68,9 +74,13 @@ class TestSearchMemory:
         assert "No relevant memories" in result
 
     def test_rag_unavailable(self):
-        with patch.object(cosysim_server, "_get_rag", return_value=None):
+        from engine.mcp import _lazy
+        _lazy._overrides["rag"] = None
+        try:
             result = _call(cosysim_server.search_memory, "test")
             assert "unavailable" in result
+        finally:
+            _lazy._overrides.pop("rag", None)
 
 
 class TestStoreMemory:
@@ -87,9 +97,13 @@ class TestStoreMemory:
         assert call_args[1]["metadata"]["importance"] == "high"
 
     def test_rag_unavailable(self):
-        with patch.object(cosysim_server, "_get_rag", return_value=None):
+        from engine.mcp import _lazy
+        _lazy._overrides["rag"] = None
+        try:
             result = _call(cosysim_server.store_memory, "test", character_id="x")
             assert "unavailable" in result
+        finally:
+            _lazy._overrides.pop("rag", None)
 
 
 class TestGetCharacterState:

@@ -351,7 +351,7 @@ class TestRestartService:
 
 
 class TestHealthRecover:
-    @patch("engine.skills.builtin.recovery_skills._check_port")
+    @patch("engine.skills.builtin.recovery_skills.port_is_open")
     @patch("engine.skills.builtin.recovery_skills._port_registry")
     def test_reports_service_status(self, mock_reg, mock_port):
         from engine.skills.builtin.recovery_skills import health_recover
@@ -367,7 +367,7 @@ class TestHealthRecover:
         assert result["online"] == 5
         assert result["offline"] == 0
 
-    @patch("engine.skills.builtin.recovery_skills._check_port")
+    @patch("engine.skills.builtin.recovery_skills.port_is_open")
     @patch("engine.skills.builtin.recovery_skills._port_registry")
     def test_single_service_check(self, mock_reg, mock_port):
         from engine.skills.builtin.recovery_skills import health_recover
