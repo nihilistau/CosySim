@@ -867,7 +867,7 @@ html, body {
 .district-modal {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    z-index: 9500;  /* v1.43.0 — above navbar (9100) and all overlays */
     display: flex;
     align-items: center;
     justify-content: center;

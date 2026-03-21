@@ -1261,7 +1261,7 @@
   width: 375px;
   height: calc(100vh - var(--cs-navbar-height, 48px) - 32px - 32px);
   max-height: 780px;
-  z-index: var(--cs-z-phone, 200);
+  z-index: 9000;
 
   border-radius: 16px;
   overflow: hidden;
