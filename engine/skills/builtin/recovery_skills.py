@@ -643,8 +643,11 @@ def system_diagnostics() -> str:
         # LMStudio status
         try:
             import urllib.request
+            from engine.utils import get_lmstudio_headers
             lms_url = get_config().get("lmstudio.base_url", "http://127.0.0.1:1234")
             req = urllib.request.Request(f"{lms_url}/api/v1/models")
+            for k, v in get_lmstudio_headers().items():
+                req.add_header(k, v)
             with urllib.request.urlopen(req, timeout=3) as resp:
                 data = json.loads(resp.read())
                 models = data.get("data", [])

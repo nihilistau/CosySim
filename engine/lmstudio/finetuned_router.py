@@ -192,12 +192,14 @@ class FinetunedRouter:
             "stream": False,
         }).encode("utf-8")
 
+        from engine.utils import get_lmstudio_headers
         req = urllib.request.Request(
             f"http://{host}:{port}/api/v1/completions",
             data=payload,
-            headers={"Content-Type": "application/json"},
             method="POST",
         )
+        for k, v in get_lmstudio_headers().items():
+            req.add_header(k, v)
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data["choices"][0]["text"].strip()

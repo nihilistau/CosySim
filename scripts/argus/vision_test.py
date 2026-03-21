@@ -8,7 +8,7 @@ from playwright.async_api import async_playwright
 from scripts.argus.paths import SCREENSHOTS_DIR
 
 SCREENSHOT = str(SCREENSHOTS_DIR / "vision_test.png")
-LMSTUDIO   = "http://localhost:1234/v1/chat/completions"
+LMSTUDIO   = "http://localhost:1234/api/v1/chat/completions"
 MODEL      = "qwen/qwen3-vl-4b"
 
 INJECT_JS = """() => {
@@ -56,7 +56,8 @@ async def main():
 
     # Ask vision model
     b64 = base64.b64encode(open(SCREENSHOT, "rb").read()).decode()
-    resp = requests.post(LMSTUDIO, json={
+    from engine.utils import get_lmstudio_headers
+    resp = requests.post(LMSTUDIO, headers=get_lmstudio_headers(), json={
         "model": MODEL,
         "messages": [{"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},

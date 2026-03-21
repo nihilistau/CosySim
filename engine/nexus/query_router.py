@@ -497,7 +497,7 @@ class NexusQueryRouter:
         cfg = get_config()
         host = cfg.get("lmstudio.host", "localhost")
         port = cfg.get("lmstudio.port", 1234)
-        url = f"http://{host}:{port}/v1/chat/completions"
+        url = f"http://{host}:{port}/api/v1/chat/completions"
 
         payload = json.dumps({
             "messages": [
@@ -513,10 +513,10 @@ class NexusQueryRouter:
         }).encode()
 
         import urllib.request
-        req = urllib.request.Request(
-            url, data=payload,
-            headers={"Content-Type": "application/json"},
-        )
+        from engine.utils import get_lmstudio_headers
+        req = urllib.request.Request(url, data=payload)
+        for k, v in get_lmstudio_headers().items():
+            req.add_header(k, v)
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read().decode())

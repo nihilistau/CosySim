@@ -42,7 +42,7 @@ def _default_base_url() -> str:
     env_port = os.environ.get("COSYSIM_LMSTUDIO_PORT") or os.environ.get("COSYVOICE_LMSTUDIO_PORT")
     if env_host:
         port = env_port or "1234"
-        return f"http://{env_host}:{port}/v1"
+        return f"http://{env_host}:{port}/api/v1"
 
     # 2) config/default.yaml (or active env yaml)
     try:
@@ -50,12 +50,12 @@ def _default_base_url() -> str:
         cfg = get_config()
         host = cfg.get("lmstudio", {}).get("host", "localhost")
         port = cfg.get("lmstudio", {}).get("port", 1234)
-        return f"http://{host}:{port}/v1"
+        return f"http://{host}:{port}/api/v1"
     except Exception:
         pass
 
     # 3) Safe default
-    return "http://localhost:1234/v1"
+    return "http://localhost:1234/api/v1"
 
 
 class LLMService:
@@ -95,7 +95,8 @@ class LLMService:
         if not REQUESTS_AVAILABLE:
             return False
         try:
-            r = requests.get(f"{self.base_url}/models", timeout=4)
+            from engine.utils import get_lmstudio_headers
+            r = requests.get(f"{self.base_url}/models", headers=get_lmstudio_headers(), timeout=4)
             self._connected = r.ok
             return r.ok
         except Exception:
@@ -111,7 +112,8 @@ class LLMService:
         if not REQUESTS_AVAILABLE:
             return None
         try:
-            r = requests.get(f"{self.base_url}/models", timeout=4)
+            from engine.utils import get_lmstudio_headers
+            r = requests.get(f"{self.base_url}/models", headers=get_lmstudio_headers(), timeout=4)
             if r.ok:
                 data = r.json()
                 models = data.get("data", [])
@@ -170,9 +172,11 @@ class LLMService:
         }
 
         try:
+            from engine.utils import get_lmstudio_headers
             r = requests.post(
                 f"{self.base_url}/chat/completions",
                 json=payload,
+                headers=get_lmstudio_headers(),
                 timeout=self.timeout,
             )
             r.raise_for_status()

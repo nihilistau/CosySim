@@ -465,11 +465,12 @@ class LMLinkManager:
         """Query a remote peer for its loaded models via REST API."""
         import httpx
 
-        url = f"{peer.api_base}/v1/models"
+        from engine.utils import get_lmstudio_headers
+        url = f"{peer.api_base}/api/v1/models"
         timeout = self._health_timeout_ms / 1000
 
         try:
-            resp = httpx.get(url, timeout=timeout)
+            resp = httpx.get(url, headers=get_lmstudio_headers(), timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
             return data.get("data", [])
@@ -482,15 +483,16 @@ class LMLinkManager:
         """
         Check if a peer is reachable.
 
-        Uses a lightweight GET /v1/models request.
+        Uses a lightweight GET /api/v1/models request.
         """
         import httpx
 
-        url = f"{peer.api_base}/v1/models"
+        from engine.utils import get_lmstudio_headers
+        url = f"{peer.api_base}/api/v1/models"
         timeout = self._health_timeout_ms / 1000
 
         try:
-            resp = httpx.get(url, timeout=timeout)
+            resp = httpx.get(url, headers=get_lmstudio_headers(), timeout=timeout)
             peer.reachable = resp.status_code == 200
             peer.last_check = time.time()
             peer.consecutive_failures = 0 if peer.reachable else peer.consecutive_failures

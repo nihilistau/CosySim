@@ -133,7 +133,6 @@ class VisionAgent:
             cfg = get_config()
             host = cfg.get("lmstudio.host", "localhost")
             port = cfg.get("lmstudio.port", 1234)
-            token = cfg.get("lmstudio.api_token", "")
             with open(image_path, "rb") as f:
                 img_b64 = base64.b64encode(f.read()).decode()
             data_url = f"data:image/png;base64,{img_b64}"
@@ -149,11 +148,10 @@ class VisionAgent:
                 "max_tokens": 512,
                 "temperature": 0.1,
             }
-            headers = {"Content-Type": "application/json"}
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
+            from engine.utils import get_lmstudio_headers
+            headers = get_lmstudio_headers()
             r = _httpx.post(
-                f"http://{host}:{port}/v1/chat/completions",
+                f"http://{host}:{port}/api/v1/chat/completions",
                 json=payload,
                 headers=headers,
                 timeout=60.0,
