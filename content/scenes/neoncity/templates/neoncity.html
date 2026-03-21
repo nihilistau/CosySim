@@ -5,14 +5,16 @@
 {% set scene_accent_rgb = '6 182 212' %}
 
 {#
-  NeonCity v1.44 — 3-Column Dashboard Layout
-  ===========================================
+  NeonCity v1.45 — Playable Dashboard
+  ====================================
   Left:   Player stats + Inventory grid
   Center: Districts + Factions + Chat/Economy/Events
   Right:  Crew roster + Mission board
 
-  Version: v1.44.0 [2026-03-21]
+  Version: v1.45.0 [2026-03-21]
   Change Log:
+    v1.45.0 [2026-03-21] — Interactive missions (detail/complete/abandon),
+                            crew operations modal, active ops timers
     v1.44.0 [2026-03-21] — Full 3-column dashboard redesign with player,
                             inventory, crew, and mission panels
     v0.68   [2026-03-20] — Initial living world hub layout
@@ -20,6 +22,7 @@
 
 {% block head_css %}
   <link rel="stylesheet" href="/shared/css/cosysim-hack-minigame.css">
+  <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='neoncity.css') }}">
 {% endblock %}
 
@@ -149,9 +152,13 @@
         </div>
       </section>
 
-      <!-- Inventory -->
+      <!-- Inventory — v1.45.0 added SHOP button -->
       <section class="hud-panel inventory-panel">
-        <h3 class="panel-title">&#9670; INVENTORY</h3>
+        <h3 class="panel-title">&#9670; INVENTORY
+          <button class="btn-shop-open" onclick="NeonCityApp.openShop()" title="Open Black Market Shop">
+            &#128722; SHOP
+          </button>
+        </h3>
         <div class="inventory-grid" id="inventory-grid">
           <!-- 12 item slots populated by JS -->
           <div class="inv-slot empty"></div>
@@ -253,7 +260,10 @@
             <div class="card-npcs" id="npcs-hacker_den">
               <span class="npc-tag">0xGH0ST</span><span class="npc-tag">NETRUNNER</span><span class="npc-tag">SYSOP</span>
             </div>
-            <div class="card-action">&#9654; ENTER DISTRICT</div>
+            <div class="card-actions-row">
+              <div class="card-action" onclick="event.stopPropagation(); NeonCityApp.visitDistrict('hacker_den')">&#9654; ENTER</div>
+              <button class="btn-hack-district" onclick="event.stopPropagation(); NeonCityApp.openHackTargets()" title="Browse hackable targets">&#128187; HACK</button>
+            </div>
           </div>
 
           <div class="district-card" data-district="street_level" style="--district-color: #facc15"
@@ -369,9 +379,16 @@
         <div class="crew-roster" id="crew-roster">
           <div class="crew-empty">No crew recruited yet.</div>
         </div>
-        <button class="btn-crew-ops" id="btn-crew-ops" onclick="NeonCityApp.checkCrewOps()">
-          &#9881; CHECK OPS
-        </button>
+        <!-- v1.45.0 — Active crew operations with countdown timers -->
+        <div class="crew-active-ops" id="crew-active-ops"></div>
+        <div class="crew-btn-row">
+          <button class="btn-crew-ops" id="btn-crew-ops" onclick="NeonCityApp.checkCrewOps()">
+            &#9881; CHECK OPS
+          </button>
+          <button class="btn-launch-ops" onclick="NeonCityApp.openCrewOpsModal()">
+            &#9654; LAUNCH OPS
+          </button>
+        </div>
       </section>
 
       <!-- Mission Board -->
@@ -391,6 +408,93 @@
   </div><!-- .neoncity-dashboard -->
 
 </div><!-- .neoncity-layout -->
+
+  <!-- ── MISSION DETAIL MODAL ── v1.45.0 [2026-03-21] -->
+  <div class="mission-detail-modal" id="mission-modal" style="display:none">
+    <div class="modal-overlay" onclick="NeonCityApp.closeMissionModal()"></div>
+    <div class="modal-content mission-modal-content">
+      <div class="modal-header">
+        <span class="mission-modal-type" id="mm-type">RECON</span>
+        <h3 class="modal-title" id="mm-title">Mission Title</h3>
+        <button class="modal-close" onclick="NeonCityApp.closeMissionModal()">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="mm-meta-row">
+          <span class="mm-difficulty" id="mm-difficulty">&#9733;&#9733;&#9733;</span>
+          <span class="mm-giver" id="mm-giver">Given by: ???</span>
+          <span class="mm-location" id="mm-location">&#9673; ???</span>
+        </div>
+        <p class="mm-description" id="mm-description"></p>
+
+        <div class="mm-objectives">
+          <h4>&#9670; OBJECTIVES</h4>
+          <div id="mm-objectives-list"></div>
+        </div>
+
+        <div class="mm-progress-row">
+          <span class="mm-progress-label">PROGRESS</span>
+          <div class="mm-progress-track">
+            <div class="mm-progress-fill" id="mm-progress-fill" style="width:0%"></div>
+          </div>
+          <span class="mm-progress-pct" id="mm-progress-pct">0%</span>
+        </div>
+
+        <div class="mm-rewards">
+          <h4>&#9670; REWARDS</h4>
+          <div class="mm-reward-grid" id="mm-rewards"></div>
+        </div>
+
+        <div class="mm-crew-assigned" id="mm-crew-section" style="display:none">
+          <h4>&#9670; ASSIGNED CREW</h4>
+          <div id="mm-crew-list"></div>
+        </div>
+
+        <div class="mm-time-limit" id="mm-time-section" style="display:none">
+          <span class="mm-time-icon">&#9200;</span>
+          <span id="mm-time-value"></span>
+        </div>
+      </div>
+      <div class="modal-footer mm-actions">
+        <button class="btn-mission-complete" id="mm-btn-complete" style="display:none"
+                onclick="NeonCityApp.completeMission()">&#10003; COMPLETE</button>
+        <button class="btn-mission-abandon" id="mm-btn-abandon" style="display:none"
+                onclick="NeonCityApp.abandonMission()">&#10007; ABANDON</button>
+        <button class="btn-mission-accept" id="mm-btn-accept" style="display:none"
+                onclick="NeonCityApp.acceptMissionFromModal()">&#9654; ACCEPT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CREW OPERATIONS MODAL ── v1.45.0 [2026-03-21] -->
+  <div class="crew-ops-modal" id="crew-ops-modal" style="display:none">
+    <div class="modal-overlay" onclick="NeonCityApp.closeCrewOpsModal()"></div>
+    <div class="modal-content crew-ops-modal-content">
+      <div class="modal-header">
+        <span class="modal-icon">&#9881;</span>
+        <h3 class="modal-title">CREW OPERATIONS</h3>
+        <button class="modal-close" onclick="NeonCityApp.closeCrewOpsModal()">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="cop-type-selector">
+          <h4>&#9670; OPERATION TYPE</h4>
+          <div class="cop-type-grid" id="cop-type-grid"></div>
+        </div>
+        <div class="cop-crew-selector">
+          <h4>&#9670; ASSIGN CREW <span class="cop-min-label" id="cop-min-label">(min 1)</span></h4>
+          <div class="cop-crew-list" id="cop-crew-list"></div>
+        </div>
+        <div class="cop-summary" id="cop-summary" style="display:none">
+          <div class="cop-duration">Duration: <span id="cop-duration-val">60 min</span></div>
+          <div class="cop-reward">Reward: <span id="cop-reward-val">&#8354;500 + 25 XP</span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-launch-op" id="btn-launch-op" onclick="NeonCityApp.launchOperation()" disabled>
+          &#9654; LAUNCH OPERATION
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── DISTRICT DETAIL MODAL ── -->
   <div class="district-modal" id="district-modal" style="display:none">
@@ -422,6 +526,9 @@
     </div>
   </div>
 
+  <!-- ── Shop Modal (shared component) ── v1.45.0 -->
+  {% include 'shop_modal.html' %}
+
   <!-- ── Consequences Panel ── -->
   <div id="consequences-panel" class="consequences-panel">
     <button class="consequences-toggle" onclick="toggleConsequences()" title="Consequences">
@@ -442,6 +549,7 @@
 
 {% block body_scripts %}
   <script src="/shared/js/cosysim-hack-minigame.js" defer></script>
+  <script src="/shared/js/cosysim-shop.js" defer></script>
   <script src="/shared/js/cosysim-particles3d.js"></script>
   <script src="/shared/js/cosysim-bench.js" defer></script>
   <script src="{{ url_for('static', filename='neoncity.js') }}" defer></script>
