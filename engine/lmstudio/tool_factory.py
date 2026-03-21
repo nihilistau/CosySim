@@ -362,6 +362,7 @@ def _raw_chat(client, messages, tools, model, temperature, max_tokens, integrati
     Needed to extract ``tool_calls`` which ``ChatResponse`` doesn't carry.
     """
     import httpx
+    from engine.utils import get_lmstudio_headers  # noqa: PLC0415
     payload = client._build_payload(
         messages,
         model=model,
@@ -375,6 +376,7 @@ def _raw_chat(client, messages, tools, model, temperature, max_tokens, integrati
         r = client._client.post(
             f"{client.base_url}/api/v1/chat/completions",
             json=payload,
+            headers=get_lmstudio_headers(),
             timeout=client.timeout,
         )
         r.raise_for_status()

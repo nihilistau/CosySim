@@ -105,7 +105,11 @@ class LMStudioManager:
         # Fallback: direct HTTP probe
         try:
             import urllib.request
-            urllib.request.urlopen(f"{self._base_url}/models", timeout=3)
+            from engine.utils import get_lmstudio_headers  # noqa: PLC0415
+            req = urllib.request.Request(f"{self._base_url}/models")
+            for k, v in get_lmstudio_headers().items():
+                req.add_header(k, v)
+            urllib.request.urlopen(req, timeout=3)
             return True
         except Exception:
             return False
