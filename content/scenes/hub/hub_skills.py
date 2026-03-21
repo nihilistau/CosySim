@@ -7,24 +7,13 @@ from __future__ import annotations
 
 import json
 import logging
-import socket
 from typing import Any, Dict, List
 
 from engine.port_registry import ALL_SCENE_TARGETS, build_target_listing
 from engine.skills.skill import skill
+from engine.utils import port_is_open
 
 logger = logging.getLogger(__name__)
-
-# ── Port check helper (local to skills, no circular import) ──────────
-
-
-def _port_open(port: int) -> bool:
-    """Return True if localhost:port is accepting connections."""
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=0.4):
-            return True
-    except OSError:
-        return False
 
 
 # ── Scene catalogue (built from canonical registry for standalone skill use) ─
@@ -54,7 +43,7 @@ def get_all_scenes_status() -> str:
     online_count = 0
 
     for s in _SCENE_PORTS:
-        is_online = _port_open(s["port"])
+        is_online = port_is_open(s["port"])
         if is_online:
             online_count += 1
         results.append({

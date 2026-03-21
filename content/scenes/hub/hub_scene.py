@@ -15,7 +15,6 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import subprocess
-import socket
 import json
 import requests
 
@@ -25,6 +24,7 @@ from engine.port_registry import (
     get_port,
     get_service_url,
 )
+from engine.utils import port_is_open
 
 def _service_up(url: str, timeout: float = 1.0) -> bool:
     """Check if an HTTP service responds."""
@@ -32,15 +32,6 @@ def _service_up(url: str, timeout: float = 1.0) -> bool:
         r = requests.get(url, timeout=timeout)
         return r.status_code < 500
     except Exception:
-        return False
-
-
-def _port_open(port: int) -> bool:
-    """Check if a TCP port is listening on localhost."""
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-            return True
-    except OSError:
         return False
 
 
@@ -449,7 +440,7 @@ def _show_scenes():
             cols = st.columns(cols_per_row)
             for col, scene in zip(cols, row_scenes):
                 with col:
-                    running = _port_open(scene["port"])
+                    running = port_is_open(scene["port"])
                     status = "🟢 Running" if running else "⚫ Stopped"
                     url = scene["url"]
 

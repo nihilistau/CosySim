@@ -1,0 +1,29 @@
+# CosySim — Game Pillar Configuration
+# Overrides for NeonCity game scenes (merged on top of default.yaml)
+
+# World simulation parameters
+world:
+  tick_interval: 60
+  time_scale: 1.0
+  weather_enabled: true
+  economy_enabled: true
+
+# Character defaults for game scenes
+characters:
+  max_per_scene: 5
+  idle_timeout: 300
+  mood_drift_enabled: true
+
+# Scene accent overrides (game pillar)
+scene_accents:
+  penthouse: "#c084fc"
+  neoncity: "#00e5ff"
+  lounge: "#f43f5e"
+  tavern: "#f97316"
+  casino: "#eab308"
+  arena: "#22c55e"
+  realm: "#e879f9"
+  heist: "#e11d48"
+  grid: "#00ff88"
+  games: "#fb7185"
+  lab_break: "#14b8a6"

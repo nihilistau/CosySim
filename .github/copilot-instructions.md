@@ -175,6 +175,37 @@ python -m engine.nexus.copilot_validation --json
 The reseed command now also deduplicates exact-title Copilot/doc mirrors in
 Nexus so validation stays green after refreshes.
 
+## Three-Pillar Architecture (v1.42)
+
+All launcher targets are organized into three pillars in `engine/control_plane_registry.py`:
+
+| Pillar | Label | Count | Purpose |
+|--------|-------|-------|---------|
+| `game` | NeonCity | 14 | Interactive scenes (penthouse, phone, lounge, etc.) |
+| `service` | Services | 10 | Infrastructure (hub, nexus_panel, bridge, nlm_proxy, etc.) |
+| `creation` | Creation Kit | 5 | Asset tools (asset_studio, canvas, creator, etc.) |
+
+Key integration points:
+- **`/api/scene-registry`** — auto-wired on every Flask scene via `register_health_route()`
+- **Navbar v2** — calls `loadPillarRegistry()` on page load for pillar toggle pills
+- **Hub** — groups scene cards by pillar instead of legacy neon_world/action/system
+- **Config overlays** — `config/game.yaml`, `config/services.yaml`, `config/creation.yaml`
+- **Launcher** — `python launcher.py --list` shows three pillar groups
+
+When adding a new scene, add it to `SCENE_DEFS` with `"pillar": "game"|"service"|"creation"`.
+
+## Smart Test System (v1.42)
+
+Use the smart test runner instead of running the full 15K test suite:
+```powershell
+pytest tests/ --smoke-only              # ~53s, 15 files, one per domain
+pytest tests/ --affected                # tests for uncommitted changes only
+pytest tests/ --staged                  # tests for staged files (pre-commit)
+pytest tests/ --affected --cap 40       # auto-fallback to smoke if too many
+python scripts/smart_test.py --smoke    # standalone script, same engine
+python scripts/smart_test.py --list     # dry-run: show what would run
+```
+
 ## Priority Over Feature Breadth
 
 When in doubt, prefer work in this order:

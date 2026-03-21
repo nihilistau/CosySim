@@ -2,12 +2,21 @@
 Shared pytest fixtures for CosySim tests.
 
 Provides isolated database, config, and EventChain instances per test.
+
+Pytest plugin flags:
+    --affected     Only run tests for files changed since HEAD (git diff)
+    --staged       Only run tests for staged files (git diff --cached)
+    --since REF    Only run tests for files changed since REF (e.g. HEAD~3)
+    --smoke-only   Run only the ~15 smoke-test files (one per domain)
+    --cap N        Max test files to run; falls back to smoke if exceeded (default: 80)
 """
 import sys
 import os
+import subprocess
 import tempfile
 import sqlite3
 from pathlib import Path
+from typing import List, Set
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -150,7 +159,10 @@ def _reset_singletons_per_module():
 # ──── Optional-dependency skip markers ───────────────────────────────────────
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list) -> None:  # type: ignore[type-arg]
-    """Auto-skip tests that require optional heavy deps (torch, etc.) when unavailable."""
+    """Auto-skip tests that require optional heavy deps (torch, etc.) when unavailable.
+
+    Also handles --affected / --staged / --smoke-only filtering.
+    """
     try:
         import torch  # noqa: F401
         _torch_ok = True
@@ -163,3 +175,150 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list) -> None:  
         for item in items:
             if Path(item.fspath).name in _torch_test_files:
                 item.add_marker(skip_torch)
+
+    # ── Affected / staged / smoke filtering ──────────────────────────────
+    affected = config.getoption("--affected", default=False)
+    staged = config.getoption("--staged", default=False)
+    smoke_only = config.getoption("--smoke-only", default=False)
+    since_ref = config.getoption("--since", default=None)
+    cap = int(config.getoption("--cap", default=80))
+
+    if not (affected or staged or smoke_only or since_ref):
+        return
+
+    from scripts.smart_test import (
+        _git_changed_files,
+        _domains_for_file,
+        _resolve_test_files,
+        _tests_for_domains,
+        _ordered_unique,
+        SMOKE_TESTS,
+    )
+
+    allowed_files: Set[str] = set()
+
+    if smoke_only:
+        for p in _resolve_test_files(SMOKE_TESTS):
+            allowed_files.add(p.name)
+    else:
+        # Determine git ref
+        if staged:
+            ref = "_staged"
+        elif since_ref:
+            ref = since_ref
+        else:
+            ref = "HEAD"
+
+        # Get changed files
+        if ref == "_staged":
+            result = subprocess.run(
+                ["git", "diff", "--name-only", "--cached"],
+                capture_output=True, text=True, cwd=str(PROJECT_ROOT),
+            )
+            changed = [f for f in result.stdout.strip().splitlines() if f]
+        else:
+            changed = _git_changed_files(since=ref)
+
+        if not changed:
+            # No changes — run nothing extra, let pytest defaults handle it
+            return
+
+        # Map to domains
+        ordered_domains: List[str] = []
+        trigger_smoke = False
+        for f in changed:
+            domains = _domains_for_file(f)
+            if "_smoke" in domains:
+                trigger_smoke = True
+            for domain in domains:
+                if not domain.startswith("_") and domain not in ordered_domains:
+                    ordered_domains.append(domain)
+
+        # Add _self for directly changed test files
+        requested = []
+        if any("_self" in _domains_for_file(f) for f in changed):
+            requested.append("_self")
+        requested.extend(ordered_domains)
+
+        if trigger_smoke:
+            test_files = _resolve_test_files(SMOKE_TESTS)
+        else:
+            test_files = _tests_for_domains(requested, changed_files=changed)
+
+        # Cap check — if too many files, fall back to smoke
+        if len(test_files) > cap:
+            config._affected_capped = True  # type: ignore[attr-defined]
+            print(
+                f"\n[smart-test] {len(test_files)} files affected (cap={cap}) "
+                f"— falling back to smoke tests ({len(SMOKE_TESTS)} files)"
+            )
+            test_files = _resolve_test_files(SMOKE_TESTS)
+
+        for p in test_files:
+            allowed_files.add(p.name)
+
+    if not allowed_files:
+        return
+
+    # Deselect items not in the allowed set
+    deselected = []
+    selected = []
+    for item in items:
+        fname = Path(item.fspath).name
+        if fname in allowed_files:
+            selected.append(item)
+        else:
+            deselected.append(item)
+
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = selected
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register --affected, --staged, --smoke-only, --since, --cap flags."""
+    group = parser.getgroup("smart-test", "CosySim smart test selection")
+    group.addoption(
+        "--affected",
+        action="store_true",
+        default=False,
+        help="Only run tests for files changed since HEAD (uncommitted changes).",
+    )
+    group.addoption(
+        "--staged",
+        action="store_true",
+        default=False,
+        help="Only run tests for staged files (git diff --cached).",
+    )
+    group.addoption(
+        "--smoke-only",
+        action="store_true",
+        default=False,
+        help="Run only smoke tests (~15 files, one per domain).",
+    )
+    group.addoption(
+        "--since",
+        default=None,
+        help="Only run tests for files changed since REF (e.g. HEAD~3).",
+    )
+    group.addoption(
+        "--cap",
+        default="80",
+        help="Max test files before falling back to smoke (default: 80).",
+    )
+
+
+def pytest_report_header(config: pytest.Config) -> List[str]:
+    """Show smart-test mode in the pytest header."""
+    lines: List[str] = []
+    if config.getoption("--affected", default=False):
+        lines.append("smart-test: --affected (uncommitted changes)")
+    elif config.getoption("--staged", default=False):
+        lines.append("smart-test: --staged (staged changes only)")
+    elif config.getoption("--smoke-only", default=False):
+        lines.append("smart-test: --smoke-only")
+    elif config.getoption("--since", default=None):
+        lines.append(f"smart-test: --since {config.getoption('--since')}")
+    if hasattr(config, "_affected_capped"):
+        lines.append("smart-test: CAPPED — too many affected files, using smoke tests")
+    return lines

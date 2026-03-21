@@ -1,76 +1,99 @@
-# Byte-compiled / optimized / DLL files
+# ──── Python ───────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+unsloth_compiled_cache/
 
-# Node.js
+# ──── Node.js ──────────────────────────────────────────────────────
 node_modules/
 
-# Runtime data (databases, vector stores, backups)
-backups/
-/artifacts/
-
-# Visual Studio Code files
+# ──── IDE / Editor ─────────────────────────────────────────────────
 .vscode
 !.vscode/mcp.json
 .vs
-
-# PyCharm files
 .idea
-
-# Eclipse Project settings
 *.*project
 .settings
-
-# Sublime Text settings
 *.sublime-workspace
 *.sublime-project
-
-# Editor temporaries
 *.swn
 *.swo
 *.swp
 *.swm
 *~
-
-# IPython notebook checkpoints
-.ipynb_checkpoints
-
-# macOS dir files
 .DS_Store
+.cache
+compile_commands.json
 
+# ──── Virtual environments ─────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ──── Build artifacts ──────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
 exp
 raw_wav
 tensorboard
 **/*build*
 
-# Clangd files
-.cache
-compile_commands.json
+# ──── Security — API tokens and sensitive files ────────────────────
+.env
+.env.local
+.env.*
+*.token
+*.key
+*.pem
+.lmstudio_token
 
-# train/inference files
-*.wav
-*.m4a
-*.aac
-*.pt
-pretrained_models
-*_pb2_grpc.py
-*_pb2.py
-*.tar
+# ──── Databases (all SQLite variants) ──────────────────────────────
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+conversation_history.db
 
-# Model weights and training artifacts (large binaries)
+# ──── Logs ─────────────────────────────────────────────────────────
+logs/
+*.log
+kernel.errors.txt
+.github/hooks/logs/
+
+# ──── Tests ────────────────────────────────────────────────────────
+tests/tmp/
+.pytest_cache/
+tui_autostart.log
+
+# ──── Cache / benchmarks ──────────────────────────────────────────
+cache/
+benchmarks/
+
+# ──── Model weights and training artifacts (large binaries) ────────
 *.safetensors
 *.gguf
 *.onnx
 *.bin
 *.h5
 *.hdf5
+*.pt
+*.tar
+pretrained_models
 training/models/
 training/datasets/*.jsonl
 
-# Media binaries
+# ──── Media binaries ──────────────────────────────────────────────
 *.mp4
 *.mp3
+*.m4a
+*.aac
+*.wav
 *.avi
 *.mov
 *.mkv
@@ -78,78 +101,18 @@ training/datasets/*.jsonl
 *.flac
 *.ogg
 content/media/
-content/simulation/media/photo/
-# Security - API tokens and sensitive files
-.lmstudio_token
-*.token
-.env
-.env.local
-*.key
-*.pem
-
-# User-specific files
-conversation_history.db
-*.db
-*.sqlite
-*.sqlite3
-
-# SQLite WAL/SHM files
-*.db-wal
-*.db-shm
-*.db-journal
-
-# Logs and temporary files
-logs/
-*.log
-kernel.errors.txt
-
-# Audio test files (keep sample files in examples/)
-test_*.wav
-audio_output/
-
-# Cache and benchmarks
-cache/
-benchmarks/
-tests/tmp/
-.pytest_cache/
-
-# Virtual environments
-.venv/
-venv/
-env/
-
-# Jupyter notebooks (keep if needed, but ignore checkpoints)
-Untitled.ipynb
-.ipynb_checkpoints/
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
-
-# Generated media (large binary files)
 content/simulation/media/images/
 content/simulation/media/voice/
 content/simulation/media/video/
+content/simulation/media/photo/
+audio_output/
+test_*.wav
 
-# Python bytecode
-*.pyc
-__pycache__/
+# ──── Generated protobuf ──────────────────────────────────────────
+*_pb2_grpc.py
+*_pb2.py
 
-# Copilot hook logs
-.github/hooks/logs/
-unsloth_compiled_cache/
-
-# Raw ARGUS / capture artifacts
-data/har_files/users_dump_folder/
-data/har_files/**/*.har
-data/har_files/**/*.heaptimeline
-data/har_files/**/*.heapsnapshot
-data/har_files/**/*.pcap
-data/har_files/**/*.pcapng
-data/har_files/**/*.trace
-
-# Runtime data artifacts (not source code)
+# ──── Runtime data artifacts ──────────────────────────────────────
 data/chrome_*/
 data/uploads/
 data/heap_output/
@@ -157,11 +120,37 @@ data/nlm_screenshots/
 data/argus/
 data/accounts/
 data/test_reports/
+data/backups/
 data/*.json
+data/*.jsonl
 data/*.png
 data/*.tmp
 data/*.db
+data/training_exports/
 content/apps/*/data/
 
-# Copilot session files
+# ──── HAR / ARGUS capture artifacts ───────────────────────────────
+artifacts/
+data/har_files/
+data/hars/
+**/*.har
+**/*.heaptimeline
+**/*.heapsnapshot
+**/*.pcap
+**/*.pcapng
+**/*.trace
+**/*.pma
+
+# ──── Backups ─────────────────────────────────────────────────────
+backups/
+
+# ──── Copilot session files ───────────────────────────────────────
 copilot-session-*.md
+
+# ──── Jupyter notebooks ───────────────────────────────────────────
+Untitled.ipynb
+.ipynb_checkpoints/
+
+# ──── Large generated files ───────────────────────────────────────
+nlm_automation_log.json
+nlm_bundle.js
