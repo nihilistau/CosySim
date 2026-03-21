@@ -63,6 +63,7 @@ module.exports = {
   apps: [
 
     // ──── Nexus KMS (must start before all CosySim services) ────────
+    // v1.42.1 [2026-03-21] — Managed Nexus KMS as PM2 process (priority 0)
 
     pyService('nexus-kms', path.join('scripts', 'pm2', 'start_nexus_kms.py'), {
       max_restarts: 10,

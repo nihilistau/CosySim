@@ -1,9 +1,21 @@
-"""THE TERMINAL — Flask hub for CosySim. v0.68 Dark Renaissance.
+"""THE TERMINAL — Flask Hub for CosySim.
+===========================================
 
-Main navigation hub connecting all scenes. Port 8500, accent #3b82f6.
+Main navigation hub connecting all 20+ scenes. Port 8500, accent #3b82f6.
+Provides the scene catalogue, world-state API, economy API, and
+pillar-based scene-registry endpoint with enriched presentation data.
 
 Usage:
-    python launcher.py --mode hub
+    python launcher.py hub
+    python launcher.py --core   # auto-starts hub among core scenes
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Extensive documentation, section dividers, version stamps
+    v1.42.0 [2026-03-21] — Pillar wiring, hub modernization
+    v0.68   [prior]      — Dark Renaissance initial implementation
 """
 from __future__ import annotations
 
@@ -27,8 +39,12 @@ DEFAULT_PORT = get_port(SCENE_ID)
 
 _SCENE_DIR = Path(__file__).parent
 
-# ── Scene catalogue ──────────────────────────────────────────────────
-# Groups: "neon_world" | "action" | "system"
+# =====================================================================
+# Scene Catalogue — Presentation Metadata                   [v1.42.1]
+# =====================================================================
+# Maps scene IDs to hub-only display metadata (subtitle, icon, group,
+# accent colour, description). Groups: "neon_world" | "action" | "system".
+# These are merged with canonical control-plane defs at build time.
 _SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
     "penthouse": {
         "subtitle": "Desire & Danger",
@@ -191,7 +207,8 @@ def _build_scene_catalogue() -> List[Dict[str, Any]]:
 
 SCENE_CATALOGUE: List[Dict[str, Any]] = _build_scene_catalogue()
 
-# Group metadata for section headers (pillar-based)
+# Pillar group metadata for hub section headers (PILLAR_IDS comes from
+# control_plane_registry and defines which scenes belong to each pillar)  [v1.42.1]
 SCENE_GROUPS: List[Dict[str, str]] = [
     {"id": "game",     "label": "NEONCITY",      "icon": "🏙️"},
     {"id": "service",  "label": "SERVICES",       "icon": "🖥️"},
@@ -227,7 +244,9 @@ class HubScene(BaseScene):
         self.register_announcer_route(self.app)
         self.register_inventory_route(self.app)
 
-        # ChoiceLoader: scene templates first, then shared (for navbar_v2.html)
+        # ChoiceLoader: scene templates take priority, then shared templates.
+        # This allows hub-specific templates to override shared partials like
+        # navbar_v2.html while still falling back to the shared directory.
         _shared_tpl = _SCENE_DIR.parent.parent / "shared" / "templates"
         self.app.jinja_loader = jinja2.ChoiceLoader([
             jinja2.FileSystemLoader(str(_SCENE_DIR / "templates")),
@@ -253,10 +272,19 @@ class HubScene(BaseScene):
         self._setup_routes()
         logger.info("HubScene (THE TERMINAL) created on port %d", port)
 
-    # ── Overrides ────────────────────────────────────────────────────
+    # -----------------------------------------------------------------
+    # Overrides — Scene Registry Route                      [v1.42.1]
+    # -----------------------------------------------------------------
 
     def register_scene_registry_route(self, app) -> None:
-        """Override base class to provide enriched scene-registry with presentation data."""
+        """Override base class to provide enriched scene-registry with presentation data.
+
+        The base class provides a bare scene-registry; this override merges
+        SCENE_DEFS/SERVICE_DEFS with hub-local _SCENE_PRESENTATION data and
+        performs live port checks to include online/offline status.
+
+        Version: v1.42.1 [2026-03-21]
+        """
 
         @app.route("/api/scene-registry")
         def api_scene_registry() -> Any:
@@ -267,6 +295,7 @@ class HubScene(BaseScene):
                     info = all_defs.get(tid, {})
                     presentation = _SCENE_PRESENTATION.get(tid, {})
                     port = get_port(tid, 0)
+                    # Live TCP probe to determine if the scene is actually running
                     online = port_is_open(port) if port else False
                     pillars[pillar_name].append({
                         "key": tid,
@@ -280,7 +309,9 @@ class HubScene(BaseScene):
                     })
             return jsonify({"pillars": pillars})
 
-    # ── Routes ──────────────────────────────────────────────────────
+    # -----------------------------------------------------------------
+    # Routes
+    # -----------------------------------------------------------------
 
     def _setup_routes(self) -> None:
         """Register all Flask routes."""
@@ -353,7 +384,9 @@ class HubScene(BaseScene):
             except Exception:
                 return jsonify({"active_scenes": [], "vram_used_mb": 0, "agent_count": 0})
 
-    # ── Lifecycle ────────────────────────────────────────────────────
+    # -----------------------------------------------------------------
+    # Lifecycle
+    # -----------------------------------------------------------------
 
     def start(self) -> None:
         """Start THE TERMINAL Flask server."""

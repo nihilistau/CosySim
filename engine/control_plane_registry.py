@@ -1,4 +1,25 @@
-"""Canonical control-plane target definitions for launcher-driven services and scenes."""
+"""
+Control Plane Registry
+======================
+
+Canonical control-plane target definitions for all launcher-driven services
+and scenes in CosySim.  This module is the single source of truth for what
+targets exist, their types, labels, pillars, and auto-start preferences.
+
+The launcher, TUI, Hub, and port registry all derive their catalogues from
+the ``SERVICE_DEFS`` and ``SCENE_DEFS`` dictionaries defined here.  Runtime
+overrides from ``config/launcher.yaml`` are applied via
+``_apply_launcher_overrides()``.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Added module header, section dividers, version stamps
+    v1.42.0 [2026-03-21] — Three-pillar architecture, managed Nexus KMS
+    v1.41.0 [2026-03-20] — ARGUS deep polish, extended rpcids
+    v1.40.0 [2026-03-19] — Health check aggregator, service discovery registry
+"""
 from __future__ import annotations
 
 import logging
@@ -11,8 +32,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER_CONFIG_PATH = PROJECT_ROOT / "config" / "launcher.yaml"
 
 
-# ──── Canonical launcher target definitions ──────────────────────────────────
+# ──── Service Definitions ────────────────────────────────────────────────────
+# Launcher-managed services: infrastructure, dashboards, APIs, proxies.
+# Each entry defines type, class/script path, display label, auto-start flag,
+# and pillar membership (service | game | creation).
 
+# v1.42.1 [2026-03-21] — 14 service targets across 3 pillars
 SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
     "nexus_kms": {
         "type": "external",
@@ -109,6 +134,11 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# ──── Scene Definitions ──────────────────────────────────────────────────────
+# Interactive game scenes and content scenes.  Each scene is a Flask app with
+# Socket.IO, served on its own port (resolved by port_registry at runtime).
+
+# v1.42.1 [2026-03-21] — 17 scene targets (15 game, 1 service, 1 creation)
 SCENE_DEFS: Dict[str, Dict[str, Any]] = {
     "phone": {
         "type": "flask",
@@ -231,8 +261,13 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# ──── Derived ID Tuples ──────────────────────────────────────────────────────
+
 SERVICE_IDS: Tuple[str, ...] = tuple(SERVICE_DEFS.keys())
 SCENE_IDS: Tuple[str, ...] = tuple(SCENE_DEFS.keys())
+
+
+# ──── Catalogue Helpers ──────────────────────────────────────────────────────
 
 
 def _copy_catalogue(entries: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -291,6 +326,9 @@ def get_target_metadata_catalogue() -> Dict[str, Dict[str, Any]]:
     return metadata
 
 
+# ──── Pillar Grouping ────────────────────────────────────────────────────────
+
+
 def get_targets_by_pillar(pillar: str) -> Dict[str, Dict[str, Any]]:
     """Return all SERVICE_DEFS + SCENE_DEFS entries matching *pillar*."""
     result: Dict[str, Dict[str, Any]] = {}
@@ -301,6 +339,7 @@ def get_targets_by_pillar(pillar: str) -> Dict[str, Dict[str, Any]]:
     return result
 
 
+# v1.42.1 [2026-03-21] — Pre-computed pillar membership for fast lookup
 PILLAR_IDS: Dict[str, Tuple[str, ...]] = {
     "game": tuple(
         tid for tid, info in {**SERVICE_DEFS, **SCENE_DEFS}.items()
@@ -315,6 +354,9 @@ PILLAR_IDS: Dict[str, Tuple[str, ...]] = {
         if info.get("pillar") == "creation"
     ),
 }
+
+
+# ──── Launcher Catalogue Builder ─────────────────────────────────────────────
 
 
 def build_launcher_catalogues(

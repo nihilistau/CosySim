@@ -1,10 +1,27 @@
-"""Canonical control-plane registry for CosySim ports and target metadata.
+"""
+Port Registry
+=============
 
+Canonical control-plane registry for CosySim ports and target metadata.
 This module is the single source of truth for:
 
-* service/scene → port mappings
-* compatibility aliases for legacy service names
+* service/scene -> port mappings (``_DEFAULT_PORTS``)
+* compatibility aliases for legacy service names (``_ALIASES``)
 * curated target lists used by launcher, dashboards, and tooling
+* health-check path and display-name overrides
+* the ``PortRegistry`` singleton with conflict detection
+
+All port lookups across the codebase should go through ``get_port()`` or
+``get_port_registry().get()`` to ensure config overrides are respected.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Added module header, section dividers, version stamps
+    v1.42.0 [2026-03-21] — Three-pillar architecture, managed Nexus KMS
+    v1.41.0 [2026-03-20] — ARGUS deep polish, extended rpcids
+    v1.40.0 [2026-03-19] — Health check aggregator, service discovery registry
 """
 from __future__ import annotations
 
@@ -17,10 +34,14 @@ from engine.control_plane_registry import PILLAR_IDS, SCENE_IDS, get_target_meta
 logger = logging.getLogger(__name__)
 
 
-# ── Canonical defaults ──────────────────────────────────────────────────────
+# ──── Canonical Port Defaults ─────────────────────────────────────────────────
+# Master port map.  Config overrides from default.yaml are applied at runtime
+# by PortRegistry._load_from_config().  External/sidecar entries at the bottom
+# are not launcher-managed but are tracked for health checks and conflict detection.
 
+# v1.42.1 [2026-03-21] — 35 port assignments across 4 groups
 _DEFAULT_PORTS: Dict[str, int] = {
-    # Launcher-managed scenes
+    # ── Game & content scenes (5555–5580) ──
     "phone": 5555,
     "penthouse": 5556,
     "lounge": 5557,
@@ -38,7 +59,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "grid": 5569,
     "lab_break": 5571,
     "intel_hub": 5580,
-    # Launcher-managed services
+    # ── Launcher-managed services (8500–8800) ──
     "hub": 8500,
     "nexus_panel": 5570,
     "dashboard": 8501,
@@ -51,9 +72,9 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "canvas_api": 5595,
     "nlm_proxy": 8800,
     "system_control": 5575,
-    # Launcher-managed external services
+    # ── Launcher-managed external services ──
     "nexus_kms": 8700,
-    # External / sidecar infrastructure
+    # ── External / sidecar infrastructure (not launcher-managed) ──
     "orpheus_tts": 5005,
     "cosyvoice_tts": 5050,
     "whisper_stt": 5051,
@@ -61,6 +82,10 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "lmstudio": 1234,
     "comfyui": 8188,
 }
+
+# ──── Legacy Aliases ──────────────────────────────────────────────────────────
+# Map old/alternate service names to their canonical keys so callers using
+# either name get the same port.
 
 _ALIASES: Dict[str, str] = {
     "qwen3_tts": "tts",
@@ -71,7 +96,10 @@ _ALIASES: Dict[str, str] = {
 }
 
 
-# Logical groupings for display / conflict detection.
+# ──── Service Groups ─────────────────────────────────────────────────────────
+# Logical groupings for display, conflict detection, and config loading.
+# Pillar-based groups at the bottom are derived from control_plane_registry.
+
 SERVICE_GROUPS: Dict[str, List[str]] = {
     "scenes": [
         "phone", "penthouse", "lounge", "tavern", "casino", "gallery",
@@ -93,7 +121,11 @@ SERVICE_GROUPS: Dict[str, List[str]] = {
 }
 
 
-# Curated control-plane target lists. Keep membership stable, resolve ports here.
+# ──── Curated Target Lists ───────────────────────────────────────────────────
+# Stable membership lists consumed by dashboards, health checks, and the Hub.
+# Order matters for display — first entry appears first in the UI.
+
+# v1.42.1 [2026-03-21] — All scene targets from control_plane_registry
 ALL_SCENE_TARGETS: Tuple[str, ...] = SCENE_IDS
 
 SCENE_HEALTH_TARGETS: Tuple[str, ...] = (
@@ -214,6 +246,10 @@ ASSET_STUDIO_INJECT_SCENES: Tuple[str, ...] = (
     "neoncity",
 )
 
+# ──── Health Check Overrides ──────────────────────────────────────────────────
+# Most scenes use /api/health; these entries override that default for targets
+# with non-standard health endpoints.
+
 _HEALTH_PATH_OVERRIDES: Dict[str, str] = {
     "hub": "/health",
     "lmstudio": "/api/v1/models",
@@ -222,6 +258,7 @@ _HEALTH_PATH_OVERRIDES: Dict[str, str] = {
     "nlm_proxy": "/health",
 }
 
+# Display names for health check UIs (overrides auto-generated title-case names)
 _HEALTH_NAME_OVERRIDES: Dict[str, str] = {
     "nexus_kms": "Nexus KMS",
     "nlm_proxy": "NLM Proxy",
@@ -232,6 +269,9 @@ _HEALTH_NAME_OVERRIDES: Dict[str, str] = {
     "lmstudio": "LMStudio",
     "comfyui": "ComfyUI",
 }
+
+
+# ──── Target Metadata & Listing Builders ─────────────────────────────────────
 
 
 def _display_name(service: str) -> str:
@@ -323,8 +363,16 @@ def build_health_endpoints(target_ids: Iterable[str] = SYSTEM_CONTROL_TARGETS) -
     return endpoints
 
 
+# ──── PortRegistry Class ─────────────────────────────────────────────────────
+
+
 class PortRegistry:
-    """Central registry of service→port mappings with conflict detection."""
+    """Central registry of service->port mappings with conflict detection.
+
+    Initialized once as a singleton via ``get_port_registry()``.  Loads
+    defaults from ``_DEFAULT_PORTS``, then applies overrides from
+    ``config/default.yaml`` (scene ports, TTS URL, LMStudio port, etc.).
+    """
 
     SERVICE_GROUPS = SERVICE_GROUPS
 

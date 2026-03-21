@@ -1,15 +1,33 @@
 """
-Configuration Manager for CosySim
+Configuration Manager
+=====================
 
-Loads and merges configuration from:
-1. config/default.yaml (base)
-2. config/{environment}.yaml (environment-specific overrides)
-3. Environment variables (runtime overrides)
+Loads and merges configuration from multiple layers, in order of precedence:
 
-Usage:
-    from engine.config import ConfigManager
-    
-    config = ConfigManager()
+1. ``config/default.yaml`` — base configuration (always loaded)
+2. ``config/{environment}.yaml`` — environment-specific overrides
+3. Pillar overlays — ``config/game.yaml``, ``config/services.yaml``,
+   ``config/creation.yaml`` (merged if present)
+4. Environment variables — runtime overrides via ``COSYSIM_*`` / ``COSYVOICE_*``
+
+The ``ConfigManager`` singleton is accessed via ``get_config()`` and supports
+dot-notation paths (``config.get("scenes.phone.port", 5555)``).  Secret-
+looking keys are transparently routed through ``SecretManager`` when available.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Added module header, section dividers, version stamps
+    v1.42.0 [2026-03-21] — Three-pillar architecture, pillar overlay loading
+    v1.41.0 [2026-03-20] — ARGUS deep polish, extended rpcids
+    v1.38.0 [2026-03-18] — SecretManager vault integration for secret keys
+
+Usage::
+
+    from engine.config import get_config
+
+    config = get_config()
     db_path = config.get("database.sqlite.path")
     port = config.get("scenes.phone.port", default=5555)
 """
@@ -22,6 +40,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# ──── Secret Detection ───────────────────────────────────────────────────────
+# Keys whose last dot-segment contains any of these words are routed through
+# SecretManager before falling back to the YAML config tree.
+
 _SECRET_KEYWORDS = ("token", "key", "password", "secret", "credential", "bearer")
 
 
@@ -31,9 +53,12 @@ def _is_secret_config_path(path: str) -> bool:
     return any(kw in last_segment for kw in _SECRET_KEYWORDS)
 
 
+# ──── ConfigManager ──────────────────────────────────────────────────────────
+
+
 class ConfigManager:
     """Manages system configuration with environment-based overrides."""
-    
+
     def __init__(self, environment: Optional[str] = None):
         """
         Initialize configuration manager.
@@ -103,10 +128,13 @@ class ConfigManager:
         
         return result
     
+    # ──── Environment Variable Overrides ────────────────────────────────────
+
     def _apply_env_overrides(self) -> None:
         """Apply environment variable overrides."""
         # Map environment variables to config paths.
         # COSYSIM_* is the canonical prefix; COSYVOICE_* kept for backwards compatibility.
+        # v1.42.1 [2026-03-21] — 21 env var mappings (13 COSYSIM, 7 COSYVOICE legacy, 1 LMSTUDIO)
         env_mappings = {
             # CosySim canonical
             "COSYSIM_DB_PATH":           "database.sqlite.path",
@@ -145,6 +173,9 @@ class ConfigManager:
                 self.set(config_path, value)
                 logger.debug(f"Override from {env_var}: {config_path} = {value}")
     
+    # ──── Core get() / set() ────────────────────────────────────────────────
+
+    # v1.42.1 [2026-03-21] — get() with SecretManager hook and ${ENV_VAR} expansion
     def get(self, path: str, default: Any = None) -> Any:
         """
         Get configuration value by dot-notation path.
@@ -189,7 +220,9 @@ class ConfigManager:
             else:
                 return default
         
-        # Expand ${ENV_VAR} or ${ENV_VAR:-fallback} patterns in string values
+        # Expand ${ENV_VAR} or ${ENV_VAR:-fallback} patterns in string values.
+        # This allows YAML values like "${COSYSIM_DB_PATH:-simulation.db}" to
+        # resolve at read time rather than load time.
         if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
             inner = value[2:-1]
             if ":-" in inner:
@@ -243,7 +276,7 @@ class ConfigManager:
         return f"<ConfigManager environment={self.environment}>"
 
 
-# Global config instance
+# ──── Singleton ──────────────────────────────────────────────────────────────
 _config_instance: Optional[ConfigManager] = None
 
 

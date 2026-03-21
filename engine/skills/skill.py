@@ -1,5 +1,9 @@
 """
-skill.py — Core skill decorator, metadata, and pack definitions
+Skill Decorator and Metadata
+=============================
+
+Core skill decorator, metadata dataclasses, and pack definitions for the
+CosySim MCP skill pipeline.
 
 A **Skill** is a plain Python function annotated with type hints so that:
 
@@ -15,14 +19,25 @@ The ``@skill`` decorator is the only thing a skill author needs::
         \"\"\"Generate an image matching *prompt* and return the file URL.\"\"\"
         ...
 
-Details
--------
-* The decorator does **not** modify the function — it remains callable as-is.
+Key design decisions:
+
+* The decorator does **not** modify the function -- it remains callable as-is.
 * Registration happens at import time via the global ``SKILL_REGISTRY``.
 * ``SkillPack`` is a lightweight grouping object: give it a pack name and it
   exposes ``.tools`` (list of callables) ready for ``lmstudio.llm().act()``.
 * Skills can have categories, cooldowns, prerequisites, and costs for
-  governance-aware execution.
+  governance-aware execution via ``AgentGovernor``.
+* The ``nexus_first`` flag wraps a skill with Nexus-first lookup so cache
+  hits bypass the function body entirely.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Added module header, section dividers, version stamps
+    v1.42.0 [2026-03-21] — Three-pillar architecture, pillar field on SkillMeta
+    v1.41.0 [2026-03-20] — ARGUS deep polish, nexus_first decorator option
+    v1.39.0 [2026-03-19] — CooldownTracker thread safety, SkillMeta cost field
 """
 from __future__ import annotations
 
@@ -33,9 +48,8 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Any
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  SKILL CATEGORIES
-# ══════════════════════════════════════════════════════════════════════
+# ──── Skill Categories ───────────────────────────────────────────────────────
+
 
 class SkillCategory:
     """Predefined skill categories for organization and filtering."""
@@ -47,6 +61,9 @@ class SkillCategory:
     ENVIRONMENT   = "environment"       # lighting, props, scene changes
     SYSTEM        = "system"            # config, status, admin
     NARRATIVE     = "narrative"         # story beats, dialog, narration
+
+
+# ──── Skill Metadata ─────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -90,9 +107,8 @@ class SkillMeta:
         return f"<SkillMeta {self.pack}.{self.name}>"
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  COOLDOWN TRACKER
-# ══════════════════════════════════════════════════════════════════════
+# ──── Cooldown Tracker ───────────────────────────────────────────────────────
+
 
 class CooldownTracker:
     """Thread-safe skill cooldown enforcement."""
@@ -126,8 +142,11 @@ class CooldownTracker:
                 self._last_used.clear()
 
 
-# Global cooldown tracker
+# Global cooldown tracker — shared across all skill invocations
 COOLDOWN_TRACKER = CooldownTracker()
+
+
+# ──── Skill Packs ───────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -163,7 +182,8 @@ class SkillPack:
         return f"<SkillPack {self.name!r} ({len(self.tools)} tools)>"
 
 
-# ────────────────────────────────────────────── decorator factory ──
+# ──── Decorator Factory ──────────────────────────────────────────────────────
+
 
 def skill(
     func:          Optional[Callable] = None,

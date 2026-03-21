@@ -1,10 +1,22 @@
 /*
  * navbar_v2.css — Universal Navbar v2 (B1 track)
  * ================================================
- * Fixed top chrome injected into all 18 CosySim scenes.
+ *
+ * Fixed top chrome injected into all CosySim scenes.
+ * Provides the global navigation bar, scene links, pillar toggle pills,
+ * credits display, action buttons, MORE dropdown, and responsive
+ * hamburger menu.
  *
  * Depends on: design_tokens.css (imported by the scene)
  * BEM naming: .cs-navbar__element--modifier
+ *
+ * @version v1.42.1 [2026-03-21]
+ * @author  CosySim Team
+ *
+ * Change Log:
+ *   v1.42.1 [2026-03-21] — Extensive documentation, section dividers
+ *   v1.42.0 [2026-03-21] — Pillar toggle pills, hub modernization
+ *   v0.68   [prior]      — Initial B1 track implementation
  */
 
 /* ── Bar ──────────────────────────────────────────────────────────── */

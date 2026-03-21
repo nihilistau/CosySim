@@ -1,4 +1,11 @@
-"""Smart test runner for CosySim — only runs tests affected by recent changes.
+"""
+Smart Test Runner
+=================
+
+Git-diff-aware test runner for CosySim.  Inspects changed files, maps them to
+test domains via ``SOURCE_TO_DOMAINS``, and runs only the affected test files.
+Supports smoke mode (one test per domain), explicit domain selection, full-suite
+fallback, and automatic pytest-xdist parallelism when available.
 
 Usage:
     python scripts/smart_test.py                    # tests for git-diff (uncommitted)
@@ -39,6 +46,14 @@ Domains:
     scene_heist     — heist, heist_revamp
     scene_games     — games, games_revamp
     scene_coders    — coders, coders_revamp
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Added module header, version stamp
+    v1.42.0 [2026-03-21] — Created: git-diff-aware test runner with domain mapping,
+                            smoke tests, xdist parallelism, pytest plugin integration
 """
 from __future__ import annotations
 
@@ -306,7 +321,8 @@ DOMAIN_TESTS: Dict[str, List[str]] = {
     ],
 }
 
-# Smoke test: one representative test from each domain (for very fast sanity checks)
+# ──── Smoke Tests ────────────────────────────────────────────────────────────
+# One representative test from each domain for very fast sanity checks (~30s)
 SMOKE_TESTS: List[str] = [
     "test_config.py",
     "test_dialog_system.py",
