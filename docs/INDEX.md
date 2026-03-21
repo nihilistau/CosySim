@@ -1,180 +1,109 @@
 # CosySim Documentation Index
 
-> Central navigation for all CosySim documentation. 53 docs covering architecture,
-> 20 scenes, game systems, the Nexus knowledge backbone, NotebookLM research
-> integration, LMStudio local inference, and the full Google ecosystem SDK.
+> v1.42 -- Three-Pillar Architecture, Smart Test System, Managed Nexus KMS.
 
-## Quick Reference — v1.02b
+## Quick Reference
 
 | Metric | Value |
 |--------|-------|
-| Version | **1.02b** "NEONCITY 2: THE LIVING CITY" (2026) |
-| Engine | **280+ Python files** across 12 subsystems |
-| Tests | **10,720+ passed** / 345 test files |
-| Scenes | **20 Flask** (11 game + 6 utility + 3 service) + 3 Streamlit apps |
-| Skills | **39 packs · 387 skills** via `@skill` decorator |
-| MCP tools | **42 modules** in `engine/mcp/tools/` |
-| Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news |
-| Scheduler | **55 autonomous tasks** (maintenance, distillation, training, benchmarks) |
-| Interceptors | **30+ pre/post-call hooks** in the agent pipeline |
-| NLM registry | **122 API entries** across 4 Google services (YAML-driven) |
+| Version | v1.42 Pillar Wiring and Hub Modernization |
+| Scenes | 20 Flask (14 game + 11 service + 5 creation) |
+| Skills | 178+ across 38 packs via @skill decorator |
+| Interceptors | 26 pre/post-call hooks in the agent pipeline |
+| Tests | ~15K across 400+ files (smart runner: ~53s smoke) |
+| Scheduler | 86 autonomous tasks |
+| Pillars | Game (NeonCity) / Service / Creation |
 
-### Scene Port Map
+### Three-Pillar Architecture
 
-| Port | ID | Display Name | Type |
-|------|----|-------------|------|
-| 5555 | phone | SIGNAL | Game |
-| 5556 | penthouse | THE PENTHOUSE | Game |
-| 5557 | lounge | THE VELVET PIT | Game |
-| 5558 | tavern | THE RUSTY ANCHOR | Game |
-| 5559 | casino | CLUB NOIR | Game |
-| 5560 | gallery | THE OBSCURA | Game |
-| 5561 | arena | THE COLOSSEUM | Game |
-| 5562 | realm | THE SHATTERED THRONE | Game |
-| 5563 | neoncity | NEON CITY | Game |
-| 5564 | coders | THE LAB | Utility |
-| 5565 | heist | THE SCORE | Game |
-| 5566 | command_center | COMMAND CENTER | Utility |
-| 5567 | games | THE ARCADE | Utility |
-| 5568 | asset_studio | ASSET STUDIO | Utility |
-| 5569 | grid | THE GRID | Game |
-| 5570 | nexus_panel | NEXUS PANEL | Service |
-| 5571 | lab_break | THE LAB BREAK | Game |
-| 5575 | system_control | SYSTEM CONTROL | Service |
-| 5580 | intel_hub | THE BRIEFING ROOM | Utility |
-| 8500 | hub | HUB | Service |
+All targets defined in `engine/control_plane_registry.py`:
 
-### Service Ports
+| Pillar | Count | Targets |
+|--------|-------|---------|
+| Game | 14 | phone, penthouse, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break |
+| Service | 11 | nexus_kms, hub, nexus_panel, dashboard, admin, tts, bridge, nlm_proxy, system_control, command_center, intel_hub |
+| Creation | 5 | canvas, canvas_api, assets, creator, asset_studio |
 
-| Port | Service |
-|------|---------|
-| 1234 | LMStudio (local inference) |
-| 5590 | Nexus Canvas (React notebook UI) |
-| 8500 | Hub (scene launcher + navigation) |
-| 8700 | Nexus KMS (knowledge management API) |
-| 8800 | NLM Proxy (NotebookLM batchexecute bridge) |
-| 9222 | Chrome CDP (browser automation) |
+### Key Ports
 
-### Engine Subsystem Map
-
-| Subsystem | Files | Lines | Purpose |
-|-----------|-------|-------|---------|
-| `engine/nexus/` | 85 | 27,400 | Knowledge backbone, Copilot self-config, scheduling, Q&A, training flywheel |
-| `engine/integrations/` | 25 | 19,700 | Google accounts, Colab, NLM direct client, Drive, compute routing |
-| `engine/mcp/` | 23 | 15,700 | MCP framework, RPC servers, dialog, state, governance |
-| `engine/lmstudio/` | 23 | 13,100 | Local inference, fine-tuning, model registry, ServerController, LMLink |
-| `engine/skills/builtin/` | 47 | 12,000 | 292 `@skill` functions across 32 packs |
-| `engine/agents/` | 17 | 9,200 | Agent framework, VirtualAgent, Governor, 30+ interceptors |
-| `engine/scenes/` | 6 | 2,471 | BaseScene, SceneStateManager, scene lifecycle |
-| `engine/services/` | 6 | 1,214 | EventBus, WorldAnnouncer, TTS |
-| `engine/` (root) | 7 | 1,270 | Config, paths, port_registry, control_plane_registry |
+| Port | Service | Managed |
+|------|---------|---------|
+| 1234 | LMStudio (local inference) | External |
+| 5555-5571 | Game scenes | Auto |
+| 5570-5580 | Service scenes | Auto |
+| 5590-5595 | Creation tools | Auto |
+| 8500 | Hub (scene launcher) | Auto |
+| 8600 | TTS Server | Manual |
+| 8700 | Nexus KMS (auto-start, priority 0) | Auto |
+| 8800 | NLM Proxy | Auto |
 
 ---
 
-## Getting Started
+## Architecture and Design
 
 | Doc | Description |
 |-----|-------------|
-| [README](../README.md) | Project overview, quick start, architecture diagram, full scene catalog |
-| [Deployment](DEPLOYMENT.md) | Service startup order, ports, health checks, PowerShell scripts |
-| [Configuration](CONFIGURATION.md) | YAML config hierarchy, `get_config()` pattern, environment overrides |
-| [Roadmap](../ROADMAP.md) | Version history from v0.51b through v0.91b and future plans |
+| [Architecture](ARCHITECTURE.md) | System design, layers, data flow, interceptor pipeline, singletons |
+| [MCP Framework](MCP_FRAMEWORK.md) | Skill dispatch, governance, state coordination, dialog system |
+| [Interceptors](INTERCEPTORS.md) | 26 pre/post-call hooks, priorities, auto-registry, scene filtering |
+| [Configuration](CONFIGURATION.md) | YAML config hierarchy, get_config() pattern, environment overrides |
+| [Decisions](DECISIONS.md) | Key architecture decisions and rationale |
 
-## Architecture & Design
-
-| Doc | Description |
-|-----|-------------|
-| [Architecture](ARCHITECTURE.md) | System design — 10 domains, layers, data flow, interceptor pipeline |
-| [Game Systems](GAME_SYSTEMS.md) | NeonCity 2 game systems — neurochemistry, cyberspace, territory, market, factions, multiplayer, news, lab survival |
-| [MCP Framework](MCP_FRAMEWORK.md) | `@mcp_tool` decorator, governance, state coordination, dialog system, rules engine |
-| [Interceptors](INTERCEPTORS.md) | 30+ pre/post-call hooks — priorities, auto-registry, scene-specific interceptors |
-| [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, ServerController, LMLink federation, TaskQueue, bearer auth |
-| [Characters](CHARACTERS.md) | Personality, stats, buffs, tags, relationships, emotion model |
-| [Character System](CHARACTER_SYSTEM.md) | CharacterMemory, ReputationManager, speech patterns, relationship tiers |
-| [Project Hindsight](PROJECT_HINDSIGHT.md) | v0.83b → v0.84b refactor — `@mcp_tool`, Pydantic models, domain extraction |
-| [Architecture Decisions](DECISIONS.md) | Key design decisions and rationale (ADRs) |
-
-## Scenes & Content
+## Deployment and Operations
 
 | Doc | Description |
 |-----|-------------|
-| [Scenes Reference](SCENES.md) | All 20 scenes — mechanics, APIs, routes, Socket.IO events, penthouse overlay, lab survival |
-| [Skills](SKILLS.md) | `@skill` decorator, 32 builtin packs, runtime registry, MCP-facing metadata, debugger skill pack |
-| [Asset Studio](ASSET_STUDIO.md) | ComfyUI integration — 15 workflow variants, tuning engine, benchmarking |
-| [The Grid](THE_GRID.md) | THE GRID — 4 zones (Market, Station, Den, Broker), GridSkills |
-| [Neon HUD](NEON_HUD.md) | Universal HUD v2 — glass slide panels, phone overlay, announcer, inventory |
-| [Living World](LIVING_WORLD.md) | WorldSim + PlayerState + EventCascade + economy ticks + faction system |
-| [World System](WORLD_SYSTEM.md) | WorldSim, WorldState, NPCScheduler, SceneDirector, InventoryManager, CrewManager |
-| [Player Identity](PLAYER_IDENTITY.md) | PlayerProfile, NPC relationships, RelationshipTypes, crew tags |
-| [News System](NEWS_SYSTEM.md) | RSS ingestion, NLM distillation, Nexus Q&A feeds, Intel Hub ticker |
+| [Deployment](DEPLOYMENT.md) | Three-pillar architecture, startup, PM2, port registry, troubleshooting |
+| [Operations](OPERATIONS.md) | Logging, scheduling, admin panel, system control, news pipeline, local agents |
+| [Testing](TESTING.md) | Smart test system (--affected, --smoke-only, --since), fixtures, conventions |
+
+## Scenes and Content
+
+| Doc | Description |
+|-----|-------------|
+| [Scenes Reference](SCENES.md) | All 20 scenes, mechanics, APIs, routes, Socket.IO events |
+| [Skills](SKILLS.md) | @skill decorator, 38 packs, runtime registry, MCP-facing metadata |
+| [Game Systems](GAME_SYSTEMS.md) | WorldSim, economy, factions, NPCs, events, inventory |
+| [Character System](CHARACTER_SYSTEM.md) | Profiles, personality, stats, relationships, speech patterns |
 | [Economy Guide](ECONOMY_GUIDE.md) | EconomyManager, cross-scene credits, betting, consequences |
-| [Arena Guide](ARENA_GUIDE.md) | THE COLOSSEUM — card game mechanics, betting, NLM commentary |
-| [Content Guide](CONTENT_GUIDE.md) | ContentEngine, ContentGate, adult profiles, seeding |
-| [Admin Guide](ADMIN_GUIDE.md) | Admin panel pages and operations |
-| [System Control Panel](SYSTEM_CONTROL.md) | Config editor, service health, launcher proxy, Git — port 5575 |
+| [Arena Guide](ARENA_GUIDE.md) | THE COLOSSEUM, card game mechanics, betting, NLM commentary |
+| [The Grid](THE_GRID.md) | THE GRID, 4 zones, GridSkills |
+| [Content Guide](CONTENT_GUIDE.md) | ContentEngine, ContentGate, profiles, seeding |
+| [Neon HUD](NEON_HUD.md) | Universal HUD v2, glass panels, phone overlay, announcer |
+| [Asset Studio](ASSET_STUDIO.md) | ComfyUI integration, workflows, tuning engine |
 
-## Nexus Knowledge System
-
-| Doc | Description |
-|-----|-------------|
-| [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, smart query router, Q&A cache, training flywheel, research sessions |
-| [Agent Onboarding](AGENT_ONBOARDING.md) | Copilot/local agent onboarding — Nexus-first workflow, session logging, self-config |
-
-## NotebookLM & Google Research Layer
+## Knowledge and Integration
 
 | Doc | Description |
 |-----|-------------|
-| [NotebookLM Overview](NOTEBOOKLM.md) | Browser-attached RPC architecture, CDP/HAR auth, dual-backend integration |
-| [NotebookLM SDK](NOTEBOOKLM_SDK.md) | Full RPC catalogue, rate limiter, :8800 proxy API, source schema |
-| [NLM SDK Design](NLM_SDK_DESIGN.md) | NLMDirectClient architecture, all methods, error handling, distillation |
-| [NLM API Reference](NLM_API_REFERENCE.md) | batchexecute protocol — rpcid decoding, request/response schemas |
-| [NLM Capabilities](NLM_CAPABILITIES.md) | Full CRUD, source discovery, Drive export, multi-model, sharing |
-| [NLM Multimodal Workflows](NLM_MULTIMODAL_WORKFLOWS.md) | Audio overviews, video generation, data tables, multi-source notebooks |
-| [NLM Journey](NLM_JOURNEY.md) | Reverse engineering story — V8 heap mining, 61 methods, WebRTC discovery |
-| [AI Studio API Reference](AISTUDIO_API_REFERENCE.md) | 34 gRPC-Web methods for Google AI Studio |
-| [Google Ecosystem SDK](GOOGLE_ECOSYSTEM_SDK.md) | Drive, Sheets, Colab, NLM — cookie auth, Artifact Bus, GPU/venv managers |
-| [Google Apps Script](GOOGLE_APPS_SCRIPT.md) | GAS as webhook receiver, scheduled intelligence layer |
+| [Nexus Integration](NEXUS_INTEGRATION.md) | NexusClient, smart query router, Q&A cache, training flywheel |
+| [Agent Onboarding](AGENT_ONBOARDING.md) | Copilot/Claude Code onboarding, Nexus-first workflow, session logging |
+| [NLM Reference](NLM_REFERENCE.md) | NotebookLM architecture, NLMDirectClient, RPC catalogue, proxy API |
+| [NLM API Reference](NLM_API_REFERENCE.md) | batchexecute protocol, rpcid decoding, request/response schemas |
+| [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, ServerController, LMLink, bearer auth (v1 API) |
+| [External APIs](EXTERNAL_APIS.md) | AI Studio, Gemini, Colab, Apps Script, Workspace, ARGUS API catalogue |
 
-## ARGUS Browser Automation
+## Infrastructure
 
 | Doc | Description |
 |-----|-------------|
-| [ARGUS](ARGUS.md) | Browser automation system — Playwright + CDP, crawlers, decoders, discovery, LiveDebugger |
-
-## APIs & Integration
-
-| Doc | Description |
-|-----|-------------|
-| [API Reference](API.md) | REST endpoints, Socket.IO events — all scene and service routes |
+| [ARGUS](ARGUS.md) | Browser automation, Playwright + CDP, crawlers, decoders |
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming audio |
+| [Training](TRAINING.md) | Data flywheel, DataCollector, AutoTrain, LoRA fine-tuning, benchmarks |
 
-## Observability & Operations
-
-| Doc | Description |
-|-----|-------------|
-| [Logging](LOGGING.md) | CosyLogger ring buffer, SystemMonitor, structured logging patterns |
-| [System Audit](SYSTEM_AUDIT.md) | Historical system audits with grades, module counts, test results |
-
-## Training & Fine-Tuning
-
-| Doc | Description |
-|-----|-------------|
-| [Training System](TRAINING_SYSTEM.md) | Data flywheel — DataCollector, Model Zoo (14 types), AutoTrain, scheduler tasks |
-| [Coder Model](CODER_MODEL.md) | Local coder model — Llama 3.2-3B + LoRA, 10 dataset strategies, benchmark promotion |
-| [Fine-Tuning Guide](FINETUNING_GUIDE.md) | End-to-end: datasets → MicroDatasetManager → FinetuneOrchestrator → ModelRegistry |
-
-## Development & Testing
+## Development
 
 | Doc | Description |
 |-----|-------------|
 | [Contributing](CONTRIBUTING.md) | Scene creation, skill writing, interceptors, testing conventions |
-| [Testing](TESTING.md) | pytest commands, fixtures (`temp_db`, `event_chain`, `mock_config`), markers |
-| [Local Agent Guide](LOCAL_AGENT_GUIDE.md) | Running local LLM agents, task delegation, LMSTaskBridge |
+| [API Reference](API.md) | REST endpoints, Socket.IO events, all scene and service routes |
 
 ## Project History
 
-| Doc | Description |
-|-----|-------------|
-| [Changelog](../CHANGELOG.md) | Sprint-by-sprint change history |
-| [Project Journal](PROJECT_JOURNAL.md) | Narrative project history from v0.51b through v0.84b |
-| [Project Journal — NLM](PROJECT_JOURNAL_NLM.md) | NotebookLM-focused development journal (3,356 lines) |
+Archived narrative docs are in `docs/archive/`:
+- PROJECT_JOURNAL.md - Sprint history from v0.51b through v0.84b
+- PROJECT_JOURNAL_NLM.md - NotebookLM development journal
+- NLM_JOURNEY.md - Reverse engineering story
+- PROJECT_HINDSIGHT.md - v0.83b refactor retrospective
+- SYSTEM_AUDIT.md - Historical system audits
+- GAP_ANALYSIS.md - v1.26 gap analysis (24 gaps)

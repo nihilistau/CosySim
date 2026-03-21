@@ -245,7 +245,7 @@ All documentation lives in `docs/` with **[INDEX.md](./docs/INDEX.md)** as the c
 | **Architecture** | [ARCHITECTURE.md](./docs/ARCHITECTURE.md) · [MCP_FRAMEWORK.md](./docs/MCP_FRAMEWORK.md) · [INTERCEPTORS.md](./docs/INTERCEPTORS.md) |
 | **Scenes** | [SCENES.md](./docs/SCENES.md) · [SKILLS.md](./docs/SKILLS.md) · [NEON_HUD.md](./docs/NEON_HUD.md) |
 | **Knowledge** | [NEXUS_INTEGRATION.md](./docs/NEXUS_INTEGRATION.md) · [NOTEBOOKLM.md](./docs/NOTEBOOKLM.md) · [NLM_KNOWLEDGE_FLYWHEEL.md](./docs/NLM_KNOWLEDGE_FLYWHEEL.md) |
-| **Inference** | [LMSTUDIO.md](./docs/LMSTUDIO.md) · [TRAINING_SYSTEM.md](./docs/TRAINING_SYSTEM.md) · [FINETUNING_GUIDE.md](./docs/FINETUNING_GUIDE.md) |
+| **Inference** | [LMSTUDIO.md](./docs/LMSTUDIO.md) · [TRAINING.md](./docs/TRAINING.md) |
 | **Operations** | [DEPLOYMENT.md](./docs/DEPLOYMENT.md) · [CONFIGURATION.md](./docs/CONFIGURATION.md) · [API.md](./docs/API.md) |
 | **Development** | [CONTRIBUTING.md](./docs/CONTRIBUTING.md) · [AGENT_ONBOARDING.md](./docs/AGENT_ONBOARDING.md) · [TESTING.md](./docs/TESTING.md) |
 | **History** | [CHANGELOG.md](./CHANGELOG.md) · [ROADMAP.md](./ROADMAP.md) · [PROJECT_HINDSIGHT.md](./docs/PROJECT_HINDSIGHT.md) |

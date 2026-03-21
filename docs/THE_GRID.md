@@ -227,6 +227,5 @@ __all__ = ["GridScene"]
 ## See Also
 
 - [NEON\_HUD.md](./NEON_HUD.md) — PlayerState API, HUD strip, faction standings
-- [LIVING\_WORLD.md](./LIVING_WORLD.md) — Economy tick, event templates, WorldSim
+- [GAME\_SYSTEMS.md](./GAME_SYSTEMS.md) — WorldSim, economy, factions, NPCs, events
 - [SKILLS.md](./SKILLS.md) — `world` pack (10 shared world skills)
-- [WORLD\_SYSTEM.md](./WORLD_SYSTEM.md) — WorldSim daemon, EventBus
