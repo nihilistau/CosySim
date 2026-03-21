@@ -1,12 +1,20 @@
 """
-NeonCity — Living World Hub v0.68 "Dark Renaissance"
-====================================================
+NeonCity — Living World Hub v1.45 "Dark Renaissance"
+=====================================================
 
 The city breathes.  Six factions fight for control.  The night never ends.
 
 Multi-district living city hub wiring together the economy, reputation,
 world-simulation, and content engines under the MCP v3.x framework.
 Board-game mode (Glitch Storm) is preserved at ``/board``.
+
+Version: v1.45.0 [2026-03-21]
+
+Change Log:
+    v1.45.0 [2026-03-21] — Playable dashboard: mission CRUD, crew ops,
+                            shop route, fixed API bugs (dict double-serialise)
+    v1.44.0 [2026-03-21] — 3-column dashboard, HUD sidebar panels
+    v0.68   [2026-03-20] — Initial living world hub
 """
 from __future__ import annotations
 
@@ -36,6 +44,7 @@ from engine.world.player_state import get_player_state
 from engine.world.inventory import get_inventory
 from engine.world.crew import get_crew_manager
 from engine.world.mission import get_mission_manager
+from engine.world.skill_progression import get_skill_manager
 from engine.content.content_engine import get_content_engine
 from engine.director.scene_director import get_scene_director
 from content.shared import register_shared_assets
@@ -302,6 +311,8 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
         self.register_world_events_route(self.app)
         self.register_announcer_route(self.app)
         self.register_inventory_route(self.app)
+        # v1.45.0 [2026-03-21] — Enable shop buy/sell endpoints
+        self.register_shop_route(self.app)
 
         # Board-game state (legacy)
         self.state: Optional[NeonCityGameState] = None
@@ -821,10 +832,10 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
 
         @self.app.route("/api/crew")
         def api_crew():
-            """Crew roster for HUD panel."""
+            """Full crew state — members, operations, roles."""
             try:
                 cm = get_crew_manager()
-                return jsonify(cm.to_hud_dict())
+                return jsonify(cm.to_dict())
             except Exception as exc:
                 logger.error("Crew API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
@@ -837,8 +848,57 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             role = data.get("role", "unknown")
             try:
                 cm = get_crew_manager()
-                member = cm.recruit(char_id, role)
-                return jsonify({"ok": True, "member": member.to_dict() if hasattr(member, "to_dict") else str(member)})
+                ok, msg = cm.recruit(char_id, role)
+                return jsonify({"ok": ok, "message": msg})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+
+        # v1.45.0 [2026-03-21] — Crew dismiss + start operation routes
+        @self.app.route("/api/crew/dismiss", methods=["POST"])
+        def api_crew_dismiss():
+            """Dismiss a crew member."""
+            data = request.get_json(force=True) or {}
+            char_id = data.get("character_id", "")
+            reason = data.get("reason", "")
+            try:
+                cm = get_crew_manager()
+                ok = cm.dismiss(char_id, reason=reason)
+                if ok:
+                    return jsonify({"ok": True, "message": f"{char_id} has left the crew."})
+                return jsonify({"ok": False, "error": f"{char_id} not found in crew."}), 404
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+
+        @self.app.route("/api/crew/start_op", methods=["POST"])
+        def api_crew_start_op():
+            """Launch a crew operation."""
+            data = request.get_json(force=True) or {}
+            op_type = data.get("op_type", "")
+            crew_ids = data.get("crew_ids", [])
+            label = data.get("label", "")
+            duration = int(data.get("duration_secs", 3600))
+            reward_credits = int(data.get("reward_credits", 500))
+            reward_xp = int(data.get("reward_xp", 25))
+            try:
+                cm = get_crew_manager()
+                ok, msg = cm.start_operation(
+                    op_type, crew_ids,
+                    label=label,
+                    duration_secs=duration,
+                    reward_credits=reward_credits,
+                    reward_xp=reward_xp,
+                )
+                return jsonify({"ok": ok, "message": msg})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+
+        @self.app.route("/api/crew/check_ops", methods=["POST"])
+        def api_crew_check_ops():
+            """Check and resolve completed crew operations."""
+            try:
+                cm = get_crew_manager()
+                completed = cm.check_operations()
+                return jsonify({"ok": True, "completed": completed})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -848,8 +908,8 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             try:
                 mm = get_mission_manager()
                 return jsonify({
-                    "available": [m.to_dict() for m in mm.list_available()],
-                    "active": [m.to_dict() for m in mm.list_active()],
+                    "available": mm.list_available(),
+                    "active": mm.list_active(),
                     "completed": len(mm.list_completed()),
                 })
             except Exception as exc:
@@ -863,28 +923,100 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             mission_id = data.get("mission_id", "")
             try:
                 mm = get_mission_manager()
-                mm.accept(mission_id)
-                return jsonify({"ok": True, "active": [m.to_dict() for m in mm.list_active()]})
+                result = mm.accept(mission_id)
+                return jsonify({"ok": result["success"], "message": result["message"]})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 400
 
+        # v1.45.0 [2026-03-21] — Mission detail, complete, abandon, objective routes
+        @self.app.route("/api/missions/<mission_id>")
+        def api_mission_detail(mission_id):
+            """Get full mission detail by ID."""
+            try:
+                mm = get_mission_manager()
+                m = mm.get_mission(mission_id)
+                if not m:
+                    return jsonify({"error": "Mission not found"}), 404
+                return jsonify(m.to_dict())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/missions/complete", methods=["POST"])
+        def api_missions_complete():
+            """Complete an active mission and collect rewards."""
+            data = request.get_json(force=True) or {}
+            mission_id = data.get("mission_id", "")
+            notes = data.get("notes", "")
+            try:
+                mm = get_mission_manager()
+                result = mm.complete(mission_id, notes=notes)
+                return jsonify({
+                    "ok": result["success"],
+                    "message": result["message"],
+                    "rewards": result.get("rewards"),
+                })
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+
+        @self.app.route("/api/missions/abandon", methods=["POST"])
+        def api_missions_abandon():
+            """Abandon an active mission (-3 rep penalty)."""
+            data = request.get_json(force=True) or {}
+            mission_id = data.get("mission_id", "")
+            try:
+                mm = get_mission_manager()
+                result = mm.abandon(mission_id)
+                return jsonify({"ok": result["success"], "message": result["message"]})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+
+        @self.app.route("/api/missions/objective", methods=["POST"])
+        def api_missions_objective():
+            """Mark a single mission objective as completed."""
+            data = request.get_json(force=True) or {}
+            mission_id = data.get("mission_id", "")
+            objective_id = data.get("objective_id", "")
+            try:
+                mm = get_mission_manager()
+                result = mm.complete_objective(mission_id, objective_id)
+                return jsonify({
+                    "ok": result["success"],
+                    "message": result.get("message", ""),
+                    "progress": result.get("progress"),
+                })
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+
+        # v1.45.0 [2026-03-21] — Skill progression API
+        @self.app.route("/api/skills")
+        def api_skills():
+            """Full skill progression state (8 skills, XP, levels)."""
+            try:
+                sm = get_skill_manager()
+                return jsonify(sm.to_dict())
+            except Exception as exc:
+                logger.error("Skills API error: %s", exc)
+                return jsonify({"error": str(exc)}), 500
+
         @self.app.route("/api/hud")
         def api_hud():
-            """Combined HUD data — player + inventory + crew + missions in one call."""
+            """Combined HUD data — player + inventory + crew + missions + skills."""
             try:
                 ps = get_player_state()
                 inv = get_inventory()
                 cm = get_crew_manager()
                 mm = get_mission_manager()
+                sm = get_skill_manager()
                 return jsonify({
                     "player": ps.to_dict(),
                     "inventory": inv.to_hud_dict(),
                     "equipped": inv.get_equipped(),
-                    "crew": cm.to_hud_dict(),
+                    "crew": cm.to_dict(),
                     "missions": {
-                        "available": [m.to_dict() for m in mm.list_available()],
-                        "active": [m.to_dict() for m in mm.list_active()],
+                        "available": mm.list_available(),
+                        "active": mm.list_active(),
                     },
+                    "skills": sm.to_dict(),
                     "balance": get_economy_manager().get_balance("player"),
                 })
             except Exception as exc:

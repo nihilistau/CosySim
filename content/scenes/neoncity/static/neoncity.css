@@ -1,6 +1,13 @@
 /* ============================================================
-   NeonCity — v0.68 "Dark Renaissance"
+   NeonCity — v1.45 "Dark Renaissance"
    Scene-specific styles. Cyan accent: #06b6d4
+
+   Version: v1.45.0 [2026-03-21]
+   Change Log:
+     v1.45.0 [2026-03-21] — Mission detail modal, crew ops panel,
+                              context menu, op timers, clickable cards
+     v1.44.0 [2026-03-21] — 3-column dashboard layout
+     v0.68   [2026-03-20] — Initial NeonCity scene styles
    ============================================================ */
 
 /* ── Design tokens ────────────────────────────────────────── */
@@ -1610,3 +1617,955 @@ html, body {
 
 .map-neighbor-cost .cost-energy { color: #3b82f6; }
 .map-neighbor-cost .cost-heat   { color: #f97316; }
+
+/* ── v1.45.0 Mission Detail Modal ─────────────────────────────── */
+
+.mission-detail-modal,
+.crew-ops-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mission-detail-modal .modal-overlay,
+.crew-ops-modal .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+}
+
+.mission-modal-content,
+.crew-ops-modal-content {
+    position: relative;
+    width: min(520px, 92vw);
+    max-height: 85vh;
+    overflow-y: auto;
+    background: var(--nc-panel);
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    border-radius: 8px;
+    box-shadow: 0 0 40px rgba(6, 182, 212, 0.08), 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+
+.mission-modal-content .modal-header,
+.crew-ops-modal-content .modal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(6, 182, 212, 0.04);
+}
+
+.mission-modal-type {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(6, 182, 212, 0.15);
+    color: var(--nc-accent);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.mission-modal-content .modal-body,
+.crew-ops-modal-content .modal-body {
+    padding: 16px 18px;
+}
+
+/* ── Mission meta row ── */
+.mm-meta-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.mm-difficulty {
+    color: #facc15;
+    letter-spacing: 2px;
+}
+
+.mm-description {
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--nc-text);
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 2px solid rgba(6, 182, 212, 0.2);
+    border-radius: 0 4px 4px 0;
+}
+
+/* ── Mission objectives ── */
+.mm-objectives h4,
+.mm-rewards h4,
+.mm-crew-assigned h4 {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.45);
+    margin-bottom: 8px;
+}
+
+.mm-obj-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    font-size: 0.68rem;
+    color: var(--nc-text);
+}
+
+.mm-obj-row.checked {
+    color: rgba(255, 255, 255, 0.35);
+    text-decoration: line-through;
+}
+
+.mm-obj-row.checked .mm-obj-check {
+    color: #22c55e;
+}
+
+.mm-obj-check {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.3);
+    flex-shrink: 0;
+}
+
+.obj-optional {
+    color: rgba(255, 255, 255, 0.25);
+    font-size: 0.55rem;
+    font-style: italic;
+}
+
+/* ── Mission progress bar ── */
+.mm-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0;
+}
+
+.mm-progress-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.4);
+    flex-shrink: 0;
+}
+
+.mm-progress-track {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.mm-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--nc-accent), #22c55e);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.mm-progress-pct {
+    font-size: 0.6rem;
+    font-family: var(--nc-mono);
+    color: var(--nc-accent);
+    width: 30px;
+    text-align: right;
+}
+
+/* ── Mission rewards ── */
+.mm-reward-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.mm-reward-chip {
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 0.6rem;
+    font-family: var(--nc-mono);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mm-reward-chip.credits { color: #facc15; border-color: rgba(250, 204, 21, 0.2); }
+.mm-reward-chip.xp      { color: #a78bfa; border-color: rgba(167, 139, 250, 0.2); }
+.mm-reward-chip.rep      { color: #22c55e; border-color: rgba(34, 197, 94, 0.2); }
+.mm-reward-chip.faction  { color: #f472b6; border-color: rgba(244, 114, 182, 0.2); }
+.mm-reward-chip.item     { color: #38bdf8; border-color: rgba(56, 189, 248, 0.2); }
+
+.mm-crew-tag,
+.cop-crew-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.55rem;
+    background: rgba(6, 182, 212, 0.1);
+    color: var(--nc-accent);
+    border: 1px solid rgba(6, 182, 212, 0.15);
+    margin: 2px;
+}
+
+.mm-time-limit {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(249, 115, 22, 0.08);
+    border: 1px solid rgba(249, 115, 22, 0.15);
+    border-radius: 4px;
+    font-size: 0.6rem;
+    color: #f97316;
+    margin-top: 8px;
+}
+
+/* ── Mission modal actions ── */
+.mm-actions {
+    display: flex;
+    gap: 8px;
+    padding: 12px 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.btn-mission-accept,
+.btn-mission-complete,
+.btn-mission-abandon {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+}
+
+.btn-mission-accept {
+    background: rgba(6, 182, 212, 0.12);
+    border-color: rgba(6, 182, 212, 0.4);
+    color: var(--nc-accent);
+}
+.btn-mission-accept:hover {
+    background: rgba(6, 182, 212, 0.25);
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.2);
+}
+
+.btn-mission-complete {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #22c55e;
+}
+.btn-mission-complete:hover {
+    background: rgba(34, 197, 94, 0.25);
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.2);
+}
+
+.btn-mission-abandon {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.25);
+    color: #ef4444;
+}
+.btn-mission-abandon:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+/* ── Clickable mission cards ── */
+.mission-card.clickable {
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.15s;
+}
+
+.mission-card.clickable:hover {
+    border-color: rgba(6, 182, 212, 0.4);
+    transform: translateX(2px);
+}
+
+.mission-mini-bar {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+}
+
+.mission-mini-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--nc-accent), #22c55e);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+/* ── v1.45.0 Crew card enhancements ─────────────────────────────── */
+
+.crew-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    margin-bottom: 4px;
+    transition: border-color 0.2s;
+}
+
+.crew-card:hover {
+    border-color: rgba(6, 182, 212, 0.25);
+}
+
+.crew-card.unavailable {
+    opacity: 0.5;
+}
+
+.crew-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.crew-icon {
+    font-size: 0.9rem;
+}
+
+.crew-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.55rem;
+}
+
+.crew-avail {
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 0.5rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.crew-avail.available {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.crew-avail.unavailable {
+    color: #f97316;
+    background: rgba(249, 115, 22, 0.1);
+}
+
+.crew-loyalty-bar {
+    grid-column: 1 / -1;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 1px;
+    overflow: hidden;
+}
+
+.crew-loyalty-fill {
+    height: 100%;
+    background: var(--nc-accent);
+    border-radius: 1px;
+    transition: width 0.5s;
+}
+
+/* ── Crew button row ── */
+.crew-btn-row {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.crew-btn-row button {
+    flex: 1;
+}
+
+.btn-launch-ops {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+    padding: 5px 8px;
+    border-radius: 3px;
+    font-size: 0.58rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-launch-ops:hover {
+    background: rgba(34, 197, 94, 0.2);
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.15);
+}
+
+/* ── Active crew operations ── */
+.crew-active-ops {
+    margin-top: 6px;
+}
+
+.crew-op-card {
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background: rgba(6, 182, 212, 0.04);
+    border: 1px solid rgba(6, 182, 212, 0.12);
+    border-radius: 4px;
+}
+
+.crew-op-card.op-complete {
+    border-color: rgba(34, 197, 94, 0.3);
+    background: rgba(34, 197, 94, 0.05);
+}
+
+.cop-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3px;
+}
+
+.cop-label {
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: var(--nc-text);
+}
+
+.cop-timer {
+    font-family: var(--nc-mono);
+    font-size: 0.6rem;
+    color: var(--nc-accent);
+}
+
+.cop-timer.cop-done {
+    color: #22c55e;
+    font-weight: 700;
+    animation: pulse-glow 1s infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.cop-bar-track {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 4px;
+}
+
+.cop-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--nc-accent), #22c55e);
+    border-radius: 2px;
+    transition: width 1s linear;
+}
+
+.cop-crew-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+
+/* ── v1.45.0 Crew Operations Modal ────────────────────────────── */
+
+.cop-type-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.cop-type-card {
+    padding: 8px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cop-type-card:hover {
+    border-color: rgba(6, 182, 212, 0.3);
+    background: rgba(6, 182, 212, 0.04);
+}
+
+.cop-type-card.selected {
+    border-color: rgba(6, 182, 212, 0.5);
+    background: rgba(6, 182, 212, 0.08);
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.1);
+}
+
+.cop-type-icon {
+    font-size: 1.2rem;
+    margin-bottom: 2px;
+}
+
+.cop-type-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--nc-text);
+    letter-spacing: 0.05em;
+}
+
+.cop-type-desc {
+    font-size: 0.5rem;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: 2px;
+}
+
+.cop-type-min {
+    font-size: 0.48rem;
+    color: rgba(255, 255, 255, 0.25);
+    margin-top: 3px;
+    font-family: var(--nc-mono);
+}
+
+.cop-crew-selector h4 {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.45);
+    margin-bottom: 6px;
+}
+
+.cop-min-label {
+    color: rgba(255, 255, 255, 0.25);
+    font-weight: 400;
+}
+
+.cop-crew-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 0.65rem;
+}
+
+.cop-crew-row:hover:not(.disabled) {
+    background: rgba(6, 182, 212, 0.04);
+}
+
+.cop-crew-row.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.cop-crew-row input[type="checkbox"] {
+    accent-color: var(--nc-accent);
+}
+
+.cop-crew-icon {
+    font-size: 0.8rem;
+}
+
+.cop-crew-name {
+    color: var(--nc-text);
+    font-weight: 500;
+    flex: 1;
+}
+
+.cop-crew-role {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 0.55rem;
+}
+
+.cop-crew-lv {
+    font-family: var(--nc-mono);
+    font-size: 0.55rem;
+    color: var(--nc-accent);
+}
+
+.cop-crew-busy {
+    font-size: 0.48rem;
+    color: #f97316;
+    font-weight: 600;
+}
+
+.cop-summary {
+    display: flex;
+    gap: 16px;
+    padding: 8px 12px;
+    background: rgba(6, 182, 212, 0.04);
+    border: 1px solid rgba(6, 182, 212, 0.1);
+    border-radius: 4px;
+    margin-top: 10px;
+    font-size: 0.6rem;
+    color: var(--nc-text);
+}
+
+.btn-launch-op {
+    width: 100%;
+    padding: 10px;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    border-radius: 4px;
+    color: #22c55e;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-launch-op:hover:not(:disabled) {
+    background: rgba(34, 197, 94, 0.25);
+    box-shadow: 0 0 16px rgba(34, 197, 94, 0.15);
+}
+
+.btn-launch-op:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* ── v1.45.0 Item Context Menu ────────────────────────────────── */
+
+.item-context-menu {
+    position: fixed;
+    z-index: 1200;
+    min-width: 160px;
+    max-width: 220px;
+    background: var(--nc-panel);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    border-radius: 6px;
+    box-shadow: 0 0 24px rgba(6, 182, 212, 0.08), 0 8px 32px rgba(0, 0, 0, 0.6);
+    padding: 8px 0;
+    animation: ctx-appear 0.15s ease;
+}
+
+@keyframes ctx-appear {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.ctx-title {
+    padding: 4px 12px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--nc-accent);
+}
+
+.ctx-desc {
+    padding: 2px 12px 6px;
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.45);
+    line-height: 1.4;
+}
+
+.ctx-meta {
+    padding: 2px 12px 6px;
+    font-size: 0.5rem;
+    color: rgba(255, 255, 255, 0.25);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ctx-actions {
+    padding: 4px 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ctx-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 5px 8px;
+    background: none;
+    border: none;
+    border-radius: 3px;
+    color: var(--nc-text);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.ctx-btn:hover           { background: rgba(6, 182, 212, 0.1); }
+.ctx-btn.use:hover       { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
+.ctx-btn.equip:hover     { background: rgba(56, 189, 248, 0.12); color: #38bdf8; }
+.ctx-btn.sell:hover      { background: rgba(250, 204, 21, 0.12); color: #facc15; }
+
+/* ── v1.45.0 Shop button in inventory panel ──────────────────── */
+
+.btn-shop-open {
+    float: right;
+    padding: 2px 8px;
+    background: rgba(250, 204, 21, 0.08);
+    border: 1px solid rgba(250, 204, 21, 0.25);
+    border-radius: 3px;
+    color: #facc15;
+    font-size: 0.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-shop-open:hover {
+    background: rgba(250, 204, 21, 0.18);
+    box-shadow: 0 0 8px rgba(250, 204, 21, 0.12);
+}
+
+/* ── Inventory rarity enhancements ── */
+.inv-slot.rarity-rare      { border-color: rgba(59, 130, 246, 0.4); }
+.inv-slot.rarity-epic       { border-color: rgba(139, 92, 246, 0.4); }
+.inv-slot.rarity-legendary  { border-color: rgba(250, 204, 21, 0.5); animation: legendary-glow 2s infinite; }
+
+@keyframes legendary-glow {
+    0%, 100% { box-shadow: 0 0 6px rgba(250, 204, 21, 0.15); }
+    50%      { box-shadow: 0 0 14px rgba(250, 204, 21, 0.35); }
+}
+
+/* ── v1.45.0 Skill Progression Panel ─────────────────────────── */
+
+.skill-global-level {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0 6px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.skill-global-lv {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--nc-accent);
+    font-family: var(--nc-mono);
+}
+
+.skill-global-xp {
+    font-size: 0.5rem;
+    color: rgba(255, 255, 255, 0.3);
+    font-family: var(--nc-mono);
+}
+
+.skill-bar-row {
+    display: grid;
+    grid-template-columns: 20px 52px 1fr 28px 42px;
+    gap: 4px;
+    align-items: center;
+    padding: 2px 0;
+    font-size: 0.55rem;
+}
+
+.skill-bar-icon {
+    font-size: 0.7rem;
+    text-align: center;
+}
+
+.skill-bar-name {
+    color: var(--nc-text);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    font-size: 0.5rem;
+}
+
+.skill-bar-track {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.skill-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.skill-bar-level {
+    font-family: var(--nc-mono);
+    font-size: 0.5rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.skill-bar-xp {
+    font-family: var(--nc-mono);
+    font-size: 0.45rem;
+    color: rgba(255, 255, 255, 0.3);
+    text-align: right;
+}
+
+/* ── v1.45.0 Heat Warning System ─────────────────────────────── */
+
+.neoncity-layout.heat-medium .stat-bar-fill.heat {
+    box-shadow: 0 0 6px rgba(249, 115, 22, 0.4);
+    animation: heat-pulse-amber 2s infinite;
+}
+
+.neoncity-layout.heat-high {
+    box-shadow: inset 0 0 60px rgba(239, 68, 68, 0.04);
+}
+
+.neoncity-layout.heat-high .stat-bar-fill.heat {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    animation: heat-pulse-red 1.5s infinite;
+}
+
+.neoncity-layout.heat-critical {
+    box-shadow: inset 0 0 100px rgba(239, 68, 68, 0.06);
+    animation: heat-screen-shake 0.3s ease-in-out;
+}
+
+.neoncity-layout.heat-critical .stat-bar-fill.heat {
+    background: #ef4444 !important;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.6);
+    animation: heat-pulse-red 1s infinite;
+}
+
+@keyframes heat-pulse-amber {
+    0%, 100% { box-shadow: 0 0 4px rgba(249, 115, 22, 0.3); }
+    50%      { box-shadow: 0 0 10px rgba(249, 115, 22, 0.6); }
+}
+
+@keyframes heat-pulse-red {
+    0%, 100% { box-shadow: 0 0 6px rgba(239, 68, 68, 0.4); }
+    50%      { box-shadow: 0 0 16px rgba(239, 68, 68, 0.7); }
+}
+
+@keyframes heat-screen-shake {
+    0%, 100% { transform: translateX(0); }
+    25%      { transform: translateX(-2px); }
+    75%      { transform: translateX(2px); }
+}
+
+.wanted-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    margin-left: 8px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 3px;
+    color: #ef4444;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    animation: pulse-glow 1.5s infinite;
+}
+
+/* ── v1.45.0 Hacking Targets Panel ───────────────────────────── */
+
+.hack-targets-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1150;
+    width: min(400px, 90vw);
+    max-height: 70vh;
+    overflow-y: auto;
+    background: var(--nc-panel);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 0 40px rgba(34, 197, 94, 0.08), 0 12px 48px rgba(0, 0, 0, 0.6);
+    animation: ctx-appear 0.2s ease;
+}
+
+.htp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(34, 197, 94, 0.15);
+    background: rgba(34, 197, 94, 0.04);
+}
+
+.htp-header h4 {
+    color: #22c55e;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+}
+
+.htp-close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.htp-list {
+    padding: 8px;
+}
+
+.hack-target-card {
+    padding: 10px 12px;
+    margin-bottom: 4px;
+    background: rgba(34, 197, 94, 0.03);
+    border: 1px solid rgba(34, 197, 94, 0.1);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.hack-target-card:hover {
+    border-color: rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.06);
+    transform: translateX(2px);
+}
+
+.htc-name {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--nc-text);
+    margin-bottom: 3px;
+}
+
+.htc-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 0.55rem;
+}
+
+.htc-security {
+    color: #22c55e;
+}
+
+.htc-reward {
+    color: #facc15;
+    font-family: var(--nc-mono);
+}
+
+/* ── Hack button on district card ── */
+.card-actions-row {
+    display: flex;
+    gap: 4px;
+    padding: 0 8px 8px;
+}
+
+.card-actions-row .card-action {
+    flex: 1;
+}
+
+.btn-hack-district {
+    padding: 4px 8px;
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 3px;
+    color: #22c55e;
+    font-size: 0.55rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-hack-district:hover {
+    background: rgba(34, 197, 94, 0.2);
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.15);
+}

@@ -1,9 +1,18 @@
 /**
- * NeonCity — v0.68 "Dark Renaissance"
+ * NeonCity — v1.45 "Dark Renaissance"
  * Living World Hub client-side controller.
  *
  * Handles Socket.IO state sync, district navigation, faction bars,
- * the world ticker, NPC chat, and particle effects via ParticleSystem3D.
+ * the world ticker, NPC chat, particle effects, mission CRUD,
+ * crew operations, inventory context menu, and heat warnings.
+ *
+ * Version: v1.45.0 [2026-03-21]
+ * Change Log:
+ *   v1.45.0 [2026-03-21] — Mission detail modal, crew ops launcher,
+ *                            active op timers, inventory context menu,
+ *                            fixed crew rendering (to_dict format)
+ *   v1.44.0 [2026-03-21] — HUD sidebar panels, 3-column layout
+ *   v0.68   [2026-03-20] — Initial Socket.IO + district controller
  */
 
 'use strict';
@@ -54,6 +63,25 @@ class NeonCityScene {
 
         /** @type {string} Active mission tab */
         this._missionTab = 'available';
+
+        // v1.45.0 — Mission detail + crew ops state
+        /** @type {string|null} Mission ID shown in detail modal */
+        this._activeMissionId = null;
+
+        /** @type {Object|null} Full mission data for detail modal */
+        this._activeMissionData = null;
+
+        /** @type {string|null} Selected crew operation type */
+        this._selectedOpType = null;
+
+        /** @type {Set<string>} Selected crew member IDs for operation */
+        this._selectedCrewIds = new Set();
+
+        /** @type {number|null} Interval ID for crew op countdown timers */
+        this._opTimerInterval = null;
+
+        /** @type {Object|null} Item context menu element ref */
+        this._contextMenu = null;
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -608,7 +636,10 @@ class NeonCityScene {
         if (data.equipped)  { this.equipped = data.equipped;    this._renderEquipped(data.equipped); }
         if (data.crew)      { this.crewData = data.crew;        this._renderCrew(data.crew); }
         if (data.missions)  { this.missionData = data.missions; this._renderMissions(); }
+        if (data.skills)    { this._renderSkillProgression(data.skills); }
         if (data.balance !== undefined) this._updateCredits(data.balance);
+        // v1.45.0 — Apply heat warnings
+        if (data.player && data.player.heat !== undefined) this._applyHeatWarnings(data.player.heat);
     }
 
     /**
@@ -620,6 +651,8 @@ class NeonCityScene {
         Object.assign(this.playerState, data);
         this._renderPlayerStats(this.playerState);
         if (data.credits !== undefined) this._updateCredits(data.credits);
+        // v1.45.0 — Heat warnings on incremental updates
+        if (data.heat !== undefined) this._applyHeatWarnings(data.heat);
     }
 
     /**
@@ -680,7 +713,7 @@ class NeonCityScene {
                 const icon = ITEM_ICONS[item.id] || '&#9670;';
                 const rarity = RARITY_MAP[item.rarity] || '';
                 const qty = (item.quantity > 1) ? `<span class="item-qty">x${item.quantity}</span>` : '';
-                html += `<div class="inv-slot filled ${rarity}" title="${this._esc(item.name || item.id)}" onclick="NeonCityApp.onItemClick('${this._esc(item.id)}')">
+                html += `<div class="inv-slot filled ${rarity}" title="${this._esc(item.name || item.id)}" onclick="NeonCityApp.onItemClick('${this._esc(item.id)}', event)">
                     <span class="item-icon">${icon}</span>${qty}
                 </div>`;
             } else {
@@ -709,34 +742,136 @@ class NeonCityScene {
 
     /**
      * Render crew roster in right sidebar.
-     * @param {Object} crew - Crew data from to_hud_dict().
+     * v1.45.0 — Updated to handle CrewManager.to_dict() format with members
+     *           array, role icons, availability badges, and dismiss buttons.
+     * @param {Object|Array} crew - Crew data (to_dict object or legacy array).
+     * CONNECTS: CrewManager.to_dict(), /api/hud, /api/crew
      */
     _renderCrew(crew) {
         const roster = document.getElementById('crew-roster');
         const countEl = document.getElementById('crew-count');
         if (!roster) return;
 
-        const members = crew.members || crew.crew || [];
-        if (countEl) countEl.textContent = `${members.length}/8`;
+        // Handle both to_dict() {members:[...]} and legacy flat array
+        const members = Array.isArray(crew) ? crew : (crew.members || []);
+        const maxSize = crew.max_size || 8;
+        if (countEl) countEl.textContent = `${members.length}/${maxSize}`;
 
         if (members.length === 0) {
             roster.innerHTML = '<div class="crew-empty">No crew recruited yet.</div>';
+            this._renderCrewOps([]);
             return;
         }
 
-        roster.innerHTML = members.map(m => `
-            <div class="crew-card">
-                <div>
-                    <div class="crew-name">${this._esc(m.name || m.character_id)}</div>
-                    <div class="crew-role">${this._esc(m.role || 'unknown')}</div>
+        const ROLE_ICONS = {
+            fixer: '\u{1F91D}', hacker: '\u{1F4BB}', muscle: '\u{1F4AA}',
+            medic: '\u{1FA7A}', driver: '\u{1F697}', tech: '\u{1F527}',
+            lookout: '\u{1F441}', face: '\u{1F3AD}', supplier: '\u{1F4E6}',
+            unknown: '\u2753',
+        };
+
+        roster.innerHTML = members.map(m => {
+            const icon = m.role_icon || ROLE_ICONS[m.role] || '\u2753';
+            const name = m.character_id || m.name || m.id || 'Unknown';
+            const avail = m.available !== false;
+            const availClass = avail ? 'available' : 'unavailable';
+            const availLabel = avail ? 'READY' : 'DEPLOYED';
+            return `
+            <div class="crew-card ${availClass}" data-crew-id="${this._esc(name)}">
+                <div class="crew-left">
+                    <span class="crew-icon">${icon}</span>
+                    <div>
+                        <div class="crew-name">${this._esc(name)}</div>
+                        <div class="crew-role">${this._esc(m.role_label || m.role || 'unknown')}</div>
+                    </div>
                 </div>
-                <div class="crew-level">LV${m.level || 1}</div>
+                <div class="crew-right">
+                    <span class="crew-avail ${availClass}">${availLabel}</span>
+                    <span class="crew-level">LV${m.level || 1}</span>
+                </div>
                 <div class="crew-loyalty-bar">
                     <div class="crew-loyalty-fill" style="width:${m.loyalty || 50}%"></div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
+
+        // Render active operations timers
+        const ops = crew.active_operations || [];
+        this._renderCrewOps(ops);
     }
+
+    /**
+     * Render active crew operations with countdown timers.
+     * v1.45.0 [2026-03-21]
+     * @param {Array} ops - Active operations from CrewManager.to_dict().
+     * CONNECTS: CrewManager, crew-active-ops div
+     */
+    _renderCrewOps(ops) {
+        const container = document.getElementById('crew-active-ops');
+        if (!container) return;
+
+        if (!ops || ops.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = ops.map(op => {
+            const remaining = op.time_remaining || 0;
+            const mins = Math.floor(remaining / 60);
+            const secs = remaining % 60;
+            const pct = op.duration_secs > 0
+                ? Math.max(0, 100 - (remaining / op.duration_secs * 100))
+                : 100;
+            return `
+            <div class="crew-op-card" data-op-id="${this._esc(op.op_id)}">
+                <div class="cop-header">
+                    <span class="cop-label">${this._esc(op.label)}</span>
+                    <span class="cop-timer">${mins}:${String(secs).padStart(2, '0')}</span>
+                </div>
+                <div class="cop-bar-track">
+                    <div class="cop-bar-fill" style="width:${pct}%"></div>
+                </div>
+                <div class="cop-crew-tags">${op.assigned_crew.map(c =>
+                    `<span class="cop-crew-tag">${this._esc(c)}</span>`
+                ).join('')}</div>
+            </div>`;
+        }).join('');
+
+        // Start countdown timer if not already running
+        this._startOpTimers();
+    }
+
+    /** Start interval to tick down crew operation timers every second. */
+    _startOpTimers() {
+        if (this._opTimerInterval) return;
+        this._opTimerInterval = setInterval(() => {
+            const cards = document.querySelectorAll('.crew-op-card');
+            if (cards.length === 0) {
+                clearInterval(this._opTimerInterval);
+                this._opTimerInterval = null;
+                return;
+            }
+            cards.forEach(card => {
+                const timerEl = card.querySelector('.cop-timer');
+                if (!timerEl) return;
+                const parts = timerEl.textContent.split(':');
+                let total = parseInt(parts[0]) * 60 + parseInt(parts[1]) - 1;
+                if (total <= 0) {
+                    timerEl.textContent = 'DONE!';
+                    timerEl.classList.add('cop-done');
+                    card.classList.add('op-complete');
+                } else {
+                    const m = Math.floor(total / 60);
+                    const s = total % 60;
+                    timerEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+                }
+            });
+        }, 1000);
+    }
+
+    // ── Mission rendering + interaction ─────────────────────────────
+    // v1.45.0 [2026-03-21] — Clickable cards, detail modal, CRUD
+    // CONNECTS: MissionManager, /api/missions/*, mission-detail-modal
 
     /** Render mission list based on active tab. */
     _renderMissions() {
@@ -759,22 +894,30 @@ class NeonCityScene {
         }
 
         list.innerHTML = missions.map(m => {
+            const mId = m.id || m.mission_id || '';
             const typeClass = (m.type || m.mission_type || '').toLowerCase();
-            const btn = this._missionTab === 'available'
-                ? `<button class="mission-btn" onclick="NeonCityApp.acceptMission('${this._esc(m.id || m.mission_id)}')">ACCEPT</button>`
-                : `<div class="mission-reward">&#9889; IN PROGRESS</div>`;
-            const reward = m.rewards
-                ? Object.entries(m.rewards).map(([k, v]) => `${v} ${k}`).join(', ')
+            const stars = '\u2605'.repeat(m.difficulty || 1) + '\u2606'.repeat(5 - (m.difficulty || 1));
+            const reward = m.reward || m.rewards || {};
+            const rewardStr = [];
+            if (reward.credits)    rewardStr.push(`\u20B4${reward.credits}`);
+            if (reward.xp)         rewardStr.push(`${reward.xp} XP`);
+            if (reward.reputation) rewardStr.push(`+${reward.reputation} REP`);
+
+            const isActive = this._missionTab === 'active';
+            const progress = m.progress || {};
+            const pctBar = isActive && progress.pct !== undefined
+                ? `<div class="mission-mini-bar"><div class="mission-mini-fill" style="width:${progress.pct}%"></div></div>`
                 : '';
+
             return `
-                <div class="mission-card">
+                <div class="mission-card clickable" onclick="NeonCityApp.openMissionDetail('${this._esc(mId)}')">
                     <div class="mission-title">${this._esc(m.title || m.name || 'Unknown')}</div>
                     <div class="mission-meta">
                         <span class="mission-type ${typeClass}">${this._esc(typeClass || 'misc')}</span>
-                        <span class="mission-difficulty">&#9733;${m.difficulty || 1}</span>
+                        <span class="mission-difficulty">${stars}</span>
                     </div>
-                    ${reward ? `<div class="mission-reward">&#8354; ${this._esc(reward)}</div>` : ''}
-                    ${btn}
+                    ${rewardStr.length ? `<div class="mission-reward">${this._esc(rewardStr.join(' / '))}</div>` : ''}
+                    ${pctBar}
                 </div>
             `;
         }).join('');
@@ -793,40 +936,249 @@ class NeonCityScene {
     }
 
     /**
-     * Accept a mission from the board.
+     * Open mission detail modal for a given mission.
+     * Fetches full mission data from /api/missions/<id>.
+     * v1.45.0 [2026-03-21]
      * @param {string} missionId
+     * CONNECTS: MissionManager.get_mission(), mission-detail-modal
+     */
+    async openMissionDetail(missionId) {
+        try {
+            const res = await fetch(`/api/missions/${encodeURIComponent(missionId)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const m = await res.json();
+            this._activeMissionId = missionId;
+            this._activeMissionData = m;
+            this._renderMissionModal(m);
+            document.getElementById('mission-modal').style.display = '';
+        } catch (err) {
+            this._showToast('ERROR', `Failed to load mission: ${err.message}`, 5000);
+        }
+    }
+
+    /**
+     * Populate mission detail modal with data.
+     * @param {Object} m - Full mission dict from API.
+     */
+    _renderMissionModal(m) {
+        const typeEl = document.getElementById('mm-type');
+        const titleEl = document.getElementById('mm-title');
+        const diffEl = document.getElementById('mm-difficulty');
+        const giverEl = document.getElementById('mm-giver');
+        const locEl = document.getElementById('mm-location');
+        const descEl = document.getElementById('mm-description');
+        const objList = document.getElementById('mm-objectives-list');
+        const progFill = document.getElementById('mm-progress-fill');
+        const progPct = document.getElementById('mm-progress-pct');
+        const rewardsEl = document.getElementById('mm-rewards');
+        const crewSection = document.getElementById('mm-crew-section');
+        const crewList = document.getElementById('mm-crew-list');
+        const timeSection = document.getElementById('mm-time-section');
+        const timeVal = document.getElementById('mm-time-value');
+        const btnComplete = document.getElementById('mm-btn-complete');
+        const btnAbandon = document.getElementById('mm-btn-abandon');
+        const btnAccept = document.getElementById('mm-btn-accept');
+
+        const type = (m.type || '').toUpperCase();
+        if (typeEl) typeEl.textContent = type;
+        if (titleEl) titleEl.textContent = m.title || 'Unknown';
+        if (diffEl) {
+            const d = m.difficulty || 1;
+            diffEl.textContent = '\u2605'.repeat(d) + '\u2606'.repeat(5 - d);
+        }
+        if (giverEl) giverEl.textContent = `Given by: ${m.giver || '???'}`;
+        if (locEl) locEl.textContent = `\u25C9 ${m.location || '???'}`;
+        if (descEl) descEl.textContent = m.description || '';
+
+        // Objectives checklist
+        if (objList) {
+            const objs = m.objectives || [];
+            objList.innerHTML = objs.map(o => {
+                const done = o.completed ? 'checked' : '';
+                const opt = o.optional ? ' <span class="obj-optional">[OPTIONAL]</span>' : '';
+                return `<div class="mm-obj-row ${done}">
+                    <span class="mm-obj-check">${o.completed ? '\u2611' : '\u2610'}</span>
+                    <span class="mm-obj-desc">${this._esc(o.description)}${opt}</span>
+                </div>`;
+            }).join('');
+        }
+
+        // Progress bar
+        const progress = m.progress || { done: 0, total: 0, pct: 0 };
+        if (progFill) progFill.style.width = `${progress.pct}%`;
+        if (progPct) progPct.textContent = `${progress.pct}%`;
+
+        // Rewards grid
+        const r = m.reward || {};
+        if (rewardsEl) {
+            const chips = [];
+            if (r.credits)    chips.push(`<span class="mm-reward-chip credits">\u20B4 ${r.credits}</span>`);
+            if (r.xp)         chips.push(`<span class="mm-reward-chip xp">${r.xp} XP</span>`);
+            if (r.reputation) chips.push(`<span class="mm-reward-chip rep">+${r.reputation} REP</span>`);
+            if (r.faction && r.faction_rep) {
+                const sign = r.faction_rep > 0 ? '+' : '';
+                chips.push(`<span class="mm-reward-chip faction">${sign}${r.faction_rep} ${r.faction}</span>`);
+            }
+            if (r.items && r.items.length) {
+                r.items.forEach(i => chips.push(`<span class="mm-reward-chip item">${this._esc(i)}</span>`));
+            }
+            rewardsEl.innerHTML = chips.join('');
+        }
+
+        // Assigned crew
+        if (crewSection) {
+            if (m.assigned_crew && m.assigned_crew.length > 0) {
+                crewSection.style.display = '';
+                if (crewList) crewList.innerHTML = m.assigned_crew
+                    .map(c => `<span class="mm-crew-tag">${this._esc(c)}</span>`).join('');
+            } else {
+                crewSection.style.display = 'none';
+            }
+        }
+
+        // Time limit
+        if (timeSection) {
+            if (m.time_limit_min) {
+                timeSection.style.display = '';
+                if (timeVal) timeVal.textContent = `${m.time_limit_min} min time limit`;
+            } else {
+                timeSection.style.display = 'none';
+            }
+        }
+
+        // Action buttons — show based on mission status
+        const status = m.status || '';
+        if (btnAccept)  btnAccept.style.display  = status === 'available' ? '' : 'none';
+        if (btnComplete) btnComplete.style.display = (status === 'active' && progress.pct === 100) ? '' : 'none';
+        if (btnAbandon) btnAbandon.style.display  = status === 'active' ? '' : 'none';
+    }
+
+    /** Close mission detail modal. */
+    closeMissionModal() {
+        document.getElementById('mission-modal').style.display = 'none';
+        this._activeMissionId = null;
+        this._activeMissionData = null;
+    }
+
+    /**
+     * Accept a mission (from board list or from detail modal).
+     * @param {string} [missionId] - If omitted, uses modal's active mission.
      */
     async acceptMission(missionId) {
+        const id = missionId || this._activeMissionId;
+        if (!id) return;
         try {
             const res = await fetch('/api/missions/accept', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mission_id: missionId }),
+                body: JSON.stringify({ mission_id: id }),
             });
             const data = await res.json();
             if (data.ok) {
-                this._appendChatEntry('system', '[MISSIONS]', 'Mission accepted!');
+                this._showToast('MISSION ACCEPTED', data.message || 'Good luck.', 4000);
+                this._appendChatEntry('system', '[MISSIONS]', data.message || 'Mission accepted!');
+                this.closeMissionModal();
                 this.refreshHud();
             } else {
-                this._appendChatEntry('system', '[MISSIONS]', `Failed: ${data.error || 'Unknown error'}`);
+                this._showToast('FAILED', data.error || data.message || 'Unknown error', 5000);
             }
         } catch (err) {
             this._appendChatEntry('system', '[MISSIONS]', `Error: ${err.message}`);
         }
     }
 
-    /** Check crew operations (complete ready ones). */
+    /** Accept mission from the detail modal. */
+    acceptMissionFromModal() {
+        this.acceptMission(this._activeMissionId);
+    }
+
+    /**
+     * Complete the currently viewed active mission.
+     * v1.45.0 [2026-03-21]
+     * CONNECTS: MissionManager.complete(), /api/missions/complete
+     */
+    async completeMission() {
+        const id = this._activeMissionId;
+        if (!id) return;
+        try {
+            const res = await fetch('/api/missions/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mission_id: id }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                const rewards = data.rewards || {};
+                const parts = [];
+                if (rewards.credits)    parts.push(`\u20B4${rewards.credits}`);
+                if (rewards.xp)         parts.push(`${rewards.xp} XP`);
+                if (rewards.reputation) parts.push(`+${rewards.reputation} REP`);
+                this._showToast('MISSION COMPLETE!', parts.join(' / ') || 'Rewards applied.', 6000);
+                this._appendChatEntry('event', '[MISSIONS]', data.message || 'Mission completed!');
+                this.closeMissionModal();
+                this.refreshHud();
+            } else {
+                this._showToast('CANNOT COMPLETE', data.message || data.error || 'Check objectives.', 5000);
+            }
+        } catch (err) {
+            this._showToast('ERROR', err.message, 5000);
+        }
+    }
+
+    /**
+     * Abandon the currently viewed active mission.
+     * v1.45.0 [2026-03-21]
+     * CONNECTS: MissionManager.abandon(), /api/missions/abandon
+     */
+    async abandonMission() {
+        const id = this._activeMissionId;
+        if (!id) return;
+        if (!confirm('Abandon this mission? You will lose 3 reputation.')) return;
+        try {
+            const res = await fetch('/api/missions/abandon', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mission_id: id }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                this._showToast('MISSION ABANDONED', data.message || '-3 REP', 5000);
+                this._appendChatEntry('system', '[MISSIONS]', data.message || 'Mission abandoned.');
+                this.closeMissionModal();
+                this.refreshHud();
+            } else {
+                this._showToast('ERROR', data.message || data.error, 5000);
+            }
+        } catch (err) {
+            this._showToast('ERROR', err.message, 5000);
+        }
+    }
+
+    // ── Crew operations ──────────────────────────────────────────────
+    // v1.45.0 [2026-03-21] — Launch ops modal, check ops, dismiss
+    // CONNECTS: CrewManager, /api/crew/*, crew-ops-modal
+
+    /**
+     * Check crew operations — resolve completed ones, show results.
+     * v1.45.0 [2026-03-21]
+     */
     async checkCrewOps() {
         try {
-            const res = await fetch('/api/crew');
+            const res = await fetch('/api/crew/check_ops', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
             const data = await res.json();
-            if (data.operations) {
-                const ready = (data.operations || []).filter(op => op.status === 'completed');
-                if (ready.length > 0) {
-                    this._appendChatEntry('system', '[CREW]', `${ready.length} operation(s) completed!`);
-                } else {
-                    this._appendChatEntry('system', '[CREW]', 'No completed operations.');
+            if (data.ok && data.completed && data.completed.length > 0) {
+                for (const op of data.completed) {
+                    const parts = [];
+                    if (op.credits_earned) parts.push(`\u20B4${op.credits_earned}`);
+                    if (op.xp_earned) parts.push(`${op.xp_earned} XP`);
+                    this._showToast('OP COMPLETE!', `${op.label}: ${parts.join(' + ')}`, 6000);
+                    this._appendChatEntry('event', '[CREW]', `${op.label} completed! ${parts.join(' + ')}`);
                 }
+            } else {
+                this._appendChatEntry('system', '[CREW]', 'No completed operations.');
             }
             this.refreshHud();
         } catch (err) {
@@ -835,17 +1187,502 @@ class NeonCityScene {
     }
 
     /**
-     * Handle inventory item click (show tooltip or use).
-     * @param {string} itemId
+     * Open the crew operations modal.
+     * v1.45.0 [2026-03-21]
+     * CONNECTS: OPERATION_TYPES, CrewManager.get_available()
      */
-    onItemClick(itemId) {
+    openCrewOpsModal() {
+        this._selectedOpType = null;
+        this._selectedCrewIds = new Set();
+
+        const OP_TYPES = {
+            recon:      { label: 'Recon',      icon: '\u{1F50D}', min: 1, desc: 'Gather intel' },
+            heist:      { label: 'Heist',      icon: '\u{1F4B0}', min: 3, desc: 'Steal item/credits' },
+            extraction: { label: 'Extraction',  icon: '\u{1F6A8}', min: 2, desc: 'Extract person/data' },
+            deal:       { label: 'Deal',        icon: '\u{1F91D}', min: 1, desc: 'Negotiate a trade' },
+            hit:        { label: 'Hit',         icon: '\u{1F3AF}', min: 2, desc: 'Neutralise target' },
+            hack:       { label: 'Hack',        icon: '\u{1F4BB}', min: 1, desc: 'Cyberspace intrusion' },
+        };
+
+        // Render operation type selector
+        const typeGrid = document.getElementById('cop-type-grid');
+        if (typeGrid) {
+            typeGrid.innerHTML = Object.entries(OP_TYPES).map(([key, op]) => `
+                <div class="cop-type-card" data-op="${key}" onclick="NeonCityApp._selectOpType('${key}')">
+                    <div class="cop-type-icon">${op.icon}</div>
+                    <div class="cop-type-label">${op.label}</div>
+                    <div class="cop-type-desc">${op.desc}</div>
+                    <div class="cop-type-min">Min ${op.min} crew</div>
+                </div>
+            `).join('');
+        }
+
+        // Render available crew for selection
+        this._renderCrewSelector();
+
+        // Reset summary
+        document.getElementById('cop-summary').style.display = 'none';
+        document.getElementById('btn-launch-op').disabled = true;
+
+        document.getElementById('crew-ops-modal').style.display = '';
+    }
+
+    /** Close crew operations modal. */
+    closeCrewOpsModal() {
+        document.getElementById('crew-ops-modal').style.display = 'none';
+    }
+
+    /**
+     * Select an operation type in the modal.
+     * @param {string} opType
+     */
+    _selectOpType(opType) {
+        this._selectedOpType = opType;
+        document.querySelectorAll('.cop-type-card').forEach(card => {
+            card.classList.toggle('selected', card.dataset.op === opType);
+        });
+
+        const OP_MIN = { recon: 1, heist: 3, extraction: 2, deal: 1, hit: 2, hack: 1 };
+        const minLabel = document.getElementById('cop-min-label');
+        if (minLabel) minLabel.textContent = `(min ${OP_MIN[opType] || 1})`;
+
+        this._updateOpSummary();
+    }
+
+    /**
+     * Render the crew member checkboxes in the ops modal.
+     * Uses crewData from last HUD fetch.
+     */
+    _renderCrewSelector() {
+        const listEl = document.getElementById('cop-crew-list');
+        if (!listEl) return;
+
+        const members = this.crewData
+            ? (Array.isArray(this.crewData) ? this.crewData : (this.crewData.members || []))
+            : [];
+
+        if (members.length === 0) {
+            listEl.innerHTML = '<div class="crew-empty">No crew to assign. Recruit first!</div>';
+            return;
+        }
+
+        const ROLE_ICONS = {
+            fixer: '\u{1F91D}', hacker: '\u{1F4BB}', muscle: '\u{1F4AA}',
+            medic: '\u{1FA7A}', driver: '\u{1F697}', tech: '\u{1F527}',
+            lookout: '\u{1F441}', face: '\u{1F3AD}', supplier: '\u{1F4E6}',
+            unknown: '\u2753',
+        };
+
+        listEl.innerHTML = members.map(m => {
+            const name = m.character_id || m.name || m.id || 'Unknown';
+            const icon = m.role_icon || ROLE_ICONS[m.role] || '\u2753';
+            const avail = m.available !== false;
+            return `
+            <label class="cop-crew-row ${avail ? '' : 'disabled'}" data-crew-id="${this._esc(name)}">
+                <input type="checkbox" ${avail ? '' : 'disabled'}
+                       onchange="NeonCityApp._toggleCrewSelection('${this._esc(name)}', this.checked)">
+                <span class="cop-crew-icon">${icon}</span>
+                <span class="cop-crew-name">${this._esc(name)}</span>
+                <span class="cop-crew-role">${this._esc(m.role_label || m.role || '')}</span>
+                <span class="cop-crew-lv">LV${m.level || 1}</span>
+                ${!avail ? '<span class="cop-crew-busy">DEPLOYED</span>' : ''}
+            </label>`;
+        }).join('');
+    }
+
+    /**
+     * Toggle a crew member in/out of the operation selection.
+     * @param {string} crewId
+     * @param {boolean} checked
+     */
+    _toggleCrewSelection(crewId, checked) {
+        if (checked) {
+            this._selectedCrewIds.add(crewId);
+        } else {
+            this._selectedCrewIds.delete(crewId);
+        }
+        this._updateOpSummary();
+    }
+
+    /** Update the operation summary and enable/disable launch button. */
+    _updateOpSummary() {
+        const summary = document.getElementById('cop-summary');
+        const launchBtn = document.getElementById('btn-launch-op');
+        const OP_MIN = { recon: 1, heist: 3, extraction: 2, deal: 1, hit: 2, hack: 1 };
+
+        const opType = this._selectedOpType;
+        const count = this._selectedCrewIds.size;
+
+        if (!opType || count === 0) {
+            if (summary) summary.style.display = 'none';
+            if (launchBtn) launchBtn.disabled = true;
+            return;
+        }
+
+        const min = OP_MIN[opType] || 1;
+        const canLaunch = count >= min;
+
+        // Duration scales inversely with crew count (base 60 min, -10 per extra)
+        const baseDuration = 60;
+        const durationMin = Math.max(15, baseDuration - (count - min) * 10);
+        const rewardCredits = 500 + count * 200;
+        const rewardXp = 25 + count * 10;
+
+        if (summary) {
+            summary.style.display = '';
+            document.getElementById('cop-duration-val').textContent = `${durationMin} min`;
+            document.getElementById('cop-reward-val').textContent =
+                `\u20B4${rewardCredits} + ${rewardXp} XP each`;
+        }
+        if (launchBtn) launchBtn.disabled = !canLaunch;
+    }
+
+    /**
+     * Launch a crew operation from the modal.
+     * v1.45.0 [2026-03-21]
+     * CONNECTS: CrewManager.start_operation(), /api/crew/start_op
+     */
+    async launchOperation() {
+        const opType = this._selectedOpType;
+        const crewIds = [...this._selectedCrewIds];
+        if (!opType || crewIds.length === 0) return;
+
+        const OP_MIN = { recon: 1, heist: 3, extraction: 2, deal: 1, hit: 2, hack: 1 };
+        const min = OP_MIN[opType] || 1;
+        const durationMin = Math.max(15, 60 - (crewIds.length - min) * 10);
+        const rewardCredits = 500 + crewIds.length * 200;
+        const rewardXp = 25 + crewIds.length * 10;
+
+        try {
+            const res = await fetch('/api/crew/start_op', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    op_type: opType,
+                    crew_ids: crewIds,
+                    duration_secs: durationMin * 60,
+                    reward_credits: rewardCredits,
+                    reward_xp: rewardXp,
+                }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                this._showToast('OPERATION LAUNCHED!', data.message, 5000);
+                this._appendChatEntry('event', '[CREW]', data.message);
+                this.closeCrewOpsModal();
+                this.refreshHud();
+            } else {
+                this._showToast('FAILED', data.message || data.error, 5000);
+            }
+        } catch (err) {
+            this._showToast('ERROR', err.message, 5000);
+        }
+    }
+
+    /**
+     * Dismiss a crew member.
+     * v1.45.0 [2026-03-21]
+     * @param {string} charId
+     */
+    async dismissCrewMember(charId) {
+        if (!confirm(`Dismiss ${charId} from your crew?`)) return;
+        try {
+            const res = await fetch('/api/crew/dismiss', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ character_id: charId }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                this._showToast('CREW UPDATE', data.message, 4000);
+                this.refreshHud();
+            } else {
+                this._showToast('ERROR', data.error, 4000);
+            }
+        } catch (err) {
+            this._showToast('ERROR', err.message, 4000);
+        }
+    }
+
+    // ── Inventory interaction ────────────────────────────────────────
+    // v1.45.0 [2026-03-21] — Context menu for use/equip/sell
+    // CONNECTS: Inventory, /api/inventory/use
+
+    /**
+     * Handle inventory item click — show context menu with actions.
+     * v1.45.0 — Replaced toast-only with full context menu.
+     * @param {string} itemId
+     * @param {MouseEvent} [event]
+     */
+    onItemClick(itemId, event) {
         const item = (this.inventory || []).find(i => i.id === itemId);
         if (!item) return;
-        this._showToast(
-            item.name || itemId,
-            `${item.description || 'No description'}${item.category ? ` [${item.category}]` : ''}`,
-            4000
-        );
+
+        // Close any existing context menu
+        this._closeContextMenu();
+
+        const menu = document.createElement('div');
+        menu.className = 'item-context-menu';
+
+        // Position near click or near the item slot
+        const x = event ? event.clientX : window.innerWidth / 2;
+        const y = event ? event.clientY : window.innerHeight / 2;
+        menu.style.left = `${Math.min(x, window.innerWidth - 180)}px`;
+        menu.style.top = `${Math.min(y, window.innerHeight - 200)}px`;
+
+        const cat = (item.category || '').toLowerCase();
+        const isConsumable = ['drug', 'food'].includes(cat);
+        const isEquipment = ['weapon', 'cyberware', 'cyberdeck', 'clothing', 'tool'].includes(cat);
+
+        let html = `<div class="ctx-title">${this._esc(item.name || itemId)}</div>`;
+        html += `<div class="ctx-desc">${this._esc(item.description || '')}</div>`;
+        html += `<div class="ctx-meta">${this._esc(cat)} ${item.rarity ? '/ ' + item.rarity : ''}</div>`;
+        html += '<div class="ctx-actions">';
+
+        if (isConsumable) {
+            html += `<button class="ctx-btn use" onclick="NeonCityApp._useItem('${this._esc(itemId)}', 'use')">USE</button>`;
+        }
+        if (isEquipment) {
+            html += `<button class="ctx-btn equip" onclick="NeonCityApp._useItem('${this._esc(itemId)}', 'equip')">EQUIP</button>`;
+        }
+        html += `<button class="ctx-btn sell" onclick="NeonCityApp._useItem('${this._esc(itemId)}', 'sell')">SELL</button>`;
+        html += '</div>';
+
+        menu.innerHTML = html;
+        document.body.appendChild(menu);
+        this._contextMenu = menu;
+
+        // Close on outside click
+        const closer = (e) => {
+            if (!menu.contains(e.target)) {
+                this._closeContextMenu();
+                document.removeEventListener('click', closer, true);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closer, true), 10);
+    }
+
+    /** Close the item context menu if open. */
+    _closeContextMenu() {
+        if (this._contextMenu) {
+            this._contextMenu.remove();
+            this._contextMenu = null;
+        }
+    }
+
+    /**
+     * Use/equip/sell an inventory item.
+     * @param {string} itemId
+     * @param {string} action - 'use', 'equip', 'unequip', 'sell'
+     */
+    async _useItem(itemId, action) {
+        this._closeContextMenu();
+        try {
+            const res = await fetch('/api/inventory/use', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_id: itemId, action }),
+            });
+            const data = await res.json();
+            const msg = data.message || data.result || `${action} ${itemId}`;
+            this._showToast(action.toUpperCase(), msg, 4000);
+            this.refreshHud();
+        } catch (err) {
+            this._showToast('ERROR', err.message, 4000);
+        }
+    }
+
+    // ── Skill Progression ─────────────────────────────────────────────
+    // v1.45.0 [2026-03-21] — XP bars per skill, global level display
+    // CONNECTS: SkillManager, /api/skills, #player-skills
+
+    /**
+     * Render the skill progression panel in the left sidebar.
+     * Replaces the simple skill chips with XP progress bars.
+     * @param {Object} skillData - From SkillManager.to_dict().
+     */
+    _renderSkillProgression(skillData) {
+        const container = document.getElementById('player-skills');
+        if (!container) return;
+
+        const skills = skillData.skills || {};
+        const globalLevel = skillData.global_level || 1;
+        const totalXp = skillData.total_xp || 0;
+
+        const SKILL_ICONS = {
+            hacking: '\u{1F4BB}', combat: '\u2694\uFE0F', stealth: '\u{1F977}',
+            social: '\u{1F3AD}', tech: '\u{1F527}', driving: '\u{1F697}',
+            medicine: '\u{1FA7A}', trading: '\u{1F4B0}',
+        };
+        const LEVEL_NAMES = ['Untrained', 'Novice', 'Competent', 'Skilled', 'Expert', 'Master'];
+        const LEVEL_THRESHOLDS = [0, 100, 300, 600, 1000, 2000];
+        const LEVEL_COLORS = ['#4a5568', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ef4444'];
+
+        let html = `<div class="skill-global-level">
+            <span class="skill-global-lv">LV ${globalLevel}</span>
+            <span class="skill-global-xp">${totalXp.toLocaleString()} total XP</span>
+        </div>`;
+
+        for (const [name, data] of Object.entries(skills)) {
+            const icon = SKILL_ICONS[name] || '\u2753';
+            const level = data.level || 0;
+            const xp = data.xp || 0;
+            const levelName = LEVEL_NAMES[level] || 'Untrained';
+            const color = LEVEL_COLORS[level] || '#4a5568';
+
+            // Calculate progress within current level
+            const current = LEVEL_THRESHOLDS[level] || 0;
+            const next = level < 5 ? (LEVEL_THRESHOLDS[level + 1] || 2000) : 2000;
+            const span = next - current;
+            const progress = span > 0 ? Math.min(100, ((xp - current) / span) * 100) : 100;
+
+            html += `
+            <div class="skill-bar-row">
+                <span class="skill-bar-icon">${icon}</span>
+                <span class="skill-bar-name">${name.toUpperCase()}</span>
+                <div class="skill-bar-track">
+                    <div class="skill-bar-fill" style="width:${progress}%; background:${color}"></div>
+                </div>
+                <span class="skill-bar-level" style="color:${color}">Lv${level}</span>
+                <span class="skill-bar-xp">${xp}/${next}</span>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // ── Heat warnings ────────────────────────────────────────────────
+    // v1.45.0 [2026-03-21] — Visual urgency at heat thresholds
+    // CONNECTS: PlayerState.heat, stat-heat bar, neoncity-header
+
+    /**
+     * Apply visual heat warnings based on current heat level.
+     * @param {number} heat - Current heat value (0-100).
+     */
+    _applyHeatWarnings(heat) {
+        const header = document.querySelector('.neoncity-header');
+        const heatBar = document.getElementById('stat-heat');
+        const layout = document.querySelector('.neoncity-layout');
+
+        // Remove all heat classes first
+        if (layout) {
+            layout.classList.remove('heat-low', 'heat-medium', 'heat-high', 'heat-critical');
+        }
+
+        if (heat >= 80) {
+            if (layout) layout.classList.add('heat-critical');
+            // Show WANTED indicator
+            this._ensureWantedBadge(true);
+        } else if (heat >= 60) {
+            if (layout) layout.classList.add('heat-high');
+            this._ensureWantedBadge(true);
+        } else if (heat >= 30) {
+            if (layout) layout.classList.add('heat-medium');
+            this._ensureWantedBadge(false);
+        } else {
+            this._ensureWantedBadge(false);
+        }
+    }
+
+    /**
+     * Show or hide the WANTED badge in the header.
+     * @param {boolean} show
+     */
+    _ensureWantedBadge(show) {
+        let badge = document.getElementById('wanted-badge');
+        if (show && !badge) {
+            badge = document.createElement('span');
+            badge.id = 'wanted-badge';
+            badge.className = 'wanted-badge';
+            badge.textContent = '\u26A0 WANTED';
+            const header = document.querySelector('.header-center');
+            if (header) header.appendChild(badge);
+        } else if (!show && badge) {
+            badge.remove();
+        }
+    }
+
+    // ── Hacking trigger ──────────────────────────────────────────────
+    // v1.45.0 [2026-03-21] — Wire hack minigame into dashboard
+    // CONNECTS: CosyHack (cosysim-hack-minigame.js), /api/hack/*
+
+    /**
+     * Open the hacking targets browser.
+     * Fetches available targets from /api/hack/targets, renders overlay.
+     */
+    async openHackTargets() {
+        try {
+            const res = await fetch('/api/hack/targets');
+            const data = await res.json();
+            const targets = data.targets || data || [];
+            if (targets.length === 0) {
+                this._showToast('NETRUNNER', 'No hackable targets nearby.', 3000);
+                return;
+            }
+            this._renderHackTargets(targets);
+        } catch (err) {
+            this._showToast('ERROR', `Hack targets: ${err.message}`, 4000);
+        }
+    }
+
+    /**
+     * Render hack targets as a toast overlay with clickable cards.
+     * @param {Array} targets
+     */
+    _renderHackTargets(targets) {
+        // Remove existing overlay if any
+        const existing = document.getElementById('hack-targets-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'hack-targets-overlay';
+        overlay.className = 'hack-targets-panel';
+        overlay.innerHTML = `
+            <div class="htp-header">
+                <h4>\u{1F4BB} HACKABLE TARGETS</h4>
+                <button class="htp-close" onclick="document.getElementById('hack-targets-overlay').remove()">\u2715</button>
+            </div>
+            <div class="htp-list">
+                ${targets.map(t => `
+                    <div class="hack-target-card" onclick="NeonCityApp.startHack('${this._esc(t.id || t.target_id || '')}')">
+                        <div class="htc-name">${this._esc(t.name || t.label || 'Unknown')}</div>
+                        <div class="htc-meta">
+                            <span class="htc-security">Security: ${'\u2605'.repeat(t.difficulty || t.security || 1)}</span>
+                            ${t.reward ? `<span class="htc-reward">\u20B4${t.reward}</span>` : ''}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    /**
+     * Start a hack minigame for a target.
+     * @param {string} targetId
+     */
+    startHack(targetId) {
+        const overlay = document.getElementById('hack-targets-overlay');
+        if (overlay) overlay.remove();
+
+        if (typeof CosyHack !== 'undefined') {
+            CosyHack.open(targetId);
+        } else {
+            this._showToast('HACK', 'Hack module not loaded.', 3000);
+        }
+    }
+
+    // ── Shop ─────────────────────────────────────────────────────────────
+    // v1.45.0 [2026-03-21] — Wire shared shop component
+    // CONNECTS: CosyShop (cosysim-shop.js), /api/shop/*
+
+    /** Open the Black Market shop modal. */
+    openShop() {
+        if (typeof CosyShop !== 'undefined') {
+            CosyShop.open({ title: 'BLACK MARKET', apiBase: '/api/shop' });
+        } else {
+            this._showToast('SHOP', 'Shop module not loaded.', 3000);
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────
