@@ -8,6 +8,11 @@ Provides:
 - LMStudio status and loaded models
 - Real-time log viewer
 - System metrics (CPU, RAM, GPU, disk)
+
+Version: v1.51.0 [2026-03-22]
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
 """
 from __future__ import annotations
 
@@ -22,14 +27,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
+from flask import jsonify, render_template, request
 
 from engine.config import get_config
 from engine.port_registry import build_health_endpoints, get_port, get_service_url
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
 
 logger = logging.getLogger(__name__)
 
@@ -120,10 +122,14 @@ def _get_system_metrics() -> Dict[str, Any]:
     return metrics
 
 
-class SystemControlScene(BaseScene, NexusSceneMixin):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class SystemControlScene(FlaskScene):
     """System Control Panel — live config editor, service monitor, system tools."""
 
     SCENE_METADATA = {
+        "name": "system_control",
+        "display_name": "SYSTEM CONTROL",
+        "port": DEFAULT_PORT,
         "title": "System Control",
         "description": "Live configuration editor, service health dashboard, NLM proxy control, "
                        "Nexus management, LMStudio status, and system metrics.",
@@ -142,32 +148,15 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
         cfg = get_config()
         port = cfg.get(f"scenes.{SCENE_ID}.port", port)
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
-        scene_dir = Path(__file__).parent
-        self.app = Flask(
-            __name__,
-            template_folder=str(scene_dir / "templates"),
-            static_folder=str(scene_dir / "static"),
-        )
-        import jinja2
-        _shared_tmpl = str(scene_dir.parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
         self.app.config["SECRET_KEY"] = cfg.get("flask.secret_key", "system-control-key")
-        register_shared_assets(self.app)
-        CORS(self.app)
 
         self._register_routes()
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         logger.info("SystemControlScene initialized on port %d", port)
 
     # ── Route registration ────────────────────────────────────────────────────
@@ -530,20 +519,7 @@ class SystemControlScene(BaseScene, NexusSceneMixin):
 
     # ── BaseScene interface ───────────────────────────────────────────────────
 
-    def start(self) -> None:
-        """Start the System Control Panel Flask server."""
-        logger.info("Starting System Control Panel on port %d", self.port)
-        self.app.run(
-            host=self.host,
-            port=self.port,
-            debug=False,
-            threaded=True,
-            use_reloader=False,
-        )
-
-    def stop(self) -> None:
-        """Stop the System Control Panel."""
-        logger.info("System Control Panel stopping")
+    # v1.51.0 [2026-03-22] — start/stop delegated to FlaskScene
 
     def get_plugin_info(self) -> Dict[str, Any]:
         """Return metadata for hub discovery."""

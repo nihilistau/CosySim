@@ -26,13 +26,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, render_template, jsonify, request as flask_request
-from flask_socketio import SocketIO, emit
-from flask_cors import CORS
+from flask import render_template, jsonify, request as flask_request
+from flask_socketio import emit
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin
+from engine.scenes.flask_scene import FlaskScene
 from content.scenes.heist.heist_game import (
     HeistState, Phase, Specialty, VENUES, CrewMember,
 )
@@ -95,7 +92,8 @@ CREW_TEMPLATES = {
 }
 
 
-class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class HeistScene(FlaskScene):
     """Cooperative heist planning & execution scene."""
 
     SCENE_METADATA = {
@@ -115,34 +113,14 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(
         self,
         host: str = "127.0.0.1",
         port: int = DEFAULT_PORT,
         db: Optional[Database] = None,
     ):
-        scene_dir = Path(__file__).parent
-        self.app = Flask(
-            __name__,
-            template_folder=str(scene_dir / "templates"),
-            static_folder=str(scene_dir / "static"),
-        )
-        register_shared_assets(self.app)
-        # Extend template loader to include shared templates (navbar_v2.html etc.)
-        import jinja2 as _jinja2
-        _shared_tpl = scene_dir.parent.parent / "shared" / "templates"
-        self.app.jinja_loader = _jinja2.ChoiceLoader([
-            _jinja2.FileSystemLoader(str(scene_dir / "templates")),
-            _jinja2.FileSystemLoader(str(_shared_tpl)),
-        ])
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
-
-        super().__init__(scene_name="heist", host=host, port=port)
+        super().__init__(host=host, port=port)
 
         self.db = db or Database()
         self.game: Optional[HeistState] = None
@@ -155,7 +133,7 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
         self._active_job_id: Optional[str] = None
         self._assigned_roles: Dict[str, str] = {}
 
-        # Engine subsystem refs (wired in start())
+        # Engine subsystem refs (wired in on_before_serve)
         self._content_engine = None
         self._economy = None
         self._reputation = None
@@ -165,8 +143,8 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
         self._event_bus = None
 
         register_heist_rules()
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
         self._register_routes()
         self._register_socketio()
 
@@ -177,8 +155,6 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
             name="PLAN", pattern=r"\[PLAN:([^\]]+)\]",
             handler=None, strip_from_output=True, pre_warm_intent="heist_plan"
         ))
-
-        self.nexus_init("heist")
 
     # ── Routes───────────────────────────────────────────────────────────
 
@@ -753,8 +729,10 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
             "skill_packs": ["memory", "character"],
         }
 
-    def start(self) -> None:
-        logger.info(f"THE SCORE — Dark Renaissance heist scene starting on port {self.port}...")
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
+
+    def on_before_serve(self) -> None:
+        """Hook: wire engine subsystems and subscribe to world events."""
         # Wire engine subsystems (all optional — graceful fallback if unavailable)
         try:
             from engine.content.content_engine import get_content_engine
@@ -805,13 +783,9 @@ class HeistScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_I
                 self._event_bus = get_event_bus()
             self._event_bus.subscribe("world.tick", self._on_world_tick)
             self._event_bus.subscribe("world.time_change", self._on_time_change)
-        self.socketio.run(
-            self.app, host=self.host, port=self.port,
-            debug=False, allow_unsafe_werkzeug=True,
-        )
 
-    def stop(self) -> None:
-        self.nexus_flush()
+    def on_shutdown(self) -> None:
+        """Hook: stop ticker, unsubscribe events, save framework state."""
         self._ticker_stop.set()
         if hasattr(self, "_event_bus") and self._event_bus:
             try:

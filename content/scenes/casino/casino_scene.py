@@ -39,17 +39,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, render_template, jsonify, request
-from flask_socketio import SocketIO, emit
-from flask_cors import CORS
+from flask import render_template, jsonify, request
+from flask_socketio import emit
 
 import sys
 from engine.paths import ROOT as _root
 sys.path.insert(0, str(_root))
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from content.scenes.casino.casino_mcp import (
     register_casino_rules,
     SCENE_ID, DEALER_ID, HUSTLER_ID,
@@ -76,7 +74,8 @@ CASINO_PORT = 5559
 #  CASINO SCENE
 # ══════════════════════════════════════════════════════════════════════
 
-class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class CasinoScene(FlaskScene):
     """
     The Midnight Casino — MCP framework showcase.
 
@@ -94,24 +93,11 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         "description": "Everyone owes someone. The cards don't lie. The dealers do.",
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = CASINO_PORT) -> None:
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
-        # ── Flask app ────────────────────────────────────────────────
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         self.app.config["SECRET_KEY"] = "midnight_casino_noir_2026"
-        CORS(self.app)
-        # v1.51.0 [2026-03-22] — Added async_mode="threading" (was missing, caused hangs in launcher)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False, async_mode="threading")
 
         # Mount control overlay
         from engine.overlay import mount_overlay
@@ -161,7 +147,6 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         # ── Setup ────────────────────────────────────────────────────
         self._setup_routes()
         self._setup_socketio()
-        self._mcp_init()
         register_casino_rules()
         self._seed_casino_registry()
         self._wire_event_bus()
@@ -169,8 +154,6 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         # Framework integration
         self._state_mgr = get_scene_state_manager()
         self._tag_registry = TagRegistry.get()
-
-        self.nexus_init("casino")
 
         # ── New engine integrations ───────────────────────────────────
         self._economy       = None
@@ -188,8 +171,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             self._event_bus = get_event_bus()
             self._event_bus.subscribe("world.tick", self._on_world_tick)
             self._event_bus.subscribe("world.time_change", self._on_time_change)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
     # ══════════════════════════════════════════════════════════════════
     #  FRAMEWORK INTEGRATION
@@ -1526,15 +1509,17 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             "skill_packs": ["casino", "social", "environment", "narrative", "memory", "character"],
         }
 
-    def start(self) -> None:
-        logger.info("CLUB NOIR opening on port %d", self.port)
-        self._fw.emit_event("scene_started", {"scene_id": SCENE_ID, "port": CASINO_PORT}, source=SCENE_ID)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
-                          allow_unsafe_werkzeug=True)
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-    def stop(self) -> None:
-        self.nexus_flush()
-        logger.info("The Midnight Casino closing")
+    def on_before_serve(self) -> None:
+        """Hook: emit scene_started event before serving."""
+        try:
+            self._fw.emit_event("scene_started", {"scene_id": SCENE_ID, "port": CASINO_PORT}, source=SCENE_ID)
+        except Exception:
+            pass
+
+    def on_shutdown(self) -> None:
+        """Hook: unsubscribe world events and save framework state."""
         if hasattr(self, "_event_bus") and self._event_bus:
             try:
                 self._event_bus.unsubscribe("world.tick", self._on_world_tick)

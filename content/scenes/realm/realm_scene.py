@@ -25,13 +25,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
+from flask import jsonify, render_template, request
 from flask_socketio import SocketIO
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 
 from .realm_state import (
     DIRECTOR_PERSONALITIES,
@@ -132,7 +130,8 @@ Keep responses SHORT. You're a speech bubble, not a novel. Use humor, sarcasm, p
 #  REALM SCENE
 # ═══════════════════════════════════════════════════════════════
 
-class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class RealmScene(FlaskScene):
     """The Realm — AI-Directed LitRPG / Visual Novel."""
 
     SCENE_METADATA = {
@@ -152,37 +151,16 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
-        self._mcp_init()
+        super().__init__(host=host, port=port)
 
-        # Flask + SocketIO
-        _scene_dir = Path(__file__).parent
-        self.app = Flask(
-            __name__,
-            template_folder=str(_scene_dir / "templates"),
-            static_folder=str(_scene_dir / "static"),
-        )
-        import jinja2 as _jinja2
-        _shared_tpl = _scene_dir.parent.parent / "shared" / "templates"
-        self.app.jinja_loader = _jinja2.ChoiceLoader([
-            _jinja2.FileSystemLoader(str(_scene_dir / "templates")),
-            _jinja2.FileSystemLoader(str(_shared_tpl)),
-        ])
-        register_shared_assets(self.app)
         self.app.config["SECRET_KEY"] = "realm_shattered_throne_v068"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
 
-        # Mount overlay + skills + health + bench + TTS
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
         # Game state (one active session at a time)
         self.state: Optional[RealmGameState] = None
@@ -202,7 +180,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
         # MCP rules
         register_realm_rules()
 
-        self.nexus_init("realm")
+        # v1.51.0 — FlaskScene handles Nexus connection
 
     # ── Agent helpers──
 
@@ -1209,15 +1187,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
 
     # ── SocketIO ──
 
-    def start(self) -> None:
-        logger.info(
-            "THE SHATTERED THRONE v0.68 'Dark Renaissance' — starting on port %d", self.port
-        )
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
-
-    def stop(self) -> None:
-        self.nexus_flush()
-        self._mcp_deregister_scene()
+    # v1.51.0 [2026-03-22] — start/stop delegated to FlaskScene
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {

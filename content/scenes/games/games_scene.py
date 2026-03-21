@@ -5,8 +5,14 @@ Port 5567.  Flask + SocketIO.
 
 Features an AI GameMaster who narrates mysteries, reacts to player choices,
 and hosts Truth-or-Dare with personality. Wraps MysteryGame and TruthOrDareGame
-in a full BaseScene with Socket.IO events, MCP state, score persistence,
+in a full FlaskScene with Socket.IO events, MCP state, score persistence,
 investigation board integration, and a Nexus-backed leaderboard.
+
+Version: v1.51.0 [2026-03-22]
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
+    v0.68   [2026-03-20] — Dark Renaissance arcade scene
 """
 
 from __future__ import annotations
@@ -19,12 +25,10 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-from flask import Flask, jsonify, render_template, request
-from flask_socketio import SocketIO, emit
+from flask import jsonify, render_template, request
+from flask_socketio import emit
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +40,8 @@ GAMEMASTER_ID = "gamemaster"
 ARCADE_GAMES = ["mystery", "dice_challenge", "truth_or_dare", "trivia", "word_game"]
 
 
-class GamesScene(BaseScene, NexusSceneMixin):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class GamesScene(FlaskScene):
     """THE ARCADE — violet-themed game hub with AI GameMaster, Socket.IO events,
     investigation board, 3D dice, adult Truth-or-Dare, and Nexus leaderboard."""
 
@@ -50,18 +55,9 @@ class GamesScene(BaseScene, NexusSceneMixin):
         "description": "Insert coin. Lose yourself. The high score is never enough.",
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
-
-        scene_dir = os.path.dirname(os.path.abspath(__file__))
-        self.app = Flask(
-            __name__,
-            template_folder=os.path.join(scene_dir, "templates"),
-            static_folder=os.path.join(scene_dir, "static"),
-        )
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*",
-                                 async_mode="threading")
-        register_shared_assets(self.app)
+        super().__init__(host=host, port=port)
 
         self.mystery_games: Dict[str, Any] = {}
         self.tod_games: Dict[str, Any] = {}
@@ -74,11 +70,8 @@ class GamesScene(BaseScene, NexusSceneMixin):
         self._wire_mcp()
         self._register_gamemaster()
 
-        self.nexus_init("games")
-
-        # Wire bench + TTS routes
+        # Wire bench route (TTS already registered by FlaskScene)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
         log.info("GamesScene (THE ARCADE) created on port %d", port)
 
@@ -355,10 +348,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
             reaction = self._get_gamemaster_reply(prompt)
             return jsonify({"reaction": reaction or ("Brilliant!" if correct else "Not quite...")})
 
-        self.register_health_route(app)
-        self.register_hud_route(app)
-        self.register_announcer_route(app)
-        self.register_inventory_route(app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         try:
             self.mount_overlay(app)
             self.mount_skills_server(app)
@@ -690,14 +680,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
     # ── BaseScene Interface ──────────────────────────────────────────
 
-    def start(self) -> None:
-        log.info("Starting GamesScene on %s:%d", self.host, self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port,
-                          allow_unsafe_werkzeug=True)
-
-    def stop(self) -> None:
-        self.nexus_flush()
-        log.info("Stopping GamesScene")
+    # v1.51.0 [2026-03-22] — start/stop delegated to FlaskScene
 
     def get_health(self) -> Dict[str, Any]:
         return {

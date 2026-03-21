@@ -58,7 +58,27 @@ def _import_gallery_scene():
     """
     import sys as _sys
 
+    # v1.51.0 [2026-03-22] — Updated for FlaskScene migration
     # ── Stub base classes (regular Python classes, no metaclass conflicts) ──
+    class _FakeFlaskScene:
+        """Unified stub for FlaskScene (replaces BaseScene+MCPSceneMixin+NexusSceneMixin)."""
+        SCENE_METADATA = {}
+        def __init__(self, host="0.0.0.0", port=5560, **kw):
+            self.scene_name = self.SCENE_METADATA.get("name", "gallery")
+            self.host = host
+            self.port = port
+            self.app = MagicMock()
+            self.socketio = MagicMock()
+        def register_health_route(self, app): pass
+        def register_bench_route(self, app, sio=None): pass
+        def register_tts_route(self, app): pass
+        def register_hud_route(self, app): pass
+        def register_announcer_route(self, app): pass
+        def register_inventory_route(self, app): pass
+        def inject_navbar_context(self): return {}
+        def get_health(self): return {"ok": True, "scene": "gallery"}
+        def nexus_flush(self): pass
+
     class _FakeBaseScene:
         def __init__(self, scene_name="", host="0.0.0.0", port=5560, **kw):
             pass
@@ -68,22 +88,18 @@ def _import_gallery_scene():
         def inject_navbar_context(self): return {}
         def get_health(self): return {"ok": True, "scene": "gallery"}
 
-    class _FakeMCPSceneMixin:
-        """Absorbs mcp_scene_id keyword in __init_subclass__."""
-        def __init_subclass__(cls, mcp_scene_id=None, **kw):
-            super().__init_subclass__(**kw)
-        def _mcp_init(self): pass
-
     class _FakeNexusMixin:
         def nexus_init(self, name): pass
         def nexus_flush(self): pass
+
+    fake_flask_scene = MagicMock()
+    fake_flask_scene.FlaskScene = _FakeFlaskScene
 
     fake_base = MagicMock()
     fake_base.BaseScene = _FakeBaseScene
     fake_base.get_active_scene = MagicMock(return_value=None)
 
     fake_mcp = MagicMock()
-    fake_mcp.MCPSceneMixin = _FakeMCPSceneMixin
     fake_mcp.get_framework = MagicMock(return_value=MagicMock())
 
     fake_nexus = MagicMock()
@@ -94,6 +110,7 @@ def _import_gallery_scene():
         "flask_socketio":                         MagicMock(),
         "flask_cors":                             MagicMock(),
         "engine.paths":                           MagicMock(ROOT=Path(".")),
+        "engine.scenes.flask_scene":              fake_flask_scene,
         "engine.scenes.base_scene":               fake_base,
         "engine.scenes.nexus_mixin":              fake_nexus,
         "engine.mcp.framework":                   fake_mcp,

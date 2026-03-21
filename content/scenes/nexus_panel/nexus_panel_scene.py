@@ -2,6 +2,11 @@
 
 Provides real-time monitoring, Librarian agent chat, maintenance controls,
 workflow management, training data curation, and Copilot integration panel.
+
+Version: v1.51.0 [2026-03-22]
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
 """
 from __future__ import annotations
 
@@ -14,17 +19,14 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
+from flask import jsonify, render_template, request
 
 from engine.config import get_config
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
 
 try:
-    from flask_socketio import SocketIO, emit
+    from flask_socketio import emit
 except ImportError:
-    SocketIO = None  # type: ignore[misc,assignment]
     emit = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,10 @@ logger = logging.getLogger(__name__)
 SCENE_ID = "nexus_panel"
 DEFAULT_PORT = 5570
 
-SCENE_METADATA = {
+_MODULE_METADATA = {
+    "name": "nexus_panel",
+    "display_name": "NEXUS CONTROL PANEL",
+    "port": DEFAULT_PORT,
     "title": "Nexus Control Panel",
     "description": "Knowledge management dashboard with Librarian AI assistant",
     "genre": "management",
@@ -51,38 +56,19 @@ SCENE_METADATA = {
 }
 
 
-class NexusPanelScene(BaseScene, NexusSceneMixin):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class NexusPanelScene(FlaskScene):
     """Nexus knowledge management control panel."""
 
-    SCENE_METADATA = SCENE_METADATA
+    SCENE_METADATA = _MODULE_METADATA
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
         cfg = get_config()
         port = cfg.get(f"scenes.{SCENE_ID}.port", port)
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
-        self._template_dir = os.path.join(os.path.dirname(__file__), "templates")
-        self._static_dir = os.path.join(os.path.dirname(__file__), "static")
-        self.app = Flask(
-            __name__,
-            template_folder=self._template_dir,
-            static_folder=self._static_dir,
-        )
         self.app.config["SECRET_KEY"] = cfg.get("flask.secret_key", "nexus-panel-key")
-
-        # Socket.IO for real-time progress streaming
-        if SocketIO is not None:
-            self.socketio = SocketIO(
-                self.app, cors_allowed_origins="*", async_mode="threading"
-            )
-        else:
-            self.socketio = None
-
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
 
         # Activity feed — ring buffer of recent events
         self._activity: deque = deque(maxlen=500)
@@ -106,7 +92,6 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
         self._ingest_jobs: Dict[str, dict] = {}
 
         self._register_routes()
-        self.nexus_init(SCENE_ID)
         logger.info("NexusPanelScene initialised on port %s", port)
 
     # ── Activity Tracking ───────────────────────────────────────────────
@@ -2200,17 +2185,12 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
 
     # ── Lifecycle ───────────────────────────────────────────────────────
 
-    def start(self) -> None:
-        """Start the Nexus Control Panel."""
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
+
+    def on_before_serve(self) -> None:
+        """Hook: log activity and check NLM proxy health before serving."""
         self._log_activity("panel_start", f"port={self.port}")
-        logger.info("Starting Nexus Control Panel on port %s", self.port)
         self._check_nlm_proxy_health()
-        if self.socketio is not None:
-            self.socketio.run(self.app, host=self.host, port=self.port,
-                              debug=False, use_reloader=False,
-                              allow_unsafe_werkzeug=True)
-        else:
-            self.app.run(host=self.host, port=self.port, debug=False, use_reloader=False)
 
     def _check_nlm_proxy_health(self) -> None:
         """Warn at startup if NLM proxy is unreachable."""
@@ -2231,19 +2211,17 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
             proxy_url,
         )
 
-    def stop(self) -> None:
-        """Stop the panel and flush Nexus events."""
+    def on_shutdown(self) -> None:
+        """Hook: log activity on shutdown."""
         self._log_activity("panel_stop")
-        self.nexus_flush()
-        logger.info("Nexus Control Panel stopped")
 
     def get_plugin_info(self) -> Dict[str, Any]:
         """Return scene metadata for hub discovery."""
         return {
             "name": SCENE_ID,
-            "title": SCENE_METADATA["title"],
-            "description": SCENE_METADATA["description"],
+            "title": _MODULE_METADATA["title"],
+            "description": _MODULE_METADATA["description"],
             "port": self.port,
             "type": "admin",
-            "features": SCENE_METADATA["features"],
+            "features": _MODULE_METADATA["features"],
         }

@@ -5,6 +5,12 @@ and places bets.  Showcases real-time agent reasoning via ArenaEngine.
 
 Port  : 5561
 Accent: #dc2626 (blood red)
+
+Version: v1.51.0 [2026-03-22]
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
+    v0.68   [2026-03-20] — Dark Renaissance arena scene
 """
 from __future__ import annotations
 
@@ -15,17 +21,15 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, render_template, jsonify, request
-from flask_socketio import SocketIO, emit, join_room
-from flask_cors import CORS
+from flask import render_template, jsonify, request
+from flask_socketio import emit, join_room
 
 import sys
 from engine.paths import ROOT as _root
 sys.path.insert(0, str(_root))
 
-from engine.scenes.base_scene import BaseScene
-from engine.mcp.framework import MCPSceneMixin, get_framework
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from content.scenes.arena import arena_skills as _arena_skills  # noqa: F401
 
 logger = logging.getLogger(__name__)
@@ -38,7 +42,8 @@ SCENE_ID: str = "arena"
 #  ARENA SCENE
 # ══════════════════════════════════════════════════════════════════════
 
-class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class ArenaScene(FlaskScene):
     """THE COLOSSEUM — Arena scene for v0.68 'Dark Renaissance'.
 
     Hosts tactical card-game matches between two AI fighters powered by
@@ -46,9 +51,8 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
     LMStudio reasoning after every round.
 
     Architecture:
-        - Flask + Socket.IO for HTTP routes and real-time events
+        - FlaskScene for unified lifecycle, MCP, and Nexus integration
         - ArenaEngine (lazy-loaded) manages match lifecycle
-        - MCPSceneMixin registers the scene with the MCP framework
         - Auto-play mode drives rounds every 5 s in a daemon thread
     """
 
@@ -62,6 +66,7 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
         "description": "Two minds. One arena. Place your bets.",
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = ARENA_PORT) -> None:
         """Initialise the Arena scene.
 
@@ -69,26 +74,12 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             host: Network interface to bind to.
             port: HTTP port for the Flask app.
         """
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
-        # ── Flask app ────────────────────────────────────────────────
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
-        register_shared_assets(self.app)
         self.app.config["SECRET_KEY"] = "colosseum_dark_renaissance_2026"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
 
-        # Register BaseScene standard routes
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
+        # Scene-specific extra routes (FlaskScene registers health, hud, announcer, inventory, tts)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
         # Mount control overlay
         try:
@@ -471,9 +462,10 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             ],
         }
 
-    def start(self) -> None:
-        """Start the Arena Flask/SocketIO server."""
-        logger.info("THE COLOSSEUM opening on port %d", self.port)
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
+
+    def on_before_serve(self) -> None:
+        """Hook: emit scene_started event before serving."""
         try:
             get_framework().emit_event(
                 "scene_started",
@@ -482,15 +474,11 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id=SCENE_ID):
             )
         except Exception:
             pass
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
-                          allow_unsafe_werkzeug=True)
 
-    def stop(self) -> None:
-        """Stop the Arena scene and clean up resources."""
+    def on_shutdown(self) -> None:
+        """Hook: stop all auto-play threads during shutdown."""
         for match_id in list(self._auto_play_threads.keys()):
             self._stop_auto_play(match_id)
-        self._mcp_deregister_scene()
-        logger.info("THE COLOSSEUM closed")
 
 
 __all__ = ["ArenaScene"]

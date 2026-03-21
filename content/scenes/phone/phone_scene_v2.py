@@ -25,15 +25,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, request, render_template, send_from_directory
-from flask_socketio import SocketIO, emit, join_room
+from flask import jsonify, request, render_template, send_from_directory
+from flask_socketio import emit, join_room
 
 from engine.paths import ROOT as project_root
 import sys; sys.path.insert(0, str(project_root))
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from content.scenes.phone.phone_db import PhoneDB
 from content.scenes.phone.phone_rules_v2 import (
     register_phone_rules,
@@ -155,14 +154,19 @@ class _PhoneCharacterAgent:
 
 # ── Main scene class ──────────────────────────────────────────────────────────
 
-class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class PhoneSceneV2(FlaskScene):
     """iOS-style phone scene — multi-contact DMs, group chats, truth-or-dare."""
 
     SCENE_METADATA = {
+        "name": "phone",
+        "display_name": "PHONE",
+        "port": 5555,
         "title": "Phone",
         "description": "iOS-style phone interface with messaging, calls, and character social media. "
                        "Characters send autonomous texts and maintain relationships.",
         "genre": "social_simulation",
+        "type": "social",
         "max_characters": 5,
         "features": ["messaging", "autonomous_texts", "character_relationships", "phone_os",
                      "contacts", "social_feed", "conversation_threads"],
@@ -170,8 +174,9 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
 
     # ── lifecycle ───────────────────────────────────────────────────────────────
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = 5555):
-        super().__init__(scene_name="phone", host=host, port=port)
+        super().__init__(host=host, port=port)
 
         self.phone_db = PhoneDB()
         self.db       = Database()
@@ -190,20 +195,8 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self._ticker_stop = threading.Event()
         self._ticker_thread: Optional[threading.Thread] = None
 
-        # Flask + SocketIO
-        self.app = Flask(
-            __name__,
-            template_folder=str(_TEMPLATE_DIR),
-            static_folder=str(_STATIC_DIR),
-        )
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
-        self.register_tts_route(self.app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.app.secret_key = os.urandom(24)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
         # Mount control overlay
         from engine.overlay import mount_overlay
@@ -216,9 +209,10 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self._state_mgr = get_scene_state_manager()
         self._tag_registry = TagRegistry.get()
 
-        self.nexus_init("phone")
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-    def start(self) -> None:
+    def on_before_serve(self) -> None:
+        """Hook: seed characters, start ticker, register MCP rules, subscribe world events."""
         self._seed_characters()
         self._start_ticker()
         try:
@@ -228,23 +222,17 @@ class PhoneSceneV2(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             # Wire up framework event listeners
             fw.on("mood_contagion", lambda evt: self._on_mood_event(evt))
             fw.on("story_beat", lambda evt: self._on_story_beat(evt))
-            self._mcp_init()
         except Exception as exc:
             logger.warning("MCP rule registration skipped: %s", exc)
         self._subscribe_world_events()
-        logger.info("PhoneSceneV2 started on %s:%s", self.host, self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
-                          use_reloader=False, allow_unsafe_werkzeug=True)
 
-    def stop(self) -> None:
-        self.nexus_flush()
+    def on_shutdown(self) -> None:
+        """Hook: stop ticker and save framework state."""
         self._ticker_stop.set()
-        # Save framework state on graceful shutdown
         try:
             get_framework().save_state()
         except Exception:
             pass
-        logger.info("PhoneSceneV2 stopped")
 
     def _on_mood_event(self, evt) -> None:
         """React to mood contagion events from the framework bus."""

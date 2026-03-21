@@ -17,13 +17,11 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
+from flask import jsonify, render_template, request
 from flask_socketio import SocketIO
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
 from content.scenes.coders.coders_rules import register_coders_rules
@@ -42,7 +40,8 @@ SCENE_ID = "coders"
 DEFAULT_PORT = 5564
 
 
-class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="coders"):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class CodersRoomScene(FlaskScene):
     """The Coders Room — AI Agent Idle Code Simulation."""
 
     SCENE_METADATA = {
@@ -60,28 +59,16 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
                      "sandboxed_execution", "multi_agent_collab"],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
-        self._mcp_init()
+        super().__init__(host=host, port=port)
 
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
         self.app.config["SECRET_KEY"] = "coders_room_v3"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
-        register_shared_assets(self.app)
 
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
         self.state: Optional[CodersRoomState] = None
         self._state_mgr = get_scene_state_manager()
@@ -93,8 +80,6 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
         register_coders_rules()
         self._tick_thread: Optional[threading.Thread] = None
         self._running = False
-
-        self.nexus_init("coders")
 
         self._setup_routes()
         self._setup_socketio()
@@ -406,16 +391,13 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
 
     # ── BaseScene contract ──
 
-    def start(self) -> None:
-        logger.info("THE LAB v0.68 Dark Renaissance starting on port %d", self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-    def stop(self) -> None:
-        self.nexus_flush()
+    def on_shutdown(self) -> None:
+        """Hook: save session and stop running flag."""
         self._running = False
         if self.state:
             self._save_session()
-        self._mcp_deregister_scene()
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {

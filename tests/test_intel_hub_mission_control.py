@@ -57,12 +57,11 @@ def hub_app():
     app = Flask(__name__)
     app.config["TESTING"] = True
 
+    # v1.51.0 — Patch FlaskScene instead of BaseScene; register_shared_assets
+    # and SocketIO no longer at module level
     with (
         patch("engine.config.get_config", return_value=MagicMock(get=lambda k, d=None: d)),
-        patch("content.scenes.intel_hub.intel_hub_scene.register_shared_assets"),
-        patch("content.scenes.intel_hub.intel_hub_scene.SocketIO", None),
-        patch("engine.scenes.base_scene.BaseScene.__init__", lambda s, **kw: None),
-        patch("engine.scenes.base_scene.BaseScene.register_health_route"),
+        patch("engine.scenes.flask_scene.FlaskScene.__init__", lambda s, **kw: None),
         patch("engine.monitoring.metrics_collector.get_metrics_collector",
               return_value=mock_metrics_collector),
         patch("engine.lmstudio.router_v3_client.get_router_v3_client",
@@ -72,9 +71,10 @@ def hub_app():
     ):
         from content.scenes.intel_hub.intel_hub_scene import IntelHubScene
         scene = IntelHubScene.__new__(IntelHubScene)
-        scene._app = app
-        scene._host = "0.0.0.0"
-        scene._port = 5580
+        scene.app = app
+        scene.host = "0.0.0.0"
+        scene.port = 5580
+        scene.scene_name = "intel_hub"
         scene._activity = deque(maxlen=200)
         scene._stop_event = MagicMock()
         scene._register_routes()
@@ -285,12 +285,10 @@ def test_intel_metrics_graceful_on_collector_error():
     mock_router = MagicMock()
     mock_router.get_status.return_value = {"available": False, "predict_count": 0}
 
+    # v1.51.0 — Patch FlaskScene instead of BaseScene
     with (
         patch("engine.config.get_config", return_value=MagicMock(get=lambda k, d=None: d)),
-        patch("content.scenes.intel_hub.intel_hub_scene.register_shared_assets"),
-        patch("content.scenes.intel_hub.intel_hub_scene.SocketIO", None),
-        patch("engine.scenes.base_scene.BaseScene.__init__", lambda s, **kw: None),
-        patch("engine.scenes.base_scene.BaseScene.register_health_route"),
+        patch("engine.scenes.flask_scene.FlaskScene.__init__", lambda s, **kw: None),
         patch("engine.monitoring.metrics_collector.get_metrics_collector", return_value=failing_mc),
         patch("engine.lmstudio.router_v3_client.get_router_v3_client", return_value=mock_router),
         patch("engine.world.world_sim.get_world_sim", side_effect=ImportError),
@@ -298,9 +296,10 @@ def test_intel_metrics_graceful_on_collector_error():
     ):
         from content.scenes.intel_hub.intel_hub_scene import IntelHubScene
         scene = IntelHubScene.__new__(IntelHubScene)
-        scene._app = app
-        scene._host = "0.0.0.0"
-        scene._port = 5580
+        scene.app = app
+        scene.host = "0.0.0.0"
+        scene.port = 5580
+        scene.scene_name = "intel_hub"
         scene._activity = deque(maxlen=200)
         scene._stop_event = MagicMock()
         scene._register_routes()
@@ -323,12 +322,10 @@ def test_world_events_graceful_on_npc_error():
     mock_sim = MagicMock()
     mock_sim.get_all_events.return_value = []
 
+    # v1.51.0 — Patch FlaskScene instead of BaseScene
     with (
         patch("engine.config.get_config", return_value=MagicMock(get=lambda k, d=None: d)),
-        patch("content.scenes.intel_hub.intel_hub_scene.register_shared_assets"),
-        patch("content.scenes.intel_hub.intel_hub_scene.SocketIO", None),
-        patch("engine.scenes.base_scene.BaseScene.__init__", lambda s, **kw: None),
-        patch("engine.scenes.base_scene.BaseScene.register_health_route"),
+        patch("engine.scenes.flask_scene.FlaskScene.__init__", lambda s, **kw: None),
         patch("engine.monitoring.metrics_collector.get_metrics_collector", return_value=MagicMock()),
         patch("engine.lmstudio.router_v3_client.get_router_v3_client", return_value=MagicMock()),
         patch("engine.world.world_sim.get_world_sim", return_value=mock_sim),
@@ -336,9 +333,10 @@ def test_world_events_graceful_on_npc_error():
     ):
         from content.scenes.intel_hub.intel_hub_scene import IntelHubScene
         scene = IntelHubScene.__new__(IntelHubScene)
-        scene._app = app
-        scene._host = "0.0.0.0"
-        scene._port = 5580
+        scene.app = app
+        scene.host = "0.0.0.0"
+        scene.port = 5580
+        scene.scene_name = "intel_hub"
         scene._activity = deque(maxlen=200)
         scene._stop_event = MagicMock()
         scene._register_routes()

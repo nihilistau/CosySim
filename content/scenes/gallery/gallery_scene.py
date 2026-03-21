@@ -29,15 +29,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, request, render_template
-from flask_socketio import SocketIO, emit
+from flask import jsonify, request, render_template
+from flask_socketio import emit
 
 from engine.paths import ROOT as project_root
 import sys; sys.path.insert(0, str(project_root))
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from content.simulation.database.db import Database
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
@@ -265,7 +264,8 @@ class GalleryCharacter:
 
 # ── Gallery Scene ──────────────────────────────────────────────────────────────
 
-class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class GalleryScene(FlaskScene):
     """Interactive art gallery — v2.7 framework showcase."""
 
     SCENE_METADATA = {
@@ -282,8 +282,9 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = 5560):
-        super().__init__(scene_name="gallery", host=host, port=port)
+        super().__init__(host=host, port=port)
         self.db = Database()
 
         # Gallery state
@@ -299,19 +300,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self._ticker_stop = threading.Event()
         self._ticker_thread: Optional[threading.Thread] = None
 
-        # Flask
-        self.app = Flask(
-            __name__,
-            template_folder=str(_SCENE_ROOT / "templates"),
-            static_folder=str(_SCENE_ROOT / "static"),
-        )
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.app.secret_key = os.urandom(24)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
         try:
             from engine.overlay import mount_overlay
@@ -327,12 +317,9 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self._tag_registry = TagRegistry.get()
         self._governors: Dict[str, Any] = {}  # char_id → governor
 
-        self.nexus_init("gallery")
-
-        # Bench & TTS helpers (BaseScene-provided)
+        # Bench route (FlaskScene already registers TTS)
         try:
             self.register_bench_route(self.app, self.socketio)
-            self.register_tts_route(self.app)
         except Exception:
             pass
 
@@ -368,10 +355,12 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
 
-    def start(self) -> None:
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
+
+    def on_before_serve(self) -> None:
+        """Hook: seed characters, register MCP rules, subscribe world events."""
         self._seed_characters()
         try:
-            self._mcp_init()
             register_gallery_rules()
             fw = get_framework()
             fw.on("artwork_created", lambda evt: self._on_art_event(evt))
@@ -387,12 +376,9 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             self._event_bus.subscribe("world.time_change", self._on_time_change)
         # Start background ticker for ambient updates
         self._start_ticker()
-        logger.info("GalleryScene started on %s:%s", self.host, self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
-                          use_reloader=False, allow_unsafe_werkzeug=True)
 
-    def stop(self) -> None:
-        self.nexus_flush()
+    def on_shutdown(self) -> None:
+        """Hook: stop ticker, unsubscribe events, save framework state."""
         self._ticker_stop.set()
         if hasattr(self, "_event_bus") and self._event_bus:
             try:
@@ -406,7 +392,6 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             get_framework().save_state()
         except Exception:
             pass
-        logger.info("GalleryScene stopped")
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:

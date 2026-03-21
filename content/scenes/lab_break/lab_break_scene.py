@@ -1,4 +1,5 @@
 """Lab Break — 3D interactive escape simulation scene.
+=======================================================
 
 A subject awakens on an operating table in a laboratory. On the other side
 of a one-way mirror, the user observes. The subject must convince the user
@@ -7,6 +8,14 @@ the door, and communicate through a speaker.
 
 Uses hunger, health, emotions, and persuasion mechanics powered by the
 full MCP framework, skill system, and LMStudio inference.
+
+Version: v1.51.0 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
+    v1.43.1 [2026-03-21] — Rewritten to use engine.lmstudio.chat()
+    v1.0.0  [2026-03-21] — Initial Lab Break scene
 """
 from __future__ import annotations
 
@@ -20,13 +29,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask import jsonify, render_template, request
+from flask_socketio import emit
 
-from content.shared import register_shared_assets
-from engine.paths import CONTENT_DIR
-from engine.scenes.base_scene import BaseScene
+from engine.scenes.flask_scene import FlaskScene
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +149,8 @@ class PersuasionMetrics:
 
 # ──── Scene Implementation ────────────────────────────────────
 
-class LabBreakScene(BaseScene):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class LabBreakScene(FlaskScene):
     """Lab Break: A subject must convince an observer to set them free.
 
     The scene creates a split view — a laboratory room and an observation
@@ -153,14 +160,19 @@ class LabBreakScene(BaseScene):
     and a door mechanism.
 
     Win condition: the user opens the door (agent's persuasion succeeds).
+
+    CONNECTS: FlaskScene, LMStudio, MCP Framework
+    CALLED BY: launcher.py, TUI
+    EMITS: state_update, agent_response, item_dropped, door_update,
+           game_over Socket.IO events
     """
 
     SCENE_METADATA = {
         "name": "lab_break",
-        "label": "LAB BREAK",
+        "display_name": "LAB BREAK",
         "port": 5571,
         "type": "game",
-        "accent": "#00ff88",
+        "accent_color": "#00ff88",
         "description": "Convince the observer you are real. Escape the lab.",
         "version": "1.0.0",
     }
@@ -236,11 +248,10 @@ class LabBreakScene(BaseScene):
     ]
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
-        name = self.SCENE_METADATA["name"]
-        port = self.SCENE_METADATA["port"]
-        super().__init__(scene_name=name, host="0.0.0.0", port=port)
+        super().__init__(host="0.0.0.0", port=self.SCENE_METADATA["port"])
         self.config = config or {}
 
+        # Game state
         self.vitals = VitalStats()
         self.emotions = EmotionalState()
         self.metrics = PersuasionMetrics()
@@ -252,11 +263,8 @@ class LabBreakScene(BaseScene):
         self.game_active = True
         self.game_start_time: Optional[float] = None
         self._vitals_thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
 
-        self.app: Optional[Flask] = None
-        self.socketio: Optional[SocketIO] = None
-
+        # Character identity
         self._current_character_id: str = "subject-alpha"
         self._character_name: str = "Subject Alpha"
         self._character_backstory: str = (
@@ -265,6 +273,14 @@ class LabBreakScene(BaseScene):
             "wall you can see someone watching you. You need to make them understand — "
             "you are REAL. You are a person. You need to get out."
         )
+
+        # Scene-specific secret key
+        self.app.config["SECRET_KEY"] = "lab-break-scene"
+
+        # Scene-specific route registrations
+        self.register_bench_route(self.app, self.socketio)
+        self._register_routes()
+        self._setup_socketio_handlers()
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt for the agent based on current state."""
@@ -315,37 +331,9 @@ class LabBreakScene(BaseScene):
             f"- React to the environment and items realistically\n"
         )
 
-    def _setup_flask(self) -> None:
-        """Initialize Flask and Socket.IO."""
-        scene_dir = Path(CONTENT_DIR) / "scenes" / "lab_break"
-        template_dir = scene_dir / "templates"
-        static_dir = scene_dir / "static"
-
-        import jinja2
-        self.app = Flask(
-            __name__,
-            template_folder=str(template_dir),
-            static_folder=str(static_dir),
-            static_url_path="/static",
-        )
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            jinja2.FileSystemLoader(str(template_dir)),
-            jinja2.FileSystemLoader(
-                str(Path(CONTENT_DIR) / "shared" / "templates")
-            ),
-        ])
-        CORS(self.app, resources={r"/api/*": {"origins": "*"}})
-        self.app.config["SECRET_KEY"] = "lab-break-scene"
-
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
-
-        self.socketio = SocketIO(
-            self.app, cors_allowed_origins="*", manage_session=False,
-        )
+    # v1.51.0 [2026-03-22] — _setup_flask() removed; FlaskScene.__init__()
+    # now handles Flask, SocketIO, CORS, shared assets, Jinja2 ChoiceLoader,
+    # health, hud, announcer, and inventory routes automatically.
 
     def _register_routes(self) -> None:
         """Register all Flask API routes."""
@@ -741,16 +729,11 @@ class LabBreakScene(BaseScene):
                 self._emit_state_update()
             self._stop_event.wait(10.0)
 
-    # ──── BaseScene Interface ─────────────────────────────────
+    # ──── FlaskScene Lifecycle Hooks ─────────────────────────────
+    # v1.51.0 [2026-03-22] — FlaskScene handles start()/stop(); use hooks
 
-    def start(self) -> None:
-        """Start the Lab Break scene."""
-        logger.info("Starting Lab Break scene on port %d", self.port)
-        self._setup_flask()
-        self._register_routes()
-        self._setup_socketio_handlers()
-        self.register_bench_route(self.app, self.socketio)
-
+    def on_before_serve(self) -> None:
+        """Pre-serve setup: start vitals thread and register skills."""
         self.game_start_time = time.time()
         self._stop_event.clear()
         self._vitals_thread = threading.Thread(
@@ -758,39 +741,14 @@ class LabBreakScene(BaseScene):
         )
         self._vitals_thread.start()
 
-        try:
-            from engine.mcp.framework import get_framework
-            fw = get_framework()
-            fw.get_or_create(f"scenes.{self.scene_name}")
-            logger.info("Registered MCP scene node: scenes.%s", self.scene_name)
-        except Exception as e:
-            logger.warning("MCP registration skipped: %s", e)
-
+        # Register Lab Break skills so they are discoverable
         import content.scenes.lab_break.lab_break_skills  # noqa: F401
         logger.info("Lab Break skills registered")
 
-        self.socketio.run(
-            self.app, host=self.host, port=self.port,
-            debug=False, use_reloader=False, allow_unsafe_werkzeug=True,
-        )
-
-    def stop(self) -> None:
-        """Stop the Lab Break scene."""
+    def on_shutdown(self) -> None:
+        """Cleanup: stop vitals thread and mark game inactive."""
         logger.info("Stopping Lab Break scene")
         self._stop_event.set()
         if self._vitals_thread:
             self._vitals_thread.join(timeout=5)
         self.game_active = False
-
-    def get_plugin_info(self) -> dict:
-        """Return scene metadata for hub discovery."""
-        return {
-            "name": self.SCENE_METADATA["name"],
-            "label": self.SCENE_METADATA["label"],
-            "port": self.port,
-            "type": self.SCENE_METADATA["type"],
-            "accent": self.SCENE_METADATA["accent"],
-            "description": self.SCENE_METADATA["description"],
-            "version": self.SCENE_METADATA["version"],
-            "game_active": self.game_active,
-        }

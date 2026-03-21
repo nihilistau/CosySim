@@ -28,13 +28,11 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask import jsonify, render_template, request
+from flask_socketio import emit
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
 from engine.events.event_bus import get_event_bus, EventTypes
@@ -269,7 +267,8 @@ _TICKER_TEMPLATES: List[str] = [
 ]
 
 
-class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neoncity"):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class NeonCityScene(FlaskScene):
     """NeonCity — Living World Hub v0.68 'Dark Renaissance'.
 
     Multi-district city scene wiring together economy, reputation,
@@ -285,38 +284,16 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             host: Bind address for the Flask/SocketIO server.
             port: TCP port for the server.
         """
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
-        self._mcp_init()
+        super().__init__(host=host, port=port)
 
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
-        # Multi-folder Jinja loader: scene templates + shared templates
-        import jinja2
-        _shared_tmpl = str(Path(__file__).parent.parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
         self.app.config["SECRET_KEY"] = "neoncity_v083_social_layer"
-        CORS(self.app)
-        # v1.51.0 [2026-03-22] — Added async_mode="threading" (was missing, caused hangs in launcher)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
-        register_shared_assets(self.app)
 
-        # BaseScene standard route mounts
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
-        self.register_health_route(self.app)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
-        self.register_hud_route(self.app)
         self.register_hack_route(self.app)
         self.register_world_events_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         # v1.45.0 [2026-03-21] — Enable shop buy/sell endpoints
         self.register_shop_route(self.app)
 
@@ -338,9 +315,8 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
         self._event_bus = get_event_bus()
         self._bus_subs: List[str] = []
 
-        # MCP rules + Nexus
+        # MCP rules
         register_neoncity_rules()
-        self.nexus_init("neoncity")
 
         # Wire everything up
         self._setup_routes()
@@ -1530,12 +1506,10 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
     # ------------------------------------------------------------------
 
     # v1.44.0 [2026-03-21] — Start LivingWorld daemon + crew polling
-    def start(self) -> None:
-        """Start the NeonCity Flask/SocketIO server.
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-        Also starts the LivingWorld daemon (world events, faction AI,
-        weather, NPC routines) and a crew operation auto-poller.
-        """
+    def on_before_serve(self) -> None:
+        """Hook: start LivingWorld daemon and crew auto-poller before serving."""
         # Start the living world simulation
         try:
             from engine.world.living_world import get_living_world
@@ -1566,17 +1540,8 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
             target=_crew_poll_loop, daemon=True, name="crew-poll",
         ).start()
 
-        logger.info(
-            'NeonCity v1.44 "Dark Renaissance" — Living World Hub starting on port %d',
-            self.port,
-        )
-        self.socketio.run(
-            self.app, host=self.host, port=self.port,
-            debug=False, allow_unsafe_werkzeug=True,
-        )
-
-    def stop(self) -> None:
-        """Tear down the scene and release all resources."""
+    def on_shutdown(self) -> None:
+        """Hook: stop crew poller, LivingWorld, and unsubscribe events."""
         self._crew_poll_running = False
         try:
             from engine.world.living_world import get_living_world
@@ -1588,8 +1553,6 @@ class NeonCityScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="neo
                 self._event_bus.unsubscribe(sub_id)
             except Exception:
                 pass
-        self.nexus_flush()
-        self._mcp_deregister_scene()
 
     def get_plugin_info(self) -> Dict[str, Any]:
         """Return scene plugin metadata for the MCP registry.

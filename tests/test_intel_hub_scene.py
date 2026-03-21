@@ -32,23 +32,22 @@ def hub_app():
     app = Flask(__name__)
     app.config["TESTING"] = True
 
+    # v1.51.0 — FlaskScene replaces BaseScene; mock at FlaskScene level
     with (
         patch("engine.config.get_config", return_value=MagicMock(get=lambda k, d=None: d)),
-        patch("content.scenes.intel_hub.intel_hub_scene.register_shared_assets"),
-        patch("content.scenes.intel_hub.intel_hub_scene.SocketIO", None),
-        patch("engine.scenes.base_scene.BaseScene.__init__", lambda s, **kw: None),
-        patch("engine.scenes.base_scene.BaseScene.register_health_route"),
+        patch("engine.scenes.flask_scene.FlaskScene.__init__", lambda s, **kw: None),
         # Patch at the source so lazy imports in route handlers resolve correctly
         patch("engine.nexus.user_profile.get_user_profile_store", return_value=mock_store),
     ):
         from content.scenes.intel_hub.intel_hub_scene import IntelHubScene
         scene = IntelHubScene.__new__(IntelHubScene)
-        scene._app = app
-        scene._host = "0.0.0.0"
-        scene._port = 5580
+        scene.app = app
+        scene.host = "0.0.0.0"
+        scene.port = 5580
+        scene.scene_name = "intel_hub"
         scene._activity = deque()
         scene._notification_subscribers = []
-        scene._socketio = None
+        scene.socketio = None
         scene._stop_event = MagicMock()
         scene._register_routes()
 
