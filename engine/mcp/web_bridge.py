@@ -81,7 +81,8 @@ def create_bridge_app(
         lms_ok = False
         try:
             async with httpx.AsyncClient() as client:
-                r = await client.get(f"{lmstudio_url}/v1/models", timeout=3.0)
+                from engine.utils import get_lmstudio_headers
+                r = await client.get(f"{lmstudio_url}/api/v1/models", headers=get_lmstudio_headers(), timeout=3.0)
                 lms_ok = r.status_code == 200
         except Exception:
             lms_ok = False  # LMStudio unreachable — expected when offline
@@ -134,9 +135,11 @@ def create_bridge_app(
 
         async with httpx.AsyncClient() as client:
             try:
+                from engine.utils import get_lmstudio_headers
                 r = await client.post(
-                    f"{lmstudio_url}/v1/chat/completions",
+                    f"{lmstudio_url}/api/v1/chat/completions",
                     json=body,
+                    headers=get_lmstudio_headers(),
                     timeout=120.0,
                 )
                 return JSONResponse(r.json(), status_code=r.status_code)
@@ -160,10 +163,12 @@ def create_bridge_app(
         async def event_generator():
             try:
                 async with httpx.AsyncClient() as client:
+                    from engine.utils import get_lmstudio_headers
                     async with client.stream(
                         "POST",
-                        f"{lmstudio_url}/v1/chat/completions",
+                        f"{lmstudio_url}/api/v1/chat/completions",
                         json=body,
+                        headers=get_lmstudio_headers(),
                         timeout=None,
                     ) as response:
                         async for line in response.aiter_lines():

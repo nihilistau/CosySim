@@ -537,15 +537,13 @@ class LabBreakScene(BaseScene):
             host = cfg.get("lmstudio.host", "localhost")
             port = cfg.get("lmstudio.port", 1234)
             model = cfg.get("lmstudio.models.small", "")
-            token = cfg.get("lmstudio.api_token", "")
 
             import requests
-            headers = {"Content-Type": "application/json"}
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
+            from engine.utils import get_lmstudio_headers
+            headers = get_lmstudio_headers()
 
             resp = requests.post(
-                f"http://{host}:{port}/v1/chat/completions",
+                f"http://{host}:{port}/api/v1/chat/completions",
                 headers=headers,
                 json={
                     "model": model,

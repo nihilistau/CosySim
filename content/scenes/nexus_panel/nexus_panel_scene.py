@@ -514,7 +514,10 @@ class NexusPanelScene(BaseScene, NexusSceneMixin):
                     import urllib.request
                     lms_url = cfg.get("lmstudio.host", "localhost")
                     lms_port = cfg.get("lmstudio.port", 1234)
+                    from engine.utils import get_lmstudio_headers
                     req = urllib.request.Request(f"http://{lms_url}:{lms_port}/api/v1/models", method="GET")
+                    for k, v in get_lmstudio_headers().items():
+                        req.add_header(k, v)
                     with urllib.request.urlopen(req, timeout=3) as resp:
                         status["tiers"]["llm"] = {"available": resp.status == 200, "label": "LMStudio LLM"}
                 except Exception:
