@@ -1,16 +1,35 @@
 /**
- * THE TERMINAL — hub.js  |  v0.68 Dark Renaissance
+ * hub.js — THE TERMINAL Hub Controller
+ * =====================================
+ *
+ * Main controller for THE TERMINAL (CosySim navigation hub, port 8500).
+ * Handles scene grid rendering (pillar-based + legacy fallback), world
+ * clock, economy panel, world-state events, and data-stream background
+ * particle animation.
+ *
  * Blue accent: #3b82f6
  *
- * Main controller class: TheTerminalHub
- * Handles scene grid, world clock, economy panel, and data-stream particles.
+ * @version v1.42.1 [2026-03-21]
+ * @author  CosySim Team
+ *
+ * Change Log:
+ *   v1.42.1 [2026-03-21] — Extensive documentation, section dividers, version stamps
+ *   v1.42.0 [2026-03-21] — Pillar grid rendering, hub modernization
+ *   v0.68   [prior]      — Dark Renaissance initial implementation
  */
 
 'use strict';
 
-// ── TheTerminalHub ──────────────────────────────────────────────────
+// =====================================================================
+// TheTerminalHub Class
+// =====================================================================
 
 class TheTerminalHub {
+
+  // -------------------------------------------------------------------
+  // Constructor & Properties
+  // -------------------------------------------------------------------
+
   constructor() {
     /** @type {number|null} */
     this._clockTimer = null;
@@ -31,7 +50,9 @@ class TheTerminalHub {
     this._dsRaf     = null;
   }
 
-  // ── Public API ─────────────────────────────────────────────────────
+  // -------------------------------------------------------------------
+  // Public API
+  // -------------------------------------------------------------------
 
   /** Boot the hub: particles → data → clock. */
   init() {
@@ -49,7 +70,13 @@ class TheTerminalHub {
     this._ecoTimer   = setInterval(() => this.loadEconomy(), 45_000);
   }
 
-  /** Fetch all scenes via pillar registry and render the scene grid. */
+  /**
+   * Fetch all scenes via pillar registry and render the scene grid.
+   * Falls back to the legacy /api/scenes endpoint if the pillar
+   * registry is unavailable.
+   *
+   * @version v1.42.1 [2026-03-21]
+   */
   async loadScenes() {
     try {
       const res  = await fetch('/api/scene-registry');
@@ -102,11 +129,16 @@ class TheTerminalHub {
     window.location.href = url;
   }
 
-  // ── Scene grid renderer ─────────────────────────────────────────
+  // -------------------------------------------------------------------
+  // Scene Grid Renderer                                 [v1.42.1]
+  // -------------------------------------------------------------------
 
   /**
-   * Build and inject scene cards grouped by pillar.
+   * Build and inject scene cards grouped by pillar (game/service/creation).
+   * Each pillar maps to a DOM container with id="scene-grid-{pillarId}".
+   *
    * @param {object} pillars  Pillar data from /api/scene-registry
+   * @version v1.42.1 [2026-03-21]
    */
   _renderPillarGrid(pillars) {
     const pillarIds = ['game', 'service', 'creation'];
@@ -134,8 +166,11 @@ class TheTerminalHub {
   }
 
   /**
-   * Update scenes badge from pillar data.
+   * Update the scenes-online badge counter from pillar data.
+   * Counts all scenes across all pillars and displays "online/total".
+   *
    * @param {object} pillars
+   * @version v1.42.1 [2026-03-21]
    */
   _updateScenesBadgePillar(pillars) {
     let online = 0;
@@ -204,7 +239,9 @@ class TheTerminalHub {
 </a>`.trim();
   }
 
-  // ── World clock ─────────────────────────────────────────────────
+  // -------------------------------------------------------------------
+  // World Clock
+  // -------------------------------------------------------------------
 
   /** Tick the live world clock display using real time. */
   _updateWorldClock() {
@@ -212,6 +249,7 @@ class TheTerminalHub {
     const hh    = String(now.getHours()).padStart(2, '0');
     const mm    = String(now.getMinutes()).padStart(2, '0');
     const ss    = String(now.getSeconds()).padStart(2, '0');
+    // Night cycle runs 20:00–05:59, day cycle runs 06:00–19:59
     const cycle = (now.getHours() >= 20 || now.getHours() < 6) ? 'NIGHT CYCLE' : 'DAY CYCLE';
 
     const timeEl = document.getElementById('world-clock-time');
@@ -222,7 +260,9 @@ class TheTerminalHub {
     }).toUpperCase();
   }
 
-  // ── World state renderer ─────────────────────────────────────────
+  // -------------------------------------------------------------------
+  // World State Renderer
+  // -------------------------------------------------------------------
 
   /**
    * Render world state panel.
@@ -260,7 +300,9 @@ class TheTerminalHub {
     }).join('');
   }
 
-  // ── Economy renderer ─────────────────────────────────────────────
+  // -------------------------------------------------------------------
+  // Economy Renderer
+  // -------------------------------------------------------------------
 
   /**
    * Render economy summary panel.
@@ -306,7 +348,9 @@ class TheTerminalHub {
     }).join('');
   }
 
-  // ── Scenes badge ─────────────────────────────────────────────────
+  // -------------------------------------------------------------------
+  // Scenes Badge (Legacy)
+  // -------------------------------------------------------------------
 
   _updateScenesBadge(scenes) {
     const online  = scenes.filter(s => s.status === 'online').length;
@@ -315,7 +359,9 @@ class TheTerminalHub {
     if (countEl) countEl.textContent = `${online}/${total}`;
   }
 
-  // ── Data stream particles ─────────────────────────────────────────
+  // -------------------------------------------------------------------
+  // Data Stream Particles (Background Canvas Animation)
+  // -------------------------------------------------------------------
 
   /** Initialise the 3-D data-stream background particle canvas. */
   _initDataStream() {
@@ -370,7 +416,8 @@ class TheTerminalHub {
     ctx.font = '11px "Courier New", monospace';
 
     this._dsParticles.forEach((p, i) => {
-      // Rotate char periodically
+      // Each particle displays a character that "rotates" to a new random
+      // glyph after charTTL frames, simulating a data-stream flicker effect.
       p.charAge++;
       if (p.charAge >= p.charTTL) {
         p.char    = this._dsRandomChar();
@@ -395,7 +442,9 @@ class TheTerminalHub {
     this._dsRaf = requestAnimationFrame(() => this._dsLoop());
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────
+  // -------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------
 
   /**
    * Escape HTML special characters to prevent XSS.
@@ -412,7 +461,9 @@ class TheTerminalHub {
   }
 }
 
-// ── Bootstrap ────────────────────────────────────────────────────────
+// =====================================================================
+// Bootstrap — DOMContentLoaded entry point
+// =====================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
   const hub = new TheTerminalHub();

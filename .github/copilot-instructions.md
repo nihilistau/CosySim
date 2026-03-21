@@ -182,7 +182,7 @@ All launcher targets are organized into three pillars in `engine/control_plane_r
 | Pillar | Label | Count | Purpose |
 |--------|-------|-------|---------|
 | `game` | NeonCity | 14 | Interactive scenes (penthouse, phone, lounge, etc.) |
-| `service` | Services | 10 | Infrastructure (hub, nexus_panel, bridge, nlm_proxy, etc.) |
+| `service` | Services | 11 | Infrastructure (nexus_kms, hub, nexus_panel, bridge, nlm_proxy, etc.) |
 | `creation` | Creation Kit | 5 | Asset tools (asset_studio, canvas, creator, etc.) |
 
 Key integration points:
@@ -205,6 +205,56 @@ pytest tests/ --affected --cap 40       # auto-fallback to smoke if too many
 python scripts/smart_test.py --smoke    # standalone script, same engine
 python scripts/smart_test.py --list     # dry-run: show what would run
 ```
+
+## Code Versioning & Comment Standards (v1.42.1)
+
+All code files created or significantly modified MUST include versioning metadata and structured comments. This is a **standing rule** for all agents (Copilot, Claude Code, local LLM agents).
+
+### Module Headers
+
+Every Python file gets a docstring header:
+
+```python
+"""
+Module Title
+============
+
+Brief description.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — What changed
+    v1.42.0 [2026-03-21] — Previous change
+"""
+```
+
+JS files use `/** ... */` JSDoc. CSS/HTML use `/* ... */` or `<!-- -->`.
+
+### Section Dividers
+
+```python
+# ──── Section Name ────────────────────────────────────────────────
+```
+
+### Version Stamps
+
+Tag significant code blocks:
+
+```python
+# v1.42.1 [2026-03-21] — Managed Nexus KMS auto-start
+def _start_external_proc(...):
+```
+
+### Versioning Scheme
+
+- Format: `vMAJOR.MINOR.PATCH [YYYY-MM-DD]`
+- MAJOR = breaking architecture. MINOR = feature sprint. PATCH = within-session.
+- Current: **v1.42** (Pillar Wiring & Hub Modernization)
+- Always add/update the Change Log when modifying a file
+- Never remove existing version stamps — they are historical record
+- Store version bumps in Nexus as changelog entries
 
 ## Priority Over Feature Breadth
 

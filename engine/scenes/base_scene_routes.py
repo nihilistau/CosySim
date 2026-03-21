@@ -1,8 +1,38 @@
-"""BaseSceneRoutesMixin — Route-registration methods extracted from base_scene.py.
+"""
+Base Scene Routes Mixin
+=======================
 
-All Flask route-registration helpers that were part of ``BaseScene`` live here
-as a mixin class.  ``BaseScene`` inherits from ``BaseSceneRoutesMixin`` so the
-public API is unchanged.
+Flask route-registration helpers extracted from ``base_scene.py`` into a mixin
+class.  ``BaseScene`` inherits from ``BaseSceneRoutesMixin`` so every scene
+automatically gets a standard set of REST API endpoints:
+
+* ``/api/health`` — health check (always registered)
+* ``/api/hud/state`` — player state, world time, events for the Neon HUD
+* ``/api/announcer/feed`` — world event feed for the CosyAnnouncer widget
+* ``/api/inventory/*`` — inventory CRUD (add, remove, equip, unequip)
+* ``/api/crew/*`` — crew management (recruit, dismiss, loyalty, operations)
+* ``/api/hack/*`` — hacking mini-game (targets, puzzle, submit, reset)
+* ``/api/city/*`` — city map navigation (map, travel, NPCs, routes)
+* ``/api/mission/*`` — mission board (accept, abandon, complete, objectives)
+* ``/api/world/events`` — WorldSim event ring-buffer and announcer feed
+* ``/api/shop/*`` — shop catalog, buy/sell, affordability check
+* ``/api/bench/metrics`` — live benchmark data for the Benchmark HUD
+* ``/api/tts/*`` — TTS synthesis, voice listing, audio serving
+* ``/api/scene-registry`` — pillar-grouped scene catalogue with live status
+* ``/api/character/*`` — character relationship and backstory lookups
+
+Each ``register_*_route`` method guards against double-registration so scenes
+can safely call them multiple times or let ``register_health_route`` auto-wire
+the standard set.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Added module header, section dividers, version stamps
+    v1.42.0 [2026-03-21] — Three-pillar architecture, scene-registry route
+    v1.41.0 [2026-03-20] — ARGUS deep polish, extended rpcids
+    v1.40.0 [2026-03-19] — Health check aggregator, bench metrics route
 """
 from __future__ import annotations
 
@@ -17,8 +47,13 @@ _bslogger = logging.getLogger(__name__)
 logger = _bslogger
 
 
+# ──── Route Registration Mixin ───────────────────────────────────────────────
+
+
 class BaseSceneRoutesMixin:
     """Mixin supplying all ``register_*_route`` helpers for BaseScene."""
+
+    # ──── Health & Character Routes ──────────────────────────────────────
 
     def register_health_route(self, app) -> None:
         """Register ``/api/health`` on a Flask app.
@@ -99,6 +134,8 @@ class BaseSceneRoutesMixin:
             except Exception as _exc:
                 _bslogger.debug("character/backstory unavailable: %s", _exc)
             return Response(_json.dumps(data), mimetype="application/json")
+
+    # ──── HUD & Announcer Routes ───────────────────────────────────────────
 
     def register_hud_route(self, app) -> None:
         """Register ``/api/hud/state`` on a Flask app.
@@ -280,6 +317,8 @@ class BaseSceneRoutesMixin:
         """
         return []
 
+    # ──── Inventory Routes ─────────────────────────────────────────────────
+
     def register_inventory_route(self, app) -> None:
         """Register ``/api/inventory`` REST endpoints on a Flask app.
 
@@ -350,6 +389,8 @@ class BaseSceneRoutesMixin:
                 return Response(_json.dumps({"ok": ok}), mimetype="application/json")
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    # ──── Crew Management Routes ───────────────────────────────────────────
 
     def register_crew_route(self, app) -> None:
         """Register ``/api/crew`` REST endpoints on a Flask app.
@@ -441,6 +482,8 @@ class BaseSceneRoutesMixin:
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
 
+    # ──── Hacking Mini-Game Routes ──────────────────────────────────────────
+
     def register_hack_route(self, app) -> None:
         """Register ``/api/hack`` REST endpoints on a Flask app.
 
@@ -515,6 +558,8 @@ class BaseSceneRoutesMixin:
                 return Response(_json.dumps({"ok": ok}), mimetype="application/json")
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    # ──── City Map Navigation Routes ───────────────────────────────────────
 
     def register_city_route(self, app) -> None:
         """Register ``/api/city`` REST endpoints on a Flask app.
@@ -608,6 +653,8 @@ class BaseSceneRoutesMixin:
                 return Response(_json.dumps({"location": location, "npcs": npcs}), mimetype="application/json")
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    # ──── Mission Board Routes ─────────────────────────────────────────────
 
     def register_mission_route(self, app) -> None:
         """Register ``/api/mission`` REST endpoints on a Flask app.
@@ -763,6 +810,8 @@ class BaseSceneRoutesMixin:
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
 
+    # ──── World Events Routes ──────────────────────────────────────────────
+
     def register_world_events_route(self, app) -> None:
         """Register ``/api/world/events`` on a Flask app.
 
@@ -833,6 +882,8 @@ class BaseSceneRoutesMixin:
                 return Response(_json.dumps({"ok": True, "npc_locations": locs}), mimetype="application/json")
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    # ──── Shop Routes ────────────────────────────────────────────────────────
 
     def register_shop_route(self, app) -> None:
         """Register ``/api/shop`` REST endpoints on a Flask app.
@@ -920,6 +971,8 @@ class BaseSceneRoutesMixin:
                 return Response(_json.dumps({"ok": True, "credits": credits, "items": affordable}), mimetype="application/json")
             except Exception as exc:
                 return Response(_json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    # ──── Benchmark HUD Routes ─────────────────────────────────────────────
 
     def register_bench_route(self, app, socketio=None) -> None:
         """Register ``/api/bench/metrics`` on a Flask app.
@@ -1038,6 +1091,8 @@ class BaseSceneRoutesMixin:
             except Exception:
                 pass
 
+    # ──── Navbar & Overlay Helpers ─────────────────────────────────────────
+
     def inject_navbar_context(self) -> Dict[str, Any]:
         """Return template context variables for navbar_v2.html.
 
@@ -1087,6 +1142,8 @@ class BaseSceneRoutesMixin:
             _bslogger.debug("BaseScene: skills server mounted on port %d", self.port)
         except Exception as _exc:
             _bslogger.debug("BaseScene.mount_skills_server failed: %s", _exc)
+
+    # ──── TTS Routes ─────────────────────────────────────────────────────────
 
     def register_tts_route(self, app) -> None:
         """Register TTS/speech endpoints on a Flask app.
@@ -1219,6 +1276,9 @@ class BaseSceneRoutesMixin:
                 )
             return send_file(str(wav_path), mimetype="audio/wav")
 
+    # ──── Scene Registry Route ─────────────────────────────────────────────
+
+    # v1.42.1 [2026-03-21] — Pillar-grouped scene catalogue with live port checks
     def register_scene_registry_route(self, app) -> None:
         """Register ``GET /api/scene-registry`` — pillar-grouped scene catalogue.
 

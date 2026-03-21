@@ -154,6 +154,64 @@ Always use `get_config().get("dot.path", default)`. Never hardcode values.
 - CSS: CSS custom properties for theming (`--primary-color`), kebab-case class names.
 - Templates: Jinja2 in `content/scenes/{name}/templates/`. Static in `content/scenes/{name}/static/`.
 
+## Code Versioning & Comments
+
+Every file you create or significantly modify MUST include:
+
+### Module Headers
+
+Python files get a docstring header at the top:
+
+```python
+"""
+Module Title
+============
+
+Brief description of what this module does.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — What changed in this version
+    v1.42.0 [2026-03-21] — Previous significant change
+"""
+```
+
+JS files use `/** ... */` JSDoc style. CSS/HTML use `/* ... */` or `<!-- ... -->`.
+
+### Section Dividers
+
+Organize code into logical sections with divider comments:
+
+```python
+# ──── Section Name ────────────────────────────────────────────────
+```
+
+### Version Stamps
+
+Tag significant code blocks with version stamps for traceability:
+
+```python
+# v1.42.1 [2026-03-21] — Managed Nexus KMS auto-start
+def _start_external_proc(...):
+```
+
+### Versioning Scheme
+
+- Format: `vMAJOR.MINOR.PATCH [YYYY-MM-DD]`
+- MAJOR: Breaking architecture changes (pillars, engine rewrites)
+- MINOR: Feature sprints (each numbered session = +1 minor)
+- PATCH: Within-session refinements
+- Current: **v1.42** (Pillar Wiring & Hub Modernization)
+
+### Rules
+
+- Always add/update the Change Log when modifying a file
+- Use section dividers to organize files with 100+ lines
+- Add inline comments for non-obvious logic (not for self-evident code)
+- Never remove existing version stamps — they are historical record
+
 ## Docs
 
 All documentation is in `docs/` with `docs/INDEX.md` as the entry point. `docs/ARCHITECTURE.md` and `docs/MCP_FRAMEWORK.md` are the best starting points for deep dives.

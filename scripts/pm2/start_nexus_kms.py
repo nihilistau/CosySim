@@ -1,7 +1,18 @@
-"""PM2 wrapper: start Nexus KMS API server.
+"""
+PM2 Wrapper — Nexus KMS API Server
+====================================
 
 Launches the Nexus Knowledge Management System from its own project
 directory (C:\\Files\\Nexus) so PM2 can manage it alongside CosySim services.
+Nexus KMS must be running before any CosySim scene that queries the knowledge
+graph — this wrapper ensures PM2 can restart it on crash.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Added module header, version stamp
+    v1.42.0 [2026-03-21] — Created as part of managed Nexus KMS integration
 """
 from __future__ import annotations
 

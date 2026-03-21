@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-CosySim Launcher v4
-====================
-Config-driven launcher with clean services / scenes separation.
+CosySim Launcher
+================
 
-  Services  — persistent infrastructure (hub, nexus_panel, dashboard, tts …)
-  Scenes    — interactive game environments (bedroom, phone, realm …)
+Config-driven launcher with clean services / scenes separation.  Reads target
+definitions from ``config/launcher.yaml`` via the shared control-plane registry
+and supports five target types: flask, streamlit, fastapi, node, and external.
+
+  Services  — persistent infrastructure (hub, nexus_panel, dashboard, tts ...)
+  Scenes    — interactive game environments (bedroom, phone, realm ...)
 
 Usage:
   python launcher.py                  # interactive menu
@@ -21,8 +24,18 @@ Usage:
   python launcher.py --init-db        # initialise simulation database
   python launcher.py --housekeep      # housekeeping tasks
 
-Auto-start flags live in config/launcher.yaml - edit that file to control
+Auto-start flags live in config/launcher.yaml — edit that file to control
 which targets launch with --core / --services / --scenes.
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — Managed Nexus KMS via external type, priority-sorted
+                            service launch, _start_external_proc helper
+    v1.42.0 [2026-03-21] — Three-pillar architecture (game/service/creation)
+    v1.41.0 [2026-03-20] — ARGUS Deep Polish, extended Gemini rpcids
+    v1.40.0 [2026-03-19] — Health check aggregator, service discovery registry
 """
 from __future__ import annotations
 
@@ -55,12 +68,12 @@ try:
 except Exception:
     VERSION = "1.05b"
 
-# ── Catalogues ────────────────────────────────────────────────────────────
+# ──── Catalogues ──────────────────────────────────────────────────────────
 SERVICES: Dict[str, Dict[str, Any]] = {}
 SCENES: Dict[str, Dict[str, Any]] = {}
 ALL_TARGETS: Dict[str, Dict[str, Any]] = {}
 
-# ── Config loader ─────────────────────────────────────────────────────────
+# ──── Config Loader ───────────────────────────────────────────────────────
 
 _LAUNCHER_CFG = LAUNCHER_CONFIG_PATH
 
@@ -79,7 +92,7 @@ def _load_config() -> None:
 _load_config()
 
 
-# ── Low-level helpers ─────────────────────────────────────────────────────
+# ──── Low-Level Helpers ───────────────────────────────────────────────────
 
 def _port_up(port: int) -> bool:
     import socket
@@ -103,7 +116,7 @@ def _hub_url() -> str:
     return f"http://localhost:{get_port('hub')}"
 
 
-# ── Single-target runner (foreground / blocking) ──────────────────────────
+# ──── Single-Target Runner (Foreground / Blocking) ────────────────────────
 
 def _run_single(name: str, info: Dict[str, Any]) -> None:
     """Start one target in the foreground. Blocks until it exits."""
@@ -142,7 +155,7 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
         sys.exit(1)
 
 
-# ── Multi-launch engine ───────────────────────────────────────────────────
+# ──── Multi-Launch Engine ─────────────────────────────────────────────────
 
 def _start_in_thread(name: str, info: Dict[str, Any],
                      failed: List[str]) -> threading.Thread:
@@ -201,9 +214,14 @@ def _start_node_proc(info: Dict[str, Any],
         return None
 
 
+# v1.42.1 [2026-03-21] — External process launcher for managed services (Nexus KMS)
 def _start_external_proc(info: Dict[str, Any],
                           failed: List[str]) -> Optional[subprocess.Popen]:
-    """Start an external service via subprocess (e.g. Nexus KMS)."""
+    """Start an external service via subprocess (e.g. Nexus KMS).
+
+    External targets define their own ``cmd`` and ``cwd`` in launcher.yaml.
+    The launcher spawns the process and optionally waits for its health port.
+    """
     cwd = info.get("cwd", ".")
     cmd = info.get("cmd", [])
     if not cmd:
@@ -273,7 +291,7 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                 if proc:
                     all_procs.append(proc)
                     print(f"    [OK] {info['label']} (PID {proc.pid})")
-            elif info["type"] == "external":
+            elif info["type"] == "external":  # v1.42.1 — external type handler
                 proc = _start_external_proc(info, failed)
                 if proc:
                     all_procs.append(proc)
@@ -290,7 +308,8 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                 print(f"    [OK] {info['label']} -> :{info['port']}")
             time.sleep(0.4)
 
-    # Sort services so external dependencies (start_priority=0) launch first
+    # v1.42.1 [2026-03-21] — Priority-sorted service launch (external deps first)
+    # Services with start_priority=0 (e.g. Nexus KMS) launch before Flask scenes
     service_names_sorted = sorted(
         service_names,
         key=lambda n: ALL_TARGETS[n].get("start_priority", 50),
@@ -397,7 +416,7 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
 
 
 
-# ── High-level launchers ──────────────────────────────────────────────────
+# ──── High-Level Launchers ────────────────────────────────────────────────
 
 def launch_core() -> None:
     """Start all auto_start services then all auto_start scenes."""
@@ -444,7 +463,7 @@ def launch_single(name: str) -> None:
     _run_single(name, info)
 
 
-# ── Info commands ─────────────────────────────────────────────────────────
+# ──── Info Commands ───────────────────────────────────────────────────────
 
 def cmd_list() -> None:
     print(f"\n  CosySim v{VERSION} -- Target List")
@@ -523,7 +542,7 @@ def cmd_init_db() -> None:
         sys.exit(1)
 
 
-# ── Interactive menu ──────────────────────────────────────────────────────
+# ──── Interactive Menu ────────────────────────────────────────────────────
 
 def interactive_menu() -> None:
     def _format_targets(names: List[str], per_line: int = 6) -> str:
@@ -588,7 +607,7 @@ def interactive_menu() -> None:
         print(f"  Unknown: '{choice}' -- try 'list' to see all targets.")
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────
+# ──── CLI Entry Point ────────────────────────────────────────────────────
 
 def main() -> None:
     _load_config()  # apply launcher.yaml overrides before parsing

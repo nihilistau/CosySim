@@ -1,8 +1,11 @@
-{#
+<!--
+  ====================================================================
   navbar_v2.html — Universal Navbar v2 (B1 track)
-  ================================================
+  ====================================================================
+
+  Self-contained Jinja2 partial for the CosySim global navigation bar.
   Inject into every scene template via:
-      {% include 'navbar_v2.html' %}
+      {%- include 'navbar_v2.html' -%}
 
   Required context variables (with safe defaults below):
       current_scene  — machine key, e.g. "penthouse"
@@ -10,7 +13,21 @@
       scene_accent   — CSS hex/rgb colour, e.g. "#c084fc"
 
   The template is self-contained: it emits its own <link> and <script>
-  tags so scenes only need the single {% include %}.
+  tags so scenes only need the single include. It also includes the
+  Neon HUD partial and bootstraps the CosyNavbar JS controller.
+
+  @version v1.42.1 [2026-03-21]
+  @author  CosySim Team
+
+  Change Log:
+    v1.42.1 [2026-03-21] — Extensive documentation, section dividers
+    v1.42.0 [2026-03-21] — Pillar wiring, hub modernization
+    v0.68   [prior]      — Initial B1 track implementation
+-->
+{#
+  NOTE: The HTML comment above is visible in rendered output for
+  debugging. The Jinja2 comments below ({# ... #}) are stripped
+  during template rendering and are for developer-only reference.
 #}
 {% set current_scene = current_scene | default('') %}
 {% set scene_name    = scene_name    | default('CosySim') %}

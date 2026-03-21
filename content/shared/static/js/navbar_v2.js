@@ -1,7 +1,10 @@
 /**
  * navbar_v2.js — Universal Navbar v2 (B1 track)
- * ===============================================
+ * ==============================================
+ *
  * Self-contained controller for the CosySim global navbar.
+ * Manages scene navigation, health-check pings, pillar filtering,
+ * TTS voice toggle, credit display, and mobile hamburger menu.
  *
  * Instantiated automatically by the navbar_v2.html partial:
  *   window.cosyNavbar = new CosyNavbar({ currentScene, sceneAccent });
@@ -15,13 +18,26 @@
  *   openAria()                    — open Aria assistant widget
  *   openAdmin()                   — open admin overlay
  *   setConnectionStatus(bool)     — update own-scene connection dot
+ *   loadPillarRegistry()          — fetch pillar data and inject toggle pills
  *
  * Custom Events emitted on document:
  *   navbar:voice_toggled  { detail: { enabled: bool } }
  *   navbar:panel_request  { detail: { panel: 'phone'|'aria'|'admin' } }
+ *
+ * @version v1.42.1 [2026-03-21]
+ * @author  CosySim Team
+ *
+ * Change Log:
+ *   v1.42.1 [2026-03-21] — Extensive documentation, section dividers, version stamps
+ *   v1.42.0 [2026-03-21] — Pillar wiring, hub modernization
+ *   v0.68   [prior]      — Initial B1 track implementation
  */
 
 'use strict';
+
+// =====================================================================
+// Constants
+// =====================================================================
 
 /** Port map for scene health-check pings. */
 const SCENE_PORTS = {
@@ -48,7 +64,16 @@ const PING_INTERVAL_MS = 30_000;
 /** localStorage key for TTS voice preference. */
 const VOICE_KEY = 'cosysim.voice.enabled';
 
+// =====================================================================
+// CosyNavbar Class
+// =====================================================================
+
 class CosyNavbar {
+
+    // -----------------------------------------------------------------
+    // Class Properties & Constructor
+    // -----------------------------------------------------------------
+
     /**
      * @param {object} options
      * @param {string} [options.currentScene='']     Machine key of the active scene.
@@ -58,19 +83,19 @@ class CosyNavbar {
         this.currentScene = options.currentScene || '';
         this.sceneAccent  = options.sceneAccent  || '#00e5ff';
 
-        /** @type {boolean} */
+        /** @type {boolean} Whether TTS voice is currently enabled. */
         this._voiceEnabled = false;
 
-        /** @type {Map<string, boolean>} */
+        /** @type {Map<string, boolean>} Cached online/offline state per scene key. */
         this._sceneStatus = new Map();
 
         /** @type {number|null} Timer handle for health-ping loop. */
         this._pingTimer = null;
 
-        /** @type {'game'|'service'|'creation'} Active pillar filter. */
+        /** @type {'game'|'service'|'creation'} Active pillar filter for scene nav. */
         this._activePillar = 'game';
 
-        /** @type {object|null} Pillar registry data from API. */
+        /** @type {object|null} Pillar registry data fetched from /api/scene-registry. */
         this._pillarData = null;
 
         // DOM refs — populated in init()
@@ -88,9 +113,9 @@ class CosyNavbar {
         };
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // Public: init
-    // ─────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
+    // Public: Initialization
+    // -----------------------------------------------------------------
 
     /**
      * Bind all event listeners, read persisted state, start pinging.
@@ -121,9 +146,9 @@ class CosyNavbar {
         this._startPingLoop();
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // Public: data updates
-    // ─────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
+    // Public: Data Updates
+    // -----------------------------------------------------------------
 
     /**
      * Update the credit balance display and trigger a gold flash.
@@ -139,10 +164,11 @@ class CosyNavbar {
             ? balance.toLocaleString()
             : String(balance);
 
-        // Trigger flash — remove then re-add class to restart animation
+        // Trigger flash — remove then re-add class to restart CSS animation.
+        // Reading offsetWidth between remove/add forces a browser reflow,
+        // which resets the animation timeline so it plays again.
         disp.classList.remove('cs-credits-display--flash');
-        // Force reflow
-        void disp.offsetWidth; // eslint-disable-line no-void
+        void disp.offsetWidth; // eslint-disable-line no-void — force reflow
         disp.classList.add('cs-credits-display--flash');
 
         // Clean up class after animation completes (0.6 s)
@@ -210,9 +236,9 @@ class CosyNavbar {
         dot.title = connected ? 'Connected' : 'Disconnected';
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // Private: setup helpers
-    // ─────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
+    // Private: Setup Helpers
+    // -----------------------------------------------------------------
 
     /** Bind click handlers on the four action buttons. */
     _setupActionButtons() {
@@ -352,9 +378,9 @@ class CosyNavbar {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // Private: scene health pings
-    // ─────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
+    // Private: Scene Health Pings
+    // -----------------------------------------------------------------
 
     /** Start auto-pinging all scene health endpoints. */
     _startPingLoop() {
@@ -414,9 +440,9 @@ class CosyNavbar {
         });
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // Private: helpers
-    // ─────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
+    // Private: Helpers
+    // -----------------------------------------------------------------
 
     /** Apply voice button active/inactive visual state. */
     _applyVoiceState() {
@@ -451,14 +477,16 @@ class CosyNavbar {
             }),
         );
     }
-    // ─────────────────────────────────────────────────────────────────
-    // Public: pillar registry
-    // ─────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
+    // Public: Pillar Registry                          [v1.42.1]
+    // -----------------------------------------------------------------
 
     /**
      * Fetch the scene registry from the API and enable pillar filtering.
      * Falls back gracefully to the hardcoded scene list if the API is
      * unavailable.
+     *
+     * @version v1.42.1 [2026-03-21]
      */
     async loadPillarRegistry() {
         try {
@@ -527,8 +555,11 @@ class CosyNavbar {
 
     /**
      * Switch the active pillar and re-render scene links.
+     * Updates pill active states and triggers a full re-render of the
+     * scene nav for the selected pillar.
      *
      * @param {'game'|'service'|'creation'} pillar
+     * @version v1.42.1 [2026-03-21]
      */
     _switchPillar(pillar) {
         if (pillar === this._activePillar && this._pillarData) return;
@@ -548,8 +579,11 @@ class CosyNavbar {
 
     /**
      * Replace the scene nav links with scenes from the given pillar.
+     * Clears existing nav items, builds inline links for up to 8 scenes,
+     * and creates a MORE dropdown for any overflow scenes.
      *
      * @param {string} pillar
+     * @version v1.42.1 [2026-03-21]
      */
     _renderPillarScenes(pillar) {
         const nav = this._el.nav;
@@ -649,6 +683,8 @@ class CosyNavbar {
     }
 }
 
-// Expose globally for console debugging
+// =====================================================================
+// Global Exports — available for console debugging and scene scripts
+// =====================================================================
 window.CosyNavbar = CosyNavbar;
 window.SCENE_PORTS = SCENE_PORTS;

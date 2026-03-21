@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""CosySim TUI — Interactive terminal launcher and system dashboard.
+"""
+CosySim TUI
+===========
+
+Interactive terminal launcher and system dashboard built on Textual.  Provides
+a three-panel interface (target list, details/logs, external services health)
+with real-time port monitoring, HAR import wizard, and priority-sorted autostart.
 
 Usage:
     python tui.py                   # full TUI
@@ -16,6 +22,15 @@ Keyboard shortcuts:
     H              — show system health summary
     L              — show log panel
     Q / Ctrl+C     — quit (stops launched subprocesses)
+
+Version: v1.42.1 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.42.1 [2026-03-21] — External type handler in _start_one, priority-sorted
+                            autostart via start_priority field
+    v1.42.0 [2026-03-21] — Three-pillar architecture (game/service/creation)
+    v1.41.0 [2026-03-20] — ARGUS Deep Polish, HAR import wizard
 """
 from __future__ import annotations
 
@@ -56,19 +71,19 @@ from textual.widgets import (
 )
 from textual.timer import Timer
 
-# ── HAR directory roots ────────────────────────────────────────────────────
+# ──── HAR Directory Roots ─────────────────────────────────────────────────
 HAR_REAL_ROOT = Path(r"C:\Files\Models\HAR_Files")
 HAR_LOCAL_ROOT = PROJECT_ROOT / "data" / "har_files"
 ACCOUNTS_COOKIES_DIR = PROJECT_ROOT / "data" / "accounts"    # {acct}_cookies.json
 ACCOUNTS_LEGACY_DIR = PROJECT_ROOT / "data" / "google_accounts"  # {acct}/cookies.json
 
-# ── External services checked in the panel ─────────────────────────────────
+# ──── External Services (Health Panel) ────────────────────────────────────
 EXTERNAL_SERVICES = [
     (target["label"], target["port"], target["health_url"])
     for target in build_target_listing(TUI_EXTERNAL_TARGETS)
 ] + [("GitHub Copilot", 0, "")]
 
-# ── Colour scheme ───────────────────────────────────────────────────────────
+# ──── Colour Scheme ───────────────────────────────────────────────────────
 TUI_CSS = """
 Screen {
     background: #0a0a0f;
@@ -194,7 +209,7 @@ TabPane {
 """
 
 
-# ── Target row widget ───────────────────────────────────────────────────────
+# ──── Target Row Widget ───────────────────────────────────────────────────
 
 class TargetRow(Static):
     """One row per scene/service in the left panel."""
@@ -240,7 +255,7 @@ class TargetRow(Static):
         self.remove_class("-selected")
 
 
-# ── Main TUI App ────────────────────────────────────────────────────────────
+# ──── Main TUI App ────────────────────────────────────────────────────────
 
 class CosySimTUI(App[None]):
     """CosySim interactive TUI launcher."""
@@ -787,7 +802,8 @@ class CosySimTUI(App[None]):
 
         dbg("[autostart] worker started")
         try:
-            # Sort targets so external dependencies (start_priority=0) launch first
+            # v1.42.1 [2026-03-21] — Priority-sorted autostart (external deps first)
+            # Targets with start_priority=0 (e.g. Nexus KMS) launch before scenes
             sorted_targets = sorted(
                 ALL_TARGETS.items(),
                 key=lambda kv: kv[1].get("start_priority", 50),
@@ -876,7 +892,7 @@ class CosySimTUI(App[None]):
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             self._launched_procs[name] = proc
-        elif t == "external":
+        elif t == "external":  # v1.42.1 [2026-03-21] — external type handler for managed services
             cwd = info.get("cwd", ".")
             cmd = info.get("cmd", [])
             if cmd and Path(cwd).is_dir():
@@ -1102,7 +1118,7 @@ class CosySimTUI(App[None]):
                 pass
 
 
-# ── Entry point ─────────────────────────────────────────────────────────────
+# ──── Entry Point ─────────────────────────────────────────────────────────
 
 def main() -> None:
     import argparse
