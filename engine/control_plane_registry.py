@@ -252,6 +252,14 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "auto_start": False,
         "pillar": "creation",
     },
+    # v1.47.0 [2026-03-21] — Creation Kit visual scene editor
+    "creation_kit": {
+        "type": "flask",
+        "cls": "content.scenes.creation_kit.creation_kit_scene.CreationKitScene",
+        "label": "CREATION KIT",
+        "auto_start": False,
+        "pillar": "creation",
+    },
     "lab_break": {
         "type": "flask",
         "cls": "content.scenes.lab_break.lab_break_scene.LabBreakScene",

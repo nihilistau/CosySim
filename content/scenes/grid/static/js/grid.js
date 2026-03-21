@@ -1,8 +1,14 @@
 /**
- * THE GRID — grid.js  |  CosySim v0.75
+ * THE GRID — grid.js  |  CosySim v1.49.2
  *
  * Handles: zone switching, market buy/sell, SVG city map, faction cards,
  * intel broker, 0xGH0ST terminal.  All Socket.IO world events routed here.
+ *
+ * Version: v1.49.2 [2026-03-21]
+ * Change Log:
+ *   v1.49.2 [2026-03-21] — API-first: market items + faction cards rendered
+ *                            client-side via fetch. No Jinja2 data dependencies.
+ *   v0.75   [2026-03-20] — Initial Grid scene JS
  */
 
 "use strict";
@@ -58,6 +64,104 @@ $$(".grid-tab").forEach(btn => {
 /* ────────────────────────────────────────────────────────────────────────────
    MARKET ZONE
    ──────────────────────────────────────────────────────────────────────────── */
+
+// v1.49.2 [2026-03-21] — Client-side market item renderer (API-first)
+// CONNECTS: /api/market/items, #market-grid
+// CALLED BY: loadMarketItems() on page load
+// EMITS: DOM for .market-item cards with buy buttons
+function renderMarketItems(items) {
+  const grid = document.getElementById("market-grid");
+  if (!grid) return;
+  if (!items || !items.length) {
+    grid.innerHTML = '<p class="inventory-empty">Market is empty.</p>';
+    return;
+  }
+  grid.innerHTML = items.map(item => {
+    const trendCls = item.trend === 'rising' ? ' price--rising' : item.trend === 'falling' ? ' price--falling' : '';
+    const trendIcon = item.trend === 'rising' ? '\u25B2' : item.trend === 'falling' ? '\u25BC' : '\u2501';
+    return `<div class="market-item" data-vendor="${item.vendor}" data-id="${item.id}" data-rarity="${item.rarity}">
+      <div class="market-item__header">
+        <span class="market-item__name">${item.name}</span>
+        <span class="market-item__rarity rarity--${item.rarity}">${item.rarity}</span>
+      </div>
+      <div class="market-item__body">
+        <div class="market-item__price${trendCls}">
+          <span class="price-symbol">\u20B5</span>
+          <span class="price-val" data-item="${item.id}">${fmt(item.price)}</span>
+          <span class="price-trend">${trendIcon}</span>
+        </div>
+        <div class="market-item__stock">Stock: ${item.stock}</div>
+      </div>
+      <div class="market-item__actions">
+        <button class="btn btn--buy" data-item="${item.id}" data-price="${item.price}" ${item.stock === 0 ? 'disabled' : ''}>
+          BUY \u20B5${fmt(item.price)}
+        </button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// v1.49.2 — Load market items from API on page load
+async function loadMarketItems() {
+  try {
+    const res = await fetch("/api/market/items");
+    const data = await res.json();
+    renderMarketItems(data.items || []);
+    renderInventory(data.inventory || []);
+  } catch {
+    const grid = document.getElementById("market-grid");
+    if (grid) grid.innerHTML = '<p class="inventory-empty">Failed to load market.</p>';
+  }
+}
+
+// v1.49.2 — Client-side faction card renderer (API-first)
+// CONNECTS: /api/faction/standings, #den-grid
+// CALLED BY: loadFactionData() (was already lazy-loaded)
+function renderFactionCards(factions, quests) {
+  const grid = document.getElementById("den-grid");
+  if (!grid) return;
+  if (!factions || !factions.length) {
+    grid.innerHTML = '<p class="inventory-empty">No faction data available.</p>';
+    return;
+  }
+  grid.innerHTML = factions.map(f => `
+    <div class="faction-card" data-faction="${f.id}" style="--faction-accent:${f.accent || '#00ff88'};">
+      <div class="faction-card__header">
+        <span class="faction-card__name">${f.label || f.id}</span>
+        <span class="faction-card__arch">${f.archetype || ''}</span>
+      </div>
+      <div class="faction-card__power-wrap">
+        <div class="faction-card__power-bar">
+          <div class="faction-card__power-fill" data-faction="${f.id}" style="width:${f.power || 50}%"></div>
+        </div>
+        <span class="faction-card__power-val" id="fp-${f.id}">${Math.round(f.power || 50)}</span>
+      </div>
+      <div class="faction-card__actions">
+        <button class="btn btn--pledge" data-faction="${f.id}">PLEDGE \u2191</button>
+        <button class="btn btn--quest" data-faction="${f.id}">QUEST \u25B6</button>
+      </div>
+      <div class="faction-quest-panel" id="quest-${f.id}" style="display:none">
+        <p class="quest-loading">Loading quest\u2026</p>
+      </div>
+    </div>
+  `).join("");
+
+  // Apply quest data if available
+  if (quests) {
+    quests.forEach(q => {
+      const panel = document.getElementById(`quest-${q.faction}`);
+      if (!panel) return;
+      panel.innerHTML = `
+        <p class="quest-title">${q.title}</p>
+        <p class="quest-desc">${q.desc}</p>
+        <p class="quest-reward">Reward: \u20B5${fmt(q.reward_credits)} + ${q.reward_rep} REP${q.heat_cost ? ` (heat +${q.heat_cost})` : ""}</p>
+      `;
+    });
+  }
+}
+
+// Load market on page load
+loadMarketItems();
 
 // Vendor filter
 $$(".vendor-tab").forEach(btn => {
@@ -269,35 +373,15 @@ document.getElementById("btn-refresh-map")?.addEventListener("click", () => {
 
 let denLoaded = false;
 
+// v1.49.2 — loadFactionData now renders cards client-side (API-first)
 async function loadFactionData() {
   if (denLoaded) return;
   denLoaded = true;
   try {
     const res = await fetch("/api/faction/standings");
     const data = await res.json();
-    renderFactionStandings(data.factions, data.quests);
+    renderFactionCards(data.factions || [], data.quests || []);
   } catch {}
-}
-
-function renderFactionStandings(factions, quests) {
-  factions.forEach(f => {
-    const card = $(`.faction-card[data-faction="${f.id}"]`);
-    if (!card) return;
-    const fill = card.querySelector(`.faction-card__power-fill[data-faction="${f.id}"]`);
-    const val  = document.getElementById(`fp-${f.id}`);
-    if (fill) fill.style.width = `${f.power}%`;
-    if (val)  val.textContent  = Math.round(f.power);
-  });
-  // Wire quest panels
-  quests.forEach(q => {
-    const panel = document.getElementById(`quest-${q.faction}`);
-    if (!panel) return;
-    panel.innerHTML = `
-      <p class="quest-title">${q.title}</p>
-      <p class="quest-desc">${q.desc}</p>
-      <p class="quest-reward">Reward: ₵${fmt(q.reward_credits)} + ${q.reward_rep} REP${q.heat_cost ? ` (heat +${q.heat_cost})` : ""}</p>
-    `;
-  });
 }
 
 // Pledge

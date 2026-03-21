@@ -899,11 +899,17 @@ function ensureCharSprite(charId, name, colorIdx, info) {
     const outfit = (info && info.outfit) ? info.outfit : 'casual';
     CharModels.updateOutfit(model, outfit);
 
+    // v1.49.1 [2026-03-21] — Set initial Y to character standing height
+    // Characters are built with feet at Y=0, so group Y should match
+    // the location's floor level (typically 0 for ground, higher for furniture)
+    const initY = (info && info.location_y !== undefined) ? info.location_y : 0;
+    model.group.position.y = initY;
+
     scene.add(model.group);
     charSprites[charId] = {
         ...model,
-        targetPos: new THREE.Vector3(0, 0, 0),
-        currentPos: new THREE.Vector3(0, 0, 0),
+        targetPos: new THREE.Vector3(0, initY, 0),
+        currentPos: new THREE.Vector3(0, initY, 0),
         bubble: null,
         currentOutfit: outfit,
     };
@@ -955,7 +961,8 @@ function updateCharPositions(characters, locations) {
         if (count === 2) off = (idx === 0) ? -0.6 : 0.6;
         else if (count >= 3) off = (idx - 1) * 0.7;
 
-        sprite.targetPos.set(pos.x + off, 0, pos.z);
+        // v1.49.1 [2026-03-21] — Use location Y for furniture height (fix avatar sinking)
+        sprite.targetPos.set(pos.x + off, pos.y || 0, pos.z);
     }
 
     // Remove sprites for characters no longer present
@@ -984,8 +991,8 @@ function animate() {
         if (s.bodyGroup && !CharModels.isPoseActive()) CharModels.animate(s, t);
     }
 
-    // Director avatar animation
-    if (directorSprite && directorSprite.bodyGroup) {
+    // v1.49.1 [2026-03-21] — Guard against race condition: check group still in scene
+    if (directorSprite && directorSprite.bodyGroup && directorSprite.group.parent) {
         directorSprite.group.position.lerp(directorSprite.targetPos, Math.min(1, dt * 3));
         CharModels.animate(directorSprite, t);
     }
@@ -1248,8 +1255,11 @@ function applyState(st) {
     // Director tab — populate char dropdowns
     populateCharacterDropdowns(st.characters || {});
 
-    // Director avatar
-    updateDirectorAvatar(st.director_avatar || null);
+    // v1.49.1 — Only update director if the field is explicitly present in state
+    // Prevents accidental removal when backend omits the field
+    if ('director_avatar' in st) {
+        updateDirectorAvatar(st.director_avatar);
+    }
 
     // Interact tab — populate move dropdowns
     const moveCharSel = document.getElementById('moveCharSelect');
@@ -1986,6 +1996,7 @@ async function placeDirectorAvatar() {
     addFeedEntry({ character_name: '(Director)', action: 'director', message: `${name}'s avatar placed at ${locationId}` }, 'director');
 }
 
+// v1.49.1 [2026-03-21] — Mark as explicit removal so state fetches don't conflict
 async function removeDirectorAvatar() {
     await fetch('/api/director/avatar', {
         method: 'POST',
@@ -1993,20 +2004,28 @@ async function removeDirectorAvatar() {
         body: JSON.stringify({ action: 'remove' })
     });
     if (directorSprite) {
+        directorSprite._explicitRemove = true;
         scene.remove(directorSprite.group);
         directorSprite = null;
     }
     addFeedEntry({ character_name: '(Director)', action: 'director', message: 'Director avatar removed' }, 'director');
 }
 
+// v1.49.1 [2026-03-21] — Fixed director avatar persistence:
+// - Only remove if explicit removal requested (not on every state fetch)
+// - Use location Y for proper height
+// - Guard against race conditions in animation loop
 function updateDirectorAvatar(avatarData) {
-    if (!avatarData) {
-        if (directorSprite) {
-            scene.remove(directorSprite.group);
-            directorSprite = null;
-        }
+    // Only remove director when explicitly null AND was previously set by user action.
+    // State fetches that omit director_avatar should NOT remove an active director.
+    if (avatarData === null && directorSprite && directorSprite._explicitRemove) {
+        scene.remove(directorSprite.group);
+        directorSprite = null;
         return;
     }
+    // If no data and no existing sprite, nothing to do
+    if (!avatarData) return;
+
     if (!directorSprite) {
         directorSprite = CharModels.create({
             name: avatarData.name || 'Director',
@@ -2016,6 +2035,7 @@ function updateDirectorAvatar(avatarData) {
         scene.add(directorSprite.group);
         directorSprite.targetPos = new THREE.Vector3(0, 0, 0);
         directorSprite.currentOutfit = null;
+        directorSprite._explicitRemove = false;
     }
     // Update outfit
     const outfit = avatarData.outfit || 'casual';
@@ -2023,12 +2043,12 @@ function updateDirectorAvatar(avatarData) {
         CharModels.updateOutfit(directorSprite, outfit);
         directorSprite.currentOutfit = outfit;
     }
-    // Position based on location
+    // Position based on location — use Y for furniture height
     const locId = avatarData.location_id || 'bed';
-    const locations = sceneState.locations || {};
-    const loc = locations[locId];
+    const locs = sceneState.locations || {};
+    const loc = locs[locId];
     if (loc && loc.pos) {
-        directorSprite.targetPos.set(loc.pos.x + 1.0, 0, loc.pos.z);
+        directorSprite.targetPos.set(loc.pos.x + 1.0, loc.pos.y || 0, loc.pos.z);
     }
 }
 

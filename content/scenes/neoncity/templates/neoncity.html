@@ -5,14 +5,17 @@
 {% set scene_accent_rgb = '6 182 212' %}
 
 {#
-  NeonCity v1.45 — Playable Dashboard
+  NeonCity v1.46 — Interactive Systems
   ====================================
   Left:   Player stats + Inventory grid
-  Center: Districts + Factions + Chat/Economy/Events
+  Center: Districts + Factions + Chat/Economy/Events (rich cards)
   Right:  Crew roster + Mission board
 
-  Version: v1.45.0 [2026-03-21]
+  Version: v1.46.0 [2026-03-21]
   Change Log:
+    v1.46.0 [2026-03-21] — Rich event feed (color-coded cards, expand,
+                            severity, impact badges), board game overhaul,
+                            cyberspace intrusion network graph
     v1.45.0 [2026-03-21] — Interactive missions (detail/complete/abandon),
                             crew operations modal, active ops timers
     v1.44.0 [2026-03-21] — Full 3-column dashboard redesign with player,
@@ -260,9 +263,11 @@
             <div class="card-npcs" id="npcs-hacker_den">
               <span class="npc-tag">0xGH0ST</span><span class="npc-tag">NETRUNNER</span><span class="npc-tag">SYSOP</span>
             </div>
+            <!-- v1.46.0 — Added CYBERSPACE button for deep intrusion UI -->
             <div class="card-actions-row">
               <div class="card-action" onclick="event.stopPropagation(); NeonCityApp.visitDistrict('hacker_den')">&#9654; ENTER</div>
               <button class="btn-hack-district" onclick="event.stopPropagation(); NeonCityApp.openHackTargets()" title="Browse hackable targets">&#128187; HACK</button>
+              <button class="btn-hack-district" onclick="event.stopPropagation(); window.location.href='/cyberspace'" title="Deep network intrusion" style="border-color:#00ff88;color:#00ff88">&#9635; CYBERSPACE</button>
             </div>
           </div>
 

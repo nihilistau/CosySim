@@ -58,6 +58,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "asset_studio": 5568,
     "grid": 5569,
     "lab_break": 5571,
+    "creation_kit": 5592,  # v1.47.0 — Creation Kit visual editor
     "intel_hub": 5580,
     # ── Launcher-managed services (8500–8800) ──
     "hub": 8500,
