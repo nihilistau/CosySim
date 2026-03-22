@@ -1059,6 +1059,69 @@ class NeonCityScene(FlaskScene):
                 logger.error("Mission generation failed: %s", exc)
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
+        # v1.52.0 [2026-03-22] — NPC Gift/Favor System
+        # CONNECTS: ReputationManager, InventoryManager, PlayerState
+        # CALLED BY: NeonCityApp.giftNpc() via REST
+        # EMITS: reputation change, inventory removal
+        @self.app.route("/api/npc/gift", methods=["POST"])
+        def api_npc_gift():
+            """Gift an item to an NPC to improve relationship standing.
+
+            Removes the item from inventory and increases standing with
+            the NPC by an amount based on item value.
+            """
+            data = request.get_json(force=True) or {}
+            npc_id = data.get("npc_id", "")
+            item_id = data.get("item_id", "")
+
+            if not npc_id or not item_id:
+                return jsonify({"ok": False, "error": "npc_id and item_id required"}), 400
+
+            try:
+                inv = get_inventory()
+                ps = get_player_state()
+                rep = get_reputation_manager()
+
+                # Check item exists in inventory
+                item = inv.get_item(item_id)
+                if not item:
+                    return jsonify({"ok": False, "error": f"You don't have {item_id}."}), 400
+
+                # Calculate standing boost based on item sell price
+                price = getattr(item, "sell_price", 0) or getattr(item, "price", 50) or 50
+                standing_boost = max(3, min(20, price // 25))
+
+                # Remove item from inventory
+                inv.remove_item(item_id, 1)
+
+                # Increase standing with NPC
+                rep.adjust(npc_id, "player", standing_boost, reason=f"gift:{item_id}")
+                new_entry = rep.get_entry(npc_id, "player")
+                new_standing = new_entry.standing if new_entry else 0
+                new_label = new_entry.label if new_entry else "Neutral"
+
+                item_name = getattr(item, "name", item_id)
+                logger.info("Gift: %s → %s (+%d standing, now %d/%s)",
+                            item_name, npc_id, standing_boost, new_standing, new_label)
+
+                can_recruit = new_standing >= 40
+                return jsonify({
+                    "ok": True,
+                    "npc_id": npc_id,
+                    "item": item_name,
+                    "standing_boost": standing_boost,
+                    "new_standing": new_standing,
+                    "new_label": new_label,
+                    "can_recruit": can_recruit,
+                    "message": (
+                        f"Gifted {item_name} to {npc_id}. +{standing_boost} standing "
+                        f"(now {new_standing}: {new_label})."
+                        + (" Ready to recruit!" if can_recruit else "")
+                    ),
+                })
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+
         @self.app.route("/api/crew")
         def api_crew():
             """Full crew state — members, operations, roles."""
@@ -1852,12 +1915,52 @@ class NeonCityScene(FlaskScene):
                         self.socketio.emit("hud_update", {"crew_ops_completed": len(completed)})
                 except Exception:
                     pass
+                # v1.52.0 — Check for expired missions on each poll tick
+                try:
+                    mm = get_mission_manager()
+                    expired = mm.check_expired()
+                    for m in expired:
+                        self.socketio.emit("city_event", {
+                            "type": "mission_failed",
+                            "payload": {
+                                "npc_id": "MISSIONS",
+                                "description": f"MISSION FAILED: {m['title']} — time expired!",
+                            },
+                        })
+                except Exception:
+                    pass
                 _time.sleep(60)
 
         self._crew_poll_running = True
         threading.Thread(
             target=_crew_poll_loop, daemon=True, name="crew-poll",
         ).start()
+
+    # ── Cross-Scene Arrival ─────────────────────────────────────────
+    # v1.52.0 [2026-03-22] — Travel log + city welcome on arrival
+    # CONNECTS: FlaskScene.on_player_arrival(), city_map.travel()
+
+    def on_player_arrival(self, from_location: str, travel_data: Dict[str, Any]) -> None:
+        """Log player arrival in the city chat and broadcast welcome."""
+        energy_cost = travel_data.get("energy_cost", 0)
+        heat_add = travel_data.get("heat_add", 0)
+        costs = []
+        if energy_cost:
+            costs.append(f"-{energy_cost} EN")
+        if heat_add:
+            costs.append(f"+{heat_add} HT")
+        cost_str = f" ({', '.join(costs)})" if costs else ""
+
+        try:
+            self.socketio.emit("city_event", {
+                "type": "arrival",
+                "payload": {
+                    "npc_id": "CITY",
+                    "description": f"Arrived from {from_location}.{cost_str} Welcome back to Neon City.",
+                },
+            })
+        except Exception as exc:
+            logger.debug("NeonCity arrival broadcast failed: %s", exc)
 
     def on_shutdown(self) -> None:
         """Hook: stop crew poller, LivingWorld, and unsubscribe events."""

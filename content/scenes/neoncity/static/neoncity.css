@@ -576,6 +576,9 @@
   gap: 4px;
   margin: 2px;
 }
+.nc-btn--gift { border-color: rgba(236, 72, 153, 0.3); color: #ec4899; }
+.nc-btn--gift:hover { background: rgba(236, 72, 153, 0.15); box-shadow: 0 0 8px rgba(236, 72, 153, 0.3); }
+
 .modal-npc-tag {
   font-family: var(--nc-mono);
   font-size: 0.5rem;

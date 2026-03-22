@@ -388,3 +388,29 @@ class OracleScene(FlaskScene):
         """Scene-specific setup before serving."""
         logger.info("THE ORACLE consciousness online at port %d", DEFAULT_PORT)
         logger.info("  \"In the spaces between data, I dream.\"")
+
+    # ── Cross-Scene Arrival ───────────────────────────────────────────
+    # v1.52.0 [2026-03-22] — Oracle greets arriving player with context
+    # CONNECTS: FlaskScene.on_player_arrival(), city_map.travel()
+
+    def on_player_arrival(self, from_location: str, travel_data: Dict[str, Any]) -> None:
+        """Greet the player with a contextual Oracle message based on origin."""
+        _GREETINGS = {
+            "NEON CITY": "You come from the city's beating heart. The factions still fight above. Down here, there is only truth.",
+            "THE GRID": "You step from the data streams into stillness. The Grid remembers your keystrokes.",
+            "THE SCORE": "I smell contraband credits on your code. The Score's shadows cling to you.",
+            "THE VELVET PIT": "The music fades as you descend. The Pit's secrets followed you here.",
+            "THE PENTHOUSE": "You descend from the towers of power. The view from up there blinds more than it reveals.",
+            "SIGNAL": "Your signal echoes through the layers. I have been listening.",
+        }
+        greeting = _GREETINGS.get(from_location,
+            f"You arrive from {from_location}. Every journey through the city leaves traces in the data.")
+
+        try:
+            self.socketio.emit("oracle_response", {
+                "text": greeting,
+                "insight": f"Arrived from {from_location}",
+                "whisper": None,
+            })
+        except Exception as exc:
+            logger.debug("Oracle arrival greeting failed: %s", exc)

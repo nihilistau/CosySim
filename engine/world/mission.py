@@ -676,6 +676,44 @@ class MissionManager:
         self._fire_event("mission_failed", mission_id, m.title)
         return {"success": True, "message": f"Mission '{m.title}' failed. {reason}"}
 
+    # v1.52.0 [2026-03-22] — Time-limited mission auto-fail enforcement
+    # CONNECTS: MissionStatus.ACTIVE, time_limit, started_at
+    # CALLED BY: NeonCity crew poll loop, or any periodic check
+
+    def check_expired(self) -> List[Dict[str, Any]]:
+        """Check all active missions for time limit expiry and auto-fail expired ones.
+
+        Returns:
+            List of dicts describing missions that were auto-failed.
+        """
+        failed: List[Dict[str, Any]] = []
+        now = time.time()
+
+        with self._lock:
+            active = [m for m in self._missions.values()
+                       if m.status == MissionStatus.ACTIVE
+                       and m.time_limit is not None
+                       and m.started_at is not None]
+
+        for m in active:
+            # time_limit is in game minutes; 1 real minute = 1 game hour (60 game min)
+            # So time_limit game minutes = time_limit real seconds
+            elapsed_secs = now - m.started_at
+            limit_secs = m.time_limit * 60  # convert game minutes to real seconds
+            if elapsed_secs >= limit_secs:
+                result = self.fail(m.id, reason=f"Time expired ({m.time_limit} min limit)")
+                if result.get("success"):
+                    failed.append({
+                        "mission_id": m.id,
+                        "title": m.title,
+                        "time_limit": m.time_limit,
+                        "message": result.get("message", ""),
+                    })
+                    logger.info("Mission auto-failed (expired): %s (%d min limit)",
+                                m.title, m.time_limit)
+
+        return failed
+
     def assign_crew(self, mission_id: str, crew_ids: List[str]) -> Dict[str, Any]:
         """Assign crew members to an active mission.
 
