@@ -106,8 +106,13 @@ async def ask(question: str, port: int = CDP_PORT) -> str:
                 return f"[ERROR: {desc[:200]}]"
             raw = json.dumps(result_obj)[:2000]
 
-        # Parse wrb.fr chunks — find the longest text (final answer)
-        best = ""
+        # Parse wrb.fr chunks — extract the final answer, skip thinking traces.
+        # Response structure (streaming):
+        #   Chunks 0-N: Thinking traces (bold headers like "**Analyzing...**\n\n")
+        #   Chunks N+1..M: Answer building progressively (each adds more text)
+        #   Last chunks: Final answer (stabilized, repeated)
+        # Strategy: take the last chunk, skip if it looks like a thinking trace.
+        texts = []
         for line in raw.replace(")]}'", "").split("\n"):
             line = line.strip()
             if not line or not line.startswith("["):
@@ -118,12 +123,28 @@ async def ask(question: str, port: int = CDP_PORT) -> str:
                         d = json.loads(item[2])
                         if isinstance(d, list) and d:
                             txt = d[0][0] if isinstance(d[0], list) and d[0] else d[0] if isinstance(d[0], str) else ""
-                            if isinstance(txt, str) and len(txt) > len(best):
-                                best = txt
+                            if isinstance(txt, str) and txt.strip():
+                                texts.append(txt)
             except Exception:
                 pass
 
-        return best or "[No answer parsed from response]"
+        if not texts:
+            return "[No answer parsed from response]"
+
+        # The final answer is the last text. If all chunks are thinking traces,
+        # fall back to the longest non-trace chunk.
+        answer = texts[-1]
+
+        # If the last chunk is a thinking trace (starts with **Bold**\n),
+        # walk backwards to find the actual answer
+        import re
+        if re.match(r"\*\*[A-Z].*\*\*\s*\n", answer):
+            for txt in reversed(texts):
+                if not re.match(r"\*\*[A-Z].*\*\*\s*\n", txt):
+                    answer = txt
+                    break
+
+        return answer
 
 
 def main():
