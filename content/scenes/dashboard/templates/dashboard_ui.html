@@ -1,0 +1,678 @@
+{#
+  dashboard_ui.html — Dashboard Scene Template
+  ==============================================
+
+  Character & system management dashboard.  Extends neon_base.html,
+  provides tab navigation for Dashboard / Characters / Personalities /
+  Roles / Memories panels.
+
+  Version: v1.49.2 [2026-03-22]
+  Author:  CosySim Team
+
+  Change Log:
+      v1.49.2 [2026-03-22] — Initial Flask migration from Streamlit dashboard_v2
+#}
+
+{% extends 'neon_base.html' %}
+
+{# ── Scene variables ───────────────────────────────────────────────── #}
+{% set scene_key          = 'dashboard' %}
+{% set scene_display_name = 'DASHBOARD' %}
+{% set scene_accent       = '#667eea' %}
+{% set scene_accent_rgb   = '102 126 234' %}
+{% set scene_version      = 'v1.49.2' %}
+{% set page_title         = 'DASHBOARD — NeonCity' %}
+{% set hide_particles     = true %}
+
+{# ── Extra CSS ─────────────────────────────────────────────────────── #}
+{% block head_style %}
+<style>
+  /* v1.49.2 [2026-03-22] — Dashboard scene styles */
+
+  /* ── Tab navigation ──────────────────────────────────────────────── */
+  .dash-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+  }
+  .dash-tab {
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    user-select: none;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+  .dash-tab:hover {
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom-color: rgba(102, 126, 234, 0.5);
+  }
+  .dash-tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+  }
+
+  /* ── Tab panels ──────────────────────────────────────────────────── */
+  .dash-panel {
+    display: none;
+  }
+  .dash-panel.active {
+    display: block;
+  }
+
+  /* ── Stat cards ──────────────────────────────────────────────────── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: rgba(102, 126, 234, 0.08);
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+  }
+  .stat-card__value {
+    font-family: 'Orbitron', monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #667eea;
+  }
+  .stat-card__label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.25rem;
+  }
+
+  /* ── Glass panels ────────────────────────────────────────────────── */
+  .glass-panel {
+    background: rgba(15, 15, 25, 0.7);
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    backdrop-filter: blur(10px);
+  }
+  .glass-panel h3 {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #667eea;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Data table ──────────────────────────────────────────────────── */
+  .dash-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .dash-table th {
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    font-family: 'Orbitron', monospace;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+  }
+  .dash-table td {
+    padding: 0.6rem 0.75rem;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .dash-table tr:hover td {
+    background: rgba(102, 126, 234, 0.06);
+  }
+
+  /* ── Forms ───────────────────────────────────────────────────────── */
+  .dash-form {
+    display: grid;
+    gap: 1rem;
+  }
+  .dash-form--2col {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dash-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .dash-field label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-family: 'Orbitron', monospace;
+  }
+  .dash-field input,
+  .dash-field select,
+  .dash-field textarea {
+    background: rgba(15, 15, 25, 0.8);
+    border: 1px solid rgba(102, 126, 234, 0.25);
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .dash-field input:focus,
+  .dash-field select:focus,
+  .dash-field textarea:focus {
+    border-color: #667eea;
+  }
+  .dash-field textarea {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1.1rem;
+    border-radius: 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+  }
+  .btn-primary {
+    background: #667eea;
+    color: #fff;
+  }
+  .btn-primary:hover {
+    background: #5a6fd6;
+  }
+  .btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .btn-danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+  }
+  .btn-ghost {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+  .btn-sm {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.72rem;
+  }
+  .btn-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  /* ── Search bar ──────────────────────────────────────────────────── */
+  .search-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .search-bar input {
+    flex: 1;
+    background: rgba(15, 15, 25, 0.8);
+    border: 1px solid rgba(102, 126, 234, 0.25);
+    border-radius: 6px;
+    padding: 0.55rem 0.75rem;
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    outline: none;
+  }
+  .search-bar input:focus {
+    border-color: #667eea;
+  }
+
+  /* ── Toast notification ──────────────────────────────────────────── */
+  .dash-toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: rgba(15, 15, 25, 0.95);
+    border: 1px solid rgba(102, 126, 234, 0.4);
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem;
+    color: #fff;
+    font-size: 0.85rem;
+    z-index: 9999;
+    transform: translateY(120%);
+    opacity: 0;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+  }
+  .dash-toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  .dash-toast.error {
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+  }
+
+  /* ── Character detail sidebar ────────────────────────────────────── */
+  .char-detail {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+  @media (max-width: 900px) {
+    .char-detail {
+      grid-template-columns: 1fr;
+    }
+    .dash-form--2col {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ── Trait bar ───────────────────────────────────────────────────── */
+  .trait-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .trait-bar__label {
+    width: 90px;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+  }
+  .trait-bar__track {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .trait-bar__fill {
+    height: 100%;
+    background: #667eea;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+  .trait-bar__value {
+    width: 35px;
+    text-align: right;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── Memory card ─────────────────────────────────────────────────── */
+  .memory-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .memory-card__content {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.85rem;
+    margin-bottom: 0.4rem;
+  }
+  .memory-card__meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  /* ── Empty state ─────────────────────────────────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.9rem;
+  }
+
+  /* ── Spinner ─────────────────────────────────────────────────────── */
+  .spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(102, 126, 234, 0.2);
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+{% endblock %}
+
+{# ── Scene Content ─────────────────────────────────────────────────── #}
+{% block scene_content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 1rem;">
+
+  <!-- Tab navigation -->
+  <nav class="dash-tabs" id="dash-tabs" role="tablist">
+    <button class="dash-tab active" data-tab="overview" role="tab">Dashboard</button>
+    <button class="dash-tab" data-tab="characters" role="tab">Characters</button>
+    <button class="dash-tab" data-tab="personalities" role="tab">Personalities</button>
+    <button class="dash-tab" data-tab="roles" role="tab">Roles</button>
+    <button class="dash-tab" data-tab="memories" role="tab">Memories</button>
+  </nav>
+
+  <!-- ════════════ Overview Panel ════════════ -->
+  <section class="dash-panel active" id="panel-overview" role="tabpanel">
+    <div class="stat-grid" id="stat-grid">
+      <div class="stat-card">
+        <div class="stat-card__value" id="stat-characters">-</div>
+        <div class="stat-card__label">Characters</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value" id="stat-personalities">-</div>
+        <div class="stat-card__label">Personalities</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value" id="stat-roles">-</div>
+        <div class="stat-card__label">Roles</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card__value" id="stat-memories">-</div>
+        <div class="stat-card__label">Memories</div>
+      </div>
+    </div>
+    <div class="glass-panel">
+      <h3>Recent Characters</h3>
+      <table class="dash-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Age</th><th>Mood</th><th>Relationship</th><th>Created</th>
+          </tr>
+        </thead>
+        <tbody id="overview-chars-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ════════════ Characters Panel ════════════ -->
+  <section class="dash-panel" id="panel-characters" role="tabpanel">
+    <!-- Character list view -->
+    <div id="char-list-view">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="color: #667eea; font-family: 'Orbitron', monospace; font-size: 0.9rem; margin: 0;">ALL CHARACTERS</h3>
+        <button class="btn btn-primary btn-sm" id="btn-new-char">+ New Character</button>
+      </div>
+      <table class="dash-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Age</th><th>Sex</th><th>Mood</th><th>Relationship</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="char-table-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Character create/edit form (hidden by default) -->
+    <div id="char-form-view" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 id="char-form-title" style="color: #667eea; font-family: 'Orbitron', monospace; font-size: 0.9rem; margin: 0;">NEW CHARACTER</h3>
+        <button class="btn btn-ghost btn-sm" id="btn-char-back">Back</button>
+      </div>
+      <div class="glass-panel">
+        <form id="char-form" class="dash-form dash-form--2col">
+          <input type="hidden" id="char-form-id">
+          <div class="dash-field">
+            <label for="cf-name">Name *</label>
+            <input type="text" id="cf-name" required>
+          </div>
+          <div class="dash-field">
+            <label for="cf-age">Age</label>
+            <input type="number" id="cf-age" min="18" max="99">
+          </div>
+          <div class="dash-field">
+            <label for="cf-sex">Sex</label>
+            <select id="cf-sex">
+              <option value="">Select...</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="non-binary">Non-Binary</option>
+            </select>
+          </div>
+          <div class="dash-field">
+            <label for="cf-personality">Personality</label>
+            <select id="cf-personality">
+              <option value="">None</option>
+            </select>
+          </div>
+          <div class="dash-field">
+            <label for="cf-hair">Hair Color</label>
+            <input type="text" id="cf-hair">
+          </div>
+          <div class="dash-field">
+            <label for="cf-eyes">Eye Color</label>
+            <input type="text" id="cf-eyes">
+          </div>
+          <div class="dash-field">
+            <label for="cf-height">Height</label>
+            <input type="text" id="cf-height" placeholder="e.g. 5'7&quot;">
+          </div>
+          <div class="dash-field">
+            <label for="cf-body">Body Type</label>
+            <input type="text" id="cf-body" placeholder="e.g. athletic, slim">
+          </div>
+          <div class="dash-field" style="grid-column: 1 / -1;">
+            <label for="cf-tags">Tags (comma-separated)</label>
+            <input type="text" id="cf-tags" placeholder="e.g. friendly, adventurous">
+          </div>
+        </form>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-char-save">Save Character</button>
+          <button class="btn btn-ghost" id="btn-char-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Character detail view (hidden by default) -->
+    <div id="char-detail-view" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 id="char-detail-name" style="color: #667eea; font-family: 'Orbitron', monospace; font-size: 0.9rem; margin: 0;"></h3>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-ghost btn-sm" id="btn-detail-edit">Edit</button>
+          <button class="btn btn-danger btn-sm" id="btn-detail-delete">Delete</button>
+          <button class="btn btn-ghost btn-sm" id="btn-detail-back">Back</button>
+        </div>
+      </div>
+      <div class="char-detail">
+        <div class="glass-panel">
+          <h3>Identity</h3>
+          <div id="char-detail-identity"></div>
+        </div>
+        <div class="glass-panel">
+          <h3>Traits</h3>
+          <div id="char-detail-traits"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ Personalities Panel ════════════ -->
+  <section class="dash-panel" id="panel-personalities" role="tabpanel">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="color: #667eea; font-family: 'Orbitron', monospace; font-size: 0.9rem; margin: 0;">PERSONALITIES</h3>
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-ghost btn-sm" id="btn-init-pers">Initialize Defaults</button>
+        <button class="btn btn-primary btn-sm" id="btn-new-pers">+ New Personality</button>
+      </div>
+    </div>
+    <table class="dash-table">
+      <thead>
+        <tr>
+          <th>Name</th><th>Traits</th><th>Openness</th><th>Created</th>
+        </tr>
+      </thead>
+      <tbody id="pers-table-body"></tbody>
+    </table>
+
+    <!-- New personality form (hidden) -->
+    <div id="pers-form-view" class="glass-panel" style="display: none; margin-top: 1rem;">
+      <h3>New Personality</h3>
+      <form id="pers-form" class="dash-form dash-form--2col">
+        <div class="dash-field">
+          <label for="pf-name">Name *</label>
+          <input type="text" id="pf-name" required>
+        </div>
+        <div class="dash-field">
+          <label for="pf-openness">Sexual Openness (0-1)</label>
+          <input type="number" id="pf-openness" min="0" max="1" step="0.1" value="0.5">
+        </div>
+        <div class="dash-field" style="grid-column: 1 / -1;">
+          <label for="pf-prompt">System Prompt *</label>
+          <textarea id="pf-prompt" rows="4" required></textarea>
+        </div>
+        <div class="dash-field">
+          <label for="pf-traits">Traits (comma-separated)</label>
+          <input type="text" id="pf-traits" placeholder="e.g. playful, caring">
+        </div>
+        <div class="dash-field">
+          <label for="pf-values">Values (comma-separated)</label>
+          <input type="text" id="pf-values" placeholder="e.g. fun, connection">
+        </div>
+      </form>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-pers-save">Save Personality</button>
+        <button class="btn btn-ghost" id="btn-pers-cancel">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ Roles Panel ════════════ -->
+  <section class="dash-panel" id="panel-roles" role="tabpanel">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="color: #667eea; font-family: 'Orbitron', monospace; font-size: 0.9rem; margin: 0;">ROLES</h3>
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-ghost btn-sm" id="btn-init-roles">Initialize Defaults</button>
+        <button class="btn btn-primary btn-sm" id="btn-new-role">+ New Role</button>
+      </div>
+    </div>
+    <table class="dash-table">
+      <thead>
+        <tr>
+          <th>Name</th><th>Description</th><th>Traits Required</th><th>Created</th>
+        </tr>
+      </thead>
+      <tbody id="role-table-body"></tbody>
+    </table>
+
+    <!-- New role form (hidden) -->
+    <div id="role-form-view" class="glass-panel" style="display: none; margin-top: 1rem;">
+      <h3>New Role</h3>
+      <form id="role-form" class="dash-form dash-form--2col">
+        <div class="dash-field">
+          <label for="rf-name">Name *</label>
+          <input type="text" id="rf-name" required>
+        </div>
+        <div class="dash-field">
+          <label for="rf-traits">Required Traits (comma-separated)</label>
+          <input type="text" id="rf-traits">
+        </div>
+        <div class="dash-field" style="grid-column: 1 / -1;">
+          <label for="rf-desc">Description *</label>
+          <textarea id="rf-desc" rows="2" required></textarea>
+        </div>
+        <div class="dash-field" style="grid-column: 1 / -1;">
+          <label for="rf-context">Context</label>
+          <textarea id="rf-context" rows="3"></textarea>
+        </div>
+        <div class="dash-field" style="grid-column: 1 / -1;">
+          <label for="rf-scenario">Scenario</label>
+          <textarea id="rf-scenario" rows="2"></textarea>
+        </div>
+      </form>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-role-save">Save Role</button>
+        <button class="btn btn-ghost" id="btn-role-cancel">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ Memories Panel ════════════ -->
+  <section class="dash-panel" id="panel-memories" role="tabpanel">
+    <div class="glass-panel">
+      <h3>Memory Browser</h3>
+      <div class="dash-form" style="margin-bottom: 1rem;">
+        <div class="dash-field">
+          <label for="mem-char-select">Character</label>
+          <select id="mem-char-select">
+            <option value="">Select a character...</option>
+          </select>
+        </div>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="mem-search-input" placeholder="Semantic search memories...">
+        <button class="btn btn-primary btn-sm" id="btn-mem-search">Search</button>
+      </div>
+      <div id="mem-list"></div>
+
+      <!-- Add memory form -->
+      <div id="mem-add-form" style="display: none; margin-top: 1rem; border-top: 1px solid rgba(102,126,234,0.15); padding-top: 1rem;">
+        <h3 style="color: #667eea; font-family: 'Orbitron', monospace; font-size: 0.8rem;">Add Memory</h3>
+        <div class="dash-form">
+          <div class="dash-field">
+            <label for="mf-content">Content *</label>
+            <textarea id="mf-content" rows="2"></textarea>
+          </div>
+          <div class="dash-form dash-form--2col">
+            <div class="dash-field">
+              <label for="mf-importance">Importance (0-1)</label>
+              <input type="number" id="mf-importance" min="0" max="1" step="0.1" value="0.5">
+            </div>
+            <div class="dash-field">
+              <label for="mf-emotion">Emotion</label>
+              <input type="text" id="mf-emotion" placeholder="e.g. happy, sad">
+            </div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" id="btn-mem-save">Save Memory</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- Toast notification -->
+<div class="dash-toast" id="dash-toast"></div>
+{% endblock %}
+
+{# ── Scripts ───────────────────────────────────────────────────────── #}
+{% block body_scripts %}
+<script src="/static/js/dashboard.js" defer></script>
+{% endblock %}

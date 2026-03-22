@@ -45,20 +45,42 @@ window.CharacterBridge = (function () {
   let _directorSprite = null;
 
   // ─── Initialise ──────────────────────────────────────────────────
+  // v1.49.2 [2026-03-22] — Use onReady() callback instead of blind setTimeout polling
+  let _initAttempts = 0;
+  const _MAX_INIT_ATTEMPTS = 10;
+
   function init() {
-    if (!window.penthouse3D) {
-      console.warn('[CharBridge] penthouse3D not ready — retrying in 500ms');
-      setTimeout(init, 500);
-      return;
-    }
+    // Wait for CharModels (loaded via separate script)
     if (typeof CharModels === 'undefined') {
-      console.warn('[CharBridge] CharModels not loaded — retrying in 500ms');
+      _initAttempts++;
+      if (_initAttempts > _MAX_INIT_ATTEMPTS) {
+        console.error('[CharBridge] CharModels not available after %d attempts — disabling 3D characters', _MAX_INIT_ATTEMPTS);
+        return;
+      }
+      console.debug('[CharBridge] CharModels not loaded — retrying in 500ms (attempt %d)', _initAttempts);
       setTimeout(init, 500);
       return;
     }
 
-    _scene = window.penthouse3D.getScene();
-    _locationPositions = window.penthouse3D.getLocationPositions();
+    // Use onReady if penthouse3D exists but isn't initialized yet
+    if (window.penthouse3D && !window.penthouse3D.isInitialized()) {
+      window.penthouse3D.onReady(_onPenthouseReady);
+      return;
+    }
+    if (!window.penthouse3D) {
+      // Listen for the ready event as fallback
+      document.addEventListener('penthouse3d:ready', () => _onPenthouseReady(window.penthouse3D), { once: true });
+      document.addEventListener('penthouse3d:error', () => {
+        console.error('[CharBridge] Penthouse 3D init failed — disabling 3D characters');
+      }, { once: true });
+      return;
+    }
+    _onPenthouseReady(window.penthouse3D);
+  }
+
+  function _onPenthouseReady(p3d) {
+    _scene = p3d.getScene();
+    _locationPositions = p3d.getLocationPositions();
 
     if (!_scene) {
       console.error('[CharBridge] Could not get Three.js scene from penthouse3D');

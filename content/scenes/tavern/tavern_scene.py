@@ -53,7 +53,7 @@ try:
 except ImportError:
     _WORLD_AVAILABLE = False
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 #  Constants
@@ -130,7 +130,7 @@ class TavernScene(FlaskScene):
             self._world_state = get_world_state()
             self._event_bus_ref = get_event_bus()
 
-        log.info("TavernScene created on port %d", port)
+        logger.info("TavernScene created on port %d", port)
 
     # ------------------------------------------------------------------
     #  MCP integration
@@ -152,9 +152,9 @@ class TavernScene(FlaskScene):
             fw.add_lifecycle_hook("framework_ready", self._on_framework_ready)
             fw.add_lifecycle_hook("scene_tick", self._on_scene_tick)
 
-            log.info("TavernScene MCP wired")
+            logger.info("TavernScene MCP wired")
         except Exception as exc:
-            log.warning("MCP wiring failed (non-fatal): %s", exc)
+            logger.warning("MCP wiring failed (non-fatal): %s", exc)
             self._fw = None
             self._scene_node = None
 
@@ -164,7 +164,7 @@ class TavernScene(FlaskScene):
             self._scene_node.update_state(self.tavern_state.to_snapshot())
 
     def _on_framework_ready(self, **_kw: Any) -> None:
-        log.info("MCP framework ready — tavern scene active")
+        logger.info("MCP framework ready — tavern scene active")
 
     def _on_scene_tick(self, scene_id: str = "", **_kw: Any) -> None:
         if scene_id == SCENE_ID:
@@ -192,7 +192,7 @@ class TavernScene(FlaskScene):
                     self._emit("consequence", c)
             except Exception as exc:
                 # v1.49.1 [2026-03-22] — Surface tick failures
-                log.warning("Tavern MCP tick failed: %s", exc)
+                logger.warning("Tavern MCP tick failed: %s", exc)
 
     # ------------------------------------------------------------------
     #  Background ticker
@@ -211,7 +211,7 @@ class TavernScene(FlaskScene):
             try:
                 self._tick()
             except Exception as exc:
-                log.debug("Ticker error: %s", exc)
+                logger.debug("Ticker error: %s", exc)
 
     def _stop_ticker(self) -> None:
         self._ticker_running = False
@@ -349,7 +349,7 @@ class TavernScene(FlaskScene):
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                log.error("Economy API error: %s", exc)
+                logger.error("Economy API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/consequences")
@@ -364,7 +364,7 @@ class TavernScene(FlaskScene):
                     "pending": [c.to_dict() for c in store.get_pending(SCENE_ID, player_id)],
                 })
             except Exception as exc:
-                log.error("Consequences API error: %s", exc)
+                logger.error("Consequences API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
 
         # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
@@ -375,14 +375,14 @@ class TavernScene(FlaskScene):
         try:
             self.register_bench_route(app, self.socketio)
         except Exception as exc:
-            log.debug("Bench route: %s", exc)
+            logger.debug("Bench route: %s", exc)
 
         # Overlay + skills server
         try:
             self.mount_overlay(app)
             self.mount_skills_server(app)
         except Exception as exc:
-            log.debug("Overlay/skills mount: %s", exc)
+            logger.debug("Overlay/skills mount: %s", exc)
 
     # ------------------------------------------------------------------
     #  SocketIO
@@ -519,7 +519,7 @@ class TavernScene(FlaskScene):
                     "clues": len(board.get_clues()),
                 })
             except Exception as exc:
-                log.debug("Investigate rumor error: %s", exc)
+                logger.debug("Investigate rumor error: %s", exc)
                 sio.emit("rumor_investigated", {"rumor_id": rumor_id, "clues": 0})
 
         # v1.49.1 [2026-03-22] — Removed legacy NOOP "action" handler

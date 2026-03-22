@@ -180,6 +180,13 @@ class ShatteredThroneScene {
 
     this.socket.on("connect",       () => this._onConnect());
     this.socket.on("disconnect",    () => console.warn("[ShatteredThrone] Disconnected"));
+    // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on("reconnect", (attempt) => {
+      console.debug("[ShatteredThrone] Reconnected after " + attempt + " attempt(s)");
+    });
+    this.socket.io.on("reconnect_attempt", (attempt) => {
+      if (attempt % 3 === 0) console.debug("[ShatteredThrone] Reconnecting... (attempt " + attempt + ")");
+    });
     this.socket.on("game_state",    d  => this._onFullState(d));
     this.socket.on("realm_state",   d  => this._onFullState(d));
     this.socket.on("turn_update",   d  => this._onFullState(d));

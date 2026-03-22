@@ -66,6 +66,14 @@ class ArenaScene {
       this._appendCommentary("Connection lost. Reconnecting…", "system");
     });
 
+    // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on("reconnect", (attempt) => {
+      console.debug("[Arena] Reconnected after " + attempt + " attempt(s)");
+    });
+    this.socket.io.on("reconnect_attempt", (attempt) => {
+      if (attempt % 3 === 0) console.debug("[Arena] Reconnecting... (attempt " + attempt + ")");
+    });
+
     this.socket.on("arena_welcome", (data) => {
       this._appendCommentary(data.message || "Welcome.", "system");
     });

@@ -1,5 +1,5 @@
 """
-LMSClient v0.50a — API-Complete LMStudio v1 REST API client
+LMSClient v0.50b — API-Complete LMStudio v1 REST API client
 
 **CosySim Framework v0.50a** — all inference through ``/api/v1/chat``.
 
@@ -91,6 +91,11 @@ logger = logging.getLogger(__name__)
 _MODEL_CACHE_TTL = 30.0
 
 
+# v1.49.2 [2026-03-22] — Auth circuit breaker error
+class LMStudioAuthError(RuntimeError):
+    """Raised when auth circuit breaker is open due to repeated 401/403 failures."""
+
+
 # ── Main client ─────────────────────────────────────────────────────────
 
 class LMSClient:
@@ -161,8 +166,57 @@ class LMSClient:
         self._resolved_model: Optional[str] = None
         self._resolved_at: float = 0.0
 
+        # v1.49.2 [2026-03-22] — Auth circuit breaker
+        self._auth_failures: int = 0
+        self._auth_circuit_open: bool = False
+        self._auth_circuit_until: float = 0.0
+        self._AUTH_FAILURE_THRESHOLD: int = 3
+        self._AUTH_COOLDOWN_SECS: float = 300.0
+
     def close(self) -> None:
         self._client.close()
+
+    # ── Auth Circuit Breaker ───────────────────────────────────────
+    # v1.49.2 [2026-03-22] — Prevent repeated auth failures from locking agents
+
+    def _check_auth_circuit(self) -> None:
+        """Raise LMStudioAuthError if auth circuit breaker is open."""
+        if not self._auth_circuit_open:
+            return
+        if time.time() >= self._auth_circuit_until:
+            self._auth_circuit_open = False
+            self._auth_failures = 0
+            logger.info("LMStudio auth circuit breaker half-open (cooldown expired)")
+            return
+        raise LMStudioAuthError(
+            f"Auth circuit breaker open ({self._auth_failures} consecutive failures). "
+            f"Check lmstudio.api_token in config. Resets in "
+            f"{int(self._auth_circuit_until - time.time())}s or call reset_auth_circuit()."
+        )
+
+    def _record_auth_failure(self, status_code: int) -> None:
+        """Record an auth failure and potentially open the circuit breaker."""
+        self._auth_failures += 1
+        if self._auth_failures >= self._AUTH_FAILURE_THRESHOLD:
+            self._auth_circuit_open = True
+            self._auth_circuit_until = time.time() + self._AUTH_COOLDOWN_SECS
+            logger.error(
+                "LMStudio auth circuit breaker OPEN after %d failures (HTTP %d). "
+                "Cooldown: %.0fs. Check lmstudio.api_token.",
+                self._auth_failures, status_code, self._AUTH_COOLDOWN_SECS,
+            )
+
+    def _record_auth_success(self) -> None:
+        """Record a successful request — resets auth failure counter."""
+        if self._auth_failures > 0:
+            self._auth_failures = 0
+
+    def reset_auth_circuit(self) -> None:
+        """Manually reset the auth circuit breaker after fixing credentials."""
+        self._auth_circuit_open = False
+        self._auth_failures = 0
+        self._auth_circuit_until = 0.0
+        logger.info("LMStudio auth circuit breaker manually reset")
 
     # ── Health & Model Info ─────────────────────────────────────────
 
@@ -770,6 +824,9 @@ class LMSClient:
 
     def _chat_native(self, messages: List[Dict], config: InferenceConfig) -> LMSResponse:
         """Call ``POST /api/v1/chat`` (native protocol, the only path)."""
+        # v1.49.2 [2026-03-22] — Auth circuit breaker check before HTTP call
+        self._check_auth_circuit()
+
         resolved = self.resolve_model(config.model)
         system_prompt, v1_input = self._messages_to_v1_input(messages)
 
@@ -790,9 +847,13 @@ class LMSClient:
             )
             r.raise_for_status()
             data = r.json()
+            self._record_auth_success()
         except httpx.ConnectError:
             raise ConnectionError(f"Cannot connect to LMStudio at {self.base_url}")
         except httpx.HTTPStatusError as exc:
+            # v1.49.2 [2026-03-22] — Track auth failures for circuit breaker
+            if exc.response.status_code in (401, 403):
+                self._record_auth_failure(exc.response.status_code)
             logger.error("Native v1 HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
             raise
 
@@ -851,6 +912,9 @@ class LMSClient:
         tool call results, and stats internally.  The generator's return
         value is the fully-populated LMSResponse.
         """
+        # v1.49.2 [2026-03-22] — Auth circuit breaker check before HTTP call
+        self._check_auth_circuit()
+
         result = LMSResponse(model=model)
         t0 = time.perf_counter()
         current_event_type: Optional[str] = None
@@ -863,6 +927,7 @@ class LMSClient:
                 timeout=None,
             ) as response:
                 response.raise_for_status()
+                self._record_auth_success()
 
                 for line in response.iter_lines():
                     if not line:
@@ -932,6 +997,9 @@ class LMSClient:
         except httpx.ConnectError:
             raise ConnectionError(f"Cannot connect to LMStudio at {self.base_url}")
         except httpx.HTTPStatusError as exc:
+            # v1.49.2 [2026-03-22] — Track auth failures for circuit breaker
+            if exc.response.status_code in (401, 403):
+                self._record_auth_failure(exc.response.status_code)
             logger.error("Stream HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
             raise
 
