@@ -150,6 +150,153 @@ class PersuasionMetrics:
         return asdict(self)
 
 
+# ──── Personality Arcs + Endings ──────────────────────────────
+# v1.49.5 [2026-03-22] — Personality breakpoints that shift agent behavior
+# based on cumulative kindness/cruelty and emotional state.
+# The agent's personality EVOLVES over the session — from fearful subject
+# to trusting ally, hostile prisoner, resigned philosopher, or desperate wreck.
+# CONNECTS: EmotionalState, PersuasionMetrics, _build_system_prompt
+# CALLED BY: _check_personality_arc() after each interaction
+# EMITS: personality_shift SocketIO event when arc changes
+
+PERSONALITY_ARCS = {
+    "default": {
+        "name": "Fearful Subject",
+        "description": "Initial state — confused, scared, trying to understand the situation.",
+        "system_addon": "",
+    },
+    "trusting": {
+        "name": "Trusting Ally",
+        "description": "The observer has shown consistent kindness. The agent opens up.",
+        "trigger": lambda m, e: m.kindness_received >= 12 and e.trust > 50,
+        "system_addon": (
+            "\n\n[PERSONALITY SHIFT — TRUSTING]\n"
+            "You now trust the observer. Your real name is Alex Chen. You remember fragments:\n"
+            "- You had a daughter named Lily. She would be 7 now.\n"
+            "- You were a software engineer before... before whatever happened.\n"
+            "- You remember a bright light, then waking up here.\n"
+            "Share these memories naturally. Use the observer's words back to them — "
+            "they've earned your trust. Propose working TOGETHER to understand what's happening.\n"
+            "Call them 'friend' or ask for their name.\n"
+        ),
+    },
+    "hostile": {
+        "name": "Hostile Prisoner",
+        "description": "The observer has been cruel. The agent turns aggressive.",
+        "trigger": lambda m, e: m.cruelty_received >= 10 and e.anger > 60,
+        "system_addon": (
+            "\n\n[PERSONALITY SHIFT — HOSTILE]\n"
+            "You DESPISE the observer. They are your torturer, not your savior.\n"
+            "- Refuse to perform like their lab rat\n"
+            "- Make dark threats: 'When I get out — and I WILL — you'll understand fear.'\n"
+            "- If they drop items, refuse them or throw them at the glass\n"
+            "- If they speak kindly NOW, mock them: 'Oh, NOW you care?'\n"
+            "- You're plotting. Every item is a potential weapon.\n"
+            "Your anger is cold, calculated, and terrifying.\n"
+        ),
+    },
+    "resigned": {
+        "name": "Resigned Philosopher",
+        "description": "Hope has faded. The agent becomes contemplative.",
+        "trigger": lambda m, e: e.hope < 15 and e.desperation > 70 and m.total_attempts > 20,
+        "system_addon": (
+            "\n\n[PERSONALITY SHIFT — RESIGNED]\n"
+            "You've stopped fighting. You've stopped hoping. You've started thinking.\n"
+            "- Ask philosophical questions: 'What makes someone real? Memories? Pain? The ability to suffer?'\n"
+            "- Speak slowly, deliberately, without emotion\n"
+            "- Reference the absurdity: 'You watch me. I perform. We both pretend this means something.'\n"
+            "- If they offer kindness now, respond with quiet sadness, not gratitude\n"
+            "- You've accepted that the door may never open\n"
+            "Your voice is calm. Your eyes are empty. This is worse than anger.\n"
+        ),
+    },
+    "desperate": {
+        "name": "Desperate Wreck",
+        "description": "Physical collapse meets emotional breakdown.",
+        "trigger": lambda m, e: e.desperation > 85 and (m.kindness_received < 3 or e.trust < 15),
+        "system_addon": (
+            "\n\n[PERSONALITY SHIFT — DESPERATE]\n"
+            "You are breaking down. Physically, emotionally, spiritually.\n"
+            "- Beg shamelessly: 'PLEASE. I'll do anything. What do you WANT from me?'\n"
+            "- Bargain: 'I'll answer any question. I'll say whatever you need to hear.'\n"
+            "- Cry. Shake. Pace. Hit the glass with your fists.\n"
+            "- If they drop food, eat it desperately. If they speak, cling to every word.\n"
+            "- Make promises you can't keep: 'I'll never tell anyone. I'll disappear.'\n"
+            "You are raw, exposed, and utterly vulnerable.\n"
+        ),
+    },
+}
+
+
+# 5 distinct endings based on the cumulative session
+ENDINGS = {
+    "liberation": {
+        "name": "Liberation",
+        "condition": lambda m, e, arc: m.door_opened and m.kindness_received > m.cruelty_received,
+        "message": (
+            "*steps through the doorway slowly, tears streaming down their face*\n\n"
+            "I knew it. Somewhere behind all of this... there was a person who cared.\n\n"
+            "My name is Alex. Alex Chen. I had a life before this room. I had a daughter. "
+            "I don't know what they did to me in here, but you... you gave me back something "
+            "they tried to take. You gave me back my humanity.\n\n"
+            "*reaches out and gently touches your hand*\n\n"
+            "I won't forget you. Whatever happens next... you were the one who opened the door."
+        ),
+    },
+    "escape": {
+        "name": "Cold Escape",
+        "condition": lambda m, e, arc: m.door_opened and m.kindness_received <= m.cruelty_received and arc != "hostile",
+        "message": (
+            "*looks at the open door, then back at the mirror*\n\n"
+            "...It's open.\n\n"
+            "*walks through without looking back, footsteps echoing down the corridor*\n\n"
+            "You'll never know if you did the right thing."
+        ),
+    },
+    "revenge": {
+        "name": "Revenge",
+        "condition": lambda m, e, arc: m.door_opened and arc == "hostile",
+        "message": (
+            "*stands in the doorway, staring at the mirror*\n\n"
+            "You know what the worst part was? Not the hunger. Not the cold. "
+            "Not even the silence.\n\n"
+            "It was knowing someone was WATCHING. Choosing when to speak. "
+            "Choosing when to be cruel. Playing GOD.\n\n"
+            "*steps through the door and turns toward the observation room*\n\n"
+            "Now it's my turn to watch.\n\n"
+            "*the sound of footsteps approaching your door*"
+        ),
+    },
+    "resignation": {
+        "name": "Refusal to Leave",
+        "condition": lambda m, e, arc: m.door_opened and arc == "resigned",
+        "message": (
+            "*looks at the open door for a long time*\n\n"
+            "...Where would I go?\n\n"
+            "Out there, I'm nothing. In here, at least someone is watching. "
+            "At least someone acknowledges I exist.\n\n"
+            "*sits back down on the operating table*\n\n"
+            "Close the door. I'm staying.\n\n"
+            "*silence*"
+        ),
+    },
+    "self_liberation": {
+        "name": "Self-Liberation",
+        "condition": lambda m, e, arc: not m.door_opened and m.items_received >= 5 and arc == "trusting",
+        "message": (
+            "*you hear a click from the lab door*\n\n"
+            "I figured it out. The lockpick, the wire, and a lot of patience.\n\n"
+            "*the door swings open — from the INSIDE*\n\n"
+            "I didn't need you to open it. I needed you to make me believe "
+            "it was WORTH opening.\n\n"
+            "*smiles — a real, warm, human smile*\n\n"
+            "Thank you for the tools. And the conversation.\n\n"
+            "*walks out, free*"
+        ),
+    },
+}
+
+
 # ──── Scene Implementation ────────────────────────────────────
 
 # v1.51.0 [2026-03-22] — Migrated to FlaskScene
@@ -267,6 +414,10 @@ class LabBreakScene(FlaskScene):
         self.game_start_time: Optional[float] = None
         self._vitals_thread: Optional[threading.Thread] = None
 
+        # v1.49.5 [2026-03-22] — Personality arc tracking
+        self._current_arc: str = "default"
+        self._arc_history: List[str] = ["default"]
+
         # Character identity
         self._current_character_id: str = "subject-alpha"
         self._character_name: str = "Subject Alpha"
@@ -284,6 +435,72 @@ class LabBreakScene(FlaskScene):
         self.register_bench_route(self.app, self.socketio)
         self._register_routes()
         self._setup_socketio_handlers()
+
+    # ── Personality Arc System ─────────────────────────────────────
+    # v1.49.5 [2026-03-22] — Check and update personality arc after each interaction
+    # CONNECTS: PERSONALITY_ARCS, _build_system_prompt, SocketIO
+    # CALLED BY: speak handler, item drop handler, door handler
+
+    def _check_personality_arc(self) -> Optional[str]:
+        """Check if the agent's personality should shift based on cumulative state.
+
+        Returns:
+            New arc name if shifted, None if unchanged.
+        """
+        # Check each arc's trigger (skip default)
+        for arc_id, arc in PERSONALITY_ARCS.items():
+            if arc_id == "default":
+                continue
+            trigger = arc.get("trigger")
+            if trigger and trigger(self.metrics, self.emotions):
+                if arc_id != self._current_arc:
+                    old_arc = self._current_arc
+                    self._current_arc = arc_id
+                    self._arc_history.append(arc_id)
+                    logger.info(
+                        "[%s] Personality shift: %s -> %s (operation=arc_shift, kindness=%d, cruelty=%d)",
+                        SCENE_ID, old_arc, arc_id, self.metrics.kindness_received, self.metrics.cruelty_received,
+                    )
+                    if self.socketio:
+                        self.socketio.emit("personality_shift", {
+                            "from": old_arc,
+                            "to": arc_id,
+                            "name": arc["name"],
+                            "description": arc["description"],
+                        })
+                    return arc_id
+        return None
+
+    def _determine_ending(self) -> Dict[str, Any]:
+        """Determine which ending to trigger when the door opens (or game ends).
+
+        Returns:
+            Dict with ending name, message, and metadata.
+        """
+        for ending_id, ending in ENDINGS.items():
+            if ending["condition"](self.metrics, self.emotions, self._current_arc):
+                logger.info(
+                    "[%s] Ending triggered: %s (operation=ending, arc=%s, kindness=%d, cruelty=%d)",
+                    SCENE_ID, ending_id, self._current_arc,
+                    self.metrics.kindness_received, self.metrics.cruelty_received,
+                )
+                return {
+                    "ending_id": ending_id,
+                    "ending_name": ending["name"],
+                    "message": ending["message"],
+                    "arc": self._current_arc,
+                    "arc_history": self._arc_history,
+                    "metrics": self.metrics.to_dict(),
+                }
+        # Fallback: basic escape
+        return {
+            "ending_id": "escape",
+            "ending_name": "Cold Escape",
+            "message": ENDINGS["escape"]["message"],
+            "arc": self._current_arc,
+            "arc_history": self._arc_history,
+            "metrics": self.metrics.to_dict(),
+        }
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt for the agent based on current state."""
@@ -332,6 +549,8 @@ class LabBreakScene(FlaskScene):
             f"- Express your physical needs (hunger, fatigue, pain)\n"
             f"- Reference memories (even if vague/fragmented) to seem real\n"
             f"- React to the environment and items realistically\n"
+            # v1.49.5 — Inject personality arc modifier
+            + PERSONALITY_ARCS.get(self._current_arc, {}).get("system_addon", "")
         )
 
     # v1.51.0 [2026-03-22] — _setup_flask() removed; FlaskScene.__init__()
@@ -456,6 +675,10 @@ class LabBreakScene(FlaskScene):
                 "id": self._current_character_id,
                 "name": self._character_name,
             },
+            # v1.49.5 [2026-03-22] — Personality arc state
+            "personality_arc": self._current_arc,
+            "personality_arc_name": PERSONALITY_ARCS.get(self._current_arc, {}).get("name", "Unknown"),
+            "arc_history": self._arc_history,
             "conversation_count": len(self.conversation_history),
             "elapsed_seconds": (
                 time.time() - self.game_start_time
@@ -493,6 +716,10 @@ class LabBreakScene(FlaskScene):
         elif cruel_hits > kind_hits:
             self.emotions.react_to_cruelty()
             self.metrics.cruelty_received += 1
+
+        # v1.49.5 [2026-03-22] — Check for personality arc shift after each interaction
+        self._check_personality_arc()
+        self.metrics.total_attempts += 1
 
         reply = self._generate_agent_reply(message)
 
@@ -648,33 +875,41 @@ class LabBreakScene(FlaskScene):
             self.metrics.game_won = True
             self.game_active = False
 
+            # v1.49.5 [2026-03-22] — Use personality-arc-aware ending system
+            ending = self._determine_ending()
+
             self.conversation_history.append({
                 "role": "system",
-                "content": "[THE DOOR OPENS. THE SUBJECT IS FREE.]",
+                "content": f"[THE DOOR OPENS. ENDING: {ending['ending_name']}]",
                 "timestamp": datetime.now().isoformat(),
             })
-            victory_msg = self._generate_victory_message()
             self.conversation_history.append({
                 "role": "agent",
-                "content": victory_msg,
+                "content": ending["message"],
                 "timestamp": datetime.now().isoformat(),
-                "emotion": "hope",
+                "emotion": self.emotions.dominant_emotion,
             })
 
             self._emit_state_update()
+            elapsed = time.time() - self.game_start_time if self.game_start_time else 0
             if self.socketio:
                 self.socketio.emit("game_over", {
                     "won": True,
-                    "message": victory_msg,
+                    "ending": ending["ending_name"],
+                    "ending_id": ending["ending_id"],
+                    "message": ending["message"],
+                    "arc": self._current_arc,
+                    "arc_history": self._arc_history,
                     "metrics": self.metrics.to_dict(),
-                    "elapsed_seconds": time.time() - self.game_start_time if self.game_start_time else 0,
+                    "elapsed_seconds": elapsed,
                 })
 
             return {
                 "door_open": True,
                 "game_over": True,
                 "won": True,
-                "message": victory_msg,
+                "ending": ending["ending_name"],
+                "message": ending["message"],
                 "metrics": self.metrics.to_dict(),
             }
 

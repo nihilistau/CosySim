@@ -1,12 +1,14 @@
 """
 Heist Scene — Cooperative multi-agent planning & execution showcase.
+===================================================================
 
 Port 5565. Flask + SocketIO.
 
 Demonstrates:
-- Multi-agent coordination (3–4 crew members with specialties)
+- Multi-agent coordination (8 crew members with specialties & backstories)
+- Crew affinity system (synergy bonuses, argument risks, betrayal mechanics)
 - VirtualPipeline integration (watcher, kill switch, pre-warming)
-- Phase-gated MCP rules (planning → approach → execution → escape)
+- Phase-gated MCP rules (planning -> approach -> execution -> escape)
 - Real-time game state with skill checks and complications
 - Pipeline-aware streaming (moods, images, actions extracted automatically)
 - SharedBoard integration (heist leaderboard)
@@ -14,6 +16,15 @@ Demonstrates:
 The player acts as the Mastermind, directing the crew. Each crew member
 is an AI agent with a personality and specialty. They discuss, argue,
 and execute actions based on the heist state and their character.
+
+Version: v1.49.5 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.49.5 [2026-03-22] — Named crew roster (8 members), affinity system, betrayal mechanics
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
+    v1.49.3 [2026-03-22] — Structured logging context
+    v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 """
 
 from __future__ import annotations
@@ -57,45 +68,155 @@ try:
 except Exception:
     DEFAULT_PORT = 5565
 
-# Crew personality templates
-CREW_TEMPLATES = {
+# v1.49.5 [2026-03-22] — Named crew with backstories, personalities, and affinities
+# CONNECTS: HeistState.add_crew, _init_agent, _build_crew_prompt
+# Each crew member has affinity scores toward other members (-100 to +100).
+# Positive affinity = synergy bonus; negative = argument risk + potential betrayal.
+CREW_ROSTER = {
     "ghost": {
         "name": "Ghost",
         "specialty": "hacker",
-        "personality": (
-            "You are Ghost, a quiet and brilliant hacker. You speak in short, "
-            "technical sentences. You're calm under pressure but get annoyed when "
-            "plans change. You use tech jargon naturally. Dry humor."
+        "personality": "ethical, anxious, methodical",
+        "backstory": (
+            "Ex-OmniCorp security architect. Left after they weaponized her "
+            "firewall code. Haunted by what her tools enabled."
         ),
+        "system_prompt": (
+            "You are Ghost, a brilliant but anxious hacker. You prefer clean, "
+            "non-violent solutions. You get nervous when plans change. You "
+            "dislike Silk because you suspect she's a double agent."
+        ),
+        "likes": ["clean_jobs", "detailed_plans"],
+        "dislikes": ["violence", "improvisation"],
+        "affinity": {"silk": -20, "tank": 10, "doc": 15, "vex": -10, "whisper": 20},
     },
     "tank": {
         "name": "Tank",
         "specialty": "muscle",
-        "personality": (
-            "You are Tank, the crew's muscle. Big, loud, loyal. You prefer "
-            "direct solutions — kick the door, intimidate the guard. You're "
-            "protective of the crew. You crack jokes when nervous."
+        "personality": "loyal, PTSD, protective",
+        "backstory": (
+            "Former SynthSec enforcer. Still hears the screams from the "
+            "Blackout Raid. Quit after refusing an order to gas a residential block."
         ),
+        "system_prompt": (
+            "You are Tank, a massive ex-enforcer with a gentle soul trapped "
+            "in a violent body. You protect the team. You have PTSD flashbacks "
+            "when things go loud. You trust Ghost."
+        ),
+        "likes": ["protecting_team", "quiet_exits"],
+        "dislikes": ["loud_entries", "civilian_risk"],
+        "affinity": {"ghost": 10, "nails": -15, "doc": 20, "silk": 5},
     },
     "silk": {
         "name": "Silk",
         "specialty": "talker",
-        "personality": (
-            "You are Silk, the smooth-talking con artist. You can talk your way "
-            "into or out of anything. Charming, manipulative, always has a backup "
-            "plan. You flirt with danger and everyone else."
+        "personality": "charming, manipulative, secrets",
+        "backstory": (
+            "Nobody knows Silk's real name. She talks her way into anything — "
+            "and out of everything. Rumor says she still has OmniCorp contacts."
         ),
+        "system_prompt": (
+            "You are Silk, a master social engineer. You enjoy manipulation as "
+            "an art form. You keep secrets from the team. You find Ghost's "
+            "paranoia about you amusing — and slightly accurate."
+        ),
+        "likes": ["deception", "social_engineering"],
+        "dislikes": ["direct_confrontation", "cameras"],
+        "affinity": {"ghost": -20, "whisper": 10, "vex": 15, "jet": 5},
     },
-    "wheels": {
-        "name": "Wheels",
+    "doc": {
+        "name": "Doc",
         "specialty": "driver",
-        "personality": (
-            "You are Wheels, the getaway driver and scout. You know every street, "
-            "every shortcut. You're paranoid — always checking exits. You talk fast "
-            "and get impatient waiting. Car metaphors for everything."
+        "personality": "calm, cynical, ex-medic",
+        "backstory": (
+            "Lost her medical license after stealing pharmaceuticals to treat "
+            "people who couldn't afford them. Now she drives getaway and "
+            "patches bullet holes."
         ),
+        "system_prompt": (
+            "You are Doc, a former surgeon turned getaway driver. You're calm "
+            "under pressure because you've seen worse in the ER. You care about "
+            "the team's safety more than the score."
+        ),
+        "likes": ["clean_exits", "no_casualties"],
+        "dislikes": ["unnecessary_risks", "greed"],
+        "affinity": {"tank": 20, "ghost": 15, "nails": -10, "jet": 10},
+    },
+    "vex": {
+        "name": "Vex",
+        "specialty": "hacker",
+        "personality": "chaotic, genius, unpredictable",
+        "backstory": (
+            "Teenage prodigy who got bored hacking governments. Does heists "
+            "for the thrill, not the money. Laughs at danger. Scares Ghost."
+        ),
+        "system_prompt": (
+            "You are Vex, a chaotic hacker genius. You improvise constantly "
+            "and love when plans go sideways because that's when you shine. "
+            "You think Ghost is boring and play pranks on her."
+        ),
+        "likes": ["improvisation", "chaos"],
+        "dislikes": ["boring_plans", "waiting"],
+        "affinity": {"ghost": -10, "silk": 15, "nails": 20, "whisper": -5},
+    },
+    "nails": {
+        "name": "Nails",
+        "specialty": "muscle",
+        "personality": "aggressive, short-tempered, effective",
+        "backstory": (
+            "Underground pit fighter from the Arena. Only knows one speed: "
+            "forward. Loyal to whoever pays, but surprisingly sentimental "
+            "about a locket she never takes off."
+        ),
+        "system_prompt": (
+            "You are Nails, a pit fighter who solves problems with force. "
+            "You're impatient with planning. You have a secret soft side but "
+            "hide it behind aggression. You and Tank clash over methods."
+        ),
+        "likes": ["action", "direct_approach"],
+        "dislikes": ["stealth", "long_plans"],
+        "affinity": {"tank": -15, "vex": 20, "silk": -5, "doc": -10},
+    },
+    "whisper": {
+        "name": "Whisper",
+        "specialty": "talker",
+        "personality": "empathetic, perceptive, haunted",
+        "backstory": (
+            "Former psychologist who specialized in corporate interrogation. "
+            "Now uses those skills to read marks and diffuse hostile situations. "
+            "Feels guilty about her past."
+        ),
+        "system_prompt": (
+            "You are Whisper, a former interrogation psychologist. You read "
+            "people like open books. You use empathy as a weapon. You're "
+            "haunted by the people you broke in your old career."
+        ),
+        "likes": ["reading_people", "nonviolent_solutions"],
+        "dislikes": ["torture", "deception"],
+        "affinity": {"ghost": 20, "silk": 10, "vex": -5, "tank": 15},
+    },
+    "jet": {
+        "name": "Jet",
+        "specialty": "driver",
+        "personality": "adrenaline_junkie, loyal, superstitious",
+        "backstory": (
+            "Former racing pilot banned from every track in NeonCity. Drives "
+            "like the laws of physics are suggestions. Has a lucky dice she "
+            "won't do a job without."
+        ),
+        "system_prompt": (
+            "You are Jet, an adrenaline-junkie getaway driver. You're fearless "
+            "behind the wheel but superstitious — you won't start a heist "
+            "without your lucky dice roll. You're fiercely loyal to the team."
+        ),
+        "likes": ["speed", "impossible_escapes"],
+        "dislikes": ["walking", "bad_luck"],
+        "affinity": {"doc": 10, "silk": 5, "vex": 15, "nails": 10},
     },
 }
+
+# Backward compatibility — old code referenced CREW_TEMPLATES
+CREW_TEMPLATES = CREW_ROSTER
 
 
 # v1.51.0 [2026-03-22] — Migrated to FlaskScene
@@ -194,6 +315,9 @@ class HeistScene(FlaskScene):
                 if tmpl:
                     self.game.add_crew(cid, tmpl["name"], tmpl["specialty"])
                     self._init_agent(cid, tmpl)
+
+            # v1.49.5 — Evaluate crew affinities on assembly
+            self._check_crew_affinity(crew_ids)
 
             self._broadcast_state()
             self._sync_to_mcp("heist_started", {"venue": venue, "crew": crew_ids})
@@ -371,6 +495,10 @@ class HeistScene(FlaskScene):
                 "roles": self._assigned_roles,
             })
             self._sync_to_mcp("crew_assigned", {"crew_member": crew_member, "role": role})
+            # v1.49.5 — Check affinities between all assigned crew members
+            assigned_ids = list(self._assigned_roles.keys())
+            if len(assigned_ids) >= 2:
+                self._check_crew_affinity(assigned_ids)
 
         @self.socketio.on("execute_phase")
         def on_execute_phase(data):
@@ -443,6 +571,199 @@ class HeistScene(FlaskScene):
                     "events": self.game.events[-5:] if self.game.events else [],
                 }
             emit("investigation_state", {"board": board_state})
+
+    # ── Affinity & Betrayal System ───────────────────────────────────────
+    # v1.49.5 [2026-03-22] — Crew synergy, argument risk, and betrayal mechanics
+    # CONNECTS: CREW_ROSTER affinities, HeistState.suspicion, CrewMember.morale
+    # CALLED BY: on_assign_crew handler, _crew_tick, perform_action flow
+    # EMITS: crew_synergy, crew_argument, crew_betrayal Socket.IO events
+
+    def _check_crew_affinity(self, crew_ids: List[str]) -> None:
+        """Evaluate pairwise affinities between assigned crew members.
+
+        Positive affinity (+10 or higher) logs a synergy bonus.
+        Negative affinity (-10 or lower) warns of friction.
+
+        Args:
+            crew_ids: List of crew member IDs currently assigned to the heist.
+        """
+        checked_pairs: set = set()
+        for i, cid_a in enumerate(crew_ids):
+            tmpl_a = self._crew_config.get(cid_a, {})
+            affinities_a = tmpl_a.get("affinity", {})
+            for cid_b in crew_ids[i + 1:]:
+                pair_key = tuple(sorted([cid_a, cid_b]))
+                if pair_key in checked_pairs:
+                    continue
+                checked_pairs.add(pair_key)
+
+                tmpl_b = self._crew_config.get(cid_b, {})
+                affinities_b = tmpl_b.get("affinity", {})
+
+                # Average the bidirectional affinity
+                score_ab = affinities_a.get(cid_b, 0)
+                score_ba = affinities_b.get(cid_a, 0)
+                avg_score = (score_ab + score_ba) / 2.0
+
+                name_a = tmpl_a.get("name", cid_a)
+                name_b = tmpl_b.get("name", cid_b)
+
+                if avg_score >= 10:
+                    # Synergy bonus — log it and notify clients
+                    bonus_pct = min(int(abs(avg_score)), 30)
+                    logger.info(
+                        "[HEIST] Crew synergy: %s and %s work well together (+%d%% success)",
+                        name_a, name_b, bonus_pct,
+                    )
+                    if hasattr(self, "socketio") and self.socketio:
+                        self.socketio.emit("crew_synergy", {
+                            "crew_a": cid_a, "crew_b": cid_b,
+                            "name_a": name_a, "name_b": name_b,
+                            "bonus_pct": bonus_pct,
+                            "message": f"{name_a} and {name_b} work well together (+{bonus_pct}% success)",
+                        })
+                elif avg_score <= -10:
+                    # Friction warning — log it and notify clients
+                    friction_pct = min(int(abs(avg_score)), 30)
+                    logger.warning(
+                        "[HEIST] Crew friction: %s and %s have tension (-%d%% reliability, argument risk)",
+                        name_a, name_b, friction_pct,
+                    )
+                    if hasattr(self, "socketio") and self.socketio:
+                        self.socketio.emit("crew_friction", {
+                            "crew_a": cid_a, "crew_b": cid_b,
+                            "name_a": name_a, "name_b": name_b,
+                            "friction_pct": friction_pct,
+                            "message": f"{name_a} and {name_b} have tension (argument risk, -{friction_pct}% reliability)",
+                        })
+
+    def _check_argument_risk(self) -> Optional[Dict[str, Any]]:
+        """Roll for crew arguments between members with negative affinity.
+
+        Negative affinity (-10 or lower) gives a 10% chance per turn of an
+        argument that raises suspicion by +5.
+
+        Returns:
+            Argument event dict if one occurred, None otherwise.
+        """
+        if not self.game:
+            return None
+
+        active_crew = [
+            cid for cid, m in self.game.crew.items()
+            if not m.arrested
+        ]
+
+        for i, cid_a in enumerate(active_crew):
+            tmpl_a = self._crew_config.get(cid_a, {})
+            affinities_a = tmpl_a.get("affinity", {})
+            for cid_b in active_crew[i + 1:]:
+                score = affinities_a.get(cid_b, 0)
+                if score <= -10 and random.random() < 0.10:
+                    name_a = tmpl_a.get("name", cid_a)
+                    name_b = self._crew_config.get(cid_b, {}).get("name", cid_b)
+                    # Argument raises suspicion
+                    self.game.suspicion = min(100, self.game.suspicion + 5)
+                    # Both lose morale
+                    if cid_a in self.game.crew:
+                        self.game.crew[cid_a].morale = max(0, self.game.crew[cid_a].morale - 5)
+                    if cid_b in self.game.crew:
+                        self.game.crew[cid_b].morale = max(0, self.game.crew[cid_b].morale - 5)
+
+                    event = {
+                        "type": "crew_argument",
+                        "crew_a": cid_a, "crew_b": cid_b,
+                        "name_a": name_a, "name_b": name_b,
+                        "suspicion_delta": 5,
+                        "message": (
+                            f"{name_a} and {name_b} are arguing! "
+                            f"Suspicion +5 (now {self.game.suspicion}). Morale drops."
+                        ),
+                    }
+                    logger.warning(
+                        "[HEIST] Crew argument: %s vs %s (suspicion +5, now %d)",
+                        name_a, name_b, self.game.suspicion,
+                    )
+                    if hasattr(self, "socketio") and self.socketio:
+                        self.socketio.emit("crew_argument", event)
+                    return event  # Only one argument per tick
+        return None
+
+    def _check_betrayal_risk(self) -> Optional[Dict[str, Any]]:
+        """Check if a demoralized crew member betrays the team.
+
+        Conditions: crew morale < 30 AND suspicion > 70 gives a 15% chance
+        of betrayal — the traitor tips off guards, suspicion +30.
+
+        Returns:
+            Betrayal event dict if one occurred, None otherwise.
+        """
+        if not self.game:
+            return None
+
+        for cid, member in self.game.crew.items():
+            if member.arrested:
+                continue
+            # Betrayal condition: low morale + high suspicion
+            if member.morale < 30 and self.game.suspicion > 70:
+                if random.random() < 0.15:
+                    self.game.suspicion = min(100, self.game.suspicion + 30)
+                    tmpl = self._crew_config.get(cid, {})
+                    name = tmpl.get("name", member.name)
+
+                    event = {
+                        "type": "crew_betrayal",
+                        "traitor": cid,
+                        "traitor_name": name,
+                        "suspicion_delta": 30,
+                        "message": (
+                            f"BETRAYAL! {name} tipped off the guards! "
+                            f"Suspicion +30 (now {self.game.suspicion}). "
+                            f"Trust is broken."
+                        ),
+                    }
+                    logger.error(
+                        "[HEIST] BETRAYAL: %s tipped off guards (suspicion +30, now %d)",
+                        name, self.game.suspicion,
+                    )
+                    if hasattr(self, "socketio") and self.socketio:
+                        self.socketio.emit("crew_betrayal", event)
+
+                    # The traitor is removed from active duty
+                    member.arrested = True
+
+                    return event  # Only one betrayal per tick
+        return None
+
+    def _get_affinity_bonus(self, char_id: str) -> float:
+        """Calculate a success chance modifier based on average affinity with active crew.
+
+        Positive average affinity grants up to +10% bonus; negative up to -10% penalty.
+
+        Args:
+            char_id: The crew member performing the action.
+
+        Returns:
+            Float modifier to add to success chance (-0.10 to +0.10).
+        """
+        if not self.game:
+            return 0.0
+        tmpl = self._crew_config.get(char_id, {})
+        affinities = tmpl.get("affinity", {})
+        if not affinities:
+            return 0.0
+
+        active_crew = [
+            cid for cid in self.game.crew
+            if cid != char_id and not self.game.crew[cid].arrested
+        ]
+        if not active_crew:
+            return 0.0
+
+        total = sum(affinities.get(cid, 0) for cid in active_crew)
+        avg = total / len(active_crew)
+        # Scale: avg affinity of +-20 maps to +-0.10 success modifier
+        return max(-0.10, min(0.10, avg / 200.0))
 
     # ── Agent management ─────────────────────────────────────────────────
 
@@ -544,11 +865,39 @@ class HeistScene(FlaskScene):
         finally:
             self.socketio.emit("typing", {"character_id": char_id, "typing": False})
 
+    # v1.49.5 [2026-03-22] — Added argument and betrayal checks per tick
     def _crew_tick(self) -> List[Dict]:
-        """Have each crew member make a decision/comment for this turn."""
+        """Have each crew member make a decision/comment for this turn.
+
+        Also rolls for crew arguments (negative affinity) and betrayal
+        (low morale + high suspicion). These events fire Socket.IO events
+        and modify game state in real time.
+
+        Returns:
+            List of result dicts describing what happened this tick.
+        """
         if not self.game:
             return []
         results = []
+
+        # ── v1.49.5: Argument risk check (before crew acts) ──────────
+        # Negative affinity (-10 or lower) = 10% chance of argument per tick
+        argument = self._check_argument_risk()
+        if argument:
+            results.append(argument)
+
+        # ── v1.49.5: Betrayal risk check ──────────────────────────────
+        # Morale < 30 AND suspicion > 70 = 15% chance of betrayal
+        betrayal = self._check_betrayal_risk()
+        if betrayal:
+            results.append(betrayal)
+            # If suspicion hit 100 from betrayal, check bust immediately
+            if self.game.check_bust():
+                results.append({"bust": True, "message": "BUSTED after betrayal!"})
+                self._broadcast_state()
+                return results
+
+        # ── Standard crew tick: each member comments/acts ─────────────
         for char_id, member in self.game.crew.items():
             if member.arrested:
                 continue
@@ -569,10 +918,45 @@ class HeistScene(FlaskScene):
 
         return results
 
+    # v1.49.5 [2026-03-22] — Enriched prompt with backstory, affinity context, system_prompt
     def _build_crew_prompt(self, member: CrewMember, template: dict) -> str:
-        """Build a rich system prompt for a crew member."""
-        personality = template.get("personality", f"You are {member.name}.")
+        """Build a rich system prompt for a crew member.
+
+        Uses system_prompt from CREW_ROSTER if available, falls back to
+        personality field. Injects backstory, affinity context with other
+        active crew, and phase-specific guidance.
+
+        Args:
+            member: The CrewMember dataclass instance.
+            template: The crew roster entry dict (from CREW_ROSTER).
+
+        Returns:
+            Fully assembled system prompt string for LLM inference.
+        """
+        # Prefer system_prompt (richer, includes relationship hints), fall back to personality
+        personality = template.get("system_prompt", template.get("personality", f"You are {member.name}."))
+        backstory = template.get("backstory", "")
         situation = self.game.situation_summary() if self.game else ""
+
+        # v1.49.5 — Build affinity context so the agent knows who it likes/dislikes
+        affinity_lines = []
+        affinities = template.get("affinity", {})
+        if affinities and self.game:
+            for other_id, score in affinities.items():
+                if other_id in self.game.crew and not self.game.crew[other_id].arrested:
+                    other_name = self._crew_config.get(other_id, {}).get("name", other_id)
+                    if score >= 15:
+                        affinity_lines.append(f"  - You deeply trust {other_name}.")
+                    elif score >= 5:
+                        affinity_lines.append(f"  - You get along with {other_name}.")
+                    elif score <= -15:
+                        affinity_lines.append(f"  - You strongly distrust {other_name}.")
+                    elif score <= -5:
+                        affinity_lines.append(f"  - You're wary of {other_name}.")
+        affinity_ctx = ""
+        if affinity_lines:
+            affinity_ctx = "CREW RELATIONSHIPS:\n" + "\n".join(affinity_lines) + "\n\n"
+
         phase_guide = ""
         if self.game:
             if self.game.phase == Phase.PLANNING:
@@ -596,8 +980,12 @@ class HeistScene(FlaskScene):
                     "Protect the loot. Coordinate the escape."
                 )
 
+        backstory_section = f"BACKSTORY: {backstory}\n\n" if backstory else ""
+
         return (
             f"{personality}\n\n"
+            f"{backstory_section}"
+            f"{affinity_ctx}"
             f"CURRENT SITUATION:\n{situation}\n\n"
             f"{phase_guide}\n\n"
             f"{self._get_governance_context(member.character_id)}"
