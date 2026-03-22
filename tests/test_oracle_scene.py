@@ -165,7 +165,8 @@ class TestOracleHealthRoute:
             "lmstudio": {"up": True, "latency_ms": 12},
             "nexus": {"up": False, "error": "Connection refused"},
         }
-        with patch("content.scenes.oracle.oracle_scene.get_system_monitor", return_value=mock_monitor):
+        # The route uses inline `from engine.logging.monitor import get_system_monitor`
+        with patch("engine.logging.monitor.get_system_monitor", return_value=mock_monitor):
             resp = client.get("/api/oracle/health")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -173,12 +174,11 @@ class TestOracleHealthRoute:
         assert "system" in data
         assert "services" in data
 
-    def test_health_returns_500_on_error(self, oracle_client):
-        """When monitor import fails, should return 500."""
+    def test_health_returns_500_on_import_error(self, oracle_client):
+        """When monitor module raises, should return 500 with ok=False."""
         client, _, _ = oracle_client
-        # The default (no mock for get_system_monitor) will cause an ImportError
-        # which the route catches and returns 500
-        resp = client.get("/api/oracle/health")
+        with patch.dict("sys.modules", {"engine.logging.monitor": None}):
+            resp = client.get("/api/oracle/health")
         assert resp.status_code == 500
         data = resp.get_json()
         assert data["ok"] is False
@@ -191,16 +191,17 @@ class TestOracleErrorsRoute:
         client, _, _ = oracle_client
         mock_agg = MagicMock()
         mock_agg.snapshot.return_value = {"top_errors": [], "total": 0}
-        with patch("content.scenes.oracle.oracle_scene.get_error_aggregator", return_value=mock_agg):
+        with patch("engine.observability.error_aggregator.get_error_aggregator", return_value=mock_agg):
             resp = client.get("/api/oracle/errors")
         assert resp.status_code == 200
         data = resp.get_json()
         assert "top_errors" in data
 
     def test_errors_returns_500_when_unavailable(self, oracle_client):
-        """When error aggregator is not available, returns 500."""
+        """When error aggregator module is missing, returns 500."""
         client, _, _ = oracle_client
-        resp = client.get("/api/oracle/errors")
+        with patch.dict("sys.modules", {"engine.observability.error_aggregator": None}):
+            resp = client.get("/api/oracle/errors")
         assert resp.status_code == 500
 
 
@@ -211,7 +212,7 @@ class TestOracleErrorRateRoute:
         client, _, _ = oracle_client
         mock_agg = MagicMock()
         mock_agg.get_error_rate.return_value = {"rate": 0.05, "window": 300}
-        with patch("content.scenes.oracle.oracle_scene.get_error_aggregator", return_value=mock_agg):
+        with patch("engine.observability.error_aggregator.get_error_aggregator", return_value=mock_agg):
             resp = client.get("/api/oracle/errors/rate?window=600")
         assert resp.status_code == 200
 
@@ -230,7 +231,7 @@ class TestOracleTraceRoute:
         mock_event.duration_ms = 5000
         mock_event.span_id = "span-001"
         mock_logger.get_trace.return_value = [mock_event]
-        with patch("content.scenes.oracle.oracle_scene.get_structured_logger", return_value=mock_logger):
+        with patch("engine.observability.structured_logger.get_structured_logger", return_value=mock_logger):
             resp = client.get("/api/oracle/trace/trace-abc123")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -251,7 +252,7 @@ class TestOracleLogsRoute:
         mock_entry.service = "nexus"
         mock_entry.message = "Failed to connect"
         mock_logger.query.return_value = [mock_entry]
-        with patch("content.scenes.oracle.oracle_scene.get_structured_logger", return_value=mock_logger):
+        with patch("engine.observability.structured_logger.get_structured_logger", return_value=mock_logger):
             resp = client.get("/api/oracle/logs?level=ERROR&limit=10")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -264,7 +265,7 @@ class TestOracleDiagnoseRoute:
     def test_diagnose_returns_ok(self, oracle_client):
         client, _, _ = oracle_client
         mock_result = {"services": {}, "errors": 0, "uptime": 3600}
-        with patch("content.scenes.oracle.oracle_scene.diagnose", return_value=mock_result):
+        with patch("engine.observability.oracle.diagnose", return_value=mock_result):
             resp = client.get("/api/oracle/diagnose")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -283,8 +284,10 @@ class TestOracleExtractInsight:
         assert result == "The city burns."
 
     def test_extract_first_sentence_with_exclamation(self, oracle_client):
+        """The method iterates '.', '!', '?' in order, finding '.' first."""
         _, scene, _ = oracle_client
-        result = scene._extract_insight("Beware! The factions are shifting.")
+        # Text with only '!' and no '.' — exclamation should be the boundary
+        result = scene._extract_insight("Beware! The factions are shifting")
         assert result == "Beware!"
 
     def test_extract_truncates_long_text_without_punctuation(self, oracle_client):
