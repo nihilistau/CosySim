@@ -1,8 +1,15 @@
 {% extends 'neon_base.html' %}
 {% set scene_key = 'gallery' %}
 {% set scene_display_name = 'THE OBSCURA' %}
-{% set scene_accent = '#a855f7' %}
-{% set scene_accent_rgb = '168 85 247' %}
+{% set scene_accent = '#06b6d4' %}
+{% set scene_accent_rgb = '6 182 212' %}
+
+{#
+  THE OBSCURA — v1.52.0 [2026-03-22] Neural Synthesis Lab
+  ========================================================
+  Rebranded from art museum to cyberpunk neural art synthesis facility.
+  Cyan/magenta palette, HUD borders, grid overlays, AI generation framing.
+#}
 
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='gallery.css') }}">
@@ -15,12 +22,12 @@
     <header class="gallery-header">
       <div class="header-left">
         <h1 class="exhibit-title">THE OBSCURA</h1>
-        <p class="exhibit-subtitle">Dark Renaissance Collection &mdash; v0.68</p>
+        <p class="exhibit-subtitle">Neural Synthesis Laboratory &middot; Sector 9</p>
       </div>
       <div class="header-right">
         <div class="curator-status">
-          <span class="curator-label">Curator</span>
-          <span class="curator-mood-badge" id="curator-mood">contemplative</span>
+          <span class="curator-label">SYNTH.AI</span>
+          <span class="curator-mood-badge" id="curator-mood">processing</span>
         </div>
       </div>
     </header>
@@ -28,7 +35,7 @@
     <!-- ── Featured Exhibit Strip (hologram_static particles) ─── -->
     <div class="featured-container">
       <div id="featured-particles" class="featured-particles"></div>
-      <span class="featured-label">FEATURED EXHIBIT</span>
+      <span class="featured-label">&#9673; NEURAL OUTPUT FEED &#9673;</span>
     </div>
 
     <!-- ── Gallery Floor ──────────────────────────────────────── -->
@@ -57,31 +64,31 @@
       <p  class="detail-description" id="detail-description"></p>
       <blockquote class="detail-commentary" id="detail-commentary"></blockquote>
       <button class="private-viewing-btn" id="private-viewing-btn">
-        &#x1F512; Private Viewing &mdash; 250 credits
+        &#9673; DECRYPT OUTPUT &mdash; 250 &#8354;
       </button>
     </div>
   </aside>
 
 
-  <!-- ── Commission Panel ────────────────────────────────────────── -->
-  <section class="commission-panel" id="commission-panel" aria-label="Commission artwork">
+  <!-- ── Generation Console ──────────────────────────────────────── -->
+  <section class="commission-panel" id="commission-panel" aria-label="Generate composition">
     <button class="commission-toggle" id="commission-toggle">
-      &#x2726; Commission a Work
+      &#9673; GENERATE COMPOSITION
     </button>
     <div class="commission-form" id="commission-form">
       <textarea
         id="commission-description"
-        placeholder="Describe the work you wish to commission…"
+        placeholder="Describe the neural composition to synthesize..."
         rows="3"
-        aria-label="Commission description"
+        aria-label="Generation prompt"
       ></textarea>
       <div class="commission-controls">
-        <select id="commission-intensity" class="intensity-select" aria-label="Content intensity">
-          <option value="1">Intensity I &mdash; Unsettling</option>
-          <option value="2">Intensity II &mdash; Disturbing</option>
-          <option value="3">Intensity III &mdash; Explicit</option>
+        <select id="commission-intensity" class="intensity-select" aria-label="Output complexity">
+          <option value="1">COMPLEXITY I &mdash; Abstract</option>
+          <option value="2">COMPLEXITY II &mdash; Detailed</option>
+          <option value="3">COMPLEXITY III &mdash; Hyperreal</option>
         </select>
-        <button class="commission-submit" id="commission-submit">Commission</button>
+        <button class="commission-submit" id="commission-submit">&#9654; SYNTHESIZE</button>
       </div>
       <div class="commission-status" id="commission-status" aria-live="polite"></div>
     </div>

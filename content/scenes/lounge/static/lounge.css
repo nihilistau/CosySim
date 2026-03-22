@@ -1,29 +1,29 @@
 /* ══════════════════════════════════════════════════════════════════════
-   THE VELVET PIT — v0.68 'Dark Renaissance'
-   Palette: Near-black #0b0907, Amber #f59e0b, Ember #92400e,
-            Crimson #dc2626, Ash #1c1814, Stone #2d2520
-   Scene accent: #f59e0b (amber)
+   THE VELVET PIT — v1.52 Cyberpunk Underground
+   Palette: Deep void #050710, Magenta #ec4899, Cyan #06b6d4
+   Scene accent: #ec4899 (magenta)
+   v1.52.0 [2026-03-22] — Cyberpunk overhaul: amber→magenta, serif→mono
 ══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --pit-black    : #0b0907;
-  --pit-ash      : #141008;
-  --pit-stone    : #1e170f;
-  --pit-dim      : #2d2218;
-  --amber        : #f59e0b;
-  --amber-soft   : #fbbf24;
-  --amber-dim    : #d97706;
-  --amber-glow   : rgba(245,158,11,0.10);
-  --amber-border : rgba(245,158,11,0.25);
-  --amber-border-l: rgba(245,158,11,0.50);
-  --ember        : #92400e;
-  --crimson      : #dc2626;
-  --crimson-l    : #ef4444;
-  --text         : #c4a97a;
-  --text-dim     : #87714e;
-  --ivory        : #f0e4c8;
-  --shadow-amber : 0 0 18px rgba(245,158,11,0.18);
-  --shadow-ember : 0 0 12px rgba(146,64,14,0.35);
+  --pit-black    : #050710;
+  --pit-ash      : #0a0c14;
+  --pit-stone    : #10131c;
+  --pit-dim      : #1a1e2e;
+  --amber        : #ec4899;
+  --amber-soft   : #f472b6;
+  --amber-dim    : #be185d;
+  --amber-glow   : rgba(236,72,153,0.10);
+  --amber-border : rgba(236,72,153,0.25);
+  --amber-border-l: rgba(236,72,153,0.50);
+  --ember        : #9d174d;
+  --crimson      : #06b6d4;
+  --crimson-l    : #22d3ee;
+  --text         : #c0c8d8;
+  --text-dim     : #4a5568;
+  --ivory        : #e5e7eb;
+  --shadow-amber : 0 0 18px rgba(236,72,153,0.18);
+  --shadow-ember : 0 0 12px rgba(236,72,153,0.35);
 }
 
 /* ── RESET ──────────────────────────────────────────────────────────── */
@@ -33,7 +33,7 @@ html, body {
   height: 100%;
   background: var(--pit-black);
   color: var(--text);
-  font-family: "Georgia", "Times New Roman", serif;
+  font-family: 'Rajdhani', 'Segoe UI', sans-serif;
   font-size: 13px;
   overflow: hidden;
 }

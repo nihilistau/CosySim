@@ -1,10 +1,12 @@
 scenes:
+  oracle:
+    auto_start: false
   arena:
     auto_start: false
   asset_studio:
     auto_start: false
   casino:
-    auto_start: false
+    auto_start: true
   coders:
     auto_start: false
   command_center:
@@ -14,15 +16,15 @@ scenes:
   games:
     auto_start: false
   grid:
-    auto_start: false
+    auto_start: true
   heist:
     auto_start: false
   intel_hub:
     auto_start: true
   lab_break:
-    auto_start: false
+    auto_start: true
   lounge:
-    auto_start: false
+    auto_start: true
   neoncity:
     auto_start: true
   penthouse:
@@ -32,7 +34,7 @@ scenes:
   realm:
     auto_start: false
   tavern:
-    auto_start: false
+    auto_start: true
 services:
   admin:
     auto_start: false
@@ -45,7 +47,7 @@ services:
   canvas_api:
     auto_start: true
   creator:
-    auto_start: false
+    auto_start: true
   dashboard:
     auto_start: false
   hub:
@@ -60,3 +62,15 @@ services:
     auto_start: true
   tts:
     auto_start: false
+
+# v1.50.0 [2026-03-22] â€” Three-pillar configuration
+# Used by launcher_system.py, launcher_game.py, launcher_creation.py
+pillars:
+  system:
+    auto_start: [nexus_kms, hub, nexus_panel, bridge, nlm_proxy, system_control]
+  game:
+    requires: [nexus_kms, hub]
+    auto_start: [neoncity, phone, lounge, tavern, casino, grid, lab_break]
+  creation:
+    requires: [hub]
+    auto_start: [canvas, canvas_api, creator]

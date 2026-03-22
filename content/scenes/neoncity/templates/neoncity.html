@@ -3,15 +3,17 @@
 {% set scene_display_name = 'NEON CITY' %}
 {% set scene_accent = '#06b6d4' %}
 {% set scene_accent_rgb = '6 182 212' %}
+{# v1.52.0 — Keep shared HUD visible (slide-in panels work after v1.51 rebuild) #}
 
 {#
-  NeonCity v1.51 — Full Rebuild
-  =============================
+  NeonCity v1.52 — Three Pillars
+  ==============================
   Rebuilt from scratch. No inherited CSS conflicts, no canvas in flow,
   no announcer overlay. Clean grid layout, all 67 DOM IDs preserved
-  for JS compatibility.
+  for JS compatibility. v1.52 adds district online/offline indicators
+  and enhanced faction data flow.
 
-  Version: v1.51.0 [2026-03-22]
+  Version: v1.52.0 [2026-03-22]
   Author:  CosySim Team
 
   Layout:
@@ -149,7 +151,7 @@
           {'key':'street_level',     'color':'#facc15','icon':'&#127750;','name':'STREET LEVEL',     'faction':'DeepState',   'desc':'Rumors, events, the pulse of the city.','activity':'dangerous','npcs':['STREET_KID','GANGER','INFORMANT']}
         ] %}
         <div class="nc-district district-card" data-district="{{ d.key }}" style="--dc:{{ d.color }}" onclick="NeonCityApp.visitDistrict('{{ d.key }}')">
-          <div class="nc-district__icon">{{ d.icon }}</div>
+          <div class="nc-district__icon">{{ d.icon | safe }}</div>
           <div class="nc-district__body">
             <div class="nc-district__name">{{ d.name }}</div>
             <div class="nc-district__faction" id="faction-{{ d.key }}">{{ d.faction }}</div>
@@ -158,6 +160,9 @@
           <div class="nc-district__meta">
             <span class="nc-district__activity nc-district__activity--{{ d.activity }}" id="activity-{{ d.key }}">
               <span class="activity-dot {{ d.activity }}"></span> {{ d.activity | upper }}
+            </span>
+            <span class="nc-district__status" id="status-{{ d.key }}" title="Scene status">
+              <span class="status-dot checking"></span> <span class="status-label">CHECKING</span>
             </span>
             <div class="nc-district__npcs" id="npcs-{{ d.key }}">
               {% for npc in d.npcs %}<span class="nc-npc-tag">{{ npc }}</span>{% endfor %}

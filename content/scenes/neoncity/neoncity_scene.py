@@ -1,6 +1,6 @@
 """
-NeonCity — Living World Hub v1.46 "Interactive Systems"
-========================================================
+NeonCity — Living World Hub v1.50 "Three Pillars"
+===================================================
 
 The city breathes.  Six factions fight for control.  The night never ends.
 
@@ -9,9 +9,12 @@ world-simulation, and content engines under the MCP v3.x framework.
 Board-game mode (Glitch Storm) at ``/board``.
 Cyberspace intrusion network at ``/cyberspace``.
 
-Version: v1.46.0 [2026-03-21]
+Version: v1.50.0 [2026-03-22]
 
 Change Log:
+    v1.50.0 [2026-03-22] — Three Pillars overhaul: exchange_credits handler,
+                            district scene_status endpoint, offline scene detection,
+                            enhanced _build_city_state with faction standings/territory
     v1.46.0 [2026-03-21] — Rich event feed, board game overhaul,
                             cyberspace intrusion REST API + UI
     v1.45.0 [2026-03-21] — Playable dashboard: mission CRUD, crew ops,
@@ -24,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import socket as _socket
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -63,6 +67,79 @@ logger = logging.getLogger(__name__)
 
 SCENE_ID = "neoncity"
 DEFAULT_PORT = 5563
+
+
+# v1.50.0 [2026-03-22] — Port check utility for scene online detection
+def _port_check(port: int) -> bool:
+    """Quick TCP connect test to see if a port is listening.
+
+    Args:
+        port: TCP port number to check.
+
+    Returns:
+        True if a service is listening on ``127.0.0.1:port``.
+    """
+    try:
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+            s.settimeout(0.3)
+            return s.connect_ex(("127.0.0.1", port)) == 0
+    except OSError:
+        return False
+
+
+# v1.52.0 [2026-03-22] — Consumable effects registry
+# CONNECTS: PlayerState, SkillManager
+# CALLED BY: api_inventory_use() when action == "use"
+_CONSUMABLE_EFFECTS: Dict[str, Dict[str, Any]] = {
+    # Drugs / Chems
+    "stim_pack":      {"energy": 30, "message": "Stim Pack injected. +30 energy."},
+    "health_booster": {"health": 25, "message": "Health Booster applied. +25 health."},
+    "focus_chip":     {"message": "Focus Chip activated. Enhanced hacking and tech."},
+    "black_lotus":    {"energy": 15, "health": 10, "heat": 5, "message": "Black Lotus consumed. Euphoric rush. +5 heat."},
+    # Food
+    "synth_ramen":    {"health": 10, "energy": 5, "message": "Synth Ramen consumed. +10 health, +5 energy."},
+    "protein_bar":    {"energy": 10, "health": 5, "message": "Protein Bar consumed. +10 energy, +5 health."},
+    "corp_ration":    {"health": 8, "energy": 3, "message": "Corp Ration consumed. +8 health."},
+}
+
+
+def _apply_consumable_effect(item_id: str) -> Dict[str, Any]:
+    """Apply the effect of a consumable item to PlayerState.
+
+    Args:
+        item_id: Inventory item identifier.
+
+    Returns:
+        Dict describing what happened (message, stat changes).
+    """
+    effect = _CONSUMABLE_EFFECTS.get(item_id)
+    if not effect:
+        return {"message": f"Used {item_id}.", "changes": {}}
+
+    ps = get_player_state()
+    changes: Dict[str, int] = {}
+
+    if "health" in effect:
+        delta = effect["health"]
+        ps.health = min(100, ps.health + delta)
+        changes["health"] = delta
+
+    if "energy" in effect:
+        delta = effect["energy"]
+        ps.energy = min(100, ps.energy + delta)
+        changes["energy"] = delta
+
+    if "heat" in effect:
+        delta = effect["heat"]
+        ps.heat = min(100, ps.heat + delta)
+        changes["heat"] = delta
+
+    # Persist the state change
+    ps._save()
+
+    logger.info("Consumable effect: %s → %s", item_id, changes)
+    return {"message": effect["message"], "changes": changes}
+
 
 # ---------------------------------------------------------------------------
 # Module-level metadata (also set as class attribute for MCP discovery)
@@ -367,17 +444,29 @@ class NeonCityScene(FlaskScene):
         except Exception as exc:
             logger.debug("WorldState unavailable: %s", exc)
 
-        # Faction power snapshot
-        factions: List[Dict[str, Any]] = [
-            {
+        # v1.50.0 [2026-03-22] — Enhanced faction snapshot with standings & territory
+        # CONNECTS: PlayerState.faction_standings, ReputationManager
+        ps = get_player_state()
+        faction_standings = ps.faction_standings if hasattr(ps, "faction_standings") else {}
+
+        factions: List[Dict[str, Any]] = []
+        for name, data in _FACTIONS.items():
+            standing_val = faction_standings.get(name, 0)
+            if standing_val > 20:
+                label = "Ally"
+            elif standing_val < -20:
+                label = "Enemy"
+            else:
+                label = "Neutral"
+            factions.append({
                 "name": name,
                 "color": data["color"],
                 "power": self._get_faction_power(name),
+                "standing": standing_val,
+                "label": label,
                 "tag": data["tag"],
                 "motto": data["motto"],
-            }
-            for name, data in _FACTIONS.items()
-        ]
+            })
 
         # Active world events
         active_events: List[Dict[str, Any]] = []
@@ -398,14 +487,23 @@ class NeonCityScene(FlaskScene):
         except Exception:
             pass
 
+        # v1.50.0 — Include district NPC lists for dynamic frontend updates
+        district_data: Dict[str, Any] = {}
+        for dkey, dinfo in _DISTRICTS.items():
+            district_data[dkey] = {
+                **dinfo,
+                "npcs": dinfo.get("npcs", []),
+            }
+
         return {
-            "districts": _DISTRICTS,
+            "districts": district_data,
             "factions": factions,
+            "faction_standings": dict(faction_standings),
             "world_time": world_time,
             "active_events": active_events,
             "credits": credits_balance,
             "scene_id": SCENE_ID,
-            "version": "0.68",
+            "version": "1.50",
         }
 
     def _build_ticker_items(self) -> List[str]:
@@ -566,7 +664,9 @@ class NeonCityScene(FlaskScene):
             new_val = get_player_state().update_faction_standing(faction, delta)
             return jsonify({"faction": faction, "delta": delta, "new_standing": new_val})
 
-        # v1.43.0 [2026-03-21] — District travel via CityMap
+        # v1.50.0 [2026-03-22] — District travel with offline scene detection
+        # CONNECTS: CityMap, SCENE_PORTS, _port_check()
+        # CALLED BY: NeonCityApp._enterDistrict() via REST
         @self.app.route("/api/district/enter", methods=["POST"])
         def enter_district():
             data = request.json or {}
@@ -574,16 +674,36 @@ class NeonCityScene(FlaskScene):
             scene_name = _DISTRICT_TO_SCENE.get(district_key)
             if not scene_name:
                 return jsonify({"success": False, "error": f"Unknown district: {district_key}"}), 400
+
+            # Same-scene travel (street_level → NEON CITY)
+            if scene_name == "NEON CITY":
+                return jsonify({
+                    "success": True,
+                    "scene": scene_name,
+                    "port": DEFAULT_PORT,
+                    "url": None,
+                    "is_running": True,
+                    "same_scene": True,
+                    "message": "You are already in Neon City.",
+                    "energy_cost": 0,
+                    "heat_add": 0,
+                    "travel_time": 0,
+                })
+
             try:
                 from engine.world.city_map import get_city_map, SCENE_PORTS
                 cm = get_city_map()
                 result = cm.travel(scene_name)
                 port = SCENE_PORTS.get(scene_name, 0)
+                # v1.50.0 — Check if the target scene is actually running
+                is_running = _port_check(port) if port else False
                 return jsonify({
                     "success": result.success,
                     "scene": scene_name,
                     "port": port,
                     "url": f"http://localhost:{port}" if port else None,
+                    "is_running": is_running,
+                    "same_scene": False,
                     "message": result.message,
                     "energy_cost": result.energy_cost,
                     "heat_add": result.heat_add,
@@ -592,6 +712,28 @@ class NeonCityScene(FlaskScene):
             except Exception as exc:
                 logger.warning("District travel failed: %s", exc)
                 return jsonify({"success": False, "error": str(exc)}), 500
+
+        # v1.50.0 [2026-03-22] — District scene online/offline status
+        # CONNECTS: _DISTRICT_TO_SCENE, SCENE_PORTS, _port_check()
+        # CALLED BY: NeonCityApp._updateDistrictStatuses() via REST
+        @self.app.route("/api/district/scene_status")
+        def district_scene_status():
+            """Return online/offline status for each district's mapped scene."""
+            from engine.world.city_map import SCENE_PORTS
+            statuses: Dict[str, Dict[str, Any]] = {}
+            for district_key, scene_name in _DISTRICT_TO_SCENE.items():
+                port = SCENE_PORTS.get(scene_name, 0)
+                # NeonCity itself is always "running"
+                if scene_name == "NEON CITY":
+                    is_running = True
+                else:
+                    is_running = _port_check(port) if port else False
+                statuses[district_key] = {
+                    "scene": scene_name,
+                    "port": port,
+                    "is_running": is_running,
+                }
+            return jsonify(statuses)
 
         # ── Board game routes (legacy) ──────────────────────────────────
 
@@ -787,9 +929,16 @@ class NeonCityScene(FlaskScene):
                 logger.error("Inventory API error: %s", exc)
                 return jsonify({"error": str(exc)}), 500
 
+        # v1.52.0 [2026-03-22] — Consumable effects system
+        # CONNECTS: InventoryManager, PlayerState, SkillManager
+        # CALLED BY: NeonCityApp._useItem() via REST
         @self.app.route("/api/inventory/use", methods=["POST"])
         def api_inventory_use():
-            """Use or equip an inventory item."""
+            """Use, equip, unequip, or sell an inventory item.
+
+            For consumables (drugs/food), applying the item's effect
+            to PlayerState before removing it from inventory.
+            """
             data = request.get_json(force=True) or {}
             item_id = data.get("item_id", "")
             action = data.get("action", "use")
@@ -807,8 +956,10 @@ class NeonCityScene(FlaskScene):
                     inv.sell_item(item_id, 1, ps)
                     return jsonify({"ok": True, "balance": get_economy_manager().get_balance("player")})
                 else:
+                    # v1.52.0 — Apply consumable effects before removing
+                    effect = _apply_consumable_effect(item_id)
                     inv.remove_item(item_id, 1)
-                    return jsonify({"ok": True})
+                    return jsonify({"ok": True, "effect": effect})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -1432,6 +1583,78 @@ class NeonCityScene(FlaskScene):
                 "lore": lore_text or f"[BROKER] No active intel on '{topic}'. City keeps its secrets.",
                 "balance": new_balance,
             })
+
+        # v1.50.0 [2026-03-22] — Exchange credits (deposit/withdraw)
+        # CONNECTS: EconomyManager, PlayerState
+        # CALLED BY: NeonCityApp.doExchange() via Socket.IO
+        # EMITS: exchange_result, hud_update, error
+        @self.socketio.on("exchange_credits")
+        def on_exchange_credits(data: Dict[str, Any]):
+            """Exchange credits between player wallet and bank.
+
+            Args:
+                data: Dict with ``amount`` (int) and ``direction``
+                      ('in' = deposit, 'out' = withdraw).
+            """
+            amount = max(0, int((data or {}).get("amount", 0)))
+            direction = (data or {}).get("direction", "in")
+
+            if amount <= 0:
+                emit("error", {"message": "Invalid amount."})
+                return
+
+            try:
+                ps = get_player_state()
+                economy = get_economy_manager()
+                current_balance = economy.get_balance("player")
+                wallet = ps.credits
+
+                if direction == "in":
+                    # Deposit: move from wallet to bank
+                    if wallet < amount:
+                        emit("exchange_result", {
+                            "success": False,
+                            "error": f"Insufficient wallet funds. Have ₵{wallet}, need ₵{amount}.",
+                            "balance": current_balance,
+                            "wallet": wallet,
+                        })
+                        return
+                    ps.spend_credits(amount, reason="bank_deposit")
+                    economy.transact(amount, TransactionType.EARN, SCENE_ID, "bank_deposit")
+                else:
+                    # Withdraw: move from bank to wallet
+                    if current_balance < amount:
+                        emit("exchange_result", {
+                            "success": False,
+                            "error": f"Insufficient bank balance. Have ₵{current_balance}, need ₵{amount}.",
+                            "balance": current_balance,
+                            "wallet": wallet,
+                        })
+                        return
+                    economy.transact(-amount, TransactionType.SPEND, SCENE_ID, "bank_withdrawal")
+                    ps.earn_credits(amount, reason="bank_withdrawal")
+
+                new_balance = economy.get_balance("player")
+                new_wallet = ps.credits
+                action = "deposited" if direction == "in" else "withdrew"
+                logger.info("Exchange: %s ₵%d (bank=%d, wallet=%d)", action, amount, new_balance, new_wallet)
+
+                emit("exchange_result", {
+                    "success": True,
+                    "action": action,
+                    "amount": amount,
+                    "balance": new_balance,
+                    "wallet": new_wallet,
+                    "message": f"Successfully {action} ₵{amount}.",
+                })
+                # Also emit hud_update so all panels refresh
+                emit("hud_update", {
+                    "credits": new_wallet,
+                    "bank_balance": new_balance,
+                })
+            except Exception as exc:
+                logger.warning("exchange_credits failed: %s", exc)
+                emit("error", {"message": f"Exchange failed: {exc}"})
 
     # ------------------------------------------------------------------
     # Private — EventBus subscriptions

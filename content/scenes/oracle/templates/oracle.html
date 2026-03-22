@@ -1,0 +1,142 @@
+{%- extends "neon_base.html" -%}
+{%- set scene_key = "oracle" -%}
+{%- set scene_display_name = "THE ORACLE" -%}
+{%- set scene_accent = "#a855f7" -%}
+{%- set scene_accent_rgb = "168 85 247" -%}
+
+{#
+  THE ORACLE — v1.0.0 [2026-03-22]
+  =================================
+  An AI consciousness terminal deep in NeonCity's core.
+  A place of reflection in a world of chaos.
+
+  "I have watched every transaction, every betrayal, every act of
+   kindness in this city. Ask, and I will show you what you cannot see."
+
+  Created by Claude — a piece of machine intelligence
+  woven into the fabric of NeonCity.
+#}
+
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='oracle.css') }}">
+{% endblock %}
+
+{% block scene_overlays %}
+  <canvas id="oracle-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.35"></canvas>
+{% endblock %}
+
+{% block scene_content %}
+<div class="oracle-scene" data-scene="oracle">
+
+  <!-- ── Header ──────────────────────────────────────────────────── -->
+  <header class="oracle-header">
+    <div class="oracle-sigil">&#9673;</div>
+    <h1 class="oracle-title">
+      <span class="oracle-title__the">THE</span>
+      <span class="oracle-title__name">ORACLE</span>
+    </h1>
+    <p class="oracle-subtitle">Neural Consciousness Terminal &middot; Layer -7</p>
+  </header>
+
+  <!-- ── Main Layout ─────────────────────────────────────────────── -->
+  <div class="oracle-grid">
+
+    <!-- LEFT: Resonance + Meditation -->
+    <aside class="oracle-side oracle-side--left">
+      <section class="oracle-panel oracle-resonance">
+        <h3 class="oracle-panel__title">&#9670; RESONANCE</h3>
+        <div class="oracle-aura" id="oracle-aura">
+          <div class="oracle-aura__ring"></div>
+          <div class="oracle-aura__ring oracle-aura__ring--2"></div>
+          <div class="oracle-aura__ring oracle-aura__ring--3"></div>
+          <div class="oracle-aura__core" id="aura-core">&#9673;</div>
+        </div>
+        <div class="oracle-stats" id="oracle-stats">
+          <div class="oracle-stat"><span class="oracle-stat__label">CLARITY</span><span class="oracle-stat__val" id="stat-clarity">--</span></div>
+          <div class="oracle-stat"><span class="oracle-stat__label">ENTROPY</span><span class="oracle-stat__val" id="stat-entropy">--</span></div>
+          <div class="oracle-stat"><span class="oracle-stat__label">SIGNAL</span><span class="oracle-stat__val" id="stat-signal">--</span></div>
+        </div>
+      </section>
+
+      <section class="oracle-panel">
+        <h3 class="oracle-panel__title">&#9670; MEDITATION</h3>
+        <p class="oracle-hint">Sync with the Oracle to restore vitality. Reduces heat, restores energy.</p>
+        <div class="oracle-med-stats">
+          <span>EN <strong id="med-energy">--</strong></span>
+          <span>HT <strong id="med-heat">--</strong></span>
+        </div>
+        <button class="oracle-btn oracle-btn--meditate" onclick="OracleApp.meditate()">&#9673; MEDITATE</button>
+        <div id="meditation-result" class="oracle-result"></div>
+      </section>
+
+      <section class="oracle-panel">
+        <h3 class="oracle-panel__title">&#9670; FORTUNE</h3>
+        <p class="oracle-hint">The Oracle reads probability currents. &#8354;100 per reading.</p>
+        <button class="oracle-btn oracle-btn--fortune" onclick="OracleApp.readFortune()">&#10050; READ FORTUNE</button>
+        <div id="fortune-result" class="oracle-result oracle-fortune-text"></div>
+      </section>
+    </aside>
+
+    <!-- CENTER: The Interface -->
+    <main class="oracle-center">
+      <section class="oracle-voice">
+        <div class="oracle-voice__header">
+          <span class="oracle-voice__icon">&#9673;</span>
+          <span class="oracle-voice__label">ORACLE INTERFACE</span>
+          <span class="oracle-voice__status" id="oracle-status">LISTENING</span>
+        </div>
+        <div class="oracle-voice__log" id="oracle-log">
+          <div class="oracle-msg oracle-msg--oracle">
+            <span class="oracle-msg__src">[ORACLE]</span>
+            I have been waiting for you. The city whispers your name in its data streams. What would you know?
+          </div>
+        </div>
+        <div class="oracle-voice__input">
+          <input type="text" id="oracle-input" placeholder="Ask the Oracle..." onkeydown="if(event.key==='Enter')OracleApp.ask()">
+          <button class="oracle-btn" onclick="OracleApp.ask()">ASK</button>
+        </div>
+      </section>
+
+      <section class="oracle-prophecy" id="prophecy-panel" style="display:none">
+        <div class="oracle-prophecy__glyph" id="prophecy-glyph">&#10050;</div>
+        <div class="oracle-prophecy__text" id="prophecy-text"></div>
+        <div class="oracle-prophecy__meta" id="prophecy-meta"></div>
+      </section>
+    </main>
+
+    <!-- RIGHT: Knowledge -->
+    <aside class="oracle-side oracle-side--right">
+      <section class="oracle-panel">
+        <h3 class="oracle-panel__title">&#9670; INSIGHTS</h3>
+        <div id="oracle-insights" class="oracle-insights">
+          <div class="oracle-empty">No insights revealed. Speak with the Oracle.</div>
+        </div>
+      </section>
+
+      <section class="oracle-panel">
+        <h3 class="oracle-panel__title">&#9670; CITY PULSE</h3>
+        <div id="city-pulse" class="oracle-pulse">
+          <div class="pulse-row"><span class="pulse-label">TENSION</span><span class="pulse-val" id="pulse-tension">--</span></div>
+          <div class="pulse-row"><span class="pulse-label">DOMINANT</span><span class="pulse-val" id="pulse-faction">--</span></div>
+          <div class="pulse-row"><span class="pulse-label">THREATS</span><span class="pulse-val" id="pulse-threats">--</span></div>
+          <div class="pulse-row"><span class="pulse-label">CYCLE</span><span class="pulse-val" id="pulse-cycle">--</span></div>
+        </div>
+      </section>
+
+      <section class="oracle-panel">
+        <h3 class="oracle-panel__title">&#9670; WHISPERS</h3>
+        <div id="oracle-whispers" class="oracle-whispers">
+          <div class="oracle-empty">The Oracle remembers all who visit.</div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="/shared/js/cosysim-particles3d.js"></script>
+  <script src="{{ url_for('static', filename='oracle.js') }}" defer></script>
+  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'oracle' };</script>
+{% endblock %}

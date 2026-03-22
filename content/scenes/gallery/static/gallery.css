@@ -1,14 +1,19 @@
 /* ============================================================
-   THE OBSCURA — Gallery Scene CSS  v0.68 Dark Renaissance
-   Accent: violet  #7c3aed  |  rgb: 124 58 237
-   ============================================================ */
+   THE OBSCURA — Neural Synthesis Lab  v1.52 Cyberpunk Overhaul
+   Accent: cyan #06b6d4 | secondary: magenta #ec4899
+   ============================================================
+   v1.52.0 [2026-03-22] — Complete rebrand: museum → neural synthesis lab.
+                           Cyan/magenta palette, mono fonts, scanlines,
+                           grid overlays, HUD borders, AI generation framing.
+   v0.68   [2026-03-20] — Original Dark Renaissance museum aesthetic.
+*/
 
 /* ── Base ─────────────────────────────────────────────────── */
 .obscura-body {
-  background: #080810;
-  color: #c8bfd8;
+  background: #050710;
+  color: #c0c8d8;
   min-height: 100vh;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  font-family: 'Rajdhani', 'Segoe UI', sans-serif;
   overflow-x: hidden;
 }
 
@@ -25,23 +30,28 @@
   justify-content: space-between;
   align-items: flex-end;
   padding: 1.5rem 0 1rem;
-  border-bottom: 1px solid rgba(124, 58, 237, 0.25);
+  border-bottom: 1px solid rgba(6, 182, 212, 0.25);
   margin-bottom: 1.5rem;
 }
 
 .exhibit-title {
-  font-size: clamp(1.6rem, 4vw, 2.4rem);
-  font-weight: 300;
-  letter-spacing: 0.3em;
-  color: #f0ebff;
-  text-shadow: 0 0 30px rgba(124, 58, 237, 0.4);
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: clamp(1.4rem, 3.5vw, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: #06b6d4;
+  text-shadow: 0 0 20px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.2);
   margin: 0;
+  background: linear-gradient(135deg, #06b6d4, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .exhibit-subtitle {
   font-size: 0.7rem;
   letter-spacing: 0.2em;
-  color: rgba(124, 58, 237, 0.65);
+  color: rgba(6, 182, 212, 0.65);
   text-transform: uppercase;
   margin: 0.25rem 0 0;
 }
@@ -50,13 +60,13 @@
   font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: #6b5580;
+  color: #4a5568;
   display: block;
 }
 
 .curator-mood-badge {
   font-size: 0.85rem;
-  color: rgba(124, 58, 237, 0.9);
+  color: rgba(6, 182, 212, 0.9);
   font-style: italic;
   transition: color 0.5s ease;
 }
@@ -68,7 +78,7 @@
   margin-bottom: 1.5rem;
   overflow: hidden;
   border-radius: 3px;
-  background: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.05), transparent);
+  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.05), transparent);
 }
 
 .featured-particles {
@@ -84,7 +94,7 @@
   transform: translate(-50%, -50%);
   font-size: 0.55rem;
   letter-spacing: 0.45em;
-  color: rgba(124, 58, 237, 0.35);
+  color: rgba(6, 182, 212, 0.35);
   text-transform: uppercase;
   pointer-events: none;
   white-space: nowrap;
@@ -105,7 +115,7 @@
 }
 
 .loading-pulse {
-  color: rgba(124, 58, 237, 0.45);
+  color: rgba(6, 182, 212, 0.45);
   font-size: 0.8rem;
   letter-spacing: 0.2em;
   animation: pulse 2.2s ease-in-out infinite;
@@ -131,9 +141,13 @@
 }
 
 .artwork-frame:hover {
-  transform: rotate(-1.5deg) translateY(-5px);
-  filter: drop-shadow(0 10px 28px rgba(124, 58, 237, 0.38));
+  transform: translateY(-4px);
+  filter: drop-shadow(0 8px 24px rgba(6, 182, 212, 0.35));
   z-index: 10;
+}
+.artwork-frame:hover .frame-inner {
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.15), inset 0 0 20px rgba(0,0,0,0.3);
 }
 
 .artwork-frame:hover .spotlight {
@@ -144,9 +158,9 @@
   position: relative;
   width: 100%;
   padding-top: 130%; /* ~4:5 portrait ratio */
-  border: 8px solid #1a1522;
+  border: 2px solid rgba(6, 182, 212, 0.15);
   box-shadow:
-    0 0 0 1px #2d2040,
+    0 0 0 1px rgba(6, 182, 212, 0.05),
     0 6px 24px rgba(0, 0, 0, 0.85),
     inset 0 0 40px rgba(0, 0, 0, 0.5);
   overflow: hidden;
@@ -181,15 +195,16 @@
 /* ── Title Card ─────────────────────────────────────────── */
 .artwork-title {
   padding: 0.45rem 0.25rem;
-  border-top: 1px solid rgba(124, 58, 237, 0.15);
+  border-top: 1px solid rgba(6, 182, 212, 0.15);
 }
 
 .title-text {
   display: block;
-  font-size: 0.78rem;
-  color: #d4c8e8;
-  font-style: italic;
-  letter-spacing: 0.04em;
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: #06b6d4;
+  font-style: normal;
+  letter-spacing: 0.08em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -198,7 +213,7 @@
 .title-artist {
   display: block;
   font-size: 0.62rem;
-  color: #6b5580;
+  color: #4a5568;
   margin-top: 0.12rem;
   white-space: nowrap;
   overflow: hidden;
@@ -211,7 +226,7 @@
   bottom: 6px;
   right: 6px;
   font-size: 0.52rem;
-  font-family: 'Courier New', monospace;
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
   letter-spacing: 0.1em;
   padding: 2px 6px;
   border-radius: 2px;
@@ -236,7 +251,7 @@
 .intensity-badge.disturbing {
   background: rgba(80, 30, 120, 0.88);
   color: #c8a8e8;
-  border: 1px solid rgba(124, 58, 237, 0.4);
+  border: 1px solid rgba(6, 182, 212, 0.4);
 }
 
 /* When used inline (not absolute) — detail panel tags */
@@ -275,8 +290,10 @@
   right: -480px;
   width: 460px;
   height: 100vh;
-  background: #0b0812;
-  border-left: 1px solid rgba(124, 58, 237, 0.22);
+  background: #050710;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(6, 182, 212, 0.22);
   box-shadow: -12px 0 48px rgba(0, 0, 0, 0.75);
   z-index: 1000;
   transition: right 0.4s cubic-bezier(.25,.8,.25,1);
@@ -294,8 +311,8 @@
   top: 1rem;
   right: 1rem;
   background: none;
-  border: 1px solid rgba(124, 58, 237, 0.3);
-  color: rgba(124, 58, 237, 0.65);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: rgba(6, 182, 212, 0.65);
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -309,9 +326,9 @@
 }
 
 .detail-close:hover {
-  background: rgba(124, 58, 237, 0.15);
-  color: #a78bfa;
-  border-color: rgba(124, 58, 237, 0.55);
+  background: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+  border-color: rgba(6, 182, 212, 0.55);
 }
 
 .detail-artwork-display {
@@ -344,38 +361,39 @@
 }
 
 .detail-title {
-  font-size: 1.35rem;
-  font-weight: 300;
-  color: #f0ebff;
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #06b6d4;
   letter-spacing: 0.04em;
   margin: 0 0 0.4rem;
 }
 
 .detail-artist {
   font-size: 0.78rem;
-  color: #6b5580;
+  color: #4a5568;
   letter-spacing: 0.1em;
   margin: 0 0 0.2rem;
 }
 
 .detail-medium {
   font-size: 0.72rem;
-  color: rgba(124, 58, 237, 0.5);
+  color: rgba(6, 182, 212, 0.5);
   font-style: italic;
   margin: 0 0 1rem;
 }
 
 .detail-description {
   font-size: 0.88rem;
-  color: #c8bfd8;
+  color: #c0c8d8;
   line-height: 1.75;
   margin: 0 0 1.25rem;
 }
 
 .detail-commentary {
-  border-left: 2px solid rgba(124, 58, 237, 0.4);
+  border-left: 2px solid rgba(6, 182, 212, 0.4);
   padding-left: 1rem;
-  color: rgba(124, 58, 237, 0.82);
+  color: rgba(6, 182, 212, 0.82);
   font-style: italic;
   font-size: 0.84rem;
   line-height: 1.65;
@@ -386,9 +404,9 @@
   display: none;
   width: 100%;
   padding: 0.72rem;
-  background: rgba(124, 58, 237, 0.1);
-  border: 1px solid rgba(124, 58, 237, 0.32);
-  color: #a78bfa;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.32);
+  color: #06b6d4;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.82rem;
@@ -398,9 +416,9 @@
 }
 
 .private-viewing-btn:hover {
-  background: rgba(124, 58, 237, 0.2);
-  border-color: rgba(124, 58, 237, 0.58);
-  box-shadow: 0 0 14px rgba(124, 58, 237, 0.28);
+  background: rgba(6, 182, 212, 0.2);
+  border-color: rgba(6, 182, 212, 0.58);
+  box-shadow: 0 0 14px rgba(6, 182, 212, 0.28);
 }
 
 /* ── Commission Panel ────────────────────────────────────── */
@@ -411,7 +429,7 @@
   right: 0;
   z-index: 500;
   background: rgba(8, 8, 16, 0.96);
-  border-top: 1px solid rgba(124, 58, 237, 0.18);
+  border-top: 1px solid rgba(6, 182, 212, 0.18);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -422,7 +440,7 @@
   padding: 0.6rem 1.5rem;
   background: none;
   border: none;
-  color: rgba(124, 58, 237, 0.55);
+  color: rgba(6, 182, 212, 0.55);
   cursor: pointer;
   font-size: 0.7rem;
   letter-spacing: 0.22em;
@@ -433,7 +451,7 @@
 }
 
 .commission-toggle:hover {
-  color: #a78bfa;
+  color: #06b6d4;
 }
 
 .commission-form {
@@ -447,9 +465,9 @@
 
 .commission-form textarea {
   width: 100%;
-  background: rgba(124, 58, 237, 0.05);
-  border: 1px solid rgba(124, 58, 237, 0.2);
-  color: #d4c8e8;
+  background: rgba(6, 182, 212, 0.05);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  color: #c0c8d8;
   padding: 0.65rem 0.75rem;
   border-radius: 4px;
   resize: vertical;
@@ -461,8 +479,8 @@
 
 .commission-form textarea:focus {
   outline: none;
-  border-color: rgba(124, 58, 237, 0.5);
-  box-shadow: 0 0 8px rgba(124, 58, 237, 0.14);
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.14);
 }
 
 .commission-controls {
@@ -474,9 +492,9 @@
 .intensity-select {
   flex: 1;
   padding: 0.48rem 0.65rem;
-  background: rgba(124, 58, 237, 0.06);
-  border: 1px solid rgba(124, 58, 237, 0.2);
-  color: #a78bfa;
+  background: rgba(6, 182, 212, 0.06);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  color: #06b6d4;
   border-radius: 4px;
   font-size: 0.78rem;
   font-family: inherit;
@@ -484,14 +502,14 @@
 
 .intensity-select:focus {
   outline: none;
-  border-color: rgba(124, 58, 237, 0.45);
+  border-color: rgba(6, 182, 212, 0.45);
 }
 
 .commission-submit {
   padding: 0.48rem 1.2rem;
-  background: rgba(124, 58, 237, 0.14);
-  border: 1px solid rgba(124, 58, 237, 0.38);
-  color: #a78bfa;
+  background: rgba(6, 182, 212, 0.14);
+  border: 1px solid rgba(6, 182, 212, 0.38);
+  color: #06b6d4;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.78rem;
@@ -502,13 +520,13 @@
 }
 
 .commission-submit:hover {
-  background: rgba(124, 58, 237, 0.24);
-  box-shadow: 0 0 12px rgba(124, 58, 237, 0.28);
+  background: rgba(6, 182, 212, 0.24);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.28);
 }
 
 .commission-status {
   font-size: 0.72rem;
-  color: rgba(124, 58, 237, 0.58);
+  color: rgba(6, 182, 212, 0.58);
   margin-top: 0.45rem;
   font-style: italic;
   min-height: 1.1em;
@@ -536,7 +554,7 @@
   padding: 0.72rem 1.2rem;
   border-radius: 4px;
   font-size: 0.82rem;
-  font-family: 'Georgia', serif;
+  font-family: 'Rajdhani', sans-serif;
   z-index: 2000;
   max-width: 310px;
   animation: notifyIn 0.3s ease, notifyOut 0.5s ease 3.8s forwards;
@@ -559,16 +577,16 @@
 }
 
 .gallery-notification.granted {
-  background: rgba(124, 58, 237, 0.13);
-  border: 1px solid rgba(124, 58, 237, 0.32);
-  color: #a78bfa;
+  background: rgba(6, 182, 212, 0.13);
+  border: 1px solid rgba(6, 182, 212, 0.32);
+  color: #06b6d4;
 }
 
 /* ── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar         { width: 4px; }
 ::-webkit-scrollbar-track   { background: #080810; }
-::-webkit-scrollbar-thumb   { background: rgba(124, 58, 237, 0.3); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(124, 58, 237, 0.52); }
+::-webkit-scrollbar-thumb   { background: rgba(6, 182, 212, 0.3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(6, 182, 212, 0.52); }
 
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 900px) {

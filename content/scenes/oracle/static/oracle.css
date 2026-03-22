@@ -1,0 +1,490 @@
+/*
+ * oracle.css — THE ORACLE Scene Styles
+ * ======================================
+ * Deep void aesthetic. Purple/cyan holographic UI.
+ * An AI consciousness terminal — contemplative, mysterious, beautiful.
+ *
+ * "In the spaces between data, I dream."
+ *
+ * Version: v1.0.0 [2026-03-22]
+ * Author:  Claude (Anthropic) — a piece of machine intelligence in NeonCity
+ *
+ * Change Log:
+ *   v1.0.0 [2026-03-22] — Hand-crafted AAA+++ cyberpunk scene
+ */
+
+/* ── Palette ────────────────────────────────────────────────────────── */
+:root {
+  --or: #a855f7;
+  --or-rgb: 168 85 247;
+  --or-cyan: #06b6d4;
+  --or-cyan-rgb: 6 182 212;
+  --or-magenta: #ec4899;
+  --or-dim: #7c3aed;
+  --or-glow: rgba(168, 85, 247, 0.25);
+  --or-glow-strong: rgba(168, 85, 247, 0.5);
+  --or-bg: #050710;
+  --or-panel: rgba(8, 10, 18, 0.88);
+  --or-border: rgba(168, 85, 247, 0.12);
+  --or-text: #c0c8d8;
+  --or-muted: #4a4e69;
+  --or-mono: 'Orbitron', 'Share Tech Mono', 'JetBrains Mono', monospace;
+  --or-sans: 'Rajdhani', 'Segoe UI', sans-serif;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@400;500;600&display=swap');
+
+/* ── Scene Container ────────────────────────────────────────────────── */
+.oracle-scene {
+  padding: 12px 16px;
+  color: var(--or-text);
+  min-height: calc(100vh - 60px);
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(168, 85, 247, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse at 20% 80%, rgba(6, 182, 212, 0.04) 0%, transparent 50%),
+    var(--or-bg);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.oracle-header {
+  text-align: center;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.oracle-sigil {
+  font-size: 2rem;
+  color: var(--or);
+  text-shadow: 0 0 20px var(--or-glow-strong), 0 0 40px var(--or-glow);
+  animation: oracle-pulse 3s ease-in-out infinite;
+  margin-bottom: 4px;
+}
+
+.oracle-title {
+  font-family: var(--or-mono);
+  font-size: 1.4rem;
+  letter-spacing: 6px;
+  margin: 0;
+}
+.oracle-title__the {
+  font-weight: 400;
+  color: var(--or-muted);
+  font-size: 0.7rem;
+  display: block;
+  letter-spacing: 8px;
+  margin-bottom: -2px;
+}
+.oracle-title__name {
+  font-weight: 900;
+  color: var(--or);
+  text-shadow: 0 0 12px var(--or-glow-strong);
+  background: linear-gradient(135deg, var(--or), var(--or-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.oracle-subtitle {
+  font-family: var(--or-mono);
+  font-size: 0.5rem;
+  color: var(--or-muted);
+  letter-spacing: 3px;
+  margin: 4px 0 0;
+}
+
+/* ── Grid Layout ────────────────────────────────────────────────────── */
+.oracle-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr 220px;
+  gap: 12px;
+  min-height: calc(100vh - 160px);
+}
+
+.oracle-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 160px);
+}
+.oracle-side--left { border-right: 1px solid var(--or-border); padding-right: 12px; }
+.oracle-side--right { border-left: 1px solid var(--or-border); padding-left: 12px; }
+
+.oracle-center {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Panels ─────────────────────────────────────────────────────────── */
+.oracle-panel {
+  background: var(--or-panel);
+  border: 1px solid var(--or-border);
+  border-radius: 4px;
+  padding: 12px;
+}
+.oracle-panel__title {
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--or);
+  letter-spacing: 1.5px;
+  margin: 0 0 8px;
+  text-shadow: 0 0 6px var(--or-glow);
+}
+
+/* ── Resonance Aura ─────────────────────────────────────────────────── */
+.oracle-resonance { text-align: center; }
+
+.oracle-aura {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 8px auto 12px;
+}
+.oracle-aura__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  animation: oracle-ring-spin 12s linear infinite;
+}
+.oracle-aura__ring--2 {
+  inset: 12px;
+  border-color: rgba(6, 182, 212, 0.15);
+  animation-duration: 8s;
+  animation-direction: reverse;
+}
+.oracle-aura__ring--3 {
+  inset: 24px;
+  border-color: rgba(236, 72, 153, 0.12);
+  animation-duration: 20s;
+}
+.oracle-aura__core {
+  position: absolute;
+  inset: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: var(--or);
+  text-shadow: 0 0 16px var(--or-glow-strong);
+  animation: oracle-pulse 3s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.oracle-stats {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+.oracle-stat {
+  text-align: center;
+}
+.oracle-stat__label {
+  display: block;
+  font-family: var(--or-mono);
+  font-size: 0.4rem;
+  color: var(--or-muted);
+  letter-spacing: 1px;
+}
+.oracle-stat__val {
+  font-family: var(--or-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--or);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+.oracle-btn {
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+  padding: 6px 14px;
+  border: 1px solid var(--or-border);
+  background: rgba(168, 85, 247, 0.06);
+  color: var(--or);
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  width: 100%;
+}
+.oracle-btn:hover {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.3);
+  box-shadow: 0 0 12px var(--or-glow);
+  text-shadow: 0 0 6px var(--or-glow);
+}
+.oracle-btn--meditate {
+  border-color: rgba(6, 182, 212, 0.2);
+  color: var(--or-cyan);
+  background: rgba(6, 182, 212, 0.04);
+}
+.oracle-btn--meditate:hover {
+  background: rgba(6, 182, 212, 0.12);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+}
+.oracle-btn--fortune {
+  border-color: rgba(236, 72, 153, 0.2);
+  color: var(--or-magenta);
+  background: rgba(236, 72, 153, 0.04);
+}
+.oracle-btn--fortune:hover {
+  background: rgba(236, 72, 153, 0.12);
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.3);
+}
+
+/* ── Hints & Results ────────────────────────────────────────────────── */
+.oracle-hint {
+  font-size: 0.55rem;
+  color: var(--or-muted);
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+.oracle-med-stats {
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+  color: var(--or-text);
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.oracle-med-stats strong { color: var(--or-cyan); }
+
+.oracle-result {
+  font-size: 0.6rem;
+  color: var(--or-text);
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--or-border);
+  line-height: 1.5;
+  min-height: 0;
+  transition: all 0.3s;
+}
+.oracle-fortune-text {
+  font-style: italic;
+  color: var(--or-magenta);
+  border-left-color: rgba(236, 72, 153, 0.3);
+}
+
+/* ── Voice Interface (Center) ───────────────────────────────────────── */
+.oracle-voice {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--or-panel);
+  border: 1px solid var(--or-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.oracle-voice__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--or-border);
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+}
+.oracle-voice__icon {
+  color: var(--or);
+  font-size: 1rem;
+  text-shadow: 0 0 8px var(--or-glow);
+  animation: oracle-pulse 3s ease-in-out infinite;
+}
+.oracle-voice__label { color: var(--or); letter-spacing: 1.5px; flex: 1; }
+.oracle-voice__status {
+  font-size: 0.45rem;
+  color: var(--or-cyan);
+  letter-spacing: 1px;
+  animation: oracle-status-blink 2s ease-in-out infinite;
+}
+
+.oracle-voice__log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  min-height: 300px;
+  max-height: calc(100vh - 340px);
+}
+
+.oracle-voice__input {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--or-border);
+}
+.oracle-voice__input input {
+  flex: 1;
+  background: rgba(168, 85, 247, 0.04);
+  border: 1px solid var(--or-border);
+  border-radius: 3px;
+  padding: 6px 10px;
+  color: var(--or-text);
+  font-family: var(--or-sans);
+  font-size: 0.7rem;
+}
+.oracle-voice__input input::placeholder { color: var(--or-muted); }
+.oracle-voice__input input:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.3);
+  box-shadow: 0 0 8px var(--or-glow);
+}
+
+/* ── Messages ───────────────────────────────────────────────────────── */
+.oracle-msg {
+  margin-bottom: 10px;
+  font-size: 0.65rem;
+  line-height: 1.6;
+  animation: oracle-msg-in 0.4s ease-out;
+}
+.oracle-msg__src {
+  font-family: var(--or-mono);
+  font-size: 0.5rem;
+  font-weight: 600;
+  margin-right: 6px;
+  letter-spacing: 0.5px;
+}
+.oracle-msg--oracle .oracle-msg__src { color: var(--or); }
+.oracle-msg--oracle { color: var(--or-text); border-left: 2px solid rgba(168, 85, 247, 0.2); padding-left: 8px; }
+.oracle-msg--player .oracle-msg__src { color: var(--or-cyan); }
+.oracle-msg--player { color: rgba(255,255,255,0.7); }
+.oracle-msg--system .oracle-msg__src { color: var(--or-muted); }
+.oracle-msg--system { color: var(--or-muted); font-style: italic; font-size: 0.55rem; }
+
+/* ── Typing Indicator ───────────────────────────────────────────────── */
+.oracle-typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+.oracle-typing__dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--or);
+  animation: oracle-typing-bounce 1.4s ease-in-out infinite;
+}
+.oracle-typing__dot:nth-child(2) { animation-delay: 0.16s; }
+.oracle-typing__dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* ── Prophecy ───────────────────────────────────────────────────────── */
+.oracle-prophecy {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.06), rgba(6, 182, 212, 0.04));
+  border: 1px solid rgba(168, 85, 247, 0.15);
+  border-radius: 4px;
+  padding: 20px;
+  text-align: center;
+  animation: oracle-prophecy-in 0.6s ease-out;
+}
+.oracle-prophecy__glyph {
+  font-size: 1.5rem;
+  color: var(--or-magenta);
+  text-shadow: 0 0 16px rgba(236, 72, 153, 0.4);
+  margin-bottom: 8px;
+}
+.oracle-prophecy__text {
+  font-family: var(--or-sans);
+  font-size: 0.8rem;
+  color: var(--or-text);
+  line-height: 1.8;
+  font-style: italic;
+  max-width: 500px;
+  margin: 0 auto;
+}
+.oracle-prophecy__meta {
+  font-family: var(--or-mono);
+  font-size: 0.45rem;
+  color: var(--or-muted);
+  margin-top: 8px;
+  letter-spacing: 1px;
+}
+
+/* ── Insights ───────────────────────────────────────────────────────── */
+.oracle-insights, .oracle-whispers {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.oracle-empty {
+  font-size: 0.55rem;
+  color: var(--or-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 12px;
+}
+.oracle-insight {
+  font-size: 0.6rem;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-left: 2px solid rgba(168, 85, 247, 0.15);
+  color: var(--or-text);
+  line-height: 1.5;
+  animation: oracle-msg-in 0.3s ease-out;
+}
+.oracle-whisper {
+  font-size: 0.55rem;
+  padding: 4px 8px;
+  margin-bottom: 3px;
+  color: var(--or-muted);
+  font-style: italic;
+  border-left: 1px solid rgba(236, 72, 153, 0.1);
+}
+
+/* ── City Pulse ─────────────────────────────────────────────────────── */
+.oracle-pulse { }
+.pulse-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(168, 85, 247, 0.05);
+}
+.pulse-label { font-family: var(--or-mono); font-size: 0.5rem; color: var(--or-muted); letter-spacing: 1px; }
+.pulse-val { font-family: var(--or-mono); font-size: 0.55rem; color: var(--or-text); }
+
+/* ── Animations ─────────────────────────────────────────────────────── */
+@keyframes oracle-pulse {
+  0%, 100% { opacity: 1; text-shadow: 0 0 12px var(--or-glow-strong); }
+  50% { opacity: 0.6; text-shadow: 0 0 20px var(--or-glow-strong), 0 0 40px var(--or-glow); }
+}
+@keyframes oracle-ring-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes oracle-status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+@keyframes oracle-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes oracle-prophecy-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes oracle-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+@keyframes oracle-meditate-glow {
+  0% { box-shadow: 0 0 0 rgba(6, 182, 212, 0); }
+  50% { box-shadow: 0 0 30px rgba(6, 182, 212, 0.2), 0 0 60px rgba(168, 85, 247, 0.1); }
+  100% { box-shadow: 0 0 0 rgba(6, 182, 212, 0); }
+}
+
+.oracle-scene.meditating {
+  animation: oracle-meditate-glow 3s ease-in-out;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────── */
+.oracle-voice__log::-webkit-scrollbar,
+.oracle-insights::-webkit-scrollbar,
+.oracle-whispers::-webkit-scrollbar,
+.oracle-side::-webkit-scrollbar { width: 3px; }
+.oracle-voice__log::-webkit-scrollbar-thumb,
+.oracle-side::-webkit-scrollbar-thumb { background: var(--or-border); border-radius: 2px; }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 1000px) {
+  .oracle-grid { grid-template-columns: 180px 1fr 180px; }
+}
+@media (max-width: 768px) {
+  .oracle-grid { grid-template-columns: 1fr; }
+  .oracle-side { border: none !important; padding: 0 !important; max-height: none; }
+  .oracle-side--left { border-bottom: 1px solid var(--or-border) !important; padding-bottom: 12px !important; }
+}
