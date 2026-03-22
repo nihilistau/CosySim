@@ -110,7 +110,9 @@ SERVICE_GROUPS: Dict[str, List[str]] = {
         "lab_break",
         "intel_hub", "nexus_panel", "system_control",
     ],
-    "streamlit": ["hub", "dashboard", "admin", "assets", "creator"],
+    # v1.49.2 [2026-03-22] — dashboard migrated from Streamlit to Flask
+    "streamlit": ["hub", "admin", "assets", "creator"],
+    "flask_dashboard": ["dashboard"],
     "tts": ["qwen3_tts", "orpheus_tts", "cosyvoice_tts", "whisper_stt"],
     "infrastructure": [
         "web_bridge", "lmstudio", "comfyui", "nexus_kms", "notebooklm_proxy",

@@ -66,6 +66,7 @@ from .neoncity_state import (
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "neoncity"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 try:
     from engine.port_registry import get_port as _get_port
@@ -142,7 +143,7 @@ def _apply_consumable_effect(item_id: str) -> Dict[str, Any]:
     # Persist the state change
     ps._save()
 
-    logger.info("Consumable effect: %s → %s", item_id, changes)
+    logger.info("[%s] Consumable effect (operation=consumable, item=%s): %s", SCENE_ID, item_id, changes)
     return {"message": effect["message"], "changes": changes}
 
 
@@ -715,7 +716,7 @@ class NeonCityScene(FlaskScene):
                     "travel_time": result.travel_time,
                 })
             except Exception as exc:
-                logger.warning("District travel failed: %s", exc)
+                logger.warning("[%s] District travel failed (operation=travel): %s", SCENE_ID, exc)
                 return jsonify({"success": False, "error": str(exc)}), 500
 
         # v1.50.0 [2026-03-22] — District scene online/offline status
@@ -781,7 +782,7 @@ class NeonCityScene(FlaskScene):
                     "state": self.state.to_dict(),
                 })
             except Exception as exc:
-                logger.error("new_game failed: %s", exc, exc_info=True)
+                logger.error("[%s] new_game failed (operation=game_start): %s", SCENE_ID, exc, exc_info=True)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/game/move", methods=["POST"])
@@ -874,7 +875,7 @@ class NeonCityScene(FlaskScene):
                     "state": state_dict,
                 })
             except Exception as exc:
-                logger.error("end_turn failed: %s", exc, exc_info=True)
+                logger.error("[%s] end_turn failed (operation=game_turn): %s", SCENE_ID, exc, exc_info=True)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/economy")
@@ -891,7 +892,7 @@ class NeonCityScene(FlaskScene):
                     ],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/consequences")
@@ -905,7 +906,7 @@ class NeonCityScene(FlaskScene):
                     "pending": [c.to_dict() for c in store.get_pending(SCENE_ID, player_id)],
                 })
             except Exception as exc:
-                logger.error("Consequences API error: %s", exc)
+                logger.error("[%s] Consequences API error (operation=consequences): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         # ── v1.44.0 [2026-03-21] — Player/Inventory/Crew/Mission endpoints ──
@@ -917,7 +918,7 @@ class NeonCityScene(FlaskScene):
                 ps = get_player_state()
                 return jsonify(ps.to_dict())
             except Exception as exc:
-                logger.error("Player API error: %s", exc)
+                logger.error("[%s] Player API error (operation=player_state): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/inventory")
@@ -931,7 +932,7 @@ class NeonCityScene(FlaskScene):
                     "capacity": getattr(inv, "capacity", 24),
                 })
             except Exception as exc:
-                logger.error("Inventory API error: %s", exc)
+                logger.error("[%s] Inventory API error (operation=inventory): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         # v1.52.0 [2026-03-22] — Consumable effects system
@@ -1061,7 +1062,7 @@ class NeonCityScene(FlaskScene):
                     "message": f"New territory mission available: {mtype} in {district_name}",
                 })
             except Exception as exc:
-                logger.error("Mission generation failed: %s", exc)
+                logger.error("[%s] Mission generation failed (operation=missions): %s", SCENE_ID, exc)
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
         # v1.52.0 [2026-03-22] — NPC Gift/Favor System
@@ -1106,8 +1107,8 @@ class NeonCityScene(FlaskScene):
                 new_label = new_entry.label if new_entry else "Neutral"
 
                 item_name = getattr(item, "name", item_id)
-                logger.info("Gift: %s → %s (+%d standing, now %d/%s)",
-                            item_name, npc_id, standing_boost, new_standing, new_label)
+                logger.info("[%s] Gift: %s → %s (+%d standing, now %d/%s) (operation=npc_gift)",
+                            SCENE_ID, item_name, npc_id, standing_boost, new_standing, new_label)
 
                 can_recruit = new_standing >= 40
                 return jsonify({
@@ -1134,7 +1135,7 @@ class NeonCityScene(FlaskScene):
                 cm = get_crew_manager()
                 return jsonify(cm.to_dict())
             except Exception as exc:
-                logger.error("Crew API error: %s", exc)
+                logger.error("[%s] Crew API error (operation=crew): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/crew/recruit", methods=["POST"])
@@ -1210,7 +1211,7 @@ class NeonCityScene(FlaskScene):
                     "completed": len(mm.list_completed()),
                 })
             except Exception as exc:
-                logger.error("Missions API error: %s", exc)
+                logger.error("[%s] Missions API error (operation=missions): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/missions/accept", methods=["POST"])
@@ -1292,7 +1293,7 @@ class NeonCityScene(FlaskScene):
                 sm = get_skill_manager()
                 return jsonify(sm.to_dict())
             except Exception as exc:
-                logger.error("Skills API error: %s", exc)
+                logger.error("[%s] Skills API error (operation=skills): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/hud")
@@ -1317,7 +1318,7 @@ class NeonCityScene(FlaskScene):
                     "balance": get_economy_manager().get_balance("player"),
                 })
             except Exception as exc:
-                logger.error("HUD API error: %s", exc)
+                logger.error("[%s] HUD API error (operation=hud): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         # ── v1.46.0 [2026-03-21] — Cyberspace intrusion REST API ────────
@@ -1336,7 +1337,7 @@ class NeonCityScene(FlaskScene):
                 cs = get_cyberspace_engine()
                 return jsonify({"networks": cs.list_networks()})
             except Exception as exc:
-                logger.error("Cyberspace list_networks error: %s", exc)
+                logger.error("[%s] Cyberspace list_networks error (operation=cyberspace): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/cyberspace/network/<network_id>")
@@ -1349,7 +1350,7 @@ class NeonCityScene(FlaskScene):
                     return jsonify({"error": "Network not found"}), 404
                 return jsonify(net)
             except Exception as exc:
-                logger.error("Cyberspace get_network error: %s", exc)
+                logger.error("[%s] Cyberspace get_network error (operation=cyberspace): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/cyberspace/generate", methods=["POST"])
@@ -1500,7 +1501,7 @@ class NeonCityScene(FlaskScene):
                 self.socketio.emit("city_state", self._build_city_state())
                 self.socketio.emit("ticker_update", {"items": self._build_ticker_items()})
             except Exception as exc:
-                logger.warning("on_connect emission failed: %s", exc)
+                logger.warning("[%s] on_connect emission failed (operation=socketio): %s", SCENE_ID, exc)
 
         @self.socketio.on("get_city_state")
         def on_get_city_state(_data=None):
@@ -1614,7 +1615,7 @@ class NeonCityScene(FlaskScene):
                     "balance": get_economy_manager().get_balance("player"),
                 })
             except Exception as exc:
-                logger.warning("get_hud emission failed: %s", exc)
+                logger.warning("[%s] get_hud emission failed (operation=socketio): %s", SCENE_ID, exc)
 
         # v1.44.0 [2026-03-21] — NPC district chat via LMStudio
         @self.socketio.on("district_chat")
@@ -1697,7 +1698,7 @@ class NeonCityScene(FlaskScene):
                             logger.debug("Mission offer injection failed", exc_info=True)
 
                 except Exception as exc:
-                    logger.warning("District chat failed for %s: %s", npc_id, exc)
+                    logger.warning("[%s] District chat failed (operation=chat, npc=%s): %s", SCENE_ID, npc_id, exc)
                     self.socketio.emit("city_event", {
                         "type": "npc_chat",
                         "payload": {
@@ -1731,7 +1732,7 @@ class NeonCityScene(FlaskScene):
                 economy.transact(-cost, TransactionType.SPEND, SCENE_ID, f"intel: {topic}")
                 new_balance = economy.get_balance("player")
             except Exception as exc:
-                logger.warning("Economy transaction failed in buy_info: %s", exc)
+                logger.warning("[%s] Economy transaction failed in buy_info (operation=economy): %s", SCENE_ID, exc)
 
             lore_text = ""
             try:
@@ -1801,7 +1802,7 @@ class NeonCityScene(FlaskScene):
                 new_balance = economy.get_balance("player")
                 new_wallet = ps.credits
                 action = "deposited" if direction == "in" else "withdrew"
-                logger.info("Exchange: %s ₵%d (bank=%d, wallet=%d)", action, amount, new_balance, new_wallet)
+                logger.info("[%s] Exchange: %s ₵%d (bank=%d, wallet=%d) (operation=exchange)", SCENE_ID, action, amount, new_balance, new_wallet)
 
                 emit("exchange_result", {
                     "success": True,
@@ -1817,7 +1818,7 @@ class NeonCityScene(FlaskScene):
                     "bank_balance": new_balance,
                 })
             except Exception as exc:
-                logger.warning("exchange_credits failed: %s", exc)
+                logger.warning("[%s] exchange_credits failed (operation=exchange): %s", SCENE_ID, exc)
                 emit("error", {"message": f"Exchange failed: {exc}"})
 
     # ------------------------------------------------------------------
@@ -1884,9 +1885,9 @@ class NeonCityScene(FlaskScene):
                 bus.subscribe(EventTypes.NEONCITY_WORLD_EVENT, _on_npc_action, "neoncity_scene"),
                 bus.subscribe("world.world_event", _on_corp_raid_check, "neoncity_world_watch"),
             ])
-            logger.info("NeonCity EventBus: %d subscriptions active.", len(self._bus_subs))
+            logger.info("[%s] EventBus: %d subscriptions active (operation=lifecycle)", SCENE_ID, len(self._bus_subs))
         except Exception as exc:
-            logger.warning("EventBus subscription failed: %s", exc)
+            logger.warning("[%s] EventBus subscription failed (operation=lifecycle): %s", SCENE_ID, exc)
 
     # ------------------------------------------------------------------
     # BaseScene contract
@@ -1902,9 +1903,9 @@ class NeonCityScene(FlaskScene):
             from engine.world.living_world import get_living_world
             lw = get_living_world()
             lw.start()
-            logger.info("LivingWorld daemon started from NeonCity")
+            logger.info("[%s] LivingWorld daemon started (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("LivingWorld start failed: %s", exc)
+            logger.warning("[%s] LivingWorld start failed (operation=lifecycle): %s", SCENE_ID, exc)
 
         # Start crew operation auto-polling (every 60s)
         import threading
@@ -1916,7 +1917,7 @@ class NeonCityScene(FlaskScene):
                     cm = get_crew_manager()
                     completed = cm.check_operations()
                     if completed:
-                        logger.info("Crew operations completed: %d", len(completed))
+                        logger.info("[%s] Crew operations completed: %d (operation=crew_poll)", SCENE_ID, len(completed))
                         self.socketio.emit("hud_update", {"crew_ops_completed": len(completed)})
                 except Exception:
                     pass

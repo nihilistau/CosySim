@@ -1,0 +1,61 @@
+{
+  "id": "template_admin_panel",
+  "name": "Admin Panel Template",
+  "scene_key": "admin_panel",
+  "accent_color": "#ff6b6b",
+  "description": "System administration dashboard with stats, service health, and control actions.",
+  "components": [
+    {
+      "id": "header_1",
+      "type": "scene_header",
+      "props": {
+        "title": "ADMIN PANEL",
+        "subtitle": "System Control",
+        "show_clock": true,
+        "show_credits": false
+      },
+      "children": {}
+    },
+    {
+      "id": "stats_row",
+      "type": "column_layout",
+      "props": { "columns": 4, "ratio": "1:1:1:1" },
+      "children": {
+        "col_1": [{ "id": "stat_1", "type": "status_indicator", "props": { "label": "Services", "value": "0/10", "status": "warning" }, "children": {} }],
+        "col_2": [{ "id": "stat_2", "type": "status_indicator", "props": { "label": "Agents", "value": "0", "status": "ok" }, "children": {} }],
+        "col_3": [{ "id": "stat_3", "type": "status_indicator", "props": { "label": "Memory", "value": "0 MB", "status": "ok" }, "children": {} }],
+        "col_4": [{ "id": "stat_4", "type": "status_indicator", "props": { "label": "Uptime", "value": "0h", "status": "ok" }, "children": {} }]
+      }
+    },
+    {
+      "id": "main_layout",
+      "type": "column_layout",
+      "props": { "columns": 2, "ratio": "1:1" },
+      "children": {
+        "left": [
+          {
+            "id": "service_panel",
+            "type": "glass_panel",
+            "props": { "title": "Service Health", "variant": "default", "scrollable": true },
+            "children": {}
+          }
+        ],
+        "right": [
+          {
+            "id": "actions_panel",
+            "type": "glass_panel",
+            "props": { "title": "Control Actions", "variant": "accent" },
+            "children": {}
+          },
+          {
+            "id": "log_panel",
+            "type": "glass_panel",
+            "props": { "title": "Recent Logs", "variant": "default", "scrollable": true },
+            "children": {}
+          }
+        ]
+      }
+    }
+  ],
+  "updated_at": "2026-03-22T00:00:00Z"
+}

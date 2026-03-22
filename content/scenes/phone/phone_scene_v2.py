@@ -49,6 +49,8 @@ from engine.mcp.tag_registry import TagRegistry
 
 logger = logging.getLogger(__name__)
 
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+
 # ── Media paths ────────────────────────────────────────────────────────────────
 _SCENE_ROOT  = Path(__file__).parent
 _STATIC_DIR  = _SCENE_ROOT / "static"
@@ -223,7 +225,7 @@ class PhoneSceneV2(FlaskScene):
             fw.on("mood_contagion", lambda evt: self._on_mood_event(evt))
             fw.on("story_beat", lambda evt: self._on_story_beat(evt))
         except Exception as exc:
-            logger.warning("MCP rule registration skipped: %s", exc)
+            logger.warning("[%s] MCP rule registration skipped (operation=mcp_wire): %s", SCENE_ID, exc)
         self._subscribe_world_events()
 
     def on_shutdown(self) -> None:
@@ -277,9 +279,9 @@ class PhoneSceneV2(FlaskScene):
                 self._on_world_major_event,
                 "phone_scene",
             )
-            logger.info("PhoneSceneV2 subscribed to world event channels")
+            logger.info("[%s] Subscribed to world event channels (operation=world_events)", SCENE_ID)
         except Exception as exc:
-            logger.warning("World event subscription failed: %s", exc)
+            logger.warning("[%s] World event subscription failed (operation=world_events): %s", SCENE_ID, exc)
 
     def _on_world_hacker_event(self, payload: Dict[str, Any]) -> None:
         """Handle incoming 0xGH0ST hacker event — emit to phone clients."""
@@ -349,7 +351,7 @@ class PhoneSceneV2(FlaskScene):
                 })
             return messages
         except Exception as exc:
-            logger.warning("_get_incoming_world_messages failed: %s", exc)
+            logger.warning("[%s] _get_incoming_world_messages failed (operation=world_messages): %s", SCENE_ID, exc)
             return []
 
     # ── character seeding ────────────────────────────────────────────────────
@@ -373,9 +375,9 @@ class PhoneSceneV2(FlaskScene):
                 except Exception:
                     pass
                 self._schedule_autotxt(char_id)
-            logger.info("Seeded %d characters into phone scene", len(chars))
+            logger.info("[%s] Seeded %d characters (operation=seed)", SCENE_ID, len(chars))
         except Exception as exc:
-            logger.warning("Character seeding failed: %s", exc)
+            logger.warning("[%s] Character seeding failed (operation=seed): %s", SCENE_ID, exc)
 
         # v1.52.0 — Seed 0xGH0ST as special investigation character
         self._seed_ghost()
@@ -390,13 +392,13 @@ class PhoneSceneV2(FlaskScene):
             inv = self.phone_db.get_investigation(ghost_id)
             if not inv:
                 self.phone_db.create_investigation(ghost_id, thread_id)
-                logger.info("Created investigation arc for 0xGH0ST")
+                logger.info("[%s] Created investigation arc for 0xGH0ST (operation=seed_ghost)", SCENE_ID)
             # Create a lightweight agent for ghost
             if ghost_id not in self._agents:
                 self._agents[ghost_id] = _PhoneCharacterAgent(ghost_id, self)
-            logger.info("0xGH0ST seeded on thread %s", thread_id)
+            logger.info("[%s] 0xGH0ST seeded on thread %s (operation=seed_ghost)", SCENE_ID, thread_id)
         except Exception as exc:
-            logger.warning("0xGH0ST seeding failed: %s", exc)
+            logger.warning("[%s] 0xGH0ST seeding failed (operation=seed_ghost): %s", SCENE_ID, exc)
 
     # v1.52.0 [2026-03-22] — Ghost investigation stages
     _GHOST_STAGES = [
@@ -437,7 +439,7 @@ class PhoneSceneV2(FlaskScene):
                     "thread_id": thread_id,
                     "message": {"sender_id": "system", "content": f"Stage {stage}: {stage_info['title']}"},
                 }, room=f"thread_{thread_id}")
-                logger.info("Investigation advanced to stage %d: %s", stage, stage_info["title"])
+                logger.info("[%s] Investigation advanced to stage %d: %s (operation=investigation)", SCENE_ID, stage, stage_info["title"])
         except Exception as exc:
             logger.debug("Investigation advance failed: %s", exc)
 
@@ -539,7 +541,7 @@ class PhoneSceneV2(FlaskScene):
                 }, room=f"thread_{thread_id}")
                 self._emit("thread_updated", {"thread_id": thread_id}, room=f"thread_{thread_id}")
             except Exception as exc:
-                logger.warning("autotxt fire failed for %s: %s", char_id, exc)
+                logger.warning("[%s] autotxt fire failed (operation=autotxt, agent=%s): %s", SCENE_ID, char_id, exc)
             finally:
                 self._schedule_autotxt(char_id)
 
@@ -608,7 +610,7 @@ class PhoneSceneV2(FlaskScene):
                         pass
             return result
         except Exception as exc:
-            logger.error("Governor reply failed for %s: %s", char_id, exc)
+            logger.error("[%s] Governor reply failed (operation=chat, agent=%s): %s", SCENE_ID, char_id, exc)
             result["text"] = "(I'm having trouble replying right now. Try again in a moment.)"
             return result
 
@@ -695,7 +697,7 @@ class PhoneSceneV2(FlaskScene):
                 self._emit("news_updated", self.phone_db.get_news_stats())
             return count
         except Exception as exc:
-            logger.warning("News sync failed: %s", exc)
+            logger.warning("[%s] News sync failed (operation=news_sync): %s", SCENE_ID, exc)
             return 0
 
     def _build_news_markup(
@@ -814,7 +816,7 @@ class PhoneSceneV2(FlaskScene):
                 result.sort(key=lambda x: x["updated_at"], reverse=True)
                 return jsonify({"ok": True, "threads": result})
             except Exception as exc:
-                logger.error("list_threads: %s", exc)
+                logger.error("[%s] list_threads failed (operation=api): %s", SCENE_ID, exc)
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
         @app.route("/api/threads/dm", methods=["POST"])
@@ -967,7 +969,7 @@ class PhoneSceneV2(FlaskScene):
                                 self._advance_investigation(thread_id, char_id)
 
                         except Exception as exc:
-                            logger.error("Reply worker error for %s: %s", char_id, exc)
+                            logger.error("[%s] Reply worker error (operation=chat, agent=%s): %s", SCENE_ID, char_id, exc)
                             self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False}, room=_room)
 
             threading.Thread(target=_reply_worker, daemon=True).start()
@@ -1009,7 +1011,7 @@ class PhoneSceneV2(FlaskScene):
                     })
                 return jsonify({"ok": True, "contacts": contacts})
             except Exception as exc:
-                logger.error("get_contacts: %s", exc)
+                logger.error("[%s] get_contacts failed (operation=api): %s", SCENE_ID, exc)
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
         # ── Investigation ─────────────────────────────────────────────────────
@@ -1124,7 +1126,7 @@ class PhoneSceneV2(FlaskScene):
                         )
                         self._emit("message_new", {"thread_id": thread_id, "message": msg}, room=f"thread_{thread_id}")
                 except Exception as exc:
-                    logger.error("game AI react: %s", exc)
+                    logger.error("[%s] Game AI react failed (operation=game, agent=%s): %s", SCENE_ID, char_id, exc)
 
             threading.Thread(target=_ai_react, daemon=True).start()
             return jsonify({"ok": True, "challenge": challenge, "round": state["round"]})
@@ -1351,7 +1353,7 @@ class PhoneSceneV2(FlaskScene):
                                 wiped_media += 1
                             except Exception:
                                 pass
-                logger.info("Admin wipe: %d messages + %d media files deleted", count, wiped_media)
+                logger.info("[%s] Admin wipe: %d messages + %d media files deleted (operation=admin)", SCENE_ID, count, wiped_media)
                 self._emit("admin_wipe", {"messages": count, "media": wiped_media})
                 return jsonify({"ok": True, "messages_deleted": count, "media_deleted": wiped_media})
             except Exception as exc:
@@ -1480,7 +1482,7 @@ class PhoneSceneV2(FlaskScene):
                     "balance": state["credits"],
                 })
             except Exception as exc:
-                logger.error("world_send_ghost failed: %s", exc)
+                logger.error("[%s] world_send_ghost failed (operation=ghost): %s", SCENE_ID, exc)
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
         # ── MCP Framework API ─────────────────────────────────────────
@@ -1879,7 +1881,7 @@ class PhoneSceneV2(FlaskScene):
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
 

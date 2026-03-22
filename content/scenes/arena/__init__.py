@@ -10,6 +10,7 @@ Version: v1.51.0 [2026-03-22]
 
 Change Log:
     v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
+    v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
     v0.68   [2026-03-20] — Dark Renaissance arena scene
 """
 from __future__ import annotations
@@ -137,7 +138,7 @@ class ArenaScene(FlaskScene):
                     "defaults": ["shadow", "blaze"],
                 })
             except Exception as exc:
-                logger.warning("Arena /api/fighters error: %s", exc)
+                logger.warning("[%s] /api/fighters error (operation=api): %s", SCENE_ID, exc)
                 return jsonify({"fighters": [], "defaults": ["shadow", "blaze"]})
 
         @app.route("/api/match/<match_id>")
@@ -153,7 +154,7 @@ class ArenaScene(FlaskScene):
                     return jsonify({"error": f"Match {match_id!r} not found"}), 404
                 return jsonify({"match": match.to_dict()})
             except Exception as exc:
-                logger.warning("Arena /api/match error: %s", exc)
+                logger.warning("[%s] /api/match error (operation=api, match=%s): %s", SCENE_ID, match_id, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/leaderboard")
@@ -177,7 +178,7 @@ class ArenaScene(FlaskScene):
                 )
                 return jsonify({"leaderboard": board})
             except Exception as exc:
-                logger.warning("Arena /api/leaderboard error: %s", exc)
+                logger.warning("[%s] /api/leaderboard error (operation=api): %s", SCENE_ID, exc)
                 return jsonify({"leaderboard": [], "error": str(exc)})
 
         @app.route("/api/framework-status")
@@ -206,7 +207,7 @@ class ArenaScene(FlaskScene):
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.warning("Economy API error: %s", exc)
+                logger.warning("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
     # ══════════════════════════════════════════════════════════════════
@@ -240,12 +241,13 @@ class ArenaScene(FlaskScene):
                 match = self._engine.create_match(fighter_a, fighter_b)
                 emit("match_created", {"match": match.to_dict()}, broadcast=True)
                 logger.info(
-                    "Arena: match %s created (%s vs %s)", match.id, fighter_a, fighter_b
+                    "[%s] Match created (operation=match_create, match=%s, fighters=%s_vs_%s)",
+                    SCENE_ID, match.id, fighter_a, fighter_b,
                 )
                 if data.get("auto_play"):
                     self._start_auto_play(match.id)
             except Exception as exc:
-                logger.warning("Arena create_match error: %s", exc)
+                logger.warning("[%s] create_match failed (operation=match_create): %s", SCENE_ID, exc)
                 emit("arena_error", {"error": str(exc)})
 
         # ── play_round ───────────────────────────────────────────────
@@ -292,7 +294,7 @@ class ArenaScene(FlaskScene):
                     self._stop_auto_play(match_id)
 
             except Exception as exc:
-                logger.warning("Arena play_round error: %s", exc)
+                logger.warning("[%s] play_round failed (operation=play_round, match=%s): %s", SCENE_ID, match_id, exc)
                 emit("arena_error", {"error": str(exc)})
 
         # ── place_bet ────────────────────────────────────────────────
@@ -319,7 +321,7 @@ class ArenaScene(FlaskScene):
                     pass
                 emit("bet_placed", {"bet": bet.to_dict(), "balance": balance})
             except Exception as exc:
-                logger.warning("Arena place_bet error: %s", exc)
+                logger.warning("[%s] place_bet failed (operation=bet, match=%s): %s", SCENE_ID, match_id, exc)
                 emit("arena_error", {"error": str(exc)})
 
         # ── get_match ────────────────────────────────────────────────
@@ -411,7 +413,7 @@ class ArenaScene(FlaskScene):
                         })
                         break
                 except Exception as exc:
-                    logger.warning("Arena auto-play error for %s: %s", match_id, exc)
+                    logger.warning("[%s] Auto-play error (operation=auto_play, match=%s): %s", SCENE_ID, match_id, exc)
                     break
 
         t = threading.Thread(
@@ -421,7 +423,7 @@ class ArenaScene(FlaskScene):
         )
         self._auto_play_threads[match_id] = t
         t.start()
-        logger.info("Arena: auto-play started for match %s", match_id)
+        logger.info("[%s] Auto-play started (operation=auto_play, match=%s)", SCENE_ID, match_id)
 
     def _stop_auto_play(self, match_id: str) -> None:
         """Signal the auto-play thread for a match to stop.

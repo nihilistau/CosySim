@@ -9,6 +9,17 @@
 
   const socket = io();
 
+  // v1.49.3 [2026-03-22] — Disconnect + reconnect handlers
+  socket.on('disconnect', () => {
+    console.debug('[LabBreak] Socket disconnected');
+  });
+  socket.io.on('reconnect', (attempt) => {
+    console.debug('[LabBreak] Reconnected after ' + attempt + ' attempt(s)');
+  });
+  socket.io.on('reconnect_attempt', (attempt) => {
+    if (attempt % 3 === 0) console.debug('[LabBreak] Reconnecting... (attempt ' + attempt + ')');
+  });
+
   // ──── DOM References ────
 
   const els = {

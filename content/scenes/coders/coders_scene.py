@@ -37,6 +37,7 @@ from .coders_state import (
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "coders"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 try:
     from engine.port_registry import get_port as _get_port
@@ -104,7 +105,7 @@ class CodersRoomScene(FlaskScene):
                 max_tokens=max_tokens,
             )
         except Exception as e:
-            logger.warning("Coders LLM call failed: %s", e)
+            logger.warning("[%s] LLM call failed (operation=chat): %s", SCENE_ID, e)
             return ""
 
     def _extract_code(self, text: str) -> str:
@@ -284,7 +285,7 @@ class CodersRoomScene(FlaskScene):
             try:
                 self._tick()
             except Exception as e:
-                logger.error("Coders tick error: %s", e)
+                logger.error("[%s] Tick error (operation=tick): %s", SCENE_ID, e)
             time.sleep(interval)
 
     def _sync_to_mcp(self) -> None:
@@ -439,7 +440,7 @@ class CodersRoomScene(FlaskScene):
         data["completed_features"] = [f.to_dict() for f in self.state.completed_features]
         data["saved_at"] = time.time()
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        logger.info("Coders session saved: %s", path)
+        logger.info("[%s] Session saved (operation=session_save): %s", SCENE_ID, path)
         return str(path)
 
     def _load_session(self, session_id: str) -> bool:
@@ -461,10 +462,10 @@ class CodersRoomScene(FlaskScene):
                     agent.reviews_done = ad.get("reviews_done", 0)
                     agent.tests_run = ad.get("tests_run", 0)
             self.state.active = False
-            logger.info("Coders session loaded: %s", session_id)
+            logger.info("[%s] Session loaded (operation=session_load): %s", SCENE_ID, session_id)
             return True
         except Exception as exc:
-            logger.warning("Failed to load session %s: %s", session_id, exc)
+            logger.warning("[%s] Failed to load session (operation=session_load, session=%s): %s", SCENE_ID, session_id, exc)
             return False
 
     def _list_sessions(self) -> List[Dict[str, Any]]:

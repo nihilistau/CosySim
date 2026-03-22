@@ -28,6 +28,7 @@ Version: v1.51.0 [2026-03-22]
 
 Change Log:
     v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
+    v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
     v0.68   [2026-03-20] — Dark Renaissance gritty dockside tavern
 """
 
@@ -130,7 +131,7 @@ class TavernScene(FlaskScene):
             self._world_state = get_world_state()
             self._event_bus_ref = get_event_bus()
 
-        logger.info("TavernScene created on port %d", port)
+        logger.info("[%s] Scene created on port %d", SCENE_ID, port)
 
     # ------------------------------------------------------------------
     #  MCP integration
@@ -152,9 +153,9 @@ class TavernScene(FlaskScene):
             fw.add_lifecycle_hook("framework_ready", self._on_framework_ready)
             fw.add_lifecycle_hook("scene_tick", self._on_scene_tick)
 
-            logger.info("TavernScene MCP wired")
+            logger.info("[%s] MCP wired (operation=mcp_wire)", SCENE_ID)
         except Exception as exc:
-            logger.warning("MCP wiring failed (non-fatal): %s", exc)
+            logger.warning("[%s] MCP wiring failed (operation=mcp_wire): %s", SCENE_ID, exc)
             self._fw = None
             self._scene_node = None
 
@@ -164,7 +165,7 @@ class TavernScene(FlaskScene):
             self._scene_node.update_state(self.tavern_state.to_snapshot())
 
     def _on_framework_ready(self, **_kw: Any) -> None:
-        logger.info("MCP framework ready — tavern scene active")
+        logger.info("[%s] MCP framework ready — scene active (operation=lifecycle)", SCENE_ID)
 
     def _on_scene_tick(self, scene_id: str = "", **_kw: Any) -> None:
         if scene_id == SCENE_ID:
@@ -192,7 +193,7 @@ class TavernScene(FlaskScene):
                     self._emit("consequence", c)
             except Exception as exc:
                 # v1.49.1 [2026-03-22] — Surface tick failures
-                logger.warning("Tavern MCP tick failed: %s", exc)
+                logger.warning("[%s] MCP tick failed (operation=tick): %s", SCENE_ID, exc)
 
     # ------------------------------------------------------------------
     #  Background ticker
@@ -235,7 +236,7 @@ class TavernScene(FlaskScene):
             try:
                 return jsonify(self.get_health())
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": "tavern", "reason": "health check raised"}), 500
 
         @app.route("/api/status")
@@ -349,7 +350,7 @@ class TavernScene(FlaskScene):
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/consequences")
@@ -364,7 +365,7 @@ class TavernScene(FlaskScene):
                     "pending": [c.to_dict() for c in store.get_pending(SCENE_ID, player_id)],
                 })
             except Exception as exc:
-                logger.error("Consequences API error: %s", exc)
+                logger.error("[%s] Consequences API error (operation=consequences): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts

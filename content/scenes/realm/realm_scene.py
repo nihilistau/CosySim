@@ -50,6 +50,7 @@ from content.scenes.realm.realm_rules import register_realm_rules
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "realm"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 try:
     from engine.port_registry import get_port as _get_port
@@ -233,7 +234,7 @@ class RealmScene(FlaskScene):
             return self._parse_director_response(raw)
 
         except Exception as e:
-            logger.warning("Director inference failed: %s", e)
+            logger.warning("[%s] Director inference failed (operation=chat): %s", SCENE_ID, e)
             return {
                 "narration": "The Director pauses, gathering thoughts... (LLM unavailable)",
                 "choices": [{"id": "a", "text": "Wait patiently"}, {"id": "b", "text": "Try again"}],
@@ -273,7 +274,7 @@ class RealmScene(FlaskScene):
             proc = mgr.infer_processed(req)
             return (proc.clean_text or proc.raw_text or "").strip()
         except Exception as e:
-            logger.warning("Assistant inference failed: %s", e)
+            logger.warning("[%s] Assistant inference failed (operation=chat): %s", SCENE_ID, e)
             return "*The Assistant stares blankly at the screen.*"
 
     def _parse_director_response(self, raw: str) -> Dict[str, Any]:
@@ -470,7 +471,7 @@ class RealmScene(FlaskScene):
                     "state": self.state.to_dict(),
                 })
             except Exception as exc:
-                logger.error("new_game failed: %s", exc, exc_info=True)
+                logger.error("[%s] new_game failed (operation=game_start): %s", SCENE_ID, exc, exc_info=True)
                 return jsonify({"error": str(exc)}), 500
 
         # ── PLAYER CHOICE ──
@@ -613,7 +614,7 @@ class RealmScene(FlaskScene):
                 self.socketio.emit("murder_started", {**result, "narration": opening.get("narration", "")})
                 return jsonify({**result, "narration": opening.get("narration", "")})
             except Exception as exc:
-                logger.error("start_murder failed: %s", exc, exc_info=True)
+                logger.error("[%s] start_murder failed (operation=murder_mystery): %s", SCENE_ID, exc, exc_info=True)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/murder/investigate", methods=["POST"])
@@ -962,7 +963,7 @@ class RealmScene(FlaskScene):
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/consequences")
@@ -977,7 +978,7 @@ class RealmScene(FlaskScene):
                     "pending": [c.to_dict() for c in store.get_pending(SCENE_ID, player_id)],
                 })
             except Exception as exc:
-                logger.error("Consequences API error: %s", exc)
+                logger.error("[%s] Consequences API error (operation=consequences): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
     # ── SocketIO ──

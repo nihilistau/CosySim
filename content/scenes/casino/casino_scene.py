@@ -67,6 +67,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+
 CASINO_PORT = 5559
 
 
@@ -237,27 +239,27 @@ class CasinoScene(FlaskScene):
         try:
             from engine.economy.economy import get_economy_manager
             self._economy = get_economy_manager()
-            logger.info("CLUB NOIR: EconomyManager wired")
+            logger.info("[%s] EconomyManager wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("CLUB NOIR: EconomyManager unavailable: %s", exc)
+            logger.warning("[%s] EconomyManager unavailable (operation=lifecycle): %s", SCENE_ID, exc)
 
     def _wire_reputation(self) -> None:
         """Wire ReputationManager for win/loss tracking."""
         try:
             from engine.characters.reputation import get_reputation_manager
             self._reputation = get_reputation_manager()
-            logger.info("CLUB NOIR: ReputationManager wired")
+            logger.info("[%s] ReputationManager wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("CLUB NOIR: ReputationManager unavailable: %s", exc)
+            logger.warning("[%s] ReputationManager unavailable (operation=lifecycle): %s", SCENE_ID, exc)
 
     def _wire_consequence_store(self) -> None:
         """Wire ConsequenceStore for delayed narrative consequences."""
         try:
             from engine.mechanics.consequences import get_consequence_store
             self._consequence = get_consequence_store()
-            logger.info("CLUB NOIR: ConsequenceStore wired")
+            logger.info("[%s] ConsequenceStore wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("CLUB NOIR: ConsequenceStore unavailable: %s", exc)
+            logger.warning("[%s] ConsequenceStore unavailable (operation=lifecycle): %s", SCENE_ID, exc)
 
     def _wire_new_event_bus(self) -> None:
         """Wire EventBus for casino.major_win publishing and world sim events."""
@@ -265,9 +267,9 @@ class CasinoScene(FlaskScene):
             from engine.events.event_bus import get_event_bus, EventTypes
             self._event_bus_new = get_event_bus()
             self._event_bus_new.subscribe("world.economy_tick", self._on_economy_tick_world)
-            logger.info("CLUB NOIR: EventBus wired")
+            logger.info("[%s] EventBus wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("CLUB NOIR: EventBus unavailable: %s", exc)
+            logger.warning("[%s] EventBus unavailable (operation=lifecycle): %s", SCENE_ID, exc)
 
     # ── Economy helpers ───────────────────────────────────────────────
 
@@ -289,7 +291,7 @@ class CasinoScene(FlaskScene):
                     self._log_transaction("debit", amount, reason)
                 return ok
         except Exception as exc:
-            logger.warning("CLUB NOIR: economy spend degraded for %s: %s", reason, exc)
+            logger.warning("[%s] Economy spend degraded (operation=economy, reason=%s): %s", SCENE_ID, reason, exc)
             self._log_transaction(
                 "debit",
                 amount,
@@ -312,7 +314,7 @@ class CasinoScene(FlaskScene):
                 self._log_transaction("credit", amount, reason)
                 return
         except Exception as exc:
-            logger.warning("CLUB NOIR: economy credit degraded for %s: %s", reason, exc)
+            logger.warning("[%s] Economy credit degraded (operation=economy, reason=%s): %s", SCENE_ID, reason, exc)
             self._log_transaction(
                 "credit",
                 amount,
@@ -384,7 +386,7 @@ class CasinoScene(FlaskScene):
                 delay_hours=24,
                 description="Mira calls — she always knows.",
             )
-            logger.info("CLUB NOIR: Mira call consequence scheduled (loss=$%d)", loss_amount)
+            logger.info("[%s] Mira call consequence scheduled (operation=consequence, loss=$%d)", SCENE_ID, loss_amount)
         except Exception as exc:
             logger.debug("schedule_mira_call error: %s", exc)
 
@@ -532,9 +534,9 @@ class CasinoScene(FlaskScene):
             for cid in [DEALER_ID, HUSTLER_ID]:
                 self._fw.get_character(cid).enter_scene(SCENE_ID)
 
-            logger.info("Casino registry seeded: Dealer Jack + Hustler Mira")
+            logger.info("[%s] Registry seeded: Dealer Jack + Hustler Mira (operation=seed)", SCENE_ID)
         except Exception as exc:
-            logger.warning("_seed_casino_registry failed: %s", exc)
+            logger.warning("[%s] Registry seeding failed (operation=seed): %s", SCENE_ID, exc)
 
     # ══════════════════════════════════════════════════════════════════
     #  AGENT HELPERS
@@ -625,7 +627,7 @@ class CasinoScene(FlaskScene):
 
             return result
         except Exception as exc:
-            logger.warning("Casino agent reply failed: %s", exc)
+            logger.warning("[%s] Agent reply failed (operation=chat, agent=%s): %s", SCENE_ID, character_id, exc)
             result["degraded"] = True
             result["error"] = str(exc)
             result["text"] = "The table goes quiet for a beat. The house voice cuts out. (LLM unavailable)"
@@ -1057,7 +1059,7 @@ class CasinoScene(FlaskScene):
             try:
                 return jsonify({"status": "ok", "scene": SCENE_ID, "port": self.port})
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": SCENE_ID, "reason": "health check raised"}), 500
 
         @app.route("/api/state")
@@ -1142,7 +1144,7 @@ class CasinoScene(FlaskScene):
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/world/status")
@@ -1550,7 +1552,7 @@ class CasinoScene(FlaskScene):
         hour = event.get("hour", 0)
         if hasattr(self, "_economy") and self._economy:
             if 18 <= hour < 20:
-                logger.info("Casino: Happy hour active — 2x win multiplier")
+                logger.info("[%s] Happy hour active — 2x win multiplier (operation=world_event)", SCENE_ID)
 
 
 # ── Standalone entry point ────────────────────────────────────────────
