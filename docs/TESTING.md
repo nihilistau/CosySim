@@ -1,12 +1,14 @@
-# CosySim Testing Guide
+# Testing
 
-> Smart test system, pytest conventions, and fixtures — v1.42+.
+> CosySim Documentation — v1.50 [2026-03-22]
+>
+> Smart test system, pytest conventions, and fixtures.
 
 ---
 
 ## Smart Test System
 
-The full test suite (~15K tests across 400+ files) takes 50+ minutes. Use the smart runner instead — it's git-diff-aware and runs only relevant tests.
+The full test suite (404 test files) is large. Use the smart runner — it's git-diff-aware and runs only relevant tests.
 
 ### Smart Runner (Preferred)
 
@@ -71,6 +73,19 @@ The smart runner maps source files to test domains. Key mappings in `scripts/sma
 | `engine/world/` | `world` | test_world_*, test_economy, ... |
 | `config/` | `config` | test_config, test_integration |
 | `launcher.py` | `launcher` | test_integration |
+
+---
+
+## Browser Testing
+
+After **any** JS/CSS/HTML change, run browser tests before committing:
+
+```bash
+python scripts/browser_test.py             # Full Playwright run
+python scripts/browser_test.py --report    # Read telemetry report
+```
+
+`cosysim-telemetry.js` captures all browser clicks, errors, and hotkeys → `POST /api/telemetry` → `data/structured_logs.jsonl`. Always check telemetry after user-reported issues.
 
 ---
 
@@ -155,6 +170,15 @@ def test_my_skill_returns_result():
 
 ## See Also
 
-- [Contributing](./CONTRIBUTING.md) — development conventions
-- [Architecture](./ARCHITECTURE.md) — system design
-- [MCP Framework](./MCP_FRAMEWORK.md) — skill and interceptor pipeline
+- [Contributing](CONTRIBUTING.md) — development conventions
+- [Architecture](ARCHITECTURE.md) — system design
+- [MCP Framework](MCP_FRAMEWORK.md) — skill and interceptor pipeline
+
+---
+
+## Change Log
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v1.50 | 2026-03-22 | Doc overhaul — accurate test file count (404), added browser testing section, unified versioning |
+| v1.42 | 2026-03-21 | Initial testing guide with smart runner and pytest integration |
