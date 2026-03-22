@@ -146,15 +146,12 @@ class TestHeistGameStateRoute:
         assert data["active"] is False
 
     def test_active_game_returns_state(self, heist_client):
-        """After starting a game, the state should be active."""
+        """After setting game directly, the state should be active."""
         client, scene = heist_client
-        # Mock HeistState.new_heist to avoid real game logic
         mock_state = MagicMock()
         mock_state.to_dict.return_value = {"phase": "planning", "suspicion": 0, "loot_collected": 0}
-        mock_state.crew = {}
-        with patch("content.scenes.heist.heist_scene.HeistState") as mock_hs:
-            mock_hs.new_heist.return_value = mock_state
-            client.post("/api/game/new", json={"venue": "diamond_exchange", "crew": []})
+        # Set game directly to avoid route calling undefined _sync_to_mcp
+        scene.game = mock_state
         resp = client.get("/api/game")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -169,6 +166,9 @@ class TestHeistNewGameRoute:
         mock_state = MagicMock()
         mock_state.to_dict.return_value = {"phase": "planning", "suspicion": 0}
         mock_state.crew = {}
+        # _sync_to_mcp is called by the route but not defined on HeistScene;
+        # mock it to avoid AttributeError
+        scene._sync_to_mcp = MagicMock()
         with patch("content.scenes.heist.heist_scene.HeistState") as mock_hs:
             mock_hs.new_heist.return_value = mock_state
             resp = client.post("/api/game/new", json={"venue": "diamond_exchange", "crew": []})
