@@ -1,0 +1,180 @@
+{%- extends "neon_base.html" -%}
+{%- set scene_key = "auction" -%}
+{%- set scene_display_name = "THE AUCTION HOUSE" -%}
+{%- set scene_accent = "#fbbf24" -%}
+{%- set scene_accent_rgb = "251 191 36" -%}
+
+{#
+  THE AUCTION HOUSE — v1.50.0 [2026-03-22]
+  Full auction UI: live bidding, NPC panel, lot display, session history.
+
+  Change Log:
+    v1.50.0 [2026-03-22] — Complete auction UI with real-time bidding
+    v1.0.0  [2026-03-22] — Initial scaffold via Creation Kit
+#}
+
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='auction.css') }}">
+{% endblock %}
+
+{% block scene_content %}
+<div class="auction-scene" data-scene="auction">
+
+  <!-- ── Header ──────────────────────────────────────────────────── -->
+  <header class="auction-header">
+    <div class="auction-header-left">
+      <h1 class="auction-title">THE AUCTION HOUSE</h1>
+      <span class="auction-subtitle">Underground Black Market Auctions</span>
+    </div>
+    <div class="auction-header-right">
+      <div class="player-credits">
+        <span class="credits-label">CREDITS</span>
+        <span class="credits-value" id="player-credits">0</span>
+      </div>
+      <div class="session-stats">
+        <span class="stat-item" id="items-won-count">Won: 0</span>
+        <span class="stat-item" id="total-spent">Spent: 0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Gavel Narration Bar ───────────────────────────────────── -->
+  <div class="gavel-bar" id="gavel-bar">
+    <div class="gavel-icon">&#x2696;</div>
+    <div class="gavel-text" id="gavel-text">The Gavel awaits...</div>
+  </div>
+
+  <!-- ── Main Content Grid ─────────────────────────────────────── -->
+  <main class="auction-main">
+
+    <!-- ── Left: Current Lot ─────────────────────────────────────── -->
+    <section class="lot-panel cs-glass-panel" id="lot-panel">
+      <!-- Idle state — shown when no auction is active -->
+      <div class="lot-idle" id="lot-idle">
+        <div class="idle-icon">&#x1f3db;</div>
+        <h2>No Active Auction</h2>
+        <p>The house is quiet. Start a session to begin bidding.</p>
+        <button class="btn-start-auction" id="btn-start-auction">
+          START AUCTION SESSION
+        </button>
+      </div>
+
+      <!-- Active lot — shown during bidding -->
+      <div class="lot-active" id="lot-active" style="display: none;">
+        <div class="lot-header">
+          <span class="lot-number" id="lot-number">LOT 1</span>
+          <span class="lot-rarity" id="lot-rarity">RARE</span>
+        </div>
+        <h2 class="lot-item-name" id="lot-item-name">Item Name</h2>
+        <p class="lot-item-desc" id="lot-item-desc">Item description</p>
+        <div class="lot-item-category" id="lot-item-category">weapon</div>
+
+        <!-- Timer -->
+        <div class="lot-timer-bar">
+          <div class="timer-fill" id="timer-fill"></div>
+          <span class="timer-text" id="timer-text">30s</span>
+        </div>
+
+        <!-- Current Price -->
+        <div class="current-price-block">
+          <span class="price-label">CURRENT BID</span>
+          <span class="price-value" id="current-price">0</span>
+          <span class="price-winner" id="current-winner">No bids yet</span>
+        </div>
+
+        <!-- Bid Controls -->
+        <div class="bid-controls">
+          <div class="bid-presets">
+            <button class="btn-bid-preset" data-increment="10">+10%</button>
+            <button class="btn-bid-preset" data-increment="25">+25%</button>
+            <button class="btn-bid-preset" data-increment="50">+50%</button>
+          </div>
+          <div class="bid-custom">
+            <input type="number" class="bid-input" id="bid-input" placeholder="Enter bid..." min="0" step="10">
+            <button class="btn-place-bid" id="btn-place-bid">BID</button>
+          </div>
+          <div class="bid-minimum" id="bid-minimum">Minimum: 0</div>
+        </div>
+
+        <!-- Phase indicator -->
+        <div class="phase-indicator" id="phase-indicator" style="display: none;">
+          <span class="phase-text" id="phase-text">GOING ONCE...</span>
+        </div>
+      </div>
+
+      <!-- Session complete -->
+      <div class="lot-complete" id="lot-complete" style="display: none;">
+        <div class="complete-icon">&#x2705;</div>
+        <h2>Session Complete</h2>
+        <div class="session-summary" id="session-summary"></div>
+        <button class="btn-start-auction" id="btn-new-auction">
+          NEW AUCTION SESSION
+        </button>
+      </div>
+    </section>
+
+    <!-- ── Right Column ──────────────────────────────────────────── -->
+    <div class="right-column">
+
+      <!-- ── NPC Bidders Panel ──────────────────────────────────── -->
+      <section class="npc-panel cs-glass-panel">
+        <h3 class="panel-title">BIDDERS</h3>
+        <div class="npc-list" id="npc-list">
+          <div class="npc-card" data-npc="cipher">
+            <span class="npc-name">Cipher</span>
+            <span class="npc-personality">Aggressive</span>
+            <span class="npc-status npc-active">Ready</span>
+          </div>
+          <div class="npc-card" data-npc="mama_lo">
+            <span class="npc-name">Mama Lo</span>
+            <span class="npc-personality">Patient</span>
+            <span class="npc-status npc-active">Ready</span>
+          </div>
+          <div class="npc-card" data-npc="the_broker">
+            <span class="npc-name">The Broker</span>
+            <span class="npc-personality">Calculated</span>
+            <span class="npc-status npc-active">Ready</span>
+          </div>
+          <div class="npc-card" data-npc="nyx">
+            <span class="npc-name">Nyx</span>
+            <span class="npc-personality">Impulsive</span>
+            <span class="npc-status npc-active">Ready</span>
+          </div>
+          <div class="npc-card" data-npc="silk">
+            <span class="npc-name">Silk</span>
+            <span class="npc-personality">Strategic</span>
+            <span class="npc-status npc-active">Ready</span>
+          </div>
+          <div class="npc-card" data-npc="zero">
+            <span class="npc-name">Zero-Day</span>
+            <span class="npc-personality">Chaotic</span>
+            <span class="npc-status npc-active">Ready</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Bid History / Activity Feed ────────────────────────── -->
+      <section class="feed-panel cs-glass-panel">
+        <h3 class="panel-title">ACTIVITY</h3>
+        <div class="bid-feed" id="bid-feed">
+          <div class="feed-empty">Waiting for auction to begin...</div>
+        </div>
+      </section>
+
+      <!-- ── Lots Progress ──────────────────────────────────────── -->
+      <section class="lots-panel cs-glass-panel">
+        <h3 class="panel-title">LOTS</h3>
+        <div class="lots-progress" id="lots-progress">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="{{ url_for('static', filename='auction.js') }}" defer></script>
+{% endblock %}

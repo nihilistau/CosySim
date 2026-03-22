@@ -1,0 +1,781 @@
+/*
+ * auction.css — THE AUCTION HOUSE Scene Styles
+ * ============================================
+ *
+ * Dark, smoky underground aesthetic with gold/amber accent.
+ * Designed for real-time auction bidding UI.
+ *
+ * Version: v1.50.0 [2026-03-22]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.50.0 [2026-03-22] — Full auction UI: lot panel, NPC cards, bid feed,
+ *                            timer bar, phase indicators, responsive grid
+ *   v1.0.0  [2026-03-22] — Initial scaffold via Creation Kit
+ */
+
+/* ── Palette ────────────────────────────────────────────────────────── */
+:root {
+  --auction-accent: #fbbf24;
+  --auction-accent-rgb: 251 191 36;
+  --auction-glow: rgba(251, 191, 36, 0.25);
+  --auction-bg: #080a10;
+  --auction-panel: rgba(10, 14, 22, 0.85);
+  --auction-border: rgba(251, 191, 36, 0.12);
+  --auction-text: #c0c8d8;
+  --auction-text-dim: #6b7280;
+  --auction-danger: #ef4444;
+  --auction-success: #22c55e;
+  --auction-smoke: rgba(0, 0, 0, 0.4);
+
+  /* Rarity colors */
+  --rarity-common: #9ca3af;
+  --rarity-uncommon: #22c55e;
+  --rarity-rare: #3b82f6;
+  --rarity-epic: #a855f7;
+  --rarity-legendary: #f59e0b;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Two-column auction layout */
+
+.auction-scene {
+  padding: var(--cs-space-lg, 16px);
+  color: var(--auction-text);
+  min-height: calc(100vh - 60px);
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(251, 191, 36, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(251, 191, 36, 0.02) 0%, transparent 50%);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+
+.auction-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--auction-border);
+}
+
+.auction-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.auction-title {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 1.2rem;
+  color: var(--auction-accent);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.auction-subtitle {
+  font-size: 0.7rem;
+  color: var(--auction-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.auction-header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.player-credits {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.credits-label {
+  font-size: 0.6rem;
+  color: var(--auction-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.credits-value {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 1.4rem;
+  color: var(--auction-accent);
+  font-weight: 700;
+}
+
+.session-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.stat-item {
+  font-size: 0.7rem;
+  color: var(--auction-text-dim);
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* ── Gavel Narration Bar ───────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Dramatic auctioneer narration strip */
+
+.gavel-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.08), transparent 80%);
+  border-left: 3px solid var(--auction-accent);
+  border-radius: 0 6px 6px 0;
+  min-height: 40px;
+  transition: background 0.3s ease;
+}
+
+.gavel-bar.gavel-highlight {
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.18), transparent 80%);
+}
+
+.gavel-icon {
+  font-size: 1.2rem;
+  filter: grayscale(0.3);
+}
+
+.gavel-text {
+  font-size: 0.85rem;
+  color: var(--auction-text);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* ── Main Grid ──────────────────────────────────────────────────────── */
+
+.auction-main {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 12px;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .auction-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Lot Panel (left) ───────────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Main auction lot display */
+
+.lot-panel {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+/* Idle state */
+.lot-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  text-align: center;
+}
+
+.idle-icon {
+  font-size: 3rem;
+  opacity: 0.4;
+}
+
+.lot-idle h2 {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 1rem;
+  color: var(--auction-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.lot-idle p {
+  color: var(--auction-text-dim);
+  font-size: 0.8rem;
+}
+
+/* Start / New auction button */
+.btn-start-auction {
+  padding: 12px 32px;
+  background: linear-gradient(135deg, var(--auction-accent), #d97706);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.btn-start-auction:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px var(--auction-glow);
+}
+
+.btn-start-auction:active {
+  transform: translateY(0);
+}
+
+/* Active lot */
+.lot-active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.lot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lot-number {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--auction-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.lot-rarity {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  padding: 2px 10px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.lot-rarity[data-rarity="common"]    { color: var(--rarity-common); border: 1px solid var(--rarity-common); }
+.lot-rarity[data-rarity="uncommon"]  { color: var(--rarity-uncommon); border: 1px solid var(--rarity-uncommon); }
+.lot-rarity[data-rarity="rare"]      { color: var(--rarity-rare); border: 1px solid var(--rarity-rare); }
+.lot-rarity[data-rarity="epic"]      { color: var(--rarity-epic); border: 1px solid var(--rarity-epic); }
+.lot-rarity[data-rarity="legendary"] { color: var(--rarity-legendary); border: 1px solid var(--rarity-legendary); }
+
+.lot-item-name {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 1.3rem;
+  color: #fff;
+  margin: 0;
+}
+
+.lot-item-desc {
+  color: var(--auction-text);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.lot-item-category {
+  font-size: 0.65rem;
+  color: var(--auction-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+/* ── Timer Bar ──────────────────────────────────────────────────────── */
+
+.lot-timer-bar {
+  position: relative;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.timer-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--auction-accent);
+  border-radius: 3px;
+  transition: width 1s linear, background 0.3s;
+  width: 100%;
+}
+
+.timer-fill.timer-warning {
+  background: #f97316;
+}
+
+.timer-fill.timer-danger {
+  background: var(--auction-danger);
+  animation: pulse-danger 0.5s infinite alternate;
+}
+
+@keyframes pulse-danger {
+  from { opacity: 0.7; }
+  to { opacity: 1; }
+}
+
+.timer-text {
+  position: absolute;
+  right: 0;
+  top: -18px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--auction-text-dim);
+}
+
+/* ── Current Price Block ────────────────────────────────────────────── */
+
+.current-price-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  background: rgba(251, 191, 36, 0.05);
+  border: 1px solid var(--auction-border);
+  border-radius: 8px;
+}
+
+.price-label {
+  font-size: 0.6rem;
+  color: var(--auction-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.price-value {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 2.2rem;
+  color: var(--auction-accent);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.price-winner {
+  font-size: 0.75rem;
+  color: var(--auction-text-dim);
+  margin-top: 4px;
+}
+
+.price-winner.is-player {
+  color: var(--auction-success);
+  font-weight: 600;
+}
+
+/* ── Bid Controls ───────────────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Preset buttons + custom bid input */
+
+.bid-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bid-presets {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-bid-preset {
+  flex: 1;
+  padding: 8px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid var(--auction-border);
+  border-radius: 4px;
+  color: var(--auction-accent);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-bid-preset:hover {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: var(--auction-accent);
+}
+
+.bid-custom {
+  display: flex;
+  gap: 8px;
+}
+
+.bid-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--auction-border);
+  border-radius: 4px;
+  color: #fff;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.bid-input:focus {
+  border-color: var(--auction-accent);
+}
+
+.bid-input::placeholder {
+  color: var(--auction-text-dim);
+}
+
+.btn-place-bid {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, var(--auction-accent), #d97706);
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+
+.btn-place-bid:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 12px var(--auction-glow);
+}
+
+.btn-place-bid:active {
+  transform: translateY(0);
+}
+
+.btn-place-bid:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.bid-minimum {
+  font-size: 0.65rem;
+  color: var(--auction-text-dim);
+  text-align: center;
+}
+
+/* ── Phase Indicator ────────────────────────────────────────────────── */
+
+.phase-indicator {
+  text-align: center;
+  padding: 10px;
+  border-radius: 6px;
+  animation: phase-pulse 1s infinite alternate;
+}
+
+.phase-indicator.going-once {
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.phase-indicator.going-twice {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.phase-indicator.sold {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  animation: none;
+}
+
+@keyframes phase-pulse {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+.phase-text {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.going-once .phase-text  { color: #f97316; }
+.going-twice .phase-text { color: var(--auction-danger); }
+.sold .phase-text        { color: var(--auction-success); }
+
+/* ── Session Complete ───────────────────────────────────────────────── */
+
+.lot-complete {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  text-align: center;
+}
+
+.complete-icon {
+  font-size: 2.5rem;
+}
+
+.lot-complete h2 {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 1rem;
+  color: var(--auction-accent);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.session-summary {
+  font-size: 0.8rem;
+  color: var(--auction-text);
+  line-height: 1.6;
+  max-width: 400px;
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.summary-label {
+  color: var(--auction-text-dim);
+}
+
+.summary-value {
+  color: var(--auction-accent);
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* ── Right Column ───────────────────────────────────────────────────── */
+
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel-title {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--auction-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0 0 8px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--auction-border);
+}
+
+/* ── NPC Bidders Panel ──────────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — NPC bidder cards with status indicators */
+
+.npc-panel {
+  padding: 12px;
+}
+
+.npc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.npc-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.2s;
+}
+
+.npc-card.npc-bidding {
+  background: rgba(251, 191, 36, 0.08);
+  border-left: 2px solid var(--auction-accent);
+}
+
+.npc-card.npc-winning {
+  background: rgba(34, 197, 94, 0.08);
+  border-left: 2px solid var(--auction-success);
+}
+
+.npc-card.npc-broke {
+  opacity: 0.35;
+}
+
+.npc-name {
+  font-size: 0.8rem;
+  color: #fff;
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.npc-personality {
+  font-size: 0.6rem;
+  color: var(--auction-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex: 1;
+}
+
+.npc-status {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+.npc-status.npc-active {
+  color: var(--auction-success);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.npc-status.npc-out {
+  color: var(--auction-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ── Bid Feed / Activity ────────────────────────────────────────────── */
+/* v1.50.0 [2026-03-22] — Scrolling activity feed */
+
+.feed-panel {
+  padding: 12px;
+  flex: 1;
+  min-height: 180px;
+  max-height: 300px;
+}
+
+.bid-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 250px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--auction-border) transparent;
+}
+
+.feed-empty {
+  color: var(--auction-text-dim);
+  font-size: 0.75rem;
+  text-align: center;
+  padding: 20px 0;
+  font-style: italic;
+}
+
+.feed-entry {
+  font-size: 0.75rem;
+  padding: 4px 6px;
+  border-radius: 3px;
+  line-height: 1.4;
+  animation: feed-in 0.3s ease-out;
+}
+
+@keyframes feed-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.feed-entry.feed-bid {
+  color: var(--auction-text);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.feed-entry.feed-player-bid {
+  color: var(--auction-accent);
+  background: rgba(251, 191, 36, 0.06);
+  border-left: 2px solid var(--auction-accent);
+}
+
+.feed-entry.feed-sold {
+  color: var(--auction-success);
+  background: rgba(34, 197, 94, 0.06);
+  font-weight: 600;
+}
+
+.feed-entry.feed-unsold {
+  color: var(--auction-text-dim);
+  font-style: italic;
+}
+
+.feed-entry.feed-gavel {
+  color: var(--auction-accent);
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.feed-bidder {
+  font-weight: 600;
+  color: #fff;
+}
+
+.feed-amount {
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--auction-accent);
+}
+
+/* ── Lots Progress ──────────────────────────────────────────────────── */
+
+.lots-panel {
+  padding: 12px;
+}
+
+.lots-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lot-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+}
+
+.lot-progress-item.lot-current {
+  background: rgba(251, 191, 36, 0.08);
+  border-left: 2px solid var(--auction-accent);
+}
+
+.lot-progress-item.lot-sold {
+  opacity: 0.6;
+}
+
+.lot-progress-item.lot-unsold {
+  opacity: 0.3;
+  text-decoration: line-through;
+}
+
+.lot-progress-num {
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--auction-text-dim);
+  min-width: 36px;
+}
+
+.lot-progress-name {
+  flex: 1;
+  color: var(--auction-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lot-progress-status {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.lot-progress-status.status-pending  { color: var(--auction-text-dim); }
+.lot-progress-status.status-active   { color: var(--auction-accent); }
+.lot-progress-status.status-sold     { color: var(--auction-success); }
+.lot-progress-status.status-unsold   { color: var(--auction-danger); }

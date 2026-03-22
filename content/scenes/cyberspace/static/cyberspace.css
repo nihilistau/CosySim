@@ -1,0 +1,755 @@
+/*
+ * cyberspace.css — CYBERSPACE Hacking Minigame Styles
+ * ====================================================
+ *
+ * Cyberpunk terminal aesthetic. Green-on-black. You're inside the network.
+ *
+ * Version: v1.49.0 [2026-03-22]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.49.0 [2026-03-22] — Full minigame UI: grid, HUD bars, programs panel,
+ *                           narration feed, splash screen, game-over overlay,
+ *                           d-pad controls, fog-of-war, animations
+ *   v1.0.0  [2026-03-22] — Initial scaffold via Creation Kit
+ */
+
+/* ── Palette ────────────────────────────────────────────────────────────── */
+:root {
+  --cs-green: #00ff41;
+  --cs-green-dim: #00cc33;
+  --cs-green-dark: #00661a;
+  --cs-green-glow: rgba(0, 255, 65, 0.35);
+  --cs-green-faint: rgba(0, 255, 65, 0.08);
+  --cs-red: #ff0040;
+  --cs-red-glow: rgba(255, 0, 64, 0.4);
+  --cs-yellow: #ffcc00;
+  --cs-yellow-glow: rgba(255, 204, 0, 0.3);
+  --cs-cyan: #00e5ff;
+  --cs-cyan-glow: rgba(0, 229, 255, 0.3);
+  --cs-purple: #b040ff;
+  --cs-bg: #030508;
+  --cs-bg-panel: rgba(0, 15, 5, 0.85);
+  --cs-bg-node: rgba(0, 20, 8, 0.6);
+  --cs-border: rgba(0, 255, 65, 0.15);
+  --cs-border-bright: rgba(0, 255, 65, 0.4);
+  --cs-text: #b0ffb8;
+  --cs-text-dim: #406848;
+  --cs-font-mono: 'Share Tech Mono', 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+  --cs-font-display: 'Orbitron', 'Share Tech Mono', monospace;
+}
+
+/* ── Base Scene ─────────────────────────────────────────────────────────── */
+.cyberspace-scene {
+  font-family: var(--cs-font-mono);
+  color: var(--cs-text);
+  background: var(--cs-bg);
+  min-height: calc(100vh - 60px);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scanline overlay */
+.cyberspace-scene::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 65, 0.015) 2px,
+    rgba(0, 255, 65, 0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ── Splash Screen ──────────────────────────────────────────────────────── */
+/* v1.49.0 [2026-03-22] — Jack-in splash with ASCII art + pulse animation */
+
+.cs-splash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 60px);
+  text-align: center;
+}
+
+.cs-splash-inner {
+  max-width: 600px;
+  padding: 40px;
+}
+
+.cs-splash-title {
+  font-family: var(--cs-font-display);
+  font-size: 2.4rem;
+  color: var(--cs-green);
+  letter-spacing: 6px;
+  text-shadow: 0 0 20px var(--cs-green-glow), 0 0 40px var(--cs-green-glow);
+  margin-bottom: 8px;
+}
+
+.cs-splash-subtitle {
+  font-size: 0.85rem;
+  color: var(--cs-text-dim);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.cs-splash-ascii pre {
+  font-family: var(--cs-font-mono);
+  font-size: 0.55rem;
+  color: var(--cs-green-dark);
+  line-height: 1.2;
+  margin-bottom: 32px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.cs-splash-hint {
+  font-size: 0.75rem;
+  color: var(--cs-text-dim);
+  margin-top: 16px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.cs-btn {
+  font-family: var(--cs-font-mono);
+  font-size: 0.9rem;
+  padding: 10px 28px;
+  border: 1px solid var(--cs-green);
+  background: transparent;
+  color: var(--cs-green);
+  cursor: pointer;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.cs-btn:hover {
+  background: var(--cs-green-faint);
+  box-shadow: 0 0 12px var(--cs-green-glow), inset 0 0 12px var(--cs-green-faint);
+}
+
+.cs-btn:active {
+  background: var(--cs-green-dark);
+  color: var(--cs-bg);
+}
+
+.cs-btn-primary {
+  border-color: var(--cs-green);
+  color: var(--cs-green);
+}
+
+.cs-btn-danger {
+  border-color: var(--cs-red);
+  color: var(--cs-red);
+}
+
+.cs-btn-danger:hover {
+  background: rgba(255, 0, 64, 0.1);
+  box-shadow: 0 0 12px var(--cs-red-glow);
+}
+
+.cs-btn-sm {
+  font-size: 0.7rem;
+  padding: 5px 14px;
+}
+
+.cs-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.cs-btn:disabled:hover {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Pulse animation for jack-in button */
+.cs-pulse {
+  animation: cs-pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes cs-pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px var(--cs-green-glow); }
+  50% { box-shadow: 0 0 20px var(--cs-green-glow), 0 0 40px rgba(0, 255, 65, 0.15); }
+}
+
+/* ── HUD Bar ────────────────────────────────────────────────────────────── */
+/* v1.49.0 [2026-03-22] — HP, trace, credits, turn counter, jack-out button */
+
+.cs-hud {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--cs-bg-panel);
+  border-bottom: 1px solid var(--cs-border);
+  flex-wrap: wrap;
+}
+
+.cs-hud-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-hud-label {
+  font-size: 0.65rem;
+  color: var(--cs-text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  min-width: 40px;
+}
+
+.cs-hud-value {
+  font-size: 0.85rem;
+  color: var(--cs-green);
+  font-weight: bold;
+  min-width: 30px;
+}
+
+.cs-credits {
+  color: var(--cs-yellow);
+}
+
+.cs-bar-outer {
+  width: 100px;
+  height: 8px;
+  background: rgba(0, 255, 65, 0.08);
+  border: 1px solid var(--cs-border);
+  overflow: hidden;
+}
+
+.cs-bar-inner {
+  height: 100%;
+  transition: width 0.4s ease, background-color 0.4s ease;
+}
+
+.cs-bar-hp {
+  background: var(--cs-green);
+  box-shadow: inset 0 0 6px var(--cs-green-glow);
+}
+
+.cs-bar-hp.cs-bar-low {
+  background: var(--cs-red);
+  box-shadow: inset 0 0 6px var(--cs-red-glow);
+}
+
+.cs-bar-trace {
+  background: var(--cs-yellow);
+  box-shadow: inset 0 0 6px var(--cs-yellow-glow);
+}
+
+.cs-bar-trace.cs-bar-critical {
+  background: var(--cs-red);
+  box-shadow: inset 0 0 6px var(--cs-red-glow);
+  animation: cs-bar-flash 0.5s ease-in-out infinite;
+}
+
+@keyframes cs-bar-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+#cs-jack-out-btn {
+  margin-left: auto;
+}
+
+/* ── Game Area Layout ───────────────────────────────────────────────────── */
+
+.cs-game {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px);
+}
+
+.cs-game-area {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  padding: 16px;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Network Grid ───────────────────────────────────────────────────────── */
+/* v1.49.0 [2026-03-22] — 5x5 grid with fog-of-war, node styling, player marker */
+
+.cs-grid-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.cs-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 72px);
+  grid-template-rows: repeat(5, 72px);
+  gap: 4px;
+  background: var(--cs-bg-panel);
+  border: 1px solid var(--cs-border);
+  padding: 8px;
+}
+
+.cs-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--cs-border);
+  background: var(--cs-bg-node);
+  cursor: default;
+  transition: all 0.2s ease;
+  position: relative;
+  font-size: 0.65rem;
+  text-align: center;
+  gap: 2px;
+}
+
+.cs-node-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.cs-node-label {
+  font-size: 0.5rem;
+  color: var(--cs-text-dim);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 64px;
+}
+
+/* Fog of war — unknown nodes */
+.cs-node-unknown {
+  background: rgba(0, 5, 2, 0.9);
+  border-color: rgba(0, 255, 65, 0.05);
+}
+
+.cs-node-unknown .cs-node-icon {
+  color: var(--cs-text-dim);
+  opacity: 0.3;
+}
+
+/* Visible nodes */
+.cs-node-visible {
+  border-color: var(--cs-border-bright);
+}
+
+/* Player position */
+.cs-node-player {
+  border-color: var(--cs-green);
+  box-shadow: 0 0 10px var(--cs-green-glow), inset 0 0 10px var(--cs-green-faint);
+  background: rgba(0, 255, 65, 0.08);
+}
+
+.cs-node-player::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cs-green);
+  box-shadow: 0 0 6px var(--cs-green);
+  animation: cs-player-ping 1.5s ease-in-out infinite;
+}
+
+@keyframes cs-player-ping {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+}
+
+/* Node type colors */
+.cs-node-data_vault { border-color: var(--cs-cyan); }
+.cs-node-data_vault .cs-node-icon { color: var(--cs-cyan); }
+.cs-node-firewall { border-color: #ff6600; }
+.cs-node-firewall .cs-node-icon { color: #ff6600; }
+.cs-node-ice_node { border-color: #88ccff; }
+.cs-node-ice_node .cs-node-icon { color: #88ccff; }
+.cs-node-trace_node { border-color: var(--cs-red); }
+.cs-node-trace_node .cs-node-icon { color: var(--cs-red); }
+.cs-node-backdoor { border-color: var(--cs-purple); }
+.cs-node-backdoor .cs-node-icon { color: var(--cs-purple); }
+.cs-node-exit { border-color: var(--cs-yellow); }
+.cs-node-exit .cs-node-icon { color: var(--cs-yellow); }
+.cs-node-core { border-color: #ff00ff; box-shadow: 0 0 8px rgba(255, 0, 255, 0.3); }
+.cs-node-core .cs-node-icon { color: #ff00ff; }
+.cs-node-empty { border-color: var(--cs-border); }
+.cs-node-empty .cs-node-icon { color: var(--cs-text-dim); }
+
+/* Hacked/destroyed overlays */
+.cs-node-hacked {
+  opacity: 0.5;
+}
+
+.cs-node-hacked::before {
+  content: 'HACKED';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  font-size: 0.4rem;
+  color: var(--cs-green-dim);
+  letter-spacing: 0.5px;
+}
+
+.cs-node-destroyed::before {
+  content: 'DEAD';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  font-size: 0.4rem;
+  color: var(--cs-red);
+  letter-spacing: 0.5px;
+}
+
+.cs-node-destroyed {
+  opacity: 0.3;
+  border-style: dashed;
+}
+
+/* Targetable node (when selecting target for a program) */
+.cs-node-targetable {
+  cursor: crosshair;
+  animation: cs-target-pulse 1s ease-in-out infinite;
+}
+
+@keyframes cs-target-pulse {
+  0%, 100% { box-shadow: 0 0 4px var(--cs-cyan-glow); }
+  50% { box-shadow: 0 0 12px var(--cs-cyan-glow), inset 0 0 8px var(--cs-cyan-glow); }
+}
+
+/* ── D-Pad Controls ─────────────────────────────────────────────────────── */
+/* v1.49.0 [2026-03-22] — Directional pad for grid movement */
+
+.cs-controls {
+  display: flex;
+  justify-content: center;
+}
+
+.cs-dpad {
+  display: grid;
+  grid-template-columns: 44px 44px 44px;
+  grid-template-rows: 44px 44px 44px;
+  gap: 2px;
+}
+
+.cs-dpad-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  background: var(--cs-bg-panel);
+  border: 1px solid var(--cs-border);
+  color: var(--cs-green);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cs-dpad-btn:hover:not(:disabled) {
+  background: var(--cs-green-faint);
+  border-color: var(--cs-green);
+  box-shadow: 0 0 8px var(--cs-green-glow);
+}
+
+.cs-dpad-btn:active:not(:disabled) {
+  background: var(--cs-green-dark);
+  color: var(--cs-bg);
+}
+
+.cs-dpad-btn:disabled {
+  opacity: 0.15;
+  cursor: default;
+}
+
+.cs-dpad-n { grid-column: 2; grid-row: 1; }
+.cs-dpad-w { grid-column: 1; grid-row: 2; }
+.cs-dpad-center { grid-column: 2; grid-row: 2; font-size: 0.5rem; }
+.cs-dpad-e { grid-column: 3; grid-row: 2; }
+.cs-dpad-s { grid-column: 2; grid-row: 3; }
+
+/* ── Sidebar Panels ─────────────────────────────────────────────────────── */
+
+.cs-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+}
+
+.cs-panel {
+  background: var(--cs-bg-panel);
+  border: 1px solid var(--cs-border);
+  padding: 12px;
+}
+
+.cs-panel-title {
+  font-family: var(--cs-font-mono);
+  font-size: 0.7rem;
+  color: var(--cs-green);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--cs-border);
+}
+
+/* ── Programs Panel ─────────────────────────────────────────────────────── */
+/* v1.49.0 [2026-03-22] — Program buttons with cooldown display */
+
+.cs-programs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cs-program-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--cs-font-mono);
+  font-size: 0.7rem;
+  background: transparent;
+  border: 1px solid var(--cs-border);
+  color: var(--cs-text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.cs-program-btn:hover:not(:disabled) {
+  border-color: var(--cs-green);
+  background: var(--cs-green-faint);
+  color: var(--cs-green);
+}
+
+.cs-program-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cs-program-name {
+  font-weight: bold;
+  color: var(--cs-green);
+  min-width: 60px;
+}
+
+.cs-program-desc {
+  flex: 1;
+  color: var(--cs-text-dim);
+  font-size: 0.6rem;
+}
+
+.cs-program-cost {
+  font-size: 0.6rem;
+  color: var(--cs-yellow);
+}
+
+.cs-program-cd {
+  font-size: 0.6rem;
+  color: var(--cs-red);
+}
+
+.cs-target-prompt {
+  padding: 8px;
+  border: 1px dashed var(--cs-cyan);
+  margin-top: 8px;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--cs-cyan);
+  animation: cs-target-pulse 1s ease-in-out infinite;
+}
+
+/* ── Narration Feed ─────────────────────────────────────────────────────── */
+/* v1.49.0 [2026-03-22] — Scrollable narration log with fade-in */
+
+.cs-narration-panel {
+  max-height: 200px;
+}
+
+.cs-narration-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-size: 0.7rem;
+}
+
+.cs-narration-line {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.05);
+  animation: cs-fade-in 0.3s ease;
+  line-height: 1.4;
+}
+
+.cs-narration-system {
+  color: var(--cs-green);
+}
+
+.cs-narration-llm {
+  color: var(--cs-cyan);
+  font-style: italic;
+}
+
+.cs-narration-warning {
+  color: var(--cs-yellow);
+}
+
+.cs-narration-danger {
+  color: var(--cs-red);
+}
+
+.cs-dim {
+  color: var(--cs-text-dim);
+  opacity: 0.6;
+}
+
+@keyframes cs-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Data Stolen Panel ──────────────────────────────────────────────────── */
+
+.cs-data-list {
+  font-size: 0.65rem;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.cs-data-item {
+  padding: 2px 0;
+  color: var(--cs-cyan);
+  font-family: var(--cs-font-mono);
+}
+
+/* ── Game Over Overlay ──────────────────────────────────────────────────── */
+/* v1.49.0 [2026-03-22] — Fullscreen game-over with stats + retry */
+
+.cs-gameover-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(3, 5, 8, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  animation: cs-fade-in 0.5s ease;
+}
+
+.cs-gameover-inner {
+  text-align: center;
+  max-width: 440px;
+  padding: 40px;
+  border: 1px solid var(--cs-border);
+  background: var(--cs-bg-panel);
+}
+
+.cs-gameover-title {
+  font-family: var(--cs-font-display);
+  font-size: 2rem;
+  letter-spacing: 4px;
+  margin-bottom: 12px;
+}
+
+.cs-gameover-title.cs-gameover-flatline {
+  color: var(--cs-red);
+  text-shadow: 0 0 20px var(--cs-red-glow);
+}
+
+.cs-gameover-title.cs-gameover-traced {
+  color: var(--cs-yellow);
+  text-shadow: 0 0 20px var(--cs-yellow-glow);
+}
+
+.cs-gameover-title.cs-gameover-escaped {
+  color: var(--cs-green);
+  text-shadow: 0 0 20px var(--cs-green-glow);
+}
+
+.cs-gameover-message {
+  font-size: 0.8rem;
+  color: var(--cs-text);
+  margin-bottom: 24px;
+}
+
+.cs-gameover-stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin-bottom: 20px;
+}
+
+.cs-gameover-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cs-gameover-stat-label {
+  font-size: 0.6rem;
+  color: var(--cs-text-dim);
+  letter-spacing: 1px;
+}
+
+.cs-gameover-stat-value {
+  font-size: 1.2rem;
+  color: var(--cs-green);
+  font-weight: bold;
+}
+
+.cs-gameover-narration {
+  font-size: 0.75rem;
+  color: var(--cs-cyan);
+  font-style: italic;
+  margin-bottom: 24px;
+  min-height: 2em;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .cs-game-area {
+    grid-template-columns: 1fr;
+  }
+
+  .cs-grid {
+    grid-template-columns: repeat(5, 56px);
+    grid-template-rows: repeat(5, 56px);
+  }
+
+  .cs-sidebar {
+    max-height: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .cs-grid {
+    grid-template-columns: repeat(5, 48px);
+    grid-template-rows: repeat(5, 48px);
+  }
+
+  .cs-hud {
+    gap: 8px;
+  }
+
+  .cs-bar-outer {
+    width: 60px;
+  }
+
+  .cs-splash-ascii pre {
+    font-size: 0.35rem;
+  }
+}
