@@ -1,5 +1,7 @@
 # CosySim Training Pipeline
 
+> CosySim Documentation — v1.50 [2026-03-22]
+>
 > End-to-end self-improving training pipeline — data collection, fine-tuning, evaluation, and promotion.
 > Every runtime interaction feeds the DataCollector, accumulates into typed datasets, triggers
 > threshold-gated QLoRA fine-tuning, and promotes models that beat the current benchmark.
@@ -75,20 +77,20 @@ maintains per-type live files and exposes stats and pruning utilities.
 
 ```
 training/datasets/collected/
-├── conversation_live.jsonl
-├── code_live.jsonl
-├── grammar_error_live.jsonl
-└── output_rating_live.jsonl
++-- conversation_live.jsonl
++-- code_live.jsonl
++-- grammar_error_live.jsonl
++-- output_rating_live.jsonl
 ```
 
 **Merged training datasets (after flush):**
 
 ```
 training/datasets/
-├── conversation_train.jsonl
-├── code_train.jsonl
-├── grammar_error_train.jsonl
-└── output_rating_train.jsonl
++-- conversation_train.jsonl
++-- code_train.jsonl
++-- grammar_error_train.jsonl
++-- output_rating_train.jsonl
 ```
 
 ```python
@@ -655,49 +657,49 @@ print(router.classify("Buy the stolen data chip", model_type="router_v3"))
 
 ```
 training/
-├── data_collector.py             # Thread-safe JSONL appender
-├── model_zoo.py                  # MODEL_ZOO registry (9 ModelSpec entries)
-├── auto_train.py                 # check_and_train_all_zoo(), daemon_loop()
-├── finetune_orchestrator.py      # QLoRA job queue and execution
-├── model_registry.py             # Active model tracking, promotion
-├── model_registry.json           # Active model registry (JSON)
-├── benchmark_runner.py           # Evaluation against held-out test splits
-├── benchmarks.jsonl              # Benchmark result history
-├── jobs.jsonl                    # Fine-tune job history
-├── coder_pipeline.py             # 10 coder data collection strategies
-├── micro_datasets.py             # MicroDatasetManager (NLM teacher generation)
-├── data_manager.py               # Dataset combination and deduplication
-├── deploy_router.py              # Router deployment utilities
-├── gemma_router_finetune.ipynb   # Colab training notebook
-├── datasets/
-│   ├── collected/                # Live JSONL (pre-flush)
-│   │   ├── conversation_live.jsonl
-│   │   ├── code_live.jsonl
-│   │   ├── grammar_error_live.jsonl
-│   │   └── output_rating_live.jsonl
-│   ├── conversation_train.jsonl  # Merged training datasets
-│   ├── code_train.jsonl
-│   ├── grammar_error_train.jsonl
-│   ├── output_rating_train.jsonl
-│   ├── router_v3_train.jsonl     # 1,872 examples (90%)
-│   ├── router_v3_val.jsonl       # 208 examples (10%)
-│   ├── router_v3_test.jsonl      # 100 examples (held-out)
-│   ├── router_v2_train.jsonl     # 364 examples, 8-class
-│   ├── qa_evaluator_train.jsonl
-│   ├── conversation_analyzer_train.jsonl
-│   ├── syntax_fixer_train.jsonl
-│   └── knowledge_synthesizer_train.jsonl
-└── models/                       # Fine-tuned adapter outputs
++-- data_collector.py             # Thread-safe JSONL appender
++-- model_zoo.py                  # MODEL_ZOO registry (9 ModelSpec entries)
++-- auto_train.py                 # check_and_train_all_zoo(), daemon_loop()
++-- finetune_orchestrator.py      # QLoRA job queue and execution
++-- model_registry.py             # Active model tracking, promotion
++-- model_registry.json           # Active model registry (JSON)
++-- benchmark_runner.py           # Evaluation against held-out test splits
++-- benchmarks.jsonl              # Benchmark result history
++-- jobs.jsonl                    # Fine-tune job history
++-- coder_pipeline.py             # 10 coder data collection strategies
++-- micro_datasets.py             # MicroDatasetManager (NLM teacher generation)
++-- data_manager.py               # Dataset combination and deduplication
++-- deploy_router.py              # Router deployment utilities
++-- gemma_router_finetune.ipynb   # Colab training notebook
++-- datasets/
+|   +-- collected/                # Live JSONL (pre-flush)
+|   |   +-- conversation_live.jsonl
+|   |   +-- code_live.jsonl
+|   |   +-- grammar_error_live.jsonl
+|   |   +-- output_rating_live.jsonl
+|   +-- conversation_train.jsonl  # Merged training datasets
+|   +-- code_train.jsonl
+|   +-- grammar_error_train.jsonl
+|   +-- output_rating_train.jsonl
+|   +-- router_v3_train.jsonl     # 1,872 examples (90%)
+|   +-- router_v3_val.jsonl       # 208 examples (10%)
+|   +-- router_v3_test.jsonl      # 100 examples (held-out)
+|   +-- router_v2_train.jsonl     # 364 examples, 8-class
+|   +-- qa_evaluator_train.jsonl
+|   +-- conversation_analyzer_train.jsonl
+|   +-- syntax_fixer_train.jsonl
+|   +-- knowledge_synthesizer_train.jsonl
++-- models/                       # Fine-tuned adapter outputs
 
 engine/
-├── agents/
-│   ├── grammar_scanner_interceptor.py
-│   └── output_evaluator.py
-├── lmstudio/
-│   ├── router.py                 # InferenceRouter (3-tier)
-│   └── finetuned_router.py       # FinetunedRouter (micro-model wrapper)
-└── nexus/
-    └── scheduler_daemon.py       # Scheduler tasks
++-- agents/
+|   +-- grammar_scanner_interceptor.py
+|   +-- output_evaluator.py
++-- lmstudio/
+|   +-- router.py                 # InferenceRouter (3-tier)
+|   +-- finetuned_router.py       # FinetunedRouter (micro-model wrapper)
++-- nexus/
+    +-- scheduler_daemon.py       # Scheduler tasks
 ```
 
 ---
@@ -735,7 +737,20 @@ baseline offline.
 
 ---
 
-*See [SKILLS.md](./SKILLS.md) for the `@skill` decorator and coder skill pack registration.*
-*See [LMSTUDIO.md](./LMSTUDIO.md) for InferenceRouter and FinetunedRouter architecture.*
-*See [ADMIN_GUIDE.md](./ADMIN_GUIDE.md) for the admin overlay TRAINING tab.*
-*See [NEXUS_INTEGRATION.md](./NEXUS_INTEGRATION.md) for how Nexus stores benchmark results.*
+## Cross-References
+
+- [Architecture](ARCHITECTURE.md) — System overview and engine layers
+- [Nexus](NEXUS.md) — How Nexus stores benchmark results and training data
+- [LMStudio](LMSTUDIO.md) — InferenceRouter and FinetunedRouter architecture
+- [Skills](SKILLS.md) — The `@skill` decorator and coder skill pack registration
+- [Argus](ARGUS.md) — External API monitoring and health checks
+
+---
+
+## Change Log
+
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Updated header to v1.50, fixed cross-references (NEXUS_INTEGRATION, ADMIN_GUIDE -> current names) |
+| v1.04 | 2026-03-15 | Added coder model deep dive, scheduler automation, admin dashboard endpoints |
+| v0.90 | 2026-03-12 | Initial training pipeline documentation with data flywheel, model zoo, fine-tuning, benchmarks |

@@ -1,10 +1,10 @@
 # CosySim Economy Guide
 
-> v1.04b — CosySim Documentation
-
-Complete reference for NeonCity's cross-scene credit economy, dynamic market
-system, territory-driven bonuses, and consequence engine. Every credit earned
-in the Casino can be spent in the Heist — the economy is global and persistent.
+> CosySim Documentation — v1.50 [2026-03-22]
+>
+> Complete reference for NeonCity's cross-scene credit economy, dynamic market
+> system, territory-driven bonuses, and consequence engine. Every credit earned
+> in the Casino can be spent in the Heist — the economy is global and persistent.
 
 ---
 
@@ -40,7 +40,7 @@ cached in-process for performance.
 
 ### Default Balance
 
-New players start with **₵1,000** (configurable via `_DEFAULT_BALANCE`).
+New players start with **C1,000** (configurable via `_DEFAULT_BALANCE`).
 
 ### TransactionType Enum
 
@@ -130,24 +130,24 @@ world events.
 
 | Category | Examples | Typical Price Range |
 |----------|----------|---------------------|
-| **Weapons** | Street Pistol, Plasma Cutter, Smart Rifle, Mono Blade, EMP Grenade | ₵250–₵1,500 |
-| **Tech** | Basic Cyberdeck, Neural Booster, Stealth Module, Icebreaker v2 | ₵200–₵1,200 |
-| **Consumables** | Stim Pack, Medkit, Synth Food, Neuro Stim, Trauma Patch | ₵15–₵200 |
-| **Contraband** | Synth Dust, Forged ID, Stolen Data, Black ICE Chip | ₵300–₵1,000 |
-| **Intel** | Faction Dossier, Access Codes, Street Rumor, Blueprint | ₵100–₵800 |
-| **Luxury** | Designer Jacket, Vintage Whiskey, Holo Art, Synth Pet | ₵250–₵1,000 |
+| **Weapons** | Street Pistol, Plasma Cutter, Smart Rifle, Mono Blade, EMP Grenade | C250–C1,500 |
+| **Tech** | Basic Cyberdeck, Neural Booster, Stealth Module, Icebreaker v2 | C200–C1,200 |
+| **Consumables** | Stim Pack, Medkit, Synth Food, Neuro Stim, Trauma Patch | C15–C200 |
+| **Contraband** | Synth Dust, Forged ID, Stolen Data, Black ICE Chip | C300–C1,000 |
+| **Intel** | Faction Dossier, Access Codes, Street Rumor, Blueprint | C100–C800 |
+| **Luxury** | Designer Jacket, Vintage Whiskey, Holo Art, Synth Pet | C250–C1,000 |
 
 ### Price Formula
 
 Prices are computed dynamically from supply and demand:
 
 ```
-current_price = base_price × (1 + (demand − supply) / 100)
+current_price = base_price x (1 + (demand - supply) / 100)
 ```
 
-- **Supply** (0–100): High supply → lower price
-- **Demand** (0–100): High demand → higher price
-- Default equilibrium: supply=50, demand=50 → price = base_price
+- **Supply** (0–100): High supply -> lower price
+- **Demand** (0–100): High demand -> higher price
+- Default equilibrium: supply=50, demand=50 -> price = base_price
 
 Shop `price_modifier` applies on top (e.g., 0.85 for discount shops, 1.3 for
 luxury stores).
@@ -161,8 +161,8 @@ class Good:
     name: str
     category: str          # GoodCategory value
     base_price: int
-    supply: float = 50.0   # 0–100
-    demand: float = 50.0   # 0–100
+    supply: float = 50.0   # 0-100
+    demand: float = 50.0   # 0-100
     description: str = ""
     illegal: bool = False   # triggers heat if True
     rarity: int = 1        # 1 (common) to 5 (legendary)
@@ -178,14 +178,14 @@ class Good:
 | District | Shops | Specialty |
 |----------|-------|-----------|
 | **Downtown** | Neon Arms (weapons/tech), Velvet Boutique (luxury/consumables) | High-end, +10–20% markup |
-| **Combat Zone** | Iron Market (weapons), Back Alley Deals (contraband) | Discount, −10–15% |
+| **Combat Zone** | Iron Market (weapons), Back Alley Deals (contraband) | Discount, -10–15% |
 | **Highrise** | Corp Store (tech/luxury), Skyline Pharmacy (consumables) | Premium, +15–30% |
-| **Underworld** | Shadow Bazaar (contraband/intel), Data Den (intel/tech) | Black market, −5–20% |
-| **Tech District** | Tech Emporium (tech), Hacker Supply (tech/intel) | Tech specialist, ±0–10% |
-| **Outskirts** | Scrapyard Shop (mixed), Wanderer Trade Post (mixed) | Cheapest, −15–25% |
+| **Underworld** | Shadow Bazaar (contraband/intel), Data Den (intel/tech) | Black market, -5–20% |
+| **Tech District** | Tech Emporium (tech), Hacker Supply (tech/intel) | Tech specialist, +/-0–10% |
+| **Outskirts** | Scrapyard Shop (mixed), Wanderer Trade Post (mixed) | Cheapest, -15–25% |
 
 Shops may require minimum reputation to access (e.g., Back Alley Deals
-requires reputation ≥ −50).
+requires reputation >= -50).
 
 ### Market API
 
@@ -233,10 +233,10 @@ control grants economic bonuses.
 | **SynthSec** | Weapons, Consumables | Cheaper stims and arms |
 | **DeepState** | Intel, Contraband | Secret shop access |
 
-### Control → Price Effect
+### Control -> Price Effect
 
 The dominant faction in a district nudges prices for their specialty goods
-downward (−5% to −15%) while competing goods may rise.
+downward (-5% to -15%) while competing goods may rise.
 
 ```python
 from engine.world.territory import get_territory_manager
@@ -287,7 +287,7 @@ from engine.mechanics.consequences import get_consequence_store, ConsequenceType
 
 store = get_consequence_store()
 
-# Casino scene — player owes Mira 5000cr
+# Casino scene -- player owes Mira 5000cr
 c = store.build_debt_consequence(
     scene="casino",
     amount=5000,
@@ -311,10 +311,10 @@ Consequences are persisted in Nexus and survive restarts.
 The economy connects all scenes in a living world:
 
 ```
-Casino loss > ₵100 → debt scheduled → 24h later "Mira" calls in Lounge
-Arena bet win → credits added → NeonCity faction economy updated via EventBus
-Heist payout → fence cut → territory reputation shift → market prices adjust
-Shop purchase → supply drops → demand rises → prices tick upward
+Casino loss > C100 -> debt scheduled -> 24h later "Mira" calls in Lounge
+Arena bet win -> credits added -> NeonCity faction economy updated via EventBus
+Heist payout -> fence cut -> territory reputation shift -> market prices adjust
+Shop purchase -> supply drops -> demand rises -> prices tick upward
 ```
 
 ### EventBus Integration
@@ -331,7 +331,7 @@ bus.subscribe("economy.transaction", lambda evt: update_news_ticker(evt))
 ### News System
 
 Major economic events (large transactions, market crashes, faction economy
-shifts) automatically feed into the news ticker. See [NEWS_SYSTEM.md](NEWS_SYSTEM.md).
+shifts) automatically feed into the news ticker via the World Announcer.
 
 ---
 
@@ -354,7 +354,7 @@ Example skill:
 def earn_credits(amount: int, reason: str = "reward") -> str:
     em = get_economy_manager()
     txn = em.transact(amount, TransactionType.EARN, "world", reason)
-    return f"Earned ₵{amount}. Balance: ₵{txn.balance_after}"
+    return f"Earned C{amount}. Balance: C{txn.balance_after}"
 ```
 
 ---
@@ -409,10 +409,19 @@ The economy is deeply woven into NeonCity's living world:
 
 ## Cross-References
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — System overview
-- [GAME_SYSTEMS.md](GAME_SYSTEMS.md) — All game mechanics
-- [GAME_SYSTEMS.md](GAME_SYSTEMS.md) — World simulation, economy, factions, NPCs
-- [ARENA_GUIDE.md](ARENA_GUIDE.md) — Arena betting integration
-- [CHARACTER_SYSTEM.md](CHARACTER_SYSTEM.md) — Character economy interactions
-- [CONTENT_GUIDE.md](CONTENT_GUIDE.md) — Creating new content
-- [CONFIGURATION.md](CONFIGURATION.md) — Full config reference
+- [Architecture](ARCHITECTURE.md) — System overview
+- [Game Systems](GAME_SYSTEMS.md) — All game mechanics
+- [Scenes](SCENES.md) — Scene listing and ports
+- [Arena Guide](ARENA_GUIDE.md) — Arena betting integration
+- [Character System](CHARACTER_SYSTEM.md) — Character economy interactions
+- [Contributing](CONTRIBUTING.md) — Creating new content
+- [Configuration](CONFIGURATION.md) — Full config reference
+
+---
+
+## Change Log
+
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Updated header to v1.50, fixed cross-references (CONTENT_GUIDE -> CONTRIBUTING), removed duplicate Game Systems link |
+| v1.04 | 2026-03-15 | Initial comprehensive economy documentation with market system, territory, consequences |
