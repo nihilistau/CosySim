@@ -5,17 +5,27 @@ Gemini API keys) by connecting to the Chrome DevTools Protocol endpoint
 at localhost:9222.  No interactive browser window required — works with
 the headless Chrome instance already running for ARGUS/NLM automation.
 
+Version: v1.50.1 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.50.1 [2026-03-22] — BL extraction, session tokens, pool sync, async-safe public API
+    v1.50.0 [2026-03-21] — Initial CDP auth recovery module
+
 Recovery procedure
 ------------------
 1. Detect Chrome CDP at localhost:9222.
 2. Open a disposable Chrome tab for navigation.
 3. Inject saved cookies (data/nlm_cookies.json) via Network.setCookie.
-4. Navigate to NotebookLM → verify login → navigate to AI Studio.
-5. Extract all fresh Google cookies and save back to data/nlm_cookies.json.
-6. Validate each Gemini API key in engine/integrations/aistudio_client.py.
-7. If any key is dead or no working key exists: intercept AI Studio
-   network traffic during page load to harvest full key values.
-8. Test harvested keys, update aistudio_client.py + config/nlm_rpcids.yaml.
+4. Navigate to NotebookLM → verify login.
+5. Extract BL + f.sid + at token from WIZ_global_data → data/nlm_meta.json.
+6. Extract all fresh Google cookies and save back to data/nlm_cookies.json.
+7. Sync cookies + session tokens to GoogleAccountPool via token_harvester.
+8. Navigate to AI Studio → check login.
+9. Validate each Gemini API key in engine/integrations/aistudio_client.py.
+10. If any key is dead or no working key exists: intercept AI Studio
+    network traffic during page load to harvest full key values.
+11. Test harvested keys, update aistudio_client.py + config/nlm_rpcids.yaml.
 
 Usage
 -----
@@ -34,6 +44,7 @@ Programmatic
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import re
@@ -51,14 +62,32 @@ logger = logging.getLogger(__name__)
 # ── Paths ──────────────────────────────────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parents[2]
 NLM_COOKIES_PATH = _ROOT / "data" / "nlm_cookies.json"
+NLM_META_PATH = _ROOT / "data" / "nlm_meta.json"
 AISTUDIO_CLIENT_PATH = _ROOT / "engine" / "integrations" / "aistudio_client.py"
 RPCIDS_YAML_PATH = _ROOT / "config" / "nlm_rpcids.yaml"
 
 # ── Constants ──────────────────────────────────────────────────────────────────
+def _get_cdp_config() -> Dict[str, Any]:
+    """Read cdp: section from config with sensible defaults."""
+    try:
+        from engine.config import get_config
+        cfg = get_config()
+        return {
+            "port": cfg.get("cdp.port", 9222),
+            "navigation_wait_s": cfg.get("cdp.navigation_wait_s", 6),
+            "harvest_timeout_s": cfg.get("cdp.harvest_timeout_s", 18),
+            "account_name": cfg.get("cdp.account_name", "nihilistcod"),
+        }
+    except Exception:
+        return {
+            "port": 9222,
+            "navigation_wait_s": 6,
+            "harvest_timeout_s": 18,
+            "account_name": "nihilistcod",
+        }
+
 def _cdp_host() -> str:
-    from engine.config import get_config
-    port = get_config().get("cdp.port", 9222)
-    return f"http://localhost:{port}"
+    return f"http://localhost:{_get_cdp_config()['port']}"
 GEMINI_EMBED_URL = (
     "https://generativelanguage.googleapis.com/v1beta"
     "/models/gemini-embedding-001:embedContent"
@@ -86,6 +115,11 @@ class AuthStatus:
     dead_api_keys: List[str] = field(default_factory=list)
     harvested_keys: List[str] = field(default_factory=list)
     keys_updated: bool = False
+    # v1.50.1 — BL + session token tracking
+    bl_refreshed: bool = False
+    bl_value: str = ""
+    session_tokens_refreshed: bool = False
+    pool_synced: bool = False
     errors: List[str] = field(default_factory=list)
     duration_s: float = 0.0
 
@@ -100,6 +134,12 @@ class AuthStatus:
             f"NLM={'in' if self.nlm_logged_in else 'OUT'}",
             f"AIStudio={'in' if self.aistudio_logged_in else 'OUT'}",
             f"keys={len(self.working_api_keys)}ok/{len(self.dead_api_keys)}dead",
+        ]
+        if self.bl_value:
+            parts.append(f"BL={'ok' if self.bl_refreshed else 'stale'}")
+        if self.pool_synced:
+            parts.append("pool=synced")
+        parts += [
             f"t={self.duration_s:.1f}s",
         ]
         if self.errors:
@@ -199,7 +239,8 @@ async def _navigate_and_check(
 ) -> bool:
     """Navigate to url; return True if page title contains ok_title and we're not on a sign-in page."""
     await _cmd(ws, "Page.navigate", {"url": url}, msg_id=base_id)
-    await asyncio.sleep(6)
+    nav_wait = _get_cdp_config()["navigation_wait_s"]
+    await asyncio.sleep(nav_wait)
     r = await _cmd(ws, "Runtime.evaluate", {
         "expression": "JSON.stringify({title: document.title, url: location.href})"
     }, msg_id=base_id + 1)
@@ -249,7 +290,8 @@ async def _harvest_keys(ws: Any) -> List[str]:
     seen: Dict[str, str] = {}  # requestId -> url
     found: List[str] = []
     next_id = 500
-    deadline = asyncio.get_event_loop().time() + 18
+    harvest_timeout = _get_cdp_config()["harvest_timeout_s"]
+    deadline = asyncio.get_event_loop().time() + harvest_timeout
 
     while asyncio.get_event_loop().time() < deadline:
         try:
@@ -296,6 +338,91 @@ async def _harvest_keys(ws: Any) -> List[str]:
                     break
 
     return list(dict.fromkeys(found))  # dedupe, preserve order
+
+
+# ── Session extraction (BL, f.sid, at) ────────────────────────────────────────
+# v1.50.1 [2026-03-22] — Reuses WIZ_global_data expression from har_capture.py:232-247
+
+_WIZ_EXTRACT_JS = (
+    "JSON.stringify({"
+    "  bl: (() => {"
+    "    const wiz = window.WIZ_global_data || {};"
+    "    const explicit = wiz.QrtxK || wiz.cfb2h || wiz.bl || '';"
+    "    if (typeof explicit === 'string' && explicit.startsWith('boq_labs-tailwind-frontend_')) return explicit;"
+    "    for (const value of Object.values(wiz)) {"
+    "      if (typeof value === 'string' && value.startsWith('boq_labs-tailwind-frontend_')) return value;"
+    "    }"
+    "    return '';"
+    "  })(),"
+    "  f_sid: (window.WIZ_global_data && (window.WIZ_global_data.IxjpMA || window.WIZ_global_data.FdrFJe)) || '',"
+    "  at: (window.WIZ_global_data && window.WIZ_global_data.SNlM0e) || '',"
+    "  href: location.href"
+    "})"
+)
+
+
+async def _extract_nlm_session(ws: Any, base_id: int = 130) -> Dict[str, str]:
+    """Extract BL, f.sid, and at token from the NLM page via Runtime.evaluate."""
+    try:
+        r = await _cmd(ws, "Runtime.evaluate", {
+            "expression": _WIZ_EXTRACT_JS,
+            "returnByValue": True,
+        }, msg_id=base_id)
+        raw = r.get("result", {}).get("result", {}).get("value", "{}")
+        data = json.loads(raw)
+    except Exception as exc:
+        logger.warning("Failed to extract NLM session: %s", exc)
+        return {}
+    meta: Dict[str, str] = {}
+    bl = data.get("bl", "")
+    if isinstance(bl, str) and bl.startswith("boq_labs-tailwind-frontend_"):
+        meta["bl"] = bl
+    f_sid = data.get("f_sid")
+    if f_sid not in (None, ""):
+        meta["f_sid"] = str(f_sid)
+    at = data.get("at")
+    if isinstance(at, str) and at:
+        meta["at"] = at
+    href = data.get("href", "")
+    if isinstance(href, str) and href:
+        meta["href"] = href
+    return meta
+
+
+def _save_nlm_meta(session: Dict[str, str]) -> None:
+    """Write session metadata (BL, f.sid, at) to data/nlm_meta.json."""
+    try:
+        existing: Dict[str, Any] = {}
+        if NLM_META_PATH.exists():
+            existing = json.loads(NLM_META_PATH.read_text(encoding="utf-8"))
+        existing.update(session)
+        existing["refreshed_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        NLM_META_PATH.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+        logger.info("Wrote NLM meta to %s", NLM_META_PATH)
+    except Exception as exc:
+        logger.warning("Failed to write nlm_meta.json: %s", exc)
+
+
+def _sync_to_account_pool(cookies: Dict[str, str], nlm_session: Dict[str, str]) -> bool:
+    """Sync fresh cookies + session tokens to GoogleAccountPool."""
+    try:
+        from scripts.argus.tools.token_harvester import update_account_pool
+        account_name = _get_cdp_config()["account_name"]
+        service_sessions: Dict[str, Dict[str, str]] = {}
+        if nlm_session:
+            service_sessions["notebooklm"] = dict(nlm_session)
+        update_account_pool(
+            cookies, account_name,
+            session=nlm_session,
+            at_token=nlm_session.get("at"),
+            service_sessions=service_sessions,
+        )
+        logger.info("[cdp_auth_recovery] Pool synced for '%s' (%d cookies, BL=%s) (operation=pool_sync)",
+                    account_name, len(cookies), nlm_session.get("bl", "none")[:30])
+        return True
+    except Exception as exc:
+        logger.warning("[cdp_auth_recovery] Pool sync failed (operation=pool_sync): %s", exc)
+        return False
 
 
 # ── Config writers ─────────────────────────────────────────────────────────────
@@ -418,16 +545,32 @@ async def _async_recover(keys_only: bool = False) -> AuthStatus:
                 )
                 logger.info("NLM: %s", "logged in" if status.nlm_logged_in else "FAILED")
 
-                # 5. Extract fresh cookies + save
+                # 5. Extract BL + session tokens from WIZ_global_data
+                nlm_session: Dict[str, str] = {}
+                if status.nlm_logged_in:
+                    nlm_session = await _extract_nlm_session(ws, base_id=130)
+                    if nlm_session.get("bl"):
+                        status.bl_refreshed = True
+                        status.bl_value = nlm_session["bl"]
+                        logger.info("BL: %s", status.bl_value)
+                    if nlm_session.get("f_sid") or nlm_session.get("at"):
+                        status.session_tokens_refreshed = True
+                        logger.info("Session: f_sid=%s at=%s",
+                                    "ok" if nlm_session.get("f_sid") else "MISSING",
+                                    "ok" if nlm_session.get("at") else "MISSING")
+                    if nlm_session:
+                        _save_nlm_meta(nlm_session)
+
+                # 6. Extract fresh cookies + save
                 fresh = await _extract_cookies(ws, msg_id=200)
                 if fresh:
-                    NLM_COOKIES_PATH.write_text(
-                        json.dumps(fresh, indent=2), encoding="utf-8"
-                    )
+                    NLM_COOKIES_PATH.write_text(json.dumps(fresh, indent=2), encoding="utf-8")
                     status.cookies_saved = len(fresh)
                     logger.info("Saved %d fresh cookies", len(fresh))
+                    # 7. Sync cookies + session to GoogleAccountPool
+                    status.pool_synced = _sync_to_account_pool(fresh, nlm_session)
 
-                # 6. Navigate to AI Studio → check login
+                # 8. Navigate to AI Studio → check login
                 status.aistudio_logged_in = await _navigate_and_check(
                     ws, _AISTUDIO_URL, "Google AI Studio", base_id=110
                 )
@@ -436,7 +579,7 @@ async def _async_recover(keys_only: bool = False) -> AuthStatus:
                     "logged in" if status.aistudio_logged_in else "FAILED",
                 )
 
-            # 7. Validate existing API keys
+            # 9. Validate existing API keys
             for key in _load_current_keys():
                 (status.working_api_keys if _test_key(key) else status.dead_api_keys).append(key)
             logger.info(
@@ -445,7 +588,7 @@ async def _async_recover(keys_only: bool = False) -> AuthStatus:
                 len(status.dead_api_keys),
             )
 
-            # 8. Harvest fresh keys if any are dead or none work
+            # 10. Harvest fresh keys if any are dead or none work
             needs_harvest = not status.working_api_keys or status.dead_api_keys
             if needs_harvest:
                 logger.info("Harvesting fresh API keys from AI Studio...")
@@ -478,14 +621,23 @@ async def _async_recover(keys_only: bool = False) -> AuthStatus:
 
 # ── Public synchronous API ─────────────────────────────────────────────────────
 
+def _run_async(coro: Any) -> Any:
+    """Run an async coroutine safely from any context."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(1, thread_name_prefix="cdp_auth") as pool:
+        return pool.submit(asyncio.run, coro).result(timeout=120)
+
 def run_check() -> AuthStatus:
-    """Synchronous health check. Safe to call from scheduler callbacks."""
-    return asyncio.run(_async_check())
+    """Synchronous health check. Safe to call from any context."""
+    return _run_async(_async_check())
 
 
 def run_recovery(keys_only: bool = False) -> AuthStatus:
-    """Synchronous full recovery. Returns AuthStatus with results."""
-    return asyncio.run(_async_recover(keys_only=keys_only))
+    """Synchronous full recovery. Safe to call from any context."""
+    return _run_async(_async_recover(keys_only=keys_only))
 
 
 def check_and_recover_if_needed() -> AuthStatus:

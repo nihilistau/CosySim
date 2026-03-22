@@ -295,6 +295,38 @@ class OracleScene(FlaskScene):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
+        # ── v1.50.1 [2026-03-22] — Engine room observability endpoints ──
+
+        @self.app.route("/api/oracle/router-stats")
+        def oracle_router_stats():
+            try:
+                from engine.nexus.query_router import get_query_router
+                router = get_query_router()
+                return jsonify(router.stats.to_dict())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/oracle/scheduler")
+        def oracle_scheduler():
+            try:
+                from engine.nexus.scheduler_daemon import get_scheduler_daemon
+                daemon = get_scheduler_daemon()
+                return jsonify(daemon.status())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/oracle/cdp-auth")
+        def oracle_cdp_auth():
+            try:
+                from engine.nexus.cdp_auth_recovery import run_check
+                status = run_check()
+                result = {"cdp_available": status.cdp_available, "nlm_logged_in": status.nlm_logged_in,
+                          "working_keys": len(status.working_api_keys), "dead_keys": len(status.dead_api_keys),
+                          "bl_value": status.bl_value, "healthy": status.healthy, "summary": status.summary()}
+                return jsonify(result)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
     # ── SocketIO Handlers ─────────────────────────────────────────────
 
     def _setup_socketio(self) -> None:

@@ -1431,6 +1431,49 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     except Exception as exc:
         logger.debug("CDP auth recovery task registration skipped: %s", exc)
 
+    # ──── NLM Auto-Distillation ────
+    daemon.register("nlm-auto-distill", "Auto-distill Q&A from high-traffic Nexus topics", "every_6h", _nlm_auto_distill_callback)
+
+    # ──── ARGUS Periodic Crawl ────
+    daemon.register("argus-periodic-crawl", "Periodic ARGUS API surface scan (NLM rpcid coverage)", "weekly", _argus_periodic_crawl_callback)
+
+
+def _nlm_auto_distill_callback() -> Dict[str, Any]:
+    try:
+        from engine.nexus.query_router import get_query_router
+        router = get_query_router()
+        stats = router.stats
+        if stats.llm_fallbacks < 5:
+            return {"skipped": True, "reason": "too few fallbacks", "fallbacks": stats.llm_fallbacks}
+        from engine.nexus.nlm_qa_distiller import NLMQADistiller
+        distiller = NLMQADistiller()
+        result = distiller.distill_from_entries(category="auto", limit=10)
+        return {"distilled_pairs": result.get("pairs_stored", 0) if isinstance(result, dict) else 0,
+                "llm_fallbacks_at_start": stats.llm_fallbacks, "total_queries": stats.total_queries}
+    except Exception as exc:
+        logger.warning("[SchedulerDaemon] NLM auto-distill failed (operation=nlm_distill): %s", exc)
+        return {"error": str(exc)}
+
+def _argus_periodic_crawl_callback() -> Dict[str, Any]:
+    try:
+        from scripts.argus.config import NLM_RPCIDS
+        from scripts.argus.discovery.endpoint_registry import EndpointRegistry
+        registry = EndpointRegistry()
+        stats = registry.stats()
+        nlm_coverage = len(NLM_RPCIDS)
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            client.add_entry(title=f"ARGUS Coverage Snapshot ({time.strftime('%Y-%m-%d')})",
+                           content=json.dumps(stats, indent=2) if isinstance(stats, dict) else str(stats),
+                           content_type="note", category="system", tags=["argus", "coverage", "periodic"])
+        except Exception:
+            pass
+        return {"nlm_rpcids_known": nlm_coverage, "registry_stats": stats if isinstance(stats, dict) else str(stats)}
+    except Exception as exc:
+        logger.warning("[SchedulerDaemon] ARGUS periodic crawl failed (operation=argus_crawl): %s", exc)
+        return {"error": str(exc)}
+
 
 def _auto_embedding_callback() -> Dict[str, Any]:
     """Batch-embed new Nexus entries and Q&A pairs into the vector store.
