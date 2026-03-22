@@ -1,0 +1,103 @@
+{%- extends "neon_base.html" -%}
+{%- set scene_key = "phone" -%}
+{%- set scene_display_name = "SIGNAL" -%}
+{%- set scene_accent = "#10b981" -%}
+{%- set scene_accent_rgb = "16 185 129" -%}
+
+{#
+  SIGNAL — v1.52.0 [2026-03-22] Cyberdeck Terminal Rebuild
+  =========================================================
+  Your cyberdeck. Your lifeline. Your weapon.
+  Start with nothing. Get a ghost call. Navigate NeonCity.
+
+  "Every frequency tells a story. Most of them are lies."
+
+  Replaces the broken CosyPhone iOS UI and orphaned SIGNAL v0.68.
+  Uses existing REST endpoints from phone_scene_v2.py.
+#}
+
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='signal.css') }}">
+{% endblock %}
+
+{% block scene_overlays %}
+  <canvas id="signal-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.25"></canvas>
+{% endblock %}
+
+{% block scene_content %}
+<div class="signal-scene" data-scene="phone">
+
+  <!-- ── Header ──────────────────────────────────────────────────── -->
+  <header class="sig-header">
+    <div class="sig-header__left">
+      <span class="sig-logo">&#9673;</span>
+      <h1 class="sig-title">SIGNAL</h1>
+      <span class="sig-version">CYBERDECK v1.52</span>
+    </div>
+    <div class="sig-header__right">
+      <span class="sig-status" id="sig-status">&#9673; ONLINE</span>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ─────────────────────────────────────────────── -->
+  <div class="sig-grid">
+
+    <!-- LEFT: Contacts -->
+    <aside class="sig-contacts">
+      <div class="sig-contacts__header">
+        <span>CONTACTS</span>
+        <span class="sig-contacts__count" id="contact-count">0</span>
+      </div>
+      <div class="sig-contacts__list" id="contact-list">
+        <div class="sig-empty">Scanning frequencies...</div>
+      </div>
+    </aside>
+
+    <!-- CENTER: Thread -->
+    <main class="sig-thread">
+      <div class="sig-thread__header" id="thread-header">
+        <span class="sig-thread__name" id="thread-name">SELECT A CONTACT</span>
+        <span class="sig-thread__status" id="thread-status">&mdash;</span>
+      </div>
+      <div class="sig-thread__messages" id="thread-messages">
+        <div class="sig-welcome">
+          <div class="sig-welcome__icon">&#128225;</div>
+          <div class="sig-welcome__text">SELECT A CONTACT TO BEGIN</div>
+          <div class="sig-welcome__sub">Your cyberdeck is ready. Choose a frequency.</div>
+        </div>
+      </div>
+      <div class="sig-thread__typing" id="thread-typing" style="display:none">
+        <span class="sig-typing"><span class="sig-typing__dot"></span><span class="sig-typing__dot"></span><span class="sig-typing__dot"></span></span>
+        <span class="sig-typing__label" id="typing-label">typing...</span>
+      </div>
+      <div class="sig-thread__input">
+        <input type="text" id="sig-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter')SignalApp.send()">
+        <button class="sig-btn" onclick="SignalApp.send()">&#9654; SEND</button>
+      </div>
+    </main>
+
+    <!-- RIGHT: Info Panel -->
+    <aside class="sig-info">
+      <section class="sig-panel">
+        <h3 class="sig-panel__title">&#9670; CONTACT INFO</h3>
+        <div id="contact-info">
+          <div class="sig-empty">No contact selected.</div>
+        </div>
+      </section>
+      <section class="sig-panel">
+        <h3 class="sig-panel__title">&#9670; CITY MAP</h3>
+        <div id="sig-map" class="sig-map-links">
+          <div class="sig-empty">Loading locations...</div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="/shared/js/cosysim-particles3d.js"></script>
+  <script src="{{ url_for('static', filename='signal.js') }}" defer></script>
+  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'phone' };</script>
+{% endblock %}
