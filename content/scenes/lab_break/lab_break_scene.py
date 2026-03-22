@@ -36,6 +36,9 @@ from engine.scenes.flask_scene import FlaskScene
 
 logger = logging.getLogger(__name__)
 
+SCENE_ID = "lab_break"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+
 
 # ──── Data Models ─────────────────────────────────────────────
 
@@ -743,11 +746,11 @@ class LabBreakScene(FlaskScene):
 
         # Register Lab Break skills so they are discoverable
         import content.scenes.lab_break.lab_break_skills  # noqa: F401
-        logger.info("Lab Break skills registered")
+        logger.info("[%s] Skills registered (operation=lifecycle)", SCENE_ID)
 
     def on_shutdown(self) -> None:
         """Cleanup: stop vitals thread and mark game inactive."""
-        logger.info("Stopping Lab Break scene")
+        logger.info("[%s] Scene stopping (operation=lifecycle)", SCENE_ID)
         self._stop_event.set()
         if self._vitals_thread:
             self._vitals_thread.join(timeout=5)

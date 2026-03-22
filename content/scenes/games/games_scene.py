@@ -30,6 +30,7 @@ from flask_socketio import emit
 
 from engine.scenes.flask_scene import FlaskScene
 
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 # v1.49.2 [2026-03-22] — Removed duplicate 'log' variable (CLAUDE.md standard: use 'logger')
 SCENE_ID = "games"
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
@@ -77,7 +78,7 @@ class GamesScene(FlaskScene):
         # Wire bench route (TTS already registered by FlaskScene)
         self.register_bench_route(self.app, self.socketio)
 
-        logger.info("GamesScene (THE ARCADE) created on port %d", port)
+        logger.info("[%s] Scene created on port %d", SCENE_ID, port)
 
     # ── MCP Integration ──────────────────────────────────────────────
 
@@ -95,9 +96,9 @@ class GamesScene(FlaskScene):
                 "tod_rounds": 0,
                 "active_game": None,
             })
-            logger.info("GamesScene (THE ARCADE) MCP wired")
+            logger.info("[%s] MCP wired (operation=mcp_wire)", SCENE_ID)
         except Exception as exc:
-            logger.warning("MCP wiring skipped: %s", exc)
+            logger.warning("[%s] MCP wiring skipped (operation=mcp_wire): %s", SCENE_ID, exc)
             self._scene_node = None
 
     def _register_gamemaster(self) -> None:
@@ -135,12 +136,12 @@ class GamesScene(FlaskScene):
                     scene_roles=[SCENE_ID],
                 )
                 apply_default_skills(GAMEMASTER_ID)
-                logger.info("GameMaster character registered")
+                logger.info("[%s] GameMaster character registered (operation=seed)", SCENE_ID)
 
             if self._fw:
                 self._fw.get_character(GAMEMASTER_ID).enter_scene(SCENE_ID)
         except Exception as exc:
-            logger.warning("GameMaster registration skipped: %s", exc)
+            logger.warning("[%s] GameMaster registration skipped (operation=seed): %s", SCENE_ID, exc)
 
     def _get_gamemaster_reply(self, prompt: str) -> str:
         """Get an AI response from the GameMaster character."""
@@ -263,7 +264,7 @@ class GamesScene(FlaskScene):
             try:
                 return jsonify(self.get_health())
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": "games", "reason": "health check raised"}), 500
 
         @app.route("/api/status")

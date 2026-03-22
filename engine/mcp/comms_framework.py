@@ -66,10 +66,12 @@ Usage::
     router = get_router()
     router.send("char-aria", "Your friend just called.")
 
-Version: v1.49.1 [2026-03-22]
+Version: v1.49.3 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.49.3 [2026-03-22] — Structured logging context: [CommsFramework]/[AgentGovernor]
+                            prefixes, operation= and entity= context on all log calls
     v1.49.1 [2026-03-22] — Audit: upgrade error swallowing from debug→warning,
                             discriminate LLM exception types, add ctx["error"] flag,
                             structured context in all log messages
@@ -182,7 +184,8 @@ class SkillManifest:
                 self._yaml_mtime = mtime
                 return
         except Exception as exc:
-            logger.warning("skill_manifests.yaml load failed: %s — using defaults", exc)
+            # v1.49.3 [2026-03-22] — Structured logging context
+            logger.warning("[CommsFramework] Skill manifest load failed (operation=load_manifests): %s — using defaults", exc)
 
         # Build from defaults
         self._scenes = {}
@@ -333,7 +336,7 @@ class InterceptorPipeline:
             try:
                 interceptor.pre_call(ctx)
             except Exception as exc:
-                logger.warning("Interceptor %s.pre_call failed: %s", interceptor.name, exc)
+                logger.warning("[CommsFramework] Interceptor pre_call failed (operation=pre_call, interceptor=%s): %s", interceptor.name, exc)
 
     def run_post(self, ctx: ResponseContext) -> None:
         for interceptor in self._interceptors:
@@ -344,7 +347,7 @@ class InterceptorPipeline:
             try:
                 interceptor.post_call(ctx)
             except Exception as exc:
-                logger.warning("Interceptor %s.post_call failed: %s", interceptor.name, exc)
+                logger.warning("[CommsFramework] Interceptor post_call failed (operation=post_call, interceptor=%s): %s", interceptor.name, exc)
 
     @property
     def names(self) -> List[str]:
@@ -407,7 +410,7 @@ class GameState:
         with self._lock:
             self._store.pop(game_id, None)
         self._notify(game_id, "__reset__", None)
-        logger.info("GameState reset for game %r", game_id)
+        logger.info("[CommsFramework] GameState reset (operation=reset, game=%s)", game_id)
 
     def all_games(self) -> List[str]:
         with self._lock:
@@ -460,7 +463,7 @@ class GameState:
                 fn(game_id, key, value)
             except Exception as exc:
                 # v1.49.1 [2026-03-22] — Upgrade to warning so observer failures are visible
-                logger.warning("GameState observer %r raised for game=%s key=%s: %s", fn, game_id, key, exc)
+                logger.warning("[CommsFramework] GameState observer raised (operation=notify, game=%s, key=%s): %s", game_id, key, exc)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -602,7 +605,7 @@ class AgentGovernor:
             except Exception as exc:
                 # v1.49.1 [2026-03-22] — Upgrade from debug to warning for visibility
                 logger.warning(
-                    "Auto skill %s failed (scene=%s, agent=%s): %s",
+                    "[AgentGovernor] Auto skill failed (operation=auto_skill, skill=%s, scene=%s, agent_id=%s): %s",
                     skill_entry.name, ctx.get("scene", "?"), ctx.get("agent_id", "?"), exc,
                 )
 
@@ -641,7 +644,7 @@ class AgentGovernor:
                 except Exception as exc:
                     # v1.49.1 [2026-03-22] — Surface agent state extraction failures
                     logger.warning(
-                        "AgentGovernor: failed to extract agent state (agent=%s, scene=%s): %s",
+                        "[AgentGovernor] Failed to extract agent state (operation=state_extract, agent_id=%s, scene=%s): %s",
                         ctx.get("agent_id", "?"), ctx.get("scene", "?"), exc,
                     )
                 ctx["response_id"] = agent_state.get("last_response_id", "")
@@ -658,17 +661,17 @@ class AgentGovernor:
                     ctx["tool_calls"] = getattr(last_response, "tool_calls", [])
             except TimeoutError as exc:
                 # v1.49.1 [2026-03-22] — Discriminate exception types for LLM failures
-                logger.error("AgentGovernor LLM call timed out (agent=%s, scene=%s): %s",
+                logger.error("[AgentGovernor] LLM call timed out (operation=llm_call, agent_id=%s, scene=%s): %s",
                              ctx.get("agent_id", "?"), ctx.get("scene", "?"), exc)
                 ctx["reply"] = ""
                 ctx["error"] = "timeout"
             except ConnectionError as exc:
-                logger.error("AgentGovernor LLM connection failed (agent=%s, scene=%s): %s",
+                logger.error("[AgentGovernor] LLM connection failed (operation=llm_call, agent_id=%s, scene=%s): %s",
                              ctx.get("agent_id", "?"), ctx.get("scene", "?"), exc)
                 ctx["reply"] = ""
                 ctx["error"] = "connection"
             except Exception as exc:
-                logger.error("AgentGovernor LLM call failed (agent=%s, scene=%s): %s",
+                logger.error("[AgentGovernor] LLM call failed (operation=llm_call, agent_id=%s, scene=%s): %s",
                              ctx.get("agent_id", "?"), ctx.get("scene", "?"), exc)
                 ctx["reply"] = ""
                 ctx["error"] = str(type(exc).__name__)

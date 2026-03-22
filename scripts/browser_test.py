@@ -44,8 +44,12 @@ def run_tests() -> dict:
         status = "PASS" if passed else "FAIL"
         results["tests"].append({"name": name, "status": status, "detail": detail})
         results["summary"]["passed" if passed else "failed"] += 1
-        icon = "✓" if passed else "✗"
-        print(f"  {icon} {name}: {detail}" if detail else f"  {icon} {name}")
+        # v1.49.3 [2026-03-22] — Use ASCII-safe icons to avoid cp1252 crash on Windows
+        icon = "[PASS]" if passed else "[FAIL]"
+        try:
+            print(f"  {icon} {name}: {detail}" if detail else f"  {icon} {name}")
+        except UnicodeEncodeError:
+            print(f"  {icon} {name}")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -271,7 +275,7 @@ def run_tests() -> dict:
         real_errors = [e for e in js_errors if "ERR_CONNECTION_REFUSED" not in e and "signal" not in e.lower()]
         for e in real_errors[:10]:
             safe = e.encode("ascii", "replace").decode()[:120]
-            print(f"  ✗ {safe}")
+            print(f"  [ERR] {safe}")
             results["errors"].append(safe)
         results["summary"]["errors"] = len(real_errors)
 
@@ -319,7 +323,7 @@ def read_telemetry(limit: int = 30) -> None:
         msg = e.get("msg", "?")
         ctx = e.get("ctx", {})
         ts = ctx.get("timestamp", "")[-12:]
-        icon = "✗" if lvl == "ERROR" else "·"
+        icon = "[ERR]" if lvl == "ERROR" else " . "
         print(f"  {icon} [{lvl:7s}] {ts} {msg[:90]}")
 
 

@@ -24,6 +24,7 @@ from engine.mcp.framework import get_framework
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "asset_studio"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 DEFAULT_PORT = get_port(SCENE_ID)
 
 
@@ -82,7 +83,7 @@ class AssetStudioScene(FlaskScene):
                 result = get_studio_core().generate(asset_type, data)
                 return jsonify(result)
             except Exception as exc:
-                logger.exception("Generate endpoint error: %s", exc)
+                logger.exception("[%s] Generate endpoint error (operation=generate): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         # ── Asset library endpoints ────────────────────────────────────────
@@ -372,7 +373,7 @@ class AssetStudioScene(FlaskScene):
             except Exception:
                 pass
 
-            logger.info("Injected %s → %s", source_filename, target_path)
+            logger.info("[%s] Injected asset (operation=inject): %s → %s", SCENE_ID, source_filename, target_path)
             return jsonify({
                 "status": "ok",
                 "scene": scene,
@@ -457,7 +458,7 @@ class AssetStudioScene(FlaskScene):
             fw = get_framework()
             fw.get_or_create(f"scenes.{SCENE_ID}")
         except Exception as exc:
-            logger.warning("MCP framework not available: %s", exc)
+            logger.warning("[%s] MCP framework not available (operation=mcp_wire): %s", SCENE_ID, exc)
         try:
             from content.scenes.asset_studio import asset_studio_skills  # noqa: PLC0415, F401
         except Exception as exc:

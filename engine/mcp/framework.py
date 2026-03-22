@@ -303,7 +303,8 @@ class TickerLoop:
             try:
                 self.callback()
             except Exception as exc:
-                logger.warning("TickerLoop '%s' callback error: %s", self.name, exc)
+                # v1.49.3 [2026-03-22] — Structured logging context
+                logger.warning("[MCPFramework] TickerLoop callback error (operation=tick, ticker=%s): %s", self.name, exc)
             self._stop.wait(self.interval)
 
 
@@ -1254,7 +1255,7 @@ class MCPFramework:
         self._ready = True
         self._fire_lifecycle("framework_ready")
         self.emit_event("framework_ready", {"turn": self._turn})
-        logger.info("MCPFramework: marked ready (%d scenes, %d characters)",
+        logger.info("[MCPFramework] Marked ready (operation=init, scenes=%d, characters=%d)",
                      len(self._scenes), len(self._characters))
 
     @property
@@ -1350,7 +1351,7 @@ class MCPFramework:
 
         self._fire_lifecycle("state_saved", path)
         self.emit_event("state_saved", {"path": path})
-        logger.info("MCPFramework: state saved to %s", path)
+        logger.info("[MCPFramework] State saved (operation=save_state, path=%s)", path)
         return path
 
     def load_state(self, path: Optional[str] = None) -> bool:
@@ -1389,10 +1390,10 @@ class MCPFramework:
 
             self._fire_lifecycle("state_loaded", path)
             self.emit_event("state_loaded", {"path": path, "turn": self._turn})
-            logger.info("MCPFramework: state restored from %s (turn=%d)", path, self._turn)
+            logger.info("[MCPFramework] State restored (operation=load_state, path=%s, turn=%d)", path, self._turn)
             return True
         except Exception as exc:
-            logger.warning("MCPFramework: failed to load state from %s: %s", path, exc)
+            logger.warning("[MCPFramework] Failed to load state (operation=load_state, path=%s): %s", path, exc)
             return False
 
     def __repr__(self) -> str:
@@ -1421,5 +1422,5 @@ def get_framework() -> MCPFramework:
                 _FW_INSTANCE = MCPFramework()
                 # Try to restore previous state (non-fatal)
                 _FW_INSTANCE.load_state()
-                logger.info("MCPFramework: singleton initialised")
+                logger.info("[MCPFramework] Singleton initialized (operation=init)")
     return _FW_INSTANCE

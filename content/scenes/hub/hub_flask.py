@@ -35,6 +35,7 @@ from engine.utils import port_is_open
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "hub"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 DEFAULT_PORT = get_port(SCENE_ID)
 
 _SCENE_DIR = Path(__file__).parent
@@ -270,7 +271,7 @@ class HubScene(BaseScene):
             logger.debug("Metrics dashboard not available: %s", exc)
 
         self._setup_routes()
-        logger.info("HubScene (THE TERMINAL) created on port %d", port)
+        logger.info("[%s] Scene created on port %d (operation=lifecycle)", SCENE_ID, port)
 
     # -----------------------------------------------------------------
     # Overrides — Scene Registry Route                      [v1.42.1]
@@ -349,7 +350,7 @@ class HubScene(BaseScene):
                     "npc_availability": summary.get("npc_availability", {}),
                 })
             except Exception as exc:
-                logger.warning("world_state unavailable: %s", exc)
+                logger.warning("[%s] world_state unavailable (operation=api): %s", SCENE_ID, exc)
                 return jsonify({"ok": False, "error": str(exc), "time": {}, "events": []})
 
         @app.route("/api/economy")
@@ -372,7 +373,7 @@ class HubScene(BaseScene):
                 ]
                 return jsonify({"ok": True, "balance": balance, "transactions": txns})
             except Exception as exc:
-                logger.warning("economy unavailable: %s", exc)
+                logger.warning("[%s] Economy unavailable (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"ok": False, "balance": 0, "transactions": []})
 
         @app.route("/api/system")
@@ -390,7 +391,7 @@ class HubScene(BaseScene):
 
     def start(self) -> None:
         """Start THE TERMINAL Flask server."""
-        logger.info("THE TERMINAL opening on %s:%d", self.host, self.port)
+        logger.info("[%s] Opening on %s:%d (operation=lifecycle)", SCENE_ID, self.host, self.port)
         try:
             from engine.events.event_bus import get_event_bus
             get_event_bus().emit("scene_started", {"scene_id": SCENE_ID, "port": self.port})
@@ -400,7 +401,7 @@ class HubScene(BaseScene):
 
     def stop(self) -> None:
         """Stop THE TERMINAL."""
-        logger.info("THE TERMINAL shutting down")
+        logger.info("[%s] Shutting down (operation=lifecycle)", SCENE_ID)
 
     def get_plugin_info(self) -> Dict[str, Any]:
         """Return plugin metadata for admin discovery."""

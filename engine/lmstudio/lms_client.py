@@ -186,7 +186,8 @@ class LMSClient:
         if time.time() >= self._auth_circuit_until:
             self._auth_circuit_open = False
             self._auth_failures = 0
-            logger.info("LMStudio auth circuit breaker half-open (cooldown expired)")
+            # v1.49.3 [2026-03-22] — Structured logging context
+            logger.info("[LMSClient] Auth circuit breaker half-open (operation=auth_check, cooldown expired)")
             return
         raise LMStudioAuthError(
             f"Auth circuit breaker open ({self._auth_failures} consecutive failures). "
@@ -201,8 +202,8 @@ class LMSClient:
             self._auth_circuit_open = True
             self._auth_circuit_until = time.time() + self._AUTH_COOLDOWN_SECS
             logger.error(
-                "LMStudio auth circuit breaker OPEN after %d failures (HTTP %d). "
-                "Cooldown: %.0fs. Check lmstudio.api_token.",
+                "[LMSClient] Auth circuit breaker OPEN (operation=auth_check, failures=%d, http_status=%d, cooldown=%.0fs). "
+                "Check lmstudio.api_token.",
                 self._auth_failures, status_code, self._AUTH_COOLDOWN_SECS,
             )
 
@@ -216,7 +217,7 @@ class LMSClient:
         self._auth_circuit_open = False
         self._auth_failures = 0
         self._auth_circuit_until = 0.0
-        logger.info("LMStudio auth circuit breaker manually reset")
+        logger.info("[LMSClient] Auth circuit breaker manually reset (operation=reset_auth)")
 
     # ── Health & Model Info ─────────────────────────────────────────
 
@@ -227,8 +228,8 @@ class LMSClient:
             # v1.43.0 — Surface auth failures through structured logging
             if r.status_code == 401:
                 logger.error(
-                    "LMStudio auth failed (401) — check lmstudio.api_token in config. "
-                    "Token present: %s", bool(self._api_token)
+                    "[LMSClient] Auth failed (operation=health_check, http_status=401, token_present=%s). "
+                    "Check lmstudio.api_token in config.", bool(self._api_token)
                 )
                 try:
                     from engine.observability.structured_logger import get_structured_logger, LogLevel
@@ -369,7 +370,7 @@ class LMSClient:
 
         self._resolved_model = resolved
         self._resolved_at = now
-        logger.info("Resolved chat model: %s", resolved)
+        logger.info("[LMSClient] Resolved chat model (operation=resolve_model, model=%s)", resolved)
         return resolved
 
     def invalidate_model_cache(self) -> None:
@@ -469,7 +470,7 @@ class LMSClient:
         except httpx.ConnectError:
             raise ConnectionError(f"Cannot connect to LMStudio at {self.base_url}")
         except httpx.HTTPStatusError as exc:
-            logger.error("Native v1 HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
+            logger.error("[LMSClient] Stateful chat HTTP error (operation=chat_stateful, http_status=%d): %s", exc.response.status_code, exc.response.text[:200])
             raise
 
         return self._parse_native_response(data, resolved)
@@ -626,7 +627,7 @@ class LMSClient:
             r.raise_for_status()
             data = r.json()
             self.invalidate_model_cache()
-            logger.info("Model loaded via REST: %s", model_id)
+            logger.info("[LMSClient] Model loaded via REST (operation=load_model, model=%s)", model_id)
 
             return LMSLoadResult(
                 type=data.get("type", "llm"),
@@ -636,10 +637,10 @@ class LMSClient:
                 load_config=data.get("load_config"),
             )
         except httpx.HTTPStatusError as exc:
-            logger.error("REST load failed (%d): %s", exc.response.status_code, exc.response.text[:200])
+            logger.error("[LMSClient] REST load failed (operation=load_model, http_status=%d): %s", exc.response.status_code, exc.response.text[:200])
             return LMSLoadResult(status="error", instance_id=model_id)
         except Exception as exc:
-            logger.error("REST load failed: %s", exc)
+            logger.error("[LMSClient] REST load failed (operation=load_model): %s", exc)
             return LMSLoadResult(status="error", instance_id=model_id)
 
     # ── Model download (REST) ──────────────────────────────────────
@@ -680,10 +681,10 @@ class LMSClient:
                 completed_at=data.get("completed_at"),
             )
         except httpx.HTTPStatusError as exc:
-            logger.error("Download failed (%d): %s", exc.response.status_code, exc.response.text[:200])
+            logger.error("[LMSClient] Download failed (operation=download_model, http_status=%d): %s", exc.response.status_code, exc.response.text[:200])
             return LMSDownloadJob(status="failed")
         except Exception as exc:
-            logger.error("Download failed: %s", exc)
+            logger.error("[LMSClient] Download failed (operation=download_model): %s", exc)
             return LMSDownloadJob(status="failed")
 
     def download_status(self, job_id: str) -> LMSDownloadStatus:
@@ -706,10 +707,10 @@ class LMSClient:
                 started_at=data.get("started_at"),
             )
         except httpx.HTTPStatusError as exc:
-            logger.error("Download status failed (%d): %s", exc.response.status_code, exc.response.text[:200])
+            logger.error("[LMSClient] Download status failed (operation=download_status, http_status=%d): %s", exc.response.status_code, exc.response.text[:200])
             return LMSDownloadStatus(job_id=job_id, status="error")
         except Exception as exc:
-            logger.error("Download status failed: %s", exc)
+            logger.error("[LMSClient] Download status failed (operation=download_status): %s", exc)
             return LMSDownloadStatus(job_id=job_id, status="error")
 
     # ── Speculative decoding ───────────────────────────────────────
@@ -732,10 +733,10 @@ class LMSClient:
         main_result = self.load_model(main_model, config=main_config)
         draft_result = self.load_model(draft_model, config=draft_config)
         if main_result.status == "loaded" and draft_result.status == "loaded":
-            logger.info("Speculative decoding enabled: main=%s draft=%s",
+            logger.info("[LMSClient] Speculative decoding enabled (operation=enable_speculative, main=%s, draft=%s)",
                         main_model, draft_model)
         else:
-            logger.warning("Speculative decoding setup incomplete: main=%s draft=%s",
+            logger.warning("[LMSClient] Speculative decoding setup incomplete (operation=enable_speculative, main_status=%s, draft_status=%s)",
                            main_result.status, draft_result.status)
         return main_result, draft_result
 
@@ -854,7 +855,7 @@ class LMSClient:
             # v1.49.2 [2026-03-22] — Track auth failures for circuit breaker
             if exc.response.status_code in (401, 403):
                 self._record_auth_failure(exc.response.status_code)
-            logger.error("Native v1 HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
+            logger.error("[LMSClient] Chat HTTP error (operation=chat, http_status=%d): %s", exc.response.status_code, exc.response.text[:200])
             raise
 
         resp = self._parse_native_response(data, resolved)
@@ -979,11 +980,11 @@ class LMSClient:
 
                     # Log tool call failures
                     elif event.event_type == "tool_call.failure":
-                        logger.warning("Stream tool_call.failure: %s", event.error)
+                        logger.warning("[LMSClient] Stream tool_call failure (operation=stream): %s", event.error)
 
                     # Log errors (stream continues — chat.end still arrives)
                     elif event.event_type == "error":
-                        logger.warning("Stream error: %s", event.error)
+                        logger.warning("[LMSClient] Stream error (operation=stream): %s", event.error)
 
                     # Extract final stats + response_id from chat.end
                     elif event.event_type == "chat.end" and event.result:
@@ -1000,7 +1001,7 @@ class LMSClient:
             # v1.49.2 [2026-03-22] — Track auth failures for circuit breaker
             if exc.response.status_code in (401, 403):
                 self._record_auth_failure(exc.response.status_code)
-            logger.error("Stream HTTP %d: %s", exc.response.status_code, exc.response.text[:200])
+            logger.error("[LMSClient] Stream HTTP error (operation=stream, http_status=%d): %s", exc.response.status_code, exc.response.text[:200])
             raise
 
         result.latency_ms = (time.perf_counter() - t0) * 1000
@@ -1086,7 +1087,7 @@ class LMSClient:
                     "provider_info": item.get("provider_info"),
                 })
             elif item_type == "invalid_tool_call":
-                logger.warning("Invalid tool call: %s — %s",
+                logger.warning("[LMSClient] Invalid tool call (operation=parse_response, tool=%s): %s",
                                item.get("metadata", {}).get("tool_name", "?"),
                                item.get("reason", "unknown"))
 
@@ -1279,10 +1280,10 @@ class LMSClient:
             self.invalidate_model_cache()
             # Invalidate all conversations using this model
             self._on_model_unloaded(model_id)
-            logger.info("Model unloaded via REST: %s", model_id)
+            logger.info("[LMSClient] Model unloaded via REST (operation=unload_model, model=%s)", model_id)
             return True
         except Exception as exc:
-            logger.error("REST unload failed: %s", exc)
+            logger.error("[LMSClient] REST unload failed (operation=unload_model): %s", exc)
             return False
 
     def __repr__(self) -> str:
@@ -1363,12 +1364,13 @@ def get_lms_client(**kwargs) -> LMSClient:
         # v1.43.0 — Log startup diagnostics
         auth = "Bearer auth" if _lms_instance._api_token else "NO AUTH"
         logger.info(
-            "LMSClient initialized: %s (%s)",
+            "[LMSClient] Initialized (operation=init, url=%s, auth=%s)",
             _lms_instance.base_url, auth,
         )
         if not _lms_instance._api_token:
             logger.warning(
-                "LMSClient has no API token — LMStudio will reject requests if auth is enabled. "
+                "[LMSClient] No API token configured (operation=init). "
+                "LMStudio will reject requests if auth is enabled. "
                 "Set lmstudio.api_token in config/default.yaml"
             )
     return _lms_instance

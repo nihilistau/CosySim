@@ -32,6 +32,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "nexus_panel"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 try:
     from engine.port_registry import get_port as _get_port
@@ -97,7 +98,7 @@ class NexusPanelScene(FlaskScene):
         self._ingest_jobs: Dict[str, dict] = {}
 
         self._register_routes()
-        logger.info("NexusPanelScene initialised on port %s", port)
+        logger.info("[%s] Scene initialised on port %s (operation=lifecycle)", SCENE_ID, port)
 
     # ── Activity Tracking ───────────────────────────────────────────────
 
@@ -508,7 +509,7 @@ class NexusPanelScene(FlaskScene):
                     status["tiers"]["llm"] = {"available": False, "label": "LMStudio (offline)"}
 
             except Exception as exc:
-                logger.warning("NLM status check failed: %s", exc)
+                logger.warning("[%s] NLM status check failed (operation=nlm_status): %s", SCENE_ID, exc)
                 status["error"] = str(exc)
 
             return jsonify(status)
@@ -624,7 +625,7 @@ class NexusPanelScene(FlaskScene):
                         "sources": sources[:5],
                     })
             except Exception as exc:
-                logger.warning("Librarian Q&A failed: %s", exc)
+                logger.warning("[%s] Librarian Q&A failed (operation=librarian): %s", SCENE_ID, exc)
 
             # Fallback: search and synthesise
             try:
@@ -647,7 +648,7 @@ class NexusPanelScene(FlaskScene):
                         "sources": [r.get("title", "") for r in results[:3]],
                     })
             except Exception as exc:
-                logger.warning("Librarian search failed: %s", exc)
+                logger.warning("[%s] Librarian search failed (operation=librarian): %s", SCENE_ID, exc)
 
             return jsonify({
                 "response": "I couldn't find relevant information. Try rephrasing your "
@@ -1109,7 +1110,7 @@ class NexusPanelScene(FlaskScene):
                                    f"{result.get('count', 0)} cards from {nb_id}", "studio")
                 return jsonify(result)
             except Exception as exc:
-                logger.exception("extract_flashcards failed")
+                logger.exception("[%s] extract_flashcards failed (operation=studio)", SCENE_ID)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/nlm/studio/extract-quiz", methods=["POST"])
@@ -1131,7 +1132,7 @@ class NexusPanelScene(FlaskScene):
                                    f"{result.get('count', 0)} questions from {nb_id}", "studio")
                 return jsonify(result)
             except Exception as exc:
-                logger.exception("extract_quiz failed")
+                logger.exception("[%s] extract_quiz failed (operation=studio)", SCENE_ID)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/nlm/studio/generate-report", methods=["POST"])
@@ -1152,7 +1153,7 @@ class NexusPanelScene(FlaskScene):
                 self._log_activity("studio_report", prompt[:60], "studio")
                 return jsonify(result)
             except Exception as exc:
-                logger.exception("generate_report_with_prompt failed")
+                logger.exception("[%s] generate_report_with_prompt failed (operation=studio)", SCENE_ID)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/nlm/studio/ask-multi", methods=["POST"])
@@ -1176,7 +1177,7 @@ class NexusPanelScene(FlaskScene):
                                    f"{len(questions)} questions on {nb_id}", "query")
                 return jsonify(result)
             except Exception as exc:
-                logger.exception("ask_multi failed")
+                logger.exception("[%s] ask_multi failed (operation=studio)", SCENE_ID)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/nlm/studio/distill", methods=["POST"])
@@ -1199,7 +1200,7 @@ class NexusPanelScene(FlaskScene):
                 self._stats["entries_added"] += total
                 return jsonify(result)
             except Exception as exc:
-                logger.exception("distill_to_nexus failed")
+                logger.exception("[%s] distill_to_nexus failed (operation=studio)", SCENE_ID)
                 return jsonify({"error": str(exc)}), 500
 
         # ── Quota & Auth ───────────────────────────────────────────────────────
@@ -1334,7 +1335,7 @@ class NexusPanelScene(FlaskScene):
                     **result,
                 })
             except Exception as exc:
-                logger.exception("export-nexus failed")
+                logger.exception("[%s] export-nexus failed (operation=export)", SCENE_ID)
                 return jsonify({"error": str(exc), "ok": False}), 500
 
 
@@ -2205,15 +2206,15 @@ class NexusPanelScene(FlaskScene):
             req = urllib.request.Request(f"{proxy_url}/health", method="GET")
             with urllib.request.urlopen(req, timeout=3) as resp:
                 if resp.status == 200:
-                    logger.info("NLM proxy online at %s — NLM intelligence active", proxy_url)
+                    logger.info("[%s] NLM proxy online at %s — NLM intelligence active (operation=health)", SCENE_ID, proxy_url)
                     return
         except Exception:
             pass
         logger.warning(
-            "NLM proxy OFFLINE at %s — NLM Lab features will degrade to cache/FTS only. "
+            "[%s] NLM proxy OFFLINE at %s (operation=health) — NLM Lab features will degrade to cache/FTS only. "
             "Start it with: python -m engine.mcp.nlm_live_proxy  "
             "Or launch with: python launcher.py nlm_proxy",
-            proxy_url,
+            SCENE_ID, proxy_url,
         )
 
     def on_shutdown(self) -> None:

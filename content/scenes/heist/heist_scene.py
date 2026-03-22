@@ -805,7 +805,7 @@ class HeistScene(FlaskScene):
             get_framework().save_state()
         except Exception:
             pass
-        logger.info("Heist scene stopped.")
+        logger.info("[%s] Scene stopped (operation=lifecycle)", SCENE_ID)
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:

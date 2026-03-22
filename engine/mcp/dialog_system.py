@@ -823,7 +823,8 @@ class DialogSystem:
                     alternatives.append({"text": text, "score": score, "index": i})
 
         except Exception as exc:
-            logger.error("try_alternatives failed: %s", exc)
+            # v1.49.3 [2026-03-22] — Structured logging context
+            logger.error("[DialogSystem] try_alternatives failed (operation=alternatives): %s", exc)
 
         alternatives.sort(key=lambda x: x["score"], reverse=True)
         return alternatives
