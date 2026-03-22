@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/oracle-check.py",
+            "timeout": 5,
+            "async": true,
+            "statusMessage": "Oracle scanning..."
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [
@@ -21,6 +34,18 @@
             "command": "python C:/Files/Models/CosySim/.claude/hooks/post-tool.py",
             "timeout": 5,
             "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/oracle-check.py",
+            "timeout": 5,
+            "async": true,
+            "statusMessage": "Oracle checking..."
           }
         ]
       }
