@@ -963,6 +963,102 @@ class NeonCityScene(FlaskScene):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 400
 
+        # v1.52.0 [2026-03-22] — NPC Relationship API
+        # CONNECTS: ReputationManager, CharacterRegistry
+        # CALLED BY: NeonCityApp._loadRelationships() via REST
+        @self.app.route("/api/relationships")
+        def api_relationships():
+            """Return player's relationship standings with all known NPCs and factions."""
+            try:
+                rep = get_reputation_manager()
+                entries = rep.get_all_entries("player")
+                result = []
+                for entry in entries:
+                    result.append({
+                        "id": entry.entity_id,
+                        "name": getattr(entry, "display_name", entry.entity_id),
+                        "standing": entry.standing,
+                        "label": entry.label,
+                        "tier": entry.tier,
+                        "history": [
+                            {"delta": h.delta, "reason": h.reason}
+                            for h in (entry.history or [])[-5:]
+                        ],
+                    })
+                return jsonify({"ok": True, "relationships": result})
+            except Exception as exc:
+                logger.debug("Relationships API error: %s", exc)
+                return jsonify({"ok": True, "relationships": []})
+
+        # v1.52.0 [2026-03-22] — Dynamic Territory Mission Generation
+        # CONNECTS: TerritoryManager, MissionManager, faction state
+        # CALLED BY: NeonCityApp via REST (on demand or periodic)
+        @self.app.route("/api/missions/generate", methods=["POST"])
+        def api_generate_mission():
+            """Generate a dynamic mission based on current territory/faction state."""
+            try:
+                from engine.world.territory import get_territory_manager
+                tm = get_territory_manager()
+                mm = get_mission_manager()
+                ps = get_player_state()
+
+                # Pick a faction conflict zone for the mission
+                import random as _rng
+                districts = list(tm.get_all_control().items())
+                if not districts:
+                    return jsonify({"ok": False, "error": "No territory data available."})
+
+                district_name, control = _rng.choice(districts)
+                # Find the weakest and strongest faction in this district
+                sorted_factions = sorted(control.items(), key=lambda x: x[1], reverse=True)
+                dominant = sorted_factions[0][0] if sorted_factions else "Unknown"
+                weakest = sorted_factions[-1][0] if len(sorted_factions) > 1 else dominant
+
+                # Generate mission type based on player standing
+                player_standing = ps.faction_standings.get(dominant, 0) if hasattr(ps, "faction_standings") else 0
+                mission_types = [
+                    ("CAPTURE", f"Seize control of {district_name} from {dominant}", "recon"),
+                    ("DEFEND", f"Defend {district_name} against {weakest} expansion", "extraction"),
+                    ("SABOTAGE", f"Sabotage {dominant}'s operations in {district_name}", "heist"),
+                    ("RECON", f"Gather intelligence on {dominant} in {district_name}", "recon"),
+                ]
+                mtype, desc, category = _rng.choice(mission_types)
+                difficulty = _rng.randint(2, 4)
+                credits_reward = 500 + difficulty * 300
+                xp_reward = 50 + difficulty * 25
+
+                mission_id = f"territory_{district_name.lower().replace(' ', '_')}_{int(time.time()) % 10000}"
+                result = mm.create(
+                    mission_id=mission_id,
+                    title=f"{mtype}: {district_name}",
+                    description=desc,
+                    mission_type=category,
+                    difficulty=difficulty,
+                    giver_npc=dominant,
+                    location=district_name,
+                    objectives=[
+                        f"Infiltrate {district_name}",
+                        f"Complete {mtype.lower()} objective",
+                        f"Extract without detection",
+                    ],
+                    rewards={
+                        "credits": credits_reward,
+                        "xp": xp_reward,
+                        "reputation": difficulty * 2,
+                        "faction_rep": difficulty * 3 if player_standing < 0 else difficulty,
+                        "faction": weakest if mtype == "CAPTURE" else dominant,
+                    },
+                )
+                return jsonify({
+                    "ok": True,
+                    "mission_id": mission_id,
+                    "title": f"{mtype}: {district_name}",
+                    "message": f"New territory mission available: {mtype} in {district_name}",
+                })
+            except Exception as exc:
+                logger.error("Mission generation failed: %s", exc)
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
         @self.app.route("/api/crew")
         def api_crew():
             """Full crew state — members, operations, roles."""

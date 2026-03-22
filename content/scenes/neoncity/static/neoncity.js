@@ -1786,6 +1786,72 @@ class NeonCityScene {
         }
     }
 
+    // ── NPC Relationships ──────────────────────────────────────────────
+    // v1.52.0 [2026-03-22] — Faction/NPC standing display
+    // CONNECTS: /api/relationships, ReputationManager
+
+    /** Load and render NPC/faction relationship standings. */
+    async loadRelationships() {
+        try {
+            const res = await fetch('/api/relationships');
+            const data = await res.json();
+            this._renderRelationships(data.relationships || []);
+        } catch (e) {
+            console.warn('[NeonCity] relationships fetch failed:', e);
+        }
+    }
+
+    /**
+     * Render relationship standings in the right sidebar.
+     * @param {Array} rels - Relationship entries from API.
+     */
+    _renderRelationships(rels) {
+        const el = document.getElementById('relationship-list');
+        if (!el) return;
+        if (!rels.length) {
+            el.innerHTML = '<div class="nc-empty">No standings recorded yet.</div>';
+            return;
+        }
+        const TIER_COLORS = {
+            'Revered': '#22c55e', 'Honored': '#22c55e', 'Friendly': '#3b82f6',
+            'Warm': '#06b6d4', 'Neutral': '#4a5568', 'Cool': '#f59e0b',
+            'Unfriendly': '#f97316', 'Hostile': '#ef4444', 'Nemesis': '#dc2626',
+        };
+        el.innerHTML = rels.slice(0, 8).map(r => {
+            const color = TIER_COLORS[r.label] || '#4a5568';
+            const sign = r.standing >= 0 ? '+' : '';
+            return `<div class="nc-rep-row">
+                <span class="nc-rep-name">${this._esc(r.name || r.id)}</span>
+                <span class="nc-rep-label" style="color:${color}">${this._esc(r.label)}</span>
+                <span class="nc-rep-val" style="color:${color}">${sign}${r.standing}</span>
+            </div>`;
+        }).join('');
+    }
+
+    // ── Dynamic Mission Generation ────────────────────────────────────
+    // v1.52.0 [2026-03-22] — Territory-based dynamic missions
+    // CONNECTS: /api/missions/generate, TerritoryManager
+
+    /** Generate a new territory mission from current faction state. */
+    async generateMission() {
+        try {
+            const res = await fetch('/api/missions/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            const data = await res.json();
+            if (data.ok) {
+                this._showToast('NEW MISSION', data.message || 'Territory mission generated.', 5000);
+                this._appendChatEntry('event', '[MISSIONS]', data.message || 'New mission available!');
+                this.refreshHud();
+            } else {
+                this._showToast('FAILED', data.error || 'Could not generate mission.', 4000);
+            }
+        } catch (err) {
+            this._showToast('ERROR', err.message, 4000);
+        }
+    }
+
     // ── Skill Progression ─────────────────────────────────────────────
     // v1.45.0 [2026-03-21] — XP bars per skill, global level display
     // CONNECTS: SkillManager, /api/skills, #player-skills
@@ -2105,6 +2171,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // v1.52.0 — Fetch district scene online/offline status on load and every 60 s
     NeonCityApp._updateDistrictStatuses();
     setInterval(() => NeonCityApp._updateDistrictStatuses(), 60_000);
+
+    // v1.52.0 — Load NPC relationship standings
+    NeonCityApp.loadRelationships();
+    setInterval(() => NeonCityApp.loadRelationships(), 60_000);
 
     // Refresh faction status every 30 s
     setInterval(() => {

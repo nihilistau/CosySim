@@ -377,19 +377,25 @@ class CityMap:
         energy_cost: int,
         heat_add: int,
     ) -> None:
+        payload = {
+            "from": origin,
+            "to": destination,
+            "travel_time_min": travel_time,
+            "energy_cost": energy_cost,
+            "heat_add": heat_add,
+            "timestamp": time.time(),
+        }
+        # v1.52.0 — Fire via both EventCascade and EventBus for broader reach
         try:
             from engine.world.event_cascade import get_event_cascade
-            ec = get_event_cascade()
-            ec.fire("player_travel", {
-                "from": origin,
-                "to": destination,
-                "travel_time_min": travel_time,
-                "energy_cost": energy_cost,
-                "heat_add": heat_add,
-                "timestamp": time.time(),
-            })
+            get_event_cascade().fire("player_travel", payload)
         except Exception as exc:
-            logger.debug("Could not fire travel event: %s", exc)
+            logger.debug("Could not fire travel event (cascade): %s", exc)
+        try:
+            from engine.events.event_bus import get_event_bus
+            get_event_bus().publish("player_travel", payload)
+        except Exception as exc:
+            logger.debug("Could not fire travel event (bus): %s", exc)
 
     # ── NPC Location Tracking ─────────────────────────────────────────────
 

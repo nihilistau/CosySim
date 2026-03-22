@@ -1,41 +1,43 @@
 /* ═══════════════════════════════════════════════════════════════════════
    THE RUSTY ANCHOR — tavern.css
-   v0.68 "Dark Renaissance" — Gritty dockside tavern palette
-   Accent: dark amber #92400e  |  rgb(146 64 14)
+   v1.52 Cyberpunk Overhaul — Neon orange dockside dive bar
+   Accent: neon orange #f97316 | secondary: cyan #06b6d4
+   v1.52.0 [2026-03-22] — Complete rebrand: medieval → cyberpunk.
+                           Orange neon, mono fonts, dark void palette.
 ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── CSS Custom Properties ───────────────────────────────────────────── */
 :root {
-  --amber:          #92400e;
-  --amber-light:    #b45309;
-  --amber-glow:     #d97706;
-  --amber-faint:    rgba(146, 64, 14, 0.18);
-  --amber-border:   rgba(146, 64, 14, 0.45);
+  --amber:          #f97316;
+  --amber-light:    #fb923c;
+  --amber-glow:     #f97316;
+  --amber-faint:    rgba(249, 115, 22, 0.12);
+  --amber-border:   rgba(249, 115, 22, 0.30);
 
-  --bg-void:        #0d0905;
-  --bg-deep:        #150e08;
-  --bg-dark:        #1c1209;
-  --bg-card:        #231610;
-  --bg-panel:       #2e1c10;
-  --bg-raised:      #3a2415;
+  --bg-void:        #050710;
+  --bg-deep:        #080a12;
+  --bg-dark:        #0c0e18;
+  --bg-card:        #10131e;
+  --bg-panel:       rgba(10, 14, 22, 0.88);
+  --bg-raised:      #1a1e2e;
 
-  --parchment:      #e8d5b5;
-  --parchment-dim:  #a08060;
-  --parchment-faint:#5a4030;
+  --parchment:      #c0c8d8;
+  --parchment-dim:  #4a5568;
+  --parchment-faint:#2d3348;
 
   --red-warn:       #7f1d1d;
-  --red-hot:        #dc2626;
-  --green-safe:     #14532d;
-  --blue-cool:      #1e3a5f;
+  --red-hot:        #ef4444;
+  --green-safe:     #22c55e;
+  --blue-cool:      #06b6d4;
 
-  --font-serif:     'Georgia', 'Times New Roman', serif;
-  --font-mono:      'Courier New', monospace;
+  --font-serif:     'Rajdhani', 'Segoe UI', sans-serif;
+  --font-mono:      'Orbitron', 'Share Tech Mono', monospace;
 
-  --radius-sm:      4px;
-  --radius-md:      8px;
-  --radius-lg:      14px;
+  --radius-sm:      3px;
+  --radius-md:      4px;
+  --radius-lg:      6px;
 
-  --shadow-amber:   0 0 12px rgba(146, 64, 14, 0.35);
+  --shadow-amber:   0 0 12px rgba(249, 115, 22, 0.25);
   --shadow-deep:    0 4px 24px rgba(0, 0, 0, 0.7);
 
   --transition:     0.22s ease;

@@ -4,30 +4,34 @@
 ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Variables ─────────────────────────────────────────────────── */
+/* v1.52.0 [2026-03-22] — Cyberpunk intensification: deeper blacks,
+   cyan secondary, mono headers, stronger neon glows */
 :root {
-  --cn-bg:          #09090b;
-  --cn-bg-panel:    #111115;
-  --cn-bg-panel2:   #16161c;
-  --cn-felt:        #0e2a1c;
-  --cn-felt-edge:   #163824;
+  --cn-bg:          #050710;
+  --cn-bg-panel:    #0a0c14;
+  --cn-bg-panel2:   #10131e;
+  --cn-felt:        #0a1e15;
+  --cn-felt-edge:   #0f2e20;
   --cn-accent:      #f97316;
-  --cn-accent-dim:  rgba(249,115,22,0.18);
-  --cn-accent-glow: 0 0 18px rgba(249,115,22,0.5);
+  --cn-accent-dim:  rgba(249,115,22,0.15);
+  --cn-accent-glow: 0 0 24px rgba(249,115,22,0.5), 0 0 48px rgba(249,115,22,0.2);
   --cn-accent-text: #fb923c;
-  --cn-gold:        #d4a933;
-  --cn-text:        #d4cfca;
-  --cn-text-muted:  #6b6860;
-  --cn-text-bright: #fff;
-  --cn-border:      #2a2a35;
+  --cn-gold:        #f59e0b;
+  --cn-cyan:        #06b6d4;
+  --cn-cyan-glow:   0 0 16px rgba(6,182,212,0.3);
+  --cn-text:        #c0c8d8;
+  --cn-text-muted:  #4a5568;
+  --cn-text-bright: #e5e7eb;
+  --cn-border:      rgba(249,115,22,0.1);
   --cn-border-acc:  rgba(249,115,22,0.35);
-  --cn-red:         #e03e3e;
+  --cn-red:         #ef4444;
   --cn-green:       #22c55e;
   --cn-shadow:      0 4px 24px rgba(0,0,0,0.7);
-  --cn-radius:      8px;
-  --cn-radius-lg:   14px;
-  --cn-font-head:   'Georgia', 'Times New Roman', serif;
-  --cn-font-body:   'Inter', system-ui, sans-serif;
-  --cn-font-mono:   'Courier New', monospace;
+  --cn-radius:      4px;
+  --cn-radius-lg:   6px;
+  --cn-font-head:   'Orbitron', 'Share Tech Mono', monospace;
+  --cn-font-body:   'Rajdhani', system-ui, sans-serif;
+  --cn-font-mono:   'JetBrains Mono', 'Courier New', monospace;
 }
 
 /* ── Reset ──────────────────────────────────────────────────────── */

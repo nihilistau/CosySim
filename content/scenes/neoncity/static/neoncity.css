@@ -424,6 +424,21 @@
 .crew-dismiss { font-size: 0.5rem; padding: 1px 4px; opacity: 0.4; transition: opacity 0.2s; }
 .crew-dismiss:hover { opacity: 1; color: #ef4444; }
 
+/* v1.52.0 — NPC Relationship standings */
+.nc-relationships { max-height: 180px; overflow-y: auto; }
+.nc-rep-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.05);
+  font-family: var(--nc-mono);
+  font-size: 0.5rem;
+}
+.nc-rep-name { flex: 1; color: var(--nc-text); letter-spacing: 0.5px; }
+.nc-rep-label { font-size: 0.45rem; letter-spacing: 0.5px; }
+.nc-rep-val { min-width: 30px; text-align: right; font-weight: 600; }
+
 /* v1.52.0 — Clickable mission objectives */
 .mm-obj-row.clickable { cursor: pointer; transition: background 0.2s; border-radius: 2px; padding: 2px 4px; }
 .mm-obj-row.clickable:hover { background: rgba(6, 182, 212, 0.08); }
