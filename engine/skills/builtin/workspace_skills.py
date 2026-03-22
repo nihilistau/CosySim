@@ -452,13 +452,14 @@ def workspace_news(topic: str, sources: str = "") -> str:
         return json.dumps({"error": str(exc)})
 
 
+# v1.49.5 [2026-03-22] — Renamed from workspace_generate to avoid duplicate registration
 @skill(
     pack="workspace",
-    description="Generate text content using Workspace Gemini (Sheets/Docs context)",
-    tags=["workspace", "gemini", "generate", "text"],
+    description="Generate text content using Workspace Gemini and store in Nexus",
+    tags=["workspace", "gemini", "generate", "text", "store"],
     category=SkillCategory.SYSTEM,
 )
-def workspace_generate(prompt: str, context: str = "sheets", store: bool = True) -> str:
+def workspace_generate_and_store(prompt: str, context: str = "sheets", store: bool = True) -> str:
     """Generate content via Workspace Gemini and optionally store in Nexus.
 
     Uses the workspace_generate pipeline stage. Context can be 'sheets' or 'docs'.
