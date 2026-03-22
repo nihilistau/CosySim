@@ -547,11 +547,18 @@ class NexusClient:
     def stats(self) -> Dict:
         return self._get("/api/stats")
     
-    def is_available(self) -> bool:
+    def is_available(self, timeout: float = 5.0) -> bool:
+        """Check if Nexus KMS is reachable and healthy.
+
+        Args:
+            timeout: Health check timeout in seconds (default 5s, not 30s).
+        """
         try:
-            result = self.health()
+            # v1.49.5 [2026-03-22] — Short timeout for health checks + logging on failure
+            result = self._get("/api/health", timeout=timeout)
             return result.get("ok", False)
-        except Exception:
+        except Exception as exc:
+            logger.warning("[NexusClient] Health check failed (operation=health_check): %s", exc)
             return False
 
     # ─── Q&A System (v0.50b) ─────────────────────────────────
@@ -733,9 +740,9 @@ class NexusClient:
             entries = [e for e in entries if method in (e.get("content") or "")]
         return entries
     
-    def _get(self, path: str) -> dict:
-        return self._request("GET", path)
-    
+    def _get(self, path: str, timeout: Optional[float] = None) -> dict:
+        return self._request("GET", path, timeout=timeout)
+
     def _post(self, path: str, payload: dict) -> dict:
         return self._request("POST", path, payload)
     
@@ -745,7 +752,7 @@ class NexusClient:
     def _delete(self, path: str) -> dict:
         return self._request("DELETE", path)
     
-    def _request(self, method: str, path: str, payload: dict = None) -> dict:
+    def _request(self, method: str, path: str, payload: dict = None, timeout: Optional[float] = None) -> dict:
         url = f"{self._base_url}{path}"
         last_err = None
         for attempt in range(1, self._max_retries + 1):
@@ -756,15 +763,19 @@ class NexusClient:
                         headers={"Content-Type": "application/json"})
                 else:
                     req = urllib.request.Request(url, method=method)
-                with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                # v1.49.5 [2026-03-22] — Support per-request timeout override
+                with urllib.request.urlopen(req, timeout=timeout or self._timeout) as resp:
                     return json.loads(resp.read().decode())
             except Exception as exc:
                 last_err = exc
                 if attempt < self._max_retries:
                     time.sleep(0.5 * attempt)  # exponential backoff
                     continue
-                logger.debug("Nexus %s %s failed after %d attempts: %s",
-                            method, path, attempt, exc)
+                # v1.49.5 [2026-03-22] — Structured logging with operation context
+                logger.warning(
+                    "[NexusClient] %s %s failed after %d attempt(s) (operation=request): %s",
+                    method, path, attempt, exc,
+                )
         return {"ok": False, "error": str(last_err)}
 
 
