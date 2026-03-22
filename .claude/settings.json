@@ -5,8 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Files/Models/CosySim/.claude/hooks/oracle-check.py",
-            "timeout": 5,
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/cosysim-hooks.py",
+            "timeout": 8,
             "async": true,
             "statusMessage": "Oracle scanning..."
           }
@@ -38,12 +38,24 @@
         ]
       },
       {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/cosysim-hooks.py",
+            "timeout": 5,
+            "async": true,
+            "statusMessage": "Syntax checking..."
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Files/Models/CosySim/.claude/hooks/oracle-check.py",
-            "timeout": 5,
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/cosysim-hooks.py",
+            "timeout": 8,
             "async": true,
             "statusMessage": "Oracle checking..."
           }
