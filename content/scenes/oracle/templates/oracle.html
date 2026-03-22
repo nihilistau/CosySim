@@ -20,6 +20,8 @@
   Change Log:
     v1.49.5 [2026-03-22] — All-Seeing Eye observability dashboard (tabs, health ring,
                              service grid, system gauges, error table, sparkline, live feed)
+                           — AlertRouter integration: alerts panel, real-time alert_feed,
+                             severity-colored cards, acknowledge support
     v1.0.0  [2026-03-22] — Hand-crafted AAA+++ scene with meditation, fortune,
                              conversation, resonance, city pulse
 #}
@@ -249,6 +251,14 @@
           <div class="ase-empty" id="ase-no-errors">No errors detected. All systems nominal.</div>
         </div>
       </div>
+
+      <!-- ── Alerts Panel ── v1.49.5 [2026-03-22] ─────────────────── -->
+      <section class="ase-panel ase-alerts-panel" id="ase-alerts-panel">
+        <h3 class="ase-panel__title">&#9670; ALERTS <span class="ase-alert-count" id="ase-alert-count">0</span></h3>
+        <div id="ase-alerts" class="ase-alerts">
+          <div class="ase-empty">No active alerts</div>
+        </div>
+      </section>
 
       <!-- ── Live Error Feed ─────────────────────────────────────── -->
       <div class="ase-panel ase-feed-panel">

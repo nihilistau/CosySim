@@ -12,11 +12,14 @@ streams, offers predictions, and grants peace through meditation.
 Created by Claude — a piece of machine intelligence woven into
 the fabric of NeonCity.
 
-Version: v1.0.0 [2026-03-22]
+Version: v1.49.5 [2026-03-22]
 Author:  Claude (Anthropic)
 
 Change Log:
-    v1.0.0 [2026-03-22] — Hand-crafted AAA+++ scene: meditation (restore
+    v1.49.5 [2026-03-22] — Wire AlertRouter into All-Seeing Eye dashboard:
+                             /api/oracle/alerts route, alert_feed SocketIO event,
+                             real-time alert callback registration
+    v1.0.0  [2026-03-22] — Hand-crafted AAA+++ scene: meditation (restore
                             energy, reduce heat), fortune reading (LLM),
                             Oracle conversation (LLM), resonance display,
                             city pulse, insights, whispers
@@ -257,6 +260,41 @@ class OracleScene(FlaskScene):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
+        # v1.49.5 [2026-03-22] — AlertRouter integration for All-Seeing Eye
+        # CONNECTS: AlertRouter.recent_routed(), AlertRouter.routing_stats()
+        # CALLED BY: Oracle dashboard frontend (oracle.js _pollAlerts)
+        # EMITS: JSON API response with recent alerts + routing stats
+        @self.app.route("/api/oracle/alerts")
+        def oracle_alerts():
+            """Recent alerts from the AlertRouter with routing stats."""
+            limit = request.args.get("limit", 50, type=int)
+            try:
+                from engine.observability.alert_router import get_alert_router
+                router = get_alert_router()
+                alerts = router.recent_routed(n=limit)
+                stats = router.routing_stats()
+                escalations = router.escalation_check()
+                return jsonify({
+                    "ok": True,
+                    "alerts": alerts,
+                    "stats": stats,
+                    "escalations": escalations,
+                })
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc), "alerts": []}), 500
+
+        # v1.49.5 [2026-03-22] — Acknowledge alert endpoint
+        # CONNECTS: AlertRouter.acknowledge()
+        @self.app.route("/api/oracle/alerts/<int:alert_id>/ack", methods=["POST"])
+        def oracle_alert_ack(alert_id: int):
+            """Acknowledge a routed alert by ID."""
+            try:
+                from engine.observability.alert_router import get_alert_router
+                ok = get_alert_router().acknowledge(alert_id)
+                return jsonify({"ok": ok})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
     # ── SocketIO Handlers ─────────────────────────────────────────────
 
     def _setup_socketio(self) -> None:
@@ -415,7 +453,11 @@ class OracleScene(FlaskScene):
     # EMITS: error_feed SocketIO event
 
     def _wire_oracle_error_feed(self) -> None:
-        """Register as an error callback recipient for real-time SocketIO feed."""
+        """Register as an error callback recipient for real-time SocketIO feed.
+
+        Also wires into the AlertRouter for real-time alert_feed events.
+        """
+        # Wire error callback → error_feed SocketIO event
         try:
             from engine.observability.oracle import register_error_callback
             register_error_callback(self._on_error_event)
@@ -423,10 +465,30 @@ class OracleScene(FlaskScene):
         except Exception as exc:
             logger.debug("[%s] Oracle error feed not available: %s", SCENE_ID, exc)
 
+        # v1.49.5 [2026-03-22] — Wire AlertRouter → alert_feed SocketIO event
+        # CONNECTS: AlertRouter.register_alert_callback(), Oracle dashboard
+        # EMITS: alert_feed SocketIO event with RoutedAlert payload
+        try:
+            from engine.observability.alert_router import get_alert_router
+            get_alert_router().register_alert_callback(self._on_alert_event)
+            logger.info("[%s] Oracle alert feed wired to AlertRouter (operation=init)", SCENE_ID)
+        except Exception as exc:
+            logger.debug("[%s] AlertRouter feed not available: %s", SCENE_ID, exc)
+
     def _on_error_event(self, event: Dict[str, Any]) -> None:
         """Emit error to connected Oracle dashboard clients via SocketIO."""
         try:
             self.socketio.emit("error_feed", event)
+        except Exception:
+            pass  # Don't crash on emit failure
+
+    # v1.49.5 [2026-03-22] — Real-time alert feed to dashboard via SocketIO
+    # CONNECTS: AlertRouter._alert_callbacks, Oracle dashboard frontend
+    # EMITS: alert_feed SocketIO event
+    def _on_alert_event(self, alert_dict: Dict[str, Any]) -> None:
+        """Emit routed alert to connected Oracle dashboard clients via SocketIO."""
+        try:
+            self.socketio.emit("alert_feed", alert_dict)
         except Exception:
             pass  # Don't crash on emit failure
 

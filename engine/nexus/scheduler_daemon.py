@@ -1433,22 +1433,30 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
 
 
 def _auto_embedding_callback() -> Dict[str, Any]:
-    """Batch-embed new Nexus entries and Q&A pairs into the vector store."""
+    """Batch-embed new Nexus entries and Q&A pairs into the vector store.
+
+    Also processes the retry queue for previously failed embeddings.
+    """
     try:
         from engine.nexus.embedding_hooks import (
             batch_embed_nexus_entries,
             batch_embed_qa_entries,
+            process_retry_queue,
         )
         entries_result = batch_embed_nexus_entries(limit=500)
         qa_result = batch_embed_qa_entries(limit=500)
+        # v1.49.5 [2026-03-22] — Process retry queue for previously failed embeddings
+        retry_result = process_retry_queue(limit=100)
         return {
             "entries_embedded": entries_result.get("embedded", 0),
             "entries_skipped": entries_result.get("skipped", 0),
             "qa_embedded": qa_result.get("embedded", 0),
             "qa_skipped": qa_result.get("skipped", 0),
+            "retry_succeeded": retry_result.get("succeeded", 0),
+            "retry_failed": retry_result.get("failed", 0),
         }
     except Exception as exc:
-        logger.error("Auto-embedding task failed: %s", exc)
+        logger.error("[SchedulerDaemon] Auto-embedding task failed (operation=embed): %s", exc)
         return {"error": str(exc)}
 
 

@@ -1,0 +1,34 @@
+{
+  "id": "template_terminal",
+  "name": "Terminal / Hacker Template",
+  "scene_key": "terminal",
+  "accent_color": "#22c55e",
+  "description": "Cyberpunk hacker terminal with command input, output log, system info, and network map.",
+  "components": [
+    {
+      "id": "header_1",
+      "type": "scene_header",
+      "props": { "title": "TERMINAL", "subtitle": "root@neoncity:~#", "show_clock": true, "show_credits": false },
+      "children": {}
+    },
+    {
+      "id": "main_layout",
+      "type": "column_layout",
+      "props": { "columns": 2, "ratio": "3:1" },
+      "children": {
+        "left": [
+          { "id": "output", "type": "glass_panel", "props": { "title": "Output", "variant": "default", "scrollable": true }, "children": {} },
+          { "id": "input", "type": "text_input", "props": { "placeholder": "> _", "submit_label": "Execute" }, "children": {} }
+        ],
+        "right": [
+          { "id": "sys_info", "type": "glass_panel", "props": { "title": "System", "variant": "accent" }, "children": {} },
+          { "id": "cpu_bar", "type": "health_bar", "props": { "label": "CPU", "value": 45 }, "children": {} },
+          { "id": "mem_bar", "type": "health_bar", "props": { "label": "Memory", "value": 72 }, "children": {} },
+          { "id": "net_bar", "type": "health_bar", "props": { "label": "Network", "value": 23 }, "children": {} },
+          { "id": "targets", "type": "leaderboard", "props": { "title": "Active Targets", "max_entries": 5 }, "children": {} }
+        ]
+      }
+    }
+  ],
+  "updated_at": "2026-03-22T00:00:00Z"
+}

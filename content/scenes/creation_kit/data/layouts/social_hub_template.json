@@ -1,0 +1,41 @@
+{
+  "id": "template_social_hub",
+  "name": "Social Hub Template",
+  "scene_key": "social_hub",
+  "accent_color": "#f472b6",
+  "description": "Social scene with character profiles, relationship tracker, chat feed, and faction standings.",
+  "components": [
+    {
+      "id": "header_1",
+      "type": "scene_header",
+      "props": { "title": "THE GATHERING", "subtitle": "Where stories intertwine", "show_clock": true, "show_credits": true },
+      "children": {}
+    },
+    {
+      "id": "faction_standing",
+      "type": "faction_bars",
+      "props": { "factions": ["Syndicate", "Resistance", "Corporate", "Underground"] },
+      "children": {}
+    },
+    {
+      "id": "main_layout",
+      "type": "column_layout",
+      "props": { "columns": 3, "ratio": "1:2:1" },
+      "children": {
+        "col_1": [
+          { "id": "people", "type": "character_list", "props": { "show_mood": true, "show_status": true, "compact": false }, "children": {} }
+        ],
+        "col_2": [
+          { "id": "chat", "type": "glass_panel", "props": { "title": "Conversation", "variant": "default", "scrollable": true }, "children": {} },
+          { "id": "input", "type": "text_input", "props": { "placeholder": "Say something...", "submit_label": "Speak" }, "children": {} }
+        ],
+        "col_3": [
+          { "id": "profile", "type": "glass_panel", "props": { "title": "Character Profile", "variant": "accent" }, "children": {} },
+          { "id": "relationship", "type": "health_bar", "props": { "label": "Relationship", "value": 50 }, "children": {} },
+          { "id": "dialogue_opts", "type": "dialogue_choice", "props": { "choices": ["Flatter", "Threaten", "Bribe", "Ask"] }, "children": {} }
+        ]
+      }
+    }
+  ],
+  "updated_at": "2026-03-22T00:00:00Z"
+}
