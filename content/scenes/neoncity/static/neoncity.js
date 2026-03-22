@@ -286,6 +286,7 @@ class NeonCityScene {
                     const role = ROLE_MAP[n] || 'unknown';
                     return `<div class="modal-npc-card">
                         <span class="modal-npc-tag">${this._esc(n)}</span>
+                        <button class="nc-btn nc-btn--xs nc-btn--gift" onclick="event.stopPropagation();NeonCityApp.giftNpc('${this._esc(n)}')">GIFT</button>
                         <button class="nc-btn nc-btn--xs" onclick="event.stopPropagation();NeonCityApp.recruitNpc('${this._esc(n)}', '${role}')">RECRUIT</button>
                     </div>`;
                 })
@@ -1668,6 +1669,43 @@ class NeonCityScene {
             } else {
                 this._showToast('RECRUIT FAILED', data.error || data.message || 'Cannot recruit.', 5000);
                 this._appendChatEntry('system', '[CREW]', data.error || data.message || 'Recruitment failed.');
+            }
+        } catch (err) {
+            this._showToast('ERROR', err.message, 4000);
+        }
+    }
+
+    /**
+     * Gift an inventory item to an NPC to build relationship.
+     * v1.52.0 [2026-03-22]
+     * @param {string} npcId - NPC identifier
+     * CONNECTS: /api/npc/gift, ReputationManager
+     */
+    async giftNpc(npcId) {
+        // Use the first non-equipped item in inventory
+        const item = (this.inventory || []).find(i => i && i.id);
+        if (!item) {
+            this._showToast('NO ITEMS', 'You have nothing to gift.', 3000);
+            return;
+        }
+        if (!confirm(`Gift ${item.name || item.id} to ${npcId}?`)) return;
+        try {
+            const res = await fetch('/api/npc/gift', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ npc_id: npcId, item_id: item.id }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                this._showToast('GIFT ACCEPTED', data.message, 5000);
+                this._appendChatEntry('event', `[${npcId}]`, data.message);
+                if (data.can_recruit) {
+                    this._showToast('RECRUIT READY', `${npcId} is now willing to join your crew!`, 6000);
+                }
+                this.refreshHud();
+                this.loadRelationships();
+            } else {
+                this._showToast('GIFT FAILED', data.error || 'Cannot gift.', 4000);
             }
         } catch (err) {
             this._showToast('ERROR', err.message, 4000);

@@ -84,52 +84,54 @@ EXTERNAL_SERVICES = [
 ] + [("GitHub Copilot", 0, "")]
 
 # ──── Colour Scheme ───────────────────────────────────────────────────────
+# v1.52.0 [2026-03-22] — Cyberpunk TUI theme: deeper void, cyan/magenta accents,
+#                         neon borders, color-coded pillar sections
 TUI_CSS = """
 Screen {
-    background: #0a0a0f;
-    color: #e2e8f0;
+    background: #050710;
+    color: #c0c8d8;
 }
 
 Header {
-    background: #1e1b4b;
-    color: #a5b4fc;
+    background: #0a0e18;
+    color: #06b6d4;
     text-style: bold;
     height: 3;
 }
 
 Footer {
-    background: #1e1b4b;
-    color: #6366f1;
+    background: #0a0e18;
+    color: #4a5568;
     height: 1;
 }
 
 #left-panel {
     width: 42;
-    background: #0f0f1a;
-    border-right: tall #1e293b;
+    background: #080a12;
+    border-right: tall #162032;
     overflow-y: auto;
 }
 
 #center-panel {
-    background: #0a0a0f;
+    background: #050710;
 }
 
 #right-panel {
     width: 36;
-    background: #0f0f1a;
-    border-left: tall #1e293b;
+    background: #080a12;
+    border-left: tall #162032;
 }
 
 .panel-title {
-    background: #1e1b4b;
-    color: #818cf8;
+    background: #0a1628;
+    color: #06b6d4;
     text-style: bold;
     padding: 0 1;
     height: 1;
 }
 
 .section-title {
-    color: #475569;
+    color: #a855f7;
     text-style: bold;
     padding: 0 1;
     height: 1;
@@ -141,24 +143,25 @@ TargetRow {
 }
 
 TargetRow:hover {
-    background: #1e293b;
+    background: #0f1724;
 }
 
 TargetRow.-selected {
-    background: #312e81;
-    color: #e2e8f0;
+    background: #0c1a2e;
+    color: #06b6d4;
+    text-style: bold;
 }
 
 TargetRow.-running {
-    color: #34d399;
+    color: #22c55e;
 }
 
 TargetRow.-stopped {
-    color: #64748b;
+    color: #4a5568;
 }
 
 TargetRow.-autostart {
-    color: #a5b4fc;
+    color: #a855f7;
 }
 
 ServiceStatus {
@@ -167,7 +170,7 @@ ServiceStatus {
 }
 
 .status-up {
-    color: #34d399;
+    color: #22c55e;
 }
 
 .status-down {
@@ -175,7 +178,7 @@ ServiceStatus {
 }
 
 #log-panel {
-    border: tall #1e293b;
+    border: tall #162032;
     margin: 0 1;
     height: 1fr;
 }
@@ -188,15 +191,15 @@ ServiceStatus {
 .account-row {
     height: 1;
     padding: 0 1;
-    color: #94a3b8;
+    color: #64748b;
 }
 
 #details-bar {
     height: 3;
-    background: #111827;
-    border-top: tall #1e293b;
+    background: #080a12;
+    border-top: tall #162032;
     padding: 0 1;
-    color: #94a3b8;
+    color: #64748b;
 }
 
 TabbedContent {
@@ -205,6 +208,25 @@ TabbedContent {
 
 TabPane {
     padding: 0;
+}
+
+Rule {
+    color: #162032;
+}
+
+DataTable {
+    background: #050710;
+}
+
+DataTable > .datatable--header {
+    background: #0a0e18;
+    color: #06b6d4;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: #0c1a2e;
+    color: #06b6d4;
 }
 """
 
@@ -227,11 +249,13 @@ class TargetRow(Static):
         self._selected = False
 
     def render_row(self) -> str:
-        icon = "●" if self._is_up else "○"
-        auto = "★" if self.info.get("auto_start") else " "
+        # v1.52.0 — Enhanced status indicators with color hints
+        icon = "[green]●[/]" if self._is_up else "[dim]○[/]"
+        auto = "[magenta]★[/]" if self.info.get("auto_start") else " "
         label = self.info["label"][:20]
         port = self.info["port"]
-        return f" {icon} {auto} {label:<20} :{port}"
+        port_str = f"[dim]:{port}[/]"
+        return f" {icon} {auto} {label:<20} {port_str}"
 
     def render(self) -> str:
         return self.render_row()
