@@ -427,7 +427,6 @@ def nexus_quality_report() -> str:
         return json.dumps({"error": str(e)})
 
 
-@mcp.resource("nexus://status")
-def resource_nexus_status() -> str:
-    """Nexus knowledge system health and stats."""
-    return nexus_status()
+# v1.49.2 [2026-03-22] — Removed duplicate @mcp.resource("nexus://status")
+# that caused NameError (mcp not imported here). The authoritative
+# resource is registered in devtools_server.py line ~991.

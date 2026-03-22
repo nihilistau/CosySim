@@ -390,21 +390,17 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-# v1.49.1 [2026-03-22] — Documented skip reasons for each ignored test file:
-#   test_agent_loop.py         — requires live LMStudio (agent tick loop)
-#   live_wire_test.py          — requires live services (Socket.IO + LMS)
-#   test_orpheus_native.py     — requires PyTorch (Orpheus TTS native)
-#   test_mcp_server.py         — requires running MCP server instance
-#   test_nexus_bridge.py       — requires live Nexus KMS at :8700
-#   test_nexus_phase2.py       — requires live Nexus KMS + embeddings
-#   test_nexus_seeder_and_bridge.py — requires live Nexus KMS + seeder
-#   test_nlm_deep_storage.py   — requires live NotebookLM cookies
-#   test_notebooklm_devtools.py — requires Chrome CDP + NotebookLM auth
-#   test_phone_news.py         — requires live news API + LMStudio
-#   test_integration.py        — full integration (all services running)
-#   test_opal_client.py        — requires Opal API credentials
-#   test_gemini_extended_client.py — requires Gemini API key
-addopts = "-v --strict-markers --basetemp=tests/tmp -m \"not slow and not integration\" --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py --ignore=tests/test_orpheus_native.py --ignore=tests/test_mcp_server.py --ignore=tests/test_nexus_bridge.py --ignore=tests/test_nexus_phase2.py --ignore=tests/test_nexus_seeder_and_bridge.py --ignore=tests/test_nlm_deep_storage.py --ignore=tests/test_notebooklm_devtools.py --ignore=tests/test_phone_news.py --ignore=tests/test_integration.py --ignore=tests/test_opal_client.py --ignore=tests/test_gemini_extended_client.py"
+# v1.49.2 [2026-03-22] — Reduced from 13 to 4 ignored files. Fixed bugs that
+#   prevented 9 test files from running (missing logger, f-string syntax,
+#   gallery_list bug, async decorator, stale @mcp.resource). All 9 files are
+#   fully mocked and do NOT require live services.
+#
+# Remaining ignored files (truly need live services or are integration-only):
+#   test_agent_loop.py     — requires live LMStudio (CLAUDE.md says ignore)
+#   live_wire_test.py      — requires live services (CLAUDE.md says ignore)
+#   test_nexus_phase2.py   — workflow/memory tests hang or fail due to code drift
+#   test_integration.py    — full integration (all services running)
+addopts = "-v --strict-markers --basetemp=tests/tmp -m \"not slow and not integration\" --ignore=tests/test_agent_loop.py --ignore=tests/live_wire_test.py --ignore=tests/test_nexus_phase2.py --ignore=tests/test_integration.py"
 # Run parallel (6x faster):  pytest -n auto
 # Run full suite:             pytest -m "" --co (removes -m filter)
 norecursedirs = ["tests/tmp", ".git", "__pycache__", "*.egg-info", "node_modules", "unsloth_compiled_cache", "backups"]
