@@ -53,6 +53,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "gallery"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 _SCENE_ROOT = Path(__file__).parent
 
 # ── Art & Gallery Data ─────────────────────────────────────────────────────────
@@ -365,7 +366,7 @@ class GalleryScene(FlaskScene):
             fw = get_framework()
             fw.on("artwork_created", lambda evt: self._on_art_event(evt))
         except Exception as exc:
-            logger.warning("MCP init skipped: %s", exc)
+            logger.warning("[%s] MCP init skipped (operation=mcp_wire): %s", SCENE_ID, exc)
         # ── World State ──────────────────────────────────────────────
         self._world_state = None
         self._event_bus = None
@@ -522,9 +523,9 @@ class GalleryScene(FlaskScene):
                     fw.get_character(char_id).update_state({"role": role})
                 except Exception:
                     pass
-            logger.info("Seeded %d gallery characters", len(self.characters))
+            logger.info("[%s] Seeded %d characters (operation=seed)", SCENE_ID, len(self.characters))
         except Exception as exc:
-            logger.warning("Character seeding failed: %s", exc)
+            logger.warning("[%s] Character seeding failed (operation=seed): %s", SCENE_ID, exc)
 
     # ── Core: Streaming Art Evaluation (v2.7 Showcase) ─────────────────────
 
@@ -642,7 +643,7 @@ class GalleryScene(FlaskScene):
             })
 
         except Exception as exc:
-            logger.error("Evaluation failed for %s: %s", char_id, exc)
+            logger.error("[%s] Evaluation failed (operation=evaluate, agent=%s): %s", SCENE_ID, char_id, exc)
             result["text"] = f"({name} is speechless before this work.)"
 
         return result
@@ -683,7 +684,7 @@ class GalleryScene(FlaskScene):
             result = agent.run_structured(prompt, schema=schema, schema_name="art_critique")
             return result if isinstance(result, dict) else {"raw": str(result)}
         except Exception as exc:
-            logger.error("Structured critique failed: %s", exc)
+            logger.error("[%s] Structured critique failed (operation=critique): %s", SCENE_ID, exc)
             return {"technique_score": 5, "emotion_score": 5, "originality_score": 5,
                     "one_word_reaction": "interesting", "would_buy": False}
 
@@ -737,7 +738,7 @@ class GalleryScene(FlaskScene):
                     })
 
             except Exception as exc:
-                logger.error("Debate failed for %s: %s", char_id, exc)
+                logger.error("[%s] Debate failed (operation=debate, agent=%s): %s", SCENE_ID, char_id, exc)
 
         # Emit debate as gallery event
         self.socketio.emit("debate", {
@@ -837,7 +838,7 @@ class GalleryScene(FlaskScene):
             return art
 
         except Exception as exc:
-            logger.error("Create artwork failed: %s", exc)
+            logger.error("[%s] Create artwork failed (operation=create_art): %s", SCENE_ID, exc)
             return None
 
     # ── Gallery Log ────────────────────────────────────────────────────────
@@ -1251,7 +1252,7 @@ class GalleryScene(FlaskScene):
             try:
                 return jsonify(self.get_health())
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": "gallery", "reason": "health check raised"}), 500
 
         @app.route("/api/economy")

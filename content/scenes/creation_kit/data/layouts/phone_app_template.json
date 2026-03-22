@@ -1,0 +1,50 @@
+{
+  "id": "template_phone_app",
+  "name": "Phone App Template",
+  "scene_key": "phone_app",
+  "accent_color": "#ff6b9d",
+  "description": "Mobile-style phone app with contact list, message thread, and status bar.",
+  "components": [
+    {
+      "id": "header_1",
+      "type": "scene_header",
+      "props": {
+        "title": "SIGNAL",
+        "subtitle": "Encrypted messaging",
+        "show_clock": true,
+        "show_credits": false
+      },
+      "children": {}
+    },
+    {
+      "id": "main_layout",
+      "type": "column_layout",
+      "props": { "columns": 2, "ratio": "1:2" },
+      "children": {
+        "left": [
+          {
+            "id": "contacts",
+            "type": "character_list",
+            "props": { "show_mood": false, "show_status": true, "compact": true },
+            "children": {}
+          }
+        ],
+        "right": [
+          {
+            "id": "thread",
+            "type": "glass_panel",
+            "props": { "title": "Messages", "variant": "default", "scrollable": true },
+            "children": {}
+          },
+          {
+            "id": "input_bar",
+            "type": "text_input",
+            "props": { "placeholder": "Type a message...", "submit_label": "Send" },
+            "children": {}
+          }
+        ]
+      }
+    }
+  ],
+  "updated_at": "2026-03-22T00:00:00Z"
+}

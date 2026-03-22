@@ -56,6 +56,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 try:
     from engine.port_registry import get_port
@@ -264,9 +266,9 @@ class LoungeScene(FlaskScene):
             reg.set_state(VIKTOR_ID, mood="neutral", mood_intensity=0.3, energy=85.0)
             apply_default_skills(VIKTOR_ID)
 
-            logger.info("Lounge registry seeded: Lola Voss + Viktor Marlowe")
+            logger.info("[%s] Registry seeded: Lola Voss + Viktor Marlowe (operation=seed)", SCENE_ID)
         except Exception as exc:
-            logger.warning("_seed_lounge_registry failed: %s", exc)
+            logger.warning("[%s] Registry seeding failed (operation=seed): %s", SCENE_ID, exc)
 
     @property
     def _reg(self):
@@ -308,7 +310,7 @@ class LoungeScene(FlaskScene):
                 description          = "Heat builds — someone's been watching the door too long.",
             )
         except Exception as exc:
-            logger.warning("Heat timer start failed: %s", exc)
+            logger.warning("[%s] Heat timer start failed (operation=tick): %s", SCENE_ID, exc)
 
     def _tick_heat(self, delta: int = 5) -> None:
         """Increment heat and check threshold rules via the MCP rules engine."""
@@ -423,7 +425,7 @@ class LoungeScene(FlaskScene):
             return song
 
         except Exception as exc:
-            logger.warning("_start_next_song failed: %s", exc)
+            logger.warning("[%s] _start_next_song failed (operation=music): %s", SCENE_ID, exc)
             return {}
 
     def _finish_song(self, song_id: str) -> None:
@@ -467,7 +469,7 @@ class LoungeScene(FlaskScene):
             threading.Thread(target=_next, daemon=True).start()
 
         except Exception as exc:
-            logger.warning("_finish_song failed: %s", exc)
+            logger.warning("[%s] _finish_song failed (operation=music): %s", SCENE_ID, exc)
 
     # ══════════════════════════════════════════════════════════════════════════
     #  TRUST GATES
@@ -788,7 +790,7 @@ class LoungeScene(FlaskScene):
             return result
 
         except Exception as exc:
-            logger.warning("_get_agent_reply(%s) failed: %s", character_id, exc)
+            logger.warning("[%s] Agent reply failed (operation=chat, agent=%s): %s", SCENE_ID, character_id, exc)
             result["degraded"] = True
             result["error"] = str(exc)
             result["text"] = self._fallback_reply(character_id, user_message)
@@ -1242,7 +1244,7 @@ class LoungeScene(FlaskScene):
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
     # ══════════════════════════════════════════════════════════════════════════

@@ -54,6 +54,10 @@ from content.scenes.penthouse.penthouse_anim_studio_mixin import PenthouseAnimSt
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════════════
 
+SCENE_ID = "penthouse"
+
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+
 POSITIONS = [
     "standing", "sitting", "kneeling", "laying down", "crouching",
     "leaning", "dancing", "on all fours", "straddling", "curled up",
@@ -1361,7 +1365,7 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         if not response_text:
             response_text = f"*{char_name} looks at you thoughtfully*"
 
-        logger.info("Penthouse chat: %s → %d chars", char_id, len(response_text))
+        logger.info("[%s] Chat response generated (operation=chat, agent=%s, chars=%d)", SCENE_ID, char_id, len(response_text))
 
         ts = datetime.now().isoformat()
         self.socketio.emit("chat_response", {
@@ -1474,7 +1478,7 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/world/context")
@@ -1587,11 +1591,11 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
             def _respond() -> None:
                 try:
-                    logger.info("[CHAT] Generating response for: %s", msg[:50])
+                    logger.info("[%s] Generating chat response (operation=chat): %s", SCENE_ID, msg[:50])
                     self._generate_chat_response(name, msg)
-                    logger.info("[CHAT] Response emitted successfully")
+                    logger.info("[%s] Chat response emitted (operation=chat)", SCENE_ID)
                 except Exception as exc:
-                    logger.error("[CHAT] Response generation FAILED: %s", exc, exc_info=True)
+                    logger.error("[%s] Chat response generation FAILED (operation=chat): %s", SCENE_ID, exc, exc_info=True)
                     try:
                         from engine.observability.structured_logger import get_structured_logger, LogLevel
                         get_structured_logger().log(
@@ -1858,9 +1862,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
             if not npc_sched._running:
                 npc_sched.start()
             self._npc_scheduler = npc_sched
-            logger.info("NPC scheduler wired to penthouse")
+            logger.info("[%s] NPC scheduler wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("NPC scheduler init failed: %s", exc)
+            logger.warning("[%s] NPC scheduler init failed (operation=lifecycle): %s", SCENE_ID, exc)
             self._npc_scheduler = None
 
     # ── New engine event handlers ─────────────────────────────────────

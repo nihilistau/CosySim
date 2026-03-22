@@ -798,6 +798,21 @@ body {
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--ck-border); border-radius: 2px; }
+
+/* ── Toast notification — v1.49.3 ──────────────────────── */
+.ck-toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--ck-panel-2); color: var(--ck-text); border: 1px solid var(--ck-border);
+  padding: 8px 20px; border-radius: 6px; font-size: 12px;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  z-index: 9999;
+}
+.ck-toast--visible { opacity: 1; }
+.ck-toast--info { border-color: var(--ck-blue); }
+.ck-toast--error { border-color: var(--ck-red); color: var(--ck-red); }
+
+/* ── Disabled button ───────────────────────────────────── */
+.ck-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -821,11 +836,16 @@ body {
       <button class="ck-btn" onclick="CK.newLayout()">&#10010; New</button>
       <button class="ck-btn" onclick="CK.openLoadModal()">&#128193; Open</button>
       <button class="ck-btn" onclick="CK.save()">&#128190; Save</button>
+      <!-- v1.49.3 [2026-03-22] — Undo/redo buttons -->
+      <button class="ck-btn" id="ck-undo-btn" onclick="CK.undo()" disabled title="Undo (Ctrl+Z)">&#8617; Undo</button>
+      <button class="ck-btn" id="ck-redo-btn" onclick="CK.redo()" disabled title="Redo (Ctrl+Y)">&#8618; Redo</button>
       <button class="ck-btn" onclick="CK.toggleLivePreview()" id="btn-live-preview">&#9654; Live Preview</button>
       <button class="ck-btn" onclick="CK.preview()">&#9635; Full Preview</button>
       <button class="ck-btn primary" onclick="CK.exportScene()">&#10548; Export Scene</button>
     </div>
   </div>
+  <!-- v1.49.3 [2026-03-22] — Toast notification -->
+  <div id="ck-toast" class="ck-toast"></div>
 
   <!-- ── Left — Component palette ───────────────────────── -->
   <div class="ck-palette" id="ck-palette">
@@ -960,12 +980,116 @@ const CK = {
   _livePreview: false,   // live preview toggle
   _previewTimer: null,   // debounce timer for live preview
 
+  // v1.49.3 [2026-03-22] — Undo/redo history
+  _undoStack: [],        // previous layout snapshots
+  _redoStack: [],        // snapshots undone (cleared on new action)
+  _MAX_UNDO: 50,        // max undo depth
+
+  // ── Undo/Redo ──────────────────────────────────────────────────
+
+  _pushUndo() {
+    this._undoStack.push(JSON.stringify(this.layout));
+    if (this._undoStack.length > this._MAX_UNDO) this._undoStack.shift();
+    this._redoStack = []; // new action clears redo
+    this._updateUndoButtons();
+  },
+
+  undo() {
+    if (!this._undoStack.length) return;
+    this._redoStack.push(JSON.stringify(this.layout));
+    this.layout = JSON.parse(this._undoStack.pop());
+    this.selectedId = null;
+    this._renderCanvas();
+    this._renderInspector();
+    this._updateUndoButtons();
+    this._showToast('Undone', 'info');
+  },
+
+  redo() {
+    if (!this._redoStack.length) return;
+    this._undoStack.push(JSON.stringify(this.layout));
+    this.layout = JSON.parse(this._redoStack.pop());
+    this.selectedId = null;
+    this._renderCanvas();
+    this._renderInspector();
+    this._updateUndoButtons();
+    this._showToast('Redone', 'info');
+  },
+
+  _updateUndoButtons() {
+    const undoBtn = document.getElementById('ck-undo-btn');
+    const redoBtn = document.getElementById('ck-redo-btn');
+    if (undoBtn) undoBtn.disabled = !this._undoStack.length;
+    if (redoBtn) redoBtn.disabled = !this._redoStack.length;
+  },
+
+  _showToast(msg, type = 'info') {
+    const el = document.getElementById('ck-toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'ck-toast ck-toast--' + type + ' ck-toast--visible';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => el.classList.remove('ck-toast--visible'), 2000);
+  },
+
+  // ── Keyboard Shortcuts ──────────────────────────────────────────
+  // v1.49.3 [2026-03-22] — Ctrl+Z, Ctrl+Y, Delete, arrow keys
+
+  _setupKeyboard() {
+    document.addEventListener('keydown', (e) => {
+      // Skip if user is typing in an input/textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        this.undo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        this.redo();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (this.selectedId) {
+          e.preventDefault();
+          this._pushUndo();
+          this.layout = this.layout.filter(c => c.id !== this.selectedId);
+          this.selectedId = null;
+          this._renderCanvas();
+          this._renderInspector();
+          this._showToast('Component deleted', 'info');
+        }
+      } else if (e.key === 'ArrowUp' && this.selectedId) {
+        e.preventDefault();
+        this._moveSelected(-1);
+      } else if (e.key === 'ArrowDown' && this.selectedId) {
+        e.preventDefault();
+        this._moveSelected(1);
+      } else if (e.key === 'Escape') {
+        this.selectedId = null;
+        this._renderCanvas();
+        this._renderInspector();
+      }
+    });
+  },
+
+  _moveSelected(dir) {
+    const idx = this.layout.findIndex(c => c.id === this.selectedId);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= this.layout.length) return;
+    this._pushUndo();
+    const temp = this.layout[idx];
+    this.layout[idx] = this.layout[newIdx];
+    this.layout[newIdx] = temp;
+    this._renderCanvas();
+  },
+
   // ── Init ─────────────────────────────────────────────────────────
 
   async init() {
     await this._loadCatalogue();
     this._renderPalette();
     this._renderCanvas();
+    this._setupKeyboard();
+    this._updateUndoButtons();
   },
 
   async _loadCatalogue() {
@@ -1060,6 +1184,7 @@ const CK = {
         }
       }
       if (fromIdx !== toIdx && fromIdx !== toIdx - 1) {
+        this._pushUndo();
         const item = this.layout.splice(fromIdx, 1)[0];
         const insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx;
         this.layout.splice(insertAt, 0, item);
@@ -1174,9 +1299,11 @@ const CK = {
       if (parent) {
         if (!parent.children) parent.children = {};
         if (!parent.children[slotName]) parent.children[slotName] = [];
+        this._pushUndo();
         parent.children[slotName].push(instance);
       }
     } else {
+      this._pushUndo();
       this.layout.push(instance);
     }
 
@@ -1204,6 +1331,7 @@ const CK = {
   moveComponent(idx, direction) {
     const newIdx = idx + direction;
     if (newIdx < 0 || newIdx >= this.layout.length) return;
+    this._pushUndo();
     const temp = this.layout[idx];
     this.layout[idx] = this.layout[newIdx];
     this.layout[newIdx] = temp;
@@ -1515,6 +1643,7 @@ const CK = {
   },
 
   newLayout() {
+    this._pushUndo();
     this.layout = [];
     this.layoutId = null;
     this.selectedId = null;

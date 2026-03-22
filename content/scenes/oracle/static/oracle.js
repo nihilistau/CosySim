@@ -66,6 +66,18 @@ class OracleScene {
       this.socket.emit('get_state');
     });
 
+    // v1.49.3 [2026-03-22] — Disconnect + reconnect handlers
+    this.socket.on('disconnect', () => {
+      console.debug('[Oracle] Socket disconnected');
+    });
+    this.socket.io.on('reconnect', (attempt) => {
+      console.debug('[Oracle] Reconnected after ' + attempt + ' attempt(s)');
+      this.socket.emit('get_state');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) console.debug('[Oracle] Reconnecting... (attempt ' + attempt + ')');
+    });
+
     this.socket.on('scene_state', (data) => {
       this.state = data;
       this._render(data);

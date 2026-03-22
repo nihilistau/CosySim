@@ -1,0 +1,50 @@
+{
+  "id": "template_chat_room",
+  "name": "Chat Room Template",
+  "scene_key": "chat_room",
+  "accent_color": "#64b5f6",
+  "description": "Basic chat room layout with message feed, input, and character list sidebar.",
+  "components": [
+    {
+      "id": "header_1",
+      "type": "scene_header",
+      "props": {
+        "title": "CHAT ROOM",
+        "subtitle": "Real-time conversation",
+        "show_clock": true,
+        "show_credits": false
+      },
+      "children": {}
+    },
+    {
+      "id": "layout_1",
+      "type": "column_layout",
+      "props": { "columns": 2, "ratio": "3:1" },
+      "children": {
+        "left": [
+          {
+            "id": "chat_feed",
+            "type": "glass_panel",
+            "props": { "title": "Messages", "variant": "default", "scrollable": true },
+            "children": {}
+          },
+          {
+            "id": "chat_input",
+            "type": "text_input",
+            "props": { "placeholder": "Type a message...", "submit_label": "Send" },
+            "children": {}
+          }
+        ],
+        "right": [
+          {
+            "id": "char_list",
+            "type": "character_list",
+            "props": { "show_mood": true, "show_status": true, "compact": false },
+            "children": {}
+          }
+        ]
+      }
+    }
+  ],
+  "updated_at": "2026-03-22T00:00:00Z"
+}

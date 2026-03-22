@@ -49,6 +49,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "heist"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 try:
     from engine.port_registry import get_port as _get_port
@@ -354,7 +355,7 @@ class HeistScene(FlaskScene):
             venue = VENUES.get(job_id, VENUES.get("diamond_exchange", {}))
             emit("job_selected", {"job_id": job_id, "venue": venue})
             self._sync_to_mcp("job_selected", {"job_id": job_id})
-            logger.info("Heist job selected: %s", job_id)
+            logger.info("[%s] Job selected (operation=job_select): %s", SCENE_ID, job_id)
 
         @self.socketio.on("assign_crew")
         def on_assign_crew(data):
@@ -413,7 +414,7 @@ class HeistScene(FlaskScene):
                 "message": "Heist blown. Lay low for 48 hours.",
             })
             self._broadcast_state()
-            logger.warning("Heist aborted — heat=%d", heat)
+            logger.warning("[%s] Heist aborted (operation=heist, heat=%d)", SCENE_ID, heat)
 
         @self.socketio.on("get_investigation")
         def on_get_investigation():
@@ -539,7 +540,7 @@ class HeistScene(FlaskScene):
                     break
 
         except Exception as exc:
-            logger.error("Heist reply failed for %s: %s", char_id, exc)
+            logger.error("[%s] Heist reply failed (operation=chat, agent=%s): %s", SCENE_ID, char_id, exc)
         finally:
             self.socketio.emit("typing", {"character_id": char_id, "typing": False})
 
@@ -718,7 +719,8 @@ class HeistScene(FlaskScene):
             pass
 
         logger.info(
-            "THE SCORE — heist complete | payout=$%d | venue=%s", payout, venue_name
+            "[%s] Heist complete (operation=heist_complete, payout=$%d, venue=%s)",
+            SCENE_ID, payout, venue_name,
         )
 
     # ── BaseScene interface ──────────────────────────────────────────────
