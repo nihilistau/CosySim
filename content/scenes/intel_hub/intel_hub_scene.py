@@ -54,6 +54,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "intel_hub"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 DEFAULT_PORT = get_port(SCENE_ID)
 
 SCENE_METADATA = {
@@ -145,7 +146,7 @@ class IntelHubScene(FlaskScene):
             from engine.assistant.assistant_bp import assistant_bp
             app.register_blueprint(assistant_bp)
         except Exception as _e:
-            logger.warning("Could not register assistant blueprint: %s", _e)
+            logger.warning("[%s] Could not register assistant blueprint (operation=lifecycle): %s", SCENE_ID, _e)
 
         @app.route("/")
         def index():
@@ -610,12 +611,12 @@ class IntelHubScene(FlaskScene):
             try:
                 metrics = get_metrics_collector().get_summary(window_seconds=3600)
             except Exception as exc:
-                logger.warning("MetricsCollector unavailable: %s", exc)
+                logger.warning("[%s] MetricsCollector unavailable (operation=metrics): %s", SCENE_ID, exc)
                 metrics = {"llm": {}, "scenes": {}, "errors": {}}
             try:
                 router_status = get_router_v3_client().get_status()
             except Exception as exc:
-                logger.warning("RouterV3Client unavailable: %s", exc)
+                logger.warning("[%s] RouterV3Client unavailable (operation=metrics): %s", SCENE_ID, exc)
                 router_status = {"available": False, "predict_count": 0}
             return jsonify({"metrics": metrics, "router": router_status})
 
@@ -679,10 +680,10 @@ class IntelHubScene(FlaskScene):
                 except Exception as nexus_exc:
                     logger.debug("Nexus rating store skipped: %s", nexus_exc)
 
-                logger.info("News rating stored: %s → %s [%s]", title[:50], label_str, source)
+                logger.info("[%s] News rating stored (operation=news_rate): %s → %s [%s]", SCENE_ID, title[:50], label_str, source)
                 return jsonify({"status": "ok", "label": label_str})
             except Exception as exc:
-                logger.error("api_news_rate error: %s", exc)
+                logger.error("[%s] api_news_rate error (operation=news_rate): %s", SCENE_ID, exc)
                 return jsonify({"status": "error", "message": str(exc)}), 500
 
         @app.route("/api/news/ratings/stats")
@@ -729,7 +730,7 @@ class IntelHubScene(FlaskScene):
                     })
                 return jsonify({"status": "ok", "items": items, "count": len(items)})
             except Exception as e:
-                logger.warning("News ticker error: %s", e)
+                logger.warning("[%s] News ticker error (operation=news_ticker): %s", SCENE_ID, e)
                 return jsonify({"status": "ok", "items": [], "count": 0, "error": str(e)})
 
         @app.route("/api/news/feed")
@@ -775,7 +776,7 @@ class IntelHubScene(FlaskScene):
 
                 return jsonify({"status": "ok", "workflows": workflows})
             except Exception as e:
-                logger.warning("Benchmark workflows error: %s", e)
+                logger.warning("[%s] Benchmark workflows error (operation=benchmark): %s", SCENE_ID, e)
                 return jsonify({"status": "error", "workflows": [], "error": str(e)})
 
         @app.route("/api/benchmark/run", methods=["POST"])
@@ -794,7 +795,7 @@ class IntelHubScene(FlaskScene):
                     try:
                         engine.benchmark_workflow(workflow_name)
                     except Exception as e:
-                        logger.warning("Background benchmark error: %s", e)
+                        logger.warning("[%s] Background benchmark error (operation=benchmark): %s", SCENE_ID, e)
 
                 threading.Thread(target=run_benchmark, daemon=True).start()
                 return jsonify({"status": "ok", "message": f"Benchmark started for {workflow_name}"})
@@ -894,7 +895,7 @@ class IntelHubScene(FlaskScene):
                 "models": [getattr(m, "key", str(m)) for m in models],
             }
         except Exception as exc:
-            logger.warning("LMStudio model check failed: %s", exc)
+            logger.warning("[%s] LMStudio model check failed (operation=health): %s", SCENE_ID, exc)
         try:
             from engine.nexus.scheduler_daemon import get_scheduler_daemon
             daemon = get_scheduler_daemon()
@@ -995,7 +996,7 @@ def _call_nexus(action: str, **kwargs) -> Dict[str, Any]:
             return {"categories": cats or []}
         return {"error": f"Unknown action: {action}"}
     except Exception as exc:
-        logger.error("Nexus call %s failed: %s", action, exc)
+        logger.error("[%s] Nexus call failed (operation=nexus, action=%s): %s", SCENE_ID, action, exc)
         return {"error": str(exc)}
 
 
@@ -1024,7 +1025,7 @@ def _call_nlm(action: str, **kwargs) -> Dict[str, Any]:
             ) or {}
         return {"error": f"Unknown NLM action: {action}"}
     except Exception as exc:
-        logger.warning("NLM call %s failed: %s", action, exc)
+        logger.warning("[%s] NLM call failed (operation=nlm, action=%s): %s", SCENE_ID, action, exc)
         return {"error": str(exc)}
 
 
@@ -1514,7 +1515,7 @@ def _get_operator_queue(status: str = "", limit: int = 20) -> Dict[str, Any]:
             "tasks": [task.to_dict() for task in tasks],
         }
     except Exception as exc:
-        logger.error("Failed to get operator queue: %s", exc)
+        logger.error("[%s] Failed to get operator queue (operation=operator): %s", SCENE_ID, exc)
         return {"summary": {}, "tasks": [], "error": str(exc)}
 
 
@@ -1534,7 +1535,7 @@ def _get_operator_inbox_items(
             "items": [item.to_dict() for item in items],
         }
     except Exception as exc:
-        logger.error("Failed to get operator inbox: %s", exc)
+        logger.error("[%s] Failed to get operator inbox (operation=operator): %s", SCENE_ID, exc)
         return {"summary": {}, "items": [], "error": str(exc)}
 
 
@@ -1586,7 +1587,7 @@ def _dispatch_operator_command(data: Dict[str, Any]) -> Dict[str, Any]:
             "response": body,
         }
     except Exception as exc:
-        logger.error("Operator live dispatch failed: %s", exc)
+        logger.error("[%s] Operator live dispatch failed (operation=operator): %s", SCENE_ID, exc)
         return {"ok": False, "mode": dispatch_mode, "error": str(exc)}
 
 
@@ -1646,7 +1647,7 @@ def _submit_operator_inbox_item(data: Dict[str, Any]) -> Dict[str, Any]:
         result["item"] = latest.to_dict() if latest else item.to_dict()
         return result
     except Exception as exc:
-        logger.error("Failed to submit operator inbox item: %s", exc)
+        logger.error("[%s] Failed to submit operator inbox item (operation=operator): %s", SCENE_ID, exc)
         return {"ok": False, "error": str(exc)}
 
 
@@ -1657,7 +1658,7 @@ def _process_operator_inbox(limit: int = 10) -> Dict[str, Any]:
 
         return get_operator_inbox().process_items(limit=limit)
     except Exception as exc:
-        logger.error("Failed to process operator inbox: %s", exc)
+        logger.error("[%s] Failed to process operator inbox (operation=operator): %s", SCENE_ID, exc)
         return {"ok": False, "error": str(exc), "processed": 0}
 
 

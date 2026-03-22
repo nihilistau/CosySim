@@ -584,7 +584,8 @@ class CharacterRegistry:
             from content.simulation.database.db import Database
             db = Database()
         except Exception as exc:
-            logger.warning("persist_to_db: cannot access DB: %s", exc)
+            # v1.49.3 [2026-03-22] — Structured logging context
+            logger.warning("[CharacterRegistry] Cannot access DB (operation=persist_to_db): %s", exc)
             return 0
 
         ids = [character_id] if character_id else list(self.list_characters())
@@ -606,7 +607,7 @@ class CharacterRegistry:
             except Exception as exc:
                 logger.debug("persist_to_db(%s): %s", cid, exc)
         if persisted:
-            logger.info("persist_to_db: saved %d/%d characters to DB", persisted, len(ids))
+            logger.info("[CharacterRegistry] Persisted to DB (operation=persist_to_db, saved=%d, total=%d)", persisted, len(ids))
         return persisted
 
 

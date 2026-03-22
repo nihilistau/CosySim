@@ -17,10 +17,12 @@ Usage::
     loop.register_character(char_b)
     loop.start(interval=30)
 
-Version: v1.49.1 [2026-03-22]
+Version: v1.49.3 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.49.3 [2026-03-22] — Structured logging context: [AgentLoop] prefix,
+                            operation= and entity= context on all log calls
     v1.49.1 [2026-03-22] — Audit: type guard for batch responses, upgrade error
                             logging from debug→warning, structured context in logs
 """
@@ -120,7 +122,7 @@ class AgentLoop:
             logger.debug("AgentLoop: MCP registered %s → %s", character.id, self.scene_id)
         except Exception as _exc:
             # v1.49.1 [2026-03-22] — MCP sync failures should be visible
-            logger.warning("AgentLoop.register_character MCP sync failed for %s: %s", character.name, _exc)
+            logger.warning("[AgentLoop] MCP sync failed (operation=register, character=%s, scene=%s): %s", character.name, self.scene_id, _exc)
 
     def unregister_character(self, character_id: str) -> None:
         self._characters.pop(character_id, None)
@@ -153,7 +155,7 @@ class AgentLoop:
                 return mgr.infer_with_pipeline(request)
             except Exception:
                 # v1.49.1 [2026-03-22] — Surface pipeline failures
-                logger.warning("AgentLoop._infer pipeline inference failed, falling back to infer_processed", exc_info=True)
+                logger.warning("[AgentLoop] Pipeline inference failed, falling back to infer_processed (operation=infer, scene=%s)", self.scene_id, exc_info=True)
         return mgr.infer_processed(request)
 
     # ── Loop control ────────────────────────────────────────────────────
@@ -167,14 +169,14 @@ class AgentLoop:
             target=self._run, args=(interval,), daemon=True, name="AgentLoop"
         )
         self._thread.start()
-        logger.info("AgentLoop started (interval=%.1fs, %d characters)", interval, len(self._characters))
+        logger.info("[AgentLoop] Started (operation=start, scene=%s, interval=%.1fs, characters=%d)", self.scene_id, interval, len(self._characters))
 
     def stop(self) -> None:
         self._running = False
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
-        logger.info("AgentLoop stopped after %d ticks", self._tick_count)
+        logger.info("[AgentLoop] Stopped (operation=stop, scene=%s, ticks=%d)", self.scene_id, self._tick_count)
 
     @property
     def is_running(self) -> bool:
@@ -185,7 +187,7 @@ class AgentLoop:
             try:
                 self.tick()
             except Exception as e:
-                logger.error("AgentLoop tick error: %s", e)
+                logger.error("[AgentLoop] Tick error (operation=tick, scene=%s, tick=%d): %s", self.scene_id, self._tick_count, e)
             self._stop_event.wait(timeout=interval)
 
     # ── Core tick ───────────────────────────────────────────────────────
@@ -207,7 +209,7 @@ class AgentLoop:
                 try:
                     contexts[cid] = self._perceive(cid)
                 except Exception as e:
-                    logger.warning("Perceive error for %s: %s", cid, e)
+                    logger.warning("[AgentLoop] Perceive error (operation=perceive, character_id=%s, scene=%s): %s", cid, self.scene_id, e)
 
         # Phase 2: Batch decide (all characters in parallel via manager)
         decisions: Dict[str, Dict] = {}
@@ -216,14 +218,14 @@ class AgentLoop:
             try:
                 decisions = self._decide_batch(decidable, contexts)
             except Exception as e:
-                logger.warning("Batch decide failed, falling back to sequential: %s", e)
+                logger.warning("[AgentLoop] Batch decide failed, falling back to sequential (operation=decide_batch, scene=%s): %s", self.scene_id, e)
         # Sequential fallback for any missing decisions
         for cid in decidable:
             if cid not in decisions:
                 try:
                     decisions[cid] = self._decide(cid, contexts[cid])
                 except Exception as e:
-                    logger.warning("Decide error for %s: %s", cid, e)
+                    logger.warning("[AgentLoop] Decide error (operation=decide, character_id=%s, scene=%s): %s", cid, self.scene_id, e)
                     decisions[cid] = {"action": "idle", "target": "", "message": ""}
 
         # Phase 3: Execute all decisions
@@ -235,7 +237,7 @@ class AgentLoop:
                 if self._on_action:
                     self._on_action(cid, result)
             except Exception as e:
-                logger.warning("Execute error for %s: %s", cid, e)
+                logger.warning("[AgentLoop] Execute error (operation=execute, character_id=%s, scene=%s): %s", cid, self.scene_id, e)
                 actions.append({"character_id": cid, "action": "idle", "error": str(e)})
 
         # Emit tick summary to UI
@@ -252,7 +254,7 @@ class AgentLoop:
             get_framework().tick()
         except Exception:
             # v1.49.1 [2026-03-22] — Framework tick failures affect game state
-            logger.warning("MCPFramework tick failed during agent loop step in scene %s", self.scene_id, exc_info=True)
+            logger.warning("[AgentLoop] MCPFramework tick failed (operation=framework_tick, scene=%s)", self.scene_id, exc_info=True)
 
         # ActivityBus: publish tick summary
         try:
@@ -397,7 +399,7 @@ class AgentLoop:
                 if response:
                     return self._parse_decision(response)
             except Exception as e:
-                logger.warning("agent.quick_query failed for %s in scene %s: %s", character_id, self.scene_id, e)
+                logger.warning("[AgentLoop] quick_query failed (operation=decide, character_id=%s, scene=%s): %s", character_id, self.scene_id, e)
 
         # Use VirtualAgentManager with pipeline for rich response
         try:
@@ -428,7 +430,7 @@ class AgentLoop:
                     decision["extra_actions"] = list(proc.action_tags)
                 return decision
         except Exception as e:
-            logger.warning("VirtualAgentManager decide failed for %s in scene %s: %s", character_id, self.scene_id, e)
+            logger.warning("[AgentLoop] VAM decide failed (operation=decide, character_id=%s, scene=%s): %s", character_id, self.scene_id, e)
 
         return self._random_action(character_id)
 
@@ -442,7 +444,7 @@ class AgentLoop:
                 char_node.update_state({"mood": mood, "last_mood_source": "agent_loop"})
         except Exception as exc:
             # v1.49.1 [2026-03-22] — Mood sync failures should be visible
-            logger.warning("Failed to update mood in MCP framework for %s: %s", character_id, exc)
+            logger.warning("[AgentLoop] Mood sync failed (operation=update_mood, character_id=%s, scene=%s): %s", character_id, self.scene_id, exc)
 
     def _decide_batch(self, char_ids: List[str], contexts: Dict[str, str]) -> Dict[str, Dict]:
         """Batch-decide actions for multiple characters in parallel."""
@@ -484,13 +486,13 @@ class AgentLoop:
         # v1.49.1 [2026-03-22] — Type guard: verify response count matches request count
         if len(responses) != len(ordered_ids):
             logger.warning(
-                "Batch decide: response count mismatch (expected %d, got %d) in scene %s",
+                "[AgentLoop] Batch decide response count mismatch (operation=decide_batch, expected=%d, got=%d, scene=%s)",
                 len(ordered_ids), len(responses), self.scene_id,
             )
         results = {}
         for cid, resp in zip(ordered_ids, responses):
             if resp is None:
-                logger.warning("Batch decide: null response for %s in scene %s", cid, self.scene_id)
+                logger.warning("[AgentLoop] Batch decide null response (operation=decide_batch, character_id=%s, scene=%s)", cid, self.scene_id)
                 results[cid] = self._random_action(cid)
                 continue
             text = resp.content or resp.reasoning_content or ""

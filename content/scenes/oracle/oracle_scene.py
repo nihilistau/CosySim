@@ -42,6 +42,7 @@ from engine.world.player_state import get_player_state
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "oracle"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 DEFAULT_PORT = get_port(SCENE_ID, 5591)
 
 
@@ -151,7 +152,7 @@ class OracleScene(FlaskScene):
 
         @self.socketio.on("connect")
         def on_connect():
-            logger.info("%s: visitor connected (visit #%d)", SCENE_ID, self._visit_count)
+            logger.info("[%s] Visitor connected (operation=socketio, visit=#%d)", SCENE_ID, self._visit_count)
             emit("scene_state", self._build_state())
 
         @self.socketio.on("get_state")
@@ -215,7 +216,7 @@ class OracleScene(FlaskScene):
                 "heat": ps.heat,
                 "health": ps.health,
             })
-            logger.info("Meditation: +%d energy, -%d heat", actual_energy, actual_heat)
+            logger.info("[%s] Meditation (operation=meditation): +%d energy, -%d heat", SCENE_ID, actual_energy, actual_heat)
 
         # v1.0.0 — Fortune reading (LLM or template)
         # CONNECTS: PlayerState.credits, LMStudio
@@ -243,7 +244,7 @@ class OracleScene(FlaskScene):
                 "cost": cost,
             })
             emit("hud_update", {"credits": ps.credits})
-            logger.info("Fortune read (cost %d): %s", cost, fortune[:50])
+            logger.info("[%s] Fortune read (operation=fortune, cost=%d): %s", SCENE_ID, cost, fortune[:50])
 
     # ── State Builder ─────────────────────────────────────────────────
 
@@ -386,8 +387,8 @@ class OracleScene(FlaskScene):
 
     def on_before_serve(self) -> None:
         """Scene-specific setup before serving."""
-        logger.info("THE ORACLE consciousness online at port %d", DEFAULT_PORT)
-        logger.info("  \"In the spaces between data, I dream.\"")
+        logger.info("[%s] Scene online at port %d (operation=lifecycle)", SCENE_ID, DEFAULT_PORT)
+        logger.info("[%s] \"In the spaces between data, I dream.\"", SCENE_ID)
 
     # ── Cross-Scene Arrival ───────────────────────────────────────────
     # v1.52.0 [2026-03-22] — Oracle greets arriving player with context

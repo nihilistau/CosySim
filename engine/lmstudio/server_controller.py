@@ -177,7 +177,8 @@ class ServerController:
         self._cli_manager = None
         self._lmlink_manager = None
 
-        logger.info("ServerController initialized")
+        # v1.49.3 [2026-03-22] — Structured logging context
+        logger.info("[ServerController] Initialized (operation=init)")
 
     # ── Lazy component access ────────────────────────────────────────
 
@@ -327,9 +328,9 @@ class ServerController:
                     eval_batch_size=eval_batch_size,
                     ttl=ttl,
                 )
-                logger.info("Loaded model via SDK: %s (ctx=%d, gpu=%.1f)", model_key, ctx, gpu)
+                logger.info("[ServerController] Loaded model via SDK (operation=load_model, model=%s, ctx=%d, gpu=%.1f)", model_key, ctx, gpu)
             except Exception as e:
-                logger.warning("SDK load failed, trying CLI: %s", e)
+                logger.warning("[ServerController] SDK load failed, trying CLI (operation=load_model, model=%s): %s", model_key, e)
                 self.cli.load_model(
                     model_key,
                     gpu=gpu,
@@ -382,11 +383,11 @@ class ServerController:
                     del self._agent_instances[aid]
                 self._metrics["total_unloads"] += 1
 
-            logger.info("Unloaded model: %s", model_key)
+            logger.info("[ServerController] Unloaded model (operation=unload_model, model=%s)", model_key)
             return True
 
         except Exception as e:
-            logger.error("Failed to unload '%s': %s", model_key, e)
+            logger.error("[ServerController] Failed to unload model (operation=unload_model, model=%s): %s", model_key, e)
             self._metrics["errors"] += 1
             return False
 
@@ -477,7 +478,7 @@ class ServerController:
             self._metrics["total_config_changes"] += 1
 
         logger.info(
-            "Configured inference for '%s': stop_strings=%s, temp=%s, max_tokens=%s",
+            "[ServerController] Configured inference (operation=configure, model=%s, stop_strings=%s, temp=%s, max_tokens=%s)",
             model_key,
             stop_strings,
             temperature,
@@ -543,14 +544,14 @@ class ServerController:
                 )
             except Exception as e:
                 logger.warning(
-                    "SDK instance isolation failed for agent '%s': %s — "
+                    "[ServerController] SDK instance isolation failed (operation=create_instance, agent_id=%s): %s — "
                     "falling back to shared model",
                     agent_id, e,
                 )
                 instance_id = model_key
         else:
             logger.info(
-                "SDK unavailable — agent '%s' will share model '%s'",
+                "[ServerController] SDK unavailable — agent will share model (operation=create_instance, agent_id=%s, model=%s)",
                 agent_id, model_key,
             )
             instance_id = model_key
@@ -570,7 +571,7 @@ class ServerController:
             self._metrics["total_instance_creates"] += 1
 
         logger.info(
-            "Created agent instance: agent=%s, model=%s, id=%s, ctx=%d",
+            "[ServerController] Created agent instance (operation=create_instance, agent_id=%s, model=%s, instance_id=%s, ctx=%d)",
             agent_id, model_key, instance_id, context_length,
         )
         return instance
@@ -604,7 +605,7 @@ class ServerController:
         if is_isolated:
             return self.unload_model(instance_id)
 
-        logger.info("Released shared instance for agent '%s'", agent_id)
+        logger.info("[ServerController] Released shared instance (operation=release_instance, agent_id=%s)", agent_id)
         return True
 
     def list_agent_instances(self) -> Dict[str, Dict[str, Any]]:
@@ -635,7 +636,7 @@ class ServerController:
         )
         self._health_thread.start()
         logger.info(
-            "Started LMStudio health monitoring (interval=%ds)",
+            "[ServerController] Started health monitoring (operation=start_health, interval=%ds)",
             self._health_check_interval,
         )
 
@@ -645,7 +646,7 @@ class ServerController:
         if self._health_thread is not None:
             self._health_thread.join(timeout=5)
             self._health_thread = None
-        logger.info("Stopped LMStudio health monitoring")
+        logger.info("[ServerController] Stopped health monitoring (operation=stop_health)")
 
     def _health_loop(self) -> None:
         """Background health check loop."""
@@ -784,7 +785,7 @@ class ServerController:
             self._instances.clear()
             self._agent_instances.clear()
 
-        logger.info("ServerController shut down")
+        logger.info("[ServerController] Shut down (operation=shutdown)")
 
 
 # ── Singleton ────────────────────────────────────────────────────────────

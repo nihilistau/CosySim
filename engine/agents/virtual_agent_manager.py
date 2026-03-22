@@ -195,7 +195,8 @@ class VirtualAgentManager:
 
                 self._router.start()
                 self._router_enabled = True
-                logger.info("InferenceRouter started with %d tiers", len(tiers))
+                # v1.49.3 [2026-03-22] — Structured logging context
+                logger.info("[VAM] InferenceRouter started (operation=init_router, tiers=%d)", len(tiers))
                 return self._router
 
             except Exception as exc:
@@ -266,7 +267,7 @@ class VirtualAgentManager:
                     tool_executor=tool_executor,
                     on_metrics=on_metrics,
                 )
-                logger.info("VirtualPipeline initialized (watcher=%s, kill=%s)",
+                logger.info("[VAM] VirtualPipeline initialized (operation=init_pipeline, watcher=%s, kill=%s)",
                             config.watcher_enabled, config.kill_switch_enabled)
                 return self._pipeline
 
@@ -388,7 +389,7 @@ class VirtualAgentManager:
 
             self._agents[agent.id] = agent
             logger.info(
-                "Registered VirtualAgent: %s (scene=%s, model=%s)",
+                "[VAM] Registered VirtualAgent (operation=register, agent=%s, scene=%s, model=%s)",
                 agent.name, agent.scene, agent.model,
             )
 
@@ -404,7 +405,7 @@ class VirtualAgentManager:
                     get_conversation_manager().delete(agent.conversation_id or "")
                 except Exception:
                     logger.debug("Suppressed exception", exc_info=True)
-                logger.info("Unregistered VirtualAgent: %s", agent.name)
+                logger.info("[VAM] Unregistered VirtualAgent (operation=unregister, agent=%s)", agent.name)
             return agent
 
     def get_agent(self, agent_id: str) -> Optional[VirtualAgent]:
@@ -438,7 +439,7 @@ class VirtualAgentManager:
         except Exception as exc:
             self._total_errors += 1
             response = InferenceResponse.from_error(str(exc))
-            logger.warning("Inference failed for agent %s: %s", request.agent_id, exc)
+            logger.warning("[VAM] Inference failed (operation=infer, agent_id=%s): %s", request.agent_id, exc)
 
         elapsed_ms = (time.perf_counter() - t0) * 1000
         if not response.latency_ms:
@@ -531,7 +532,7 @@ class VirtualAgentManager:
             return responses
 
         except Exception as exc:
-            logger.error("Batch inference failed: %s", exc)
+            logger.error("[VAM] Batch inference failed (operation=infer_batch, count=%d): %s", len(requests), exc)
             return [InferenceResponse.from_error(str(exc)) for _ in requests]
 
     # ── Streaming inference ────────────────────────────────────────
@@ -732,7 +733,7 @@ class VirtualAgentManager:
         """High-level: build request, infer, process response."""
         agent = self._agents.get(agent_id)
         if not agent:
-            logger.warning("Agent %s not registered", agent_id)
+            logger.warning("[VAM] Agent not registered (operation=reply, agent_id=%s)", agent_id)
             return ""
         return agent.reply(
             user_message,
@@ -785,7 +786,7 @@ class VirtualAgentManager:
             client.load_model(model, **kwargs)
             return True
         except Exception as exc:
-            logger.error("Failed to load model %s: %s", model, exc)
+            logger.error("[VAM] Failed to load model (operation=load_model, model=%s): %s", model, exc)
             return False
 
     def unload_model(self, model: str) -> bool:
@@ -796,7 +797,7 @@ class VirtualAgentManager:
             client.unload_model(model)
             return True
         except Exception as exc:
-            logger.error("Failed to unload model %s: %s", model, exc)
+            logger.error("[VAM] Failed to unload model (operation=unload_model, model=%s): %s", model, exc)
             return False
 
     # ── Hooks ───────────────────────────────────────────────────────
@@ -1014,7 +1015,7 @@ class VirtualAgentManager:
             temperature=max(0.3, (cfg.temperature or 0.7) - 0.2 * (attempt + 1)),
         ))
         logger.info(
-            "Conversation repair attempt %d for %s (temp=%.2f)",
+            "[VAM] Conversation repair attempt (operation=repair, attempt=%d, agent_id=%s, temp=%.2f)",
             attempt + 1, request.agent_id, retry_cfg.temperature or 0.7,
         )
 

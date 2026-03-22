@@ -33,6 +33,7 @@ from engine.mcp.tag_registry import TagRegistry
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "command_center"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 try:
     from engine.port_registry import get_port as _get_port
@@ -88,7 +89,7 @@ class CommandCenterScene(FlaskScene):
             from content.scenes.command_center.command_center_rules import register_command_center_rules
             register_command_center_rules()
         except Exception as exc:
-            logger.warning("Failed to register command center rules: %s", exc)
+            logger.warning("[%s] Failed to register rules (operation=mcp_wire): %s", SCENE_ID, exc)
 
     # ------------------------------------------------------------------
     # Lazy accessors for singletons
@@ -588,7 +589,7 @@ class CommandCenterScene(FlaskScene):
                 else:
                     return jsonify({"error": f"Unknown event type: {event_type}"}), 400
 
-                logger.info("Injected %s into %s: %s", event_type, scene_id, content[:80])
+                logger.info("[%s] Injected %s into %s (operation=inject): %s", SCENE_ID, event_type, scene_id, content[:80])
                 return jsonify({"ok": True, "type": event_type, "scene": scene_id})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -605,7 +606,7 @@ class CommandCenterScene(FlaskScene):
                 coord = get_coordinator()
                 for key, value in data.items():
                     coord.update(char_id, key, value, persist=True)
-                logger.info("Edited stats for %s: %s", char_id, data)
+                logger.info("[%s] Edited stats (operation=edit_stats, agent=%s): %s", SCENE_ID, char_id, data)
                 return jsonify({"ok": True, "char_id": char_id, "updated": data})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -913,8 +914,8 @@ class CommandCenterScene(FlaskScene):
                     turns=int(turns),
                     issued_by="command_center",
                 )
-                logger.info("Directive injected: %s in %s → %s (%d turns)",
-                         character_id, scene_id, directive[:60], turns)
+                logger.info("[%s] Directive injected (operation=directive, agent=%s, target_scene=%s, turns=%d): %s",
+                         SCENE_ID, character_id, scene_id, turns, directive[:60])
                 return jsonify({
                     "ok": True, "character_id": character_id,
                     "scene_id": scene_id, "turns": turns,
@@ -957,7 +958,7 @@ class CommandCenterScene(FlaskScene):
                 except Exception:
                     pass
 
-                logger.info("Broadcast to %s from %s: %s", scene_id, sender, message[:80])
+                logger.info("[%s] Broadcast (operation=broadcast, target_scene=%s, sender=%s): %s", SCENE_ID, scene_id, sender, message[:80])
                 return jsonify({"ok": True, "scene_id": scene_id, "sender": sender})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -1031,7 +1032,7 @@ class CommandCenterScene(FlaskScene):
                     "source": "command_center",
                 })
 
-                logger.info("Transfer %s: %s → %s", character_id, from_scene, to_scene)
+                logger.info("[%s] Transfer (operation=transfer, agent=%s): %s → %s", SCENE_ID, character_id, from_scene, to_scene)
                 return jsonify({
                     "ok": True, "character_id": character_id,
                     "from_scene": from_scene, "to_scene": to_scene,

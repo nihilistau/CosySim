@@ -36,6 +36,9 @@ from engine.skills.skill import skill
 
 logger = logging.getLogger(__name__)
 
+SCENE_ID = "grid"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+
 # ──── Catalogue ──────────────────────────────────────────────────────────────
 
 MARKET_CATALOGUE: List[Dict[str, Any]] = [
@@ -557,4 +560,4 @@ class GridScene(FlaskScene):
             bus.subscribe("world.major_event", _on_world_event, subscriber_id="grid")
             logger.debug("THE GRID: EventBus wired")
         except Exception as exc:
-            logger.warning("THE GRID: EventBus wiring failed: %s", exc)
+            logger.warning("[%s] EventBus wiring failed (operation=lifecycle): %s", SCENE_ID, exc)

@@ -36,6 +36,7 @@ from engine.scenes.flask_scene import FlaskScene
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "system_control"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 DEFAULT_PORT = get_port(SCENE_ID)
 
 # ── Config file catalogue ────────────────────────────────────────────────────
@@ -157,7 +158,7 @@ class SystemControlScene(FlaskScene):
         self.app.config["SECRET_KEY"] = cfg.get("flask.secret_key", "system-control-key")
 
         self._register_routes()
-        logger.info("SystemControlScene initialized on port %d", port)
+        logger.info("[%s] Scene initialized on port %d (operation=lifecycle)", SCENE_ID, port)
 
     # ── Route registration ────────────────────────────────────────────────────
 
@@ -178,7 +179,7 @@ class SystemControlScene(FlaskScene):
             try:
                 return jsonify({"status": "ok", "scene": SCENE_ID, "port": self.port})
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": SCENE_ID, "reason": "health check raised"}), 500
 
         @app.route("/api/plugin_info")
@@ -303,7 +304,7 @@ class SystemControlScene(FlaskScene):
 
             full.parent.mkdir(parents=True, exist_ok=True)
             full.write_text(content, encoding="utf-8")
-            logger.info("Config written: %s (%d chars)", rel_path, len(content))
+            logger.info("[%s] Config written (operation=config_write): %s (%d chars)", SCENE_ID, rel_path, len(content))
             return jsonify({"ok": True, "path": rel_path, "size": len(content), "backed_up": True})
 
         @app.route("/api/config/<path:filename>/restore", methods=["POST"])

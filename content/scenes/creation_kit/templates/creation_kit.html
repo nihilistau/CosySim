@@ -1398,6 +1398,7 @@ const CK = {
         <span>${this._escHtml(String(title))}</span>
         ${hasSlots ? '<span style="font-size:0.55rem;color:var(--ck-text-dim)">[container]</span>' : ''}
       </div>
+      ${this._renderInlinePreview(inst, def)}
       ${slotsHtml}
       <div class="ck-placed-actions">
         ${!nested ? `
@@ -1407,6 +1408,42 @@ const CK = {
         <button class="ck-placed-action delete" onclick="event.stopPropagation();CK.selectedId='${inst.id}';CK.deleteSelected()" title="Delete">&#10005;</button>
       </div>
     </div>`;
+  },
+
+  // ── Inline preview — mini component rendering in canvas cards ────
+  // v1.49.3 [2026-03-22] — Shows what the component will look like
+
+  _renderInlinePreview(inst, def) {
+    const p = inst.props || {};
+    const t = inst.type;
+    // Only render inline preview for visual component types
+    if (t === 'text_block' && p.text) {
+      return `<div class="ck-inline-prev" style="font-size:0.65rem;color:var(--ck-text-dim);padding:4px 8px;max-height:40px;overflow:hidden">${this._escHtml(String(p.text).slice(0, 100))}</div>`;
+    }
+    if (t === 'heading') {
+      const sz = {'h1':'1.1rem','h2':'0.9rem','h3':'0.75rem'}[p.level||'h2'] || '0.9rem';
+      return `<div class="ck-inline-prev" style="font-size:${sz};font-weight:600;padding:4px 8px;color:var(--ck-accent)">${this._escHtml(p.text || 'Heading')}</div>`;
+    }
+    if (t === 'button' || t === 'button_group') {
+      const label = p.label || (p.buttons || []).map(b => b.label).join(' | ') || 'Button';
+      return `<div class="ck-inline-prev" style="padding:4px 8px"><span style="background:var(--ck-accent);color:#000;padding:2px 10px;border-radius:4px;font-size:0.6rem;font-weight:600">${this._escHtml(label)}</span></div>`;
+    }
+    if (t === 'status_indicator') {
+      const colors = {ok:'var(--ck-green)',warning:'var(--ck-accent)',error:'var(--ck-red)',offline:'var(--ck-text-dim)'};
+      const c = colors[p.status] || 'var(--ck-text-dim)';
+      return `<div class="ck-inline-prev" style="padding:4px 8px;font-size:0.65rem"><span style="color:${c}">\u25CF</span> ${this._escHtml(p.label||'')} <strong>${this._escHtml(String(p.value||''))}</strong></div>`;
+    }
+    if (t === 'health_bar' || t === 'faction_bars') {
+      const pct = p.value || p.pct || 75;
+      return `<div class="ck-inline-prev" style="padding:4px 8px"><div style="background:var(--ck-panel);border-radius:3px;height:8px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--ck-green);border-radius:3px"></div></div></div>`;
+    }
+    if (t === 'text_input') {
+      return `<div class="ck-inline-prev" style="padding:4px 8px"><div style="background:var(--ck-panel);border:1px solid var(--ck-border);border-radius:4px;padding:3px 8px;font-size:0.6rem;color:var(--ck-text-dim)">${this._escHtml(p.placeholder || 'Type...')}</div></div>`;
+    }
+    if (t === 'glass_panel') {
+      return `<div class="ck-inline-prev" style="padding:4px 8px;font-size:0.6rem;color:var(--ck-text-dim);border-left:2px solid var(--ck-accent);margin:0 8px">${this._escHtml(p.title || 'Panel')}</div>`;
+    }
+    return ''; // No inline preview for this type
   },
 
   // ── Property inspector ───────────────────────────────────────────
@@ -1507,9 +1544,38 @@ const CK = {
   _setPropById(id, key, value) {
     const inst = this._findById(this.layout, id);
     if (!inst) return;
+    // v1.49.3 [2026-03-22] — Validate prop against schema before setting
+    const def = this.components[inst.type] || {};
+    const schema = (def.prop_schema || []).find(p => p.key === key);
+    if (schema) {
+      const err = this._validateProp(schema, value);
+      const errEl = document.getElementById('ck-prop-err-' + key);
+      if (errEl) errEl.textContent = err || '';
+      if (err) {
+        this._showToast('Validation: ' + err, 'error');
+      }
+    }
+    this._pushUndo();
     inst.props[key] = value;
     this._renderCanvas();
     this._schedulePreview();
+  },
+
+  // v1.49.3 [2026-03-22] — Property validation against component schema
+  _validateProp(schema, value) {
+    if (schema.required && (value === '' || value === null || value === undefined)) {
+      return schema.label + ' is required';
+    }
+    if (schema.type === 'number') {
+      const num = Number(value);
+      if (isNaN(num)) return schema.label + ' must be a number';
+      if (schema.min !== undefined && num < schema.min) return schema.label + ' min: ' + schema.min;
+      if (schema.max !== undefined && num > schema.max) return schema.label + ' max: ' + schema.max;
+    }
+    if (schema.type === 'color' && value && !/^#[0-9a-fA-F]{3,8}$/.test(value)) {
+      return schema.label + ' must be a valid hex color';
+    }
+    return null; // valid
   },
 
   // ── Live preview ─────────────────────────────────────────────────
