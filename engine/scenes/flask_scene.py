@@ -332,6 +332,50 @@ class FlaskScene(BaseScene, NexusSceneMixin):
         except Exception as exc:
             logger.debug("FlaskScene: world event subscription skipped: %s", exc)
 
+        # v1.52.0 [2026-03-22] — Cross-scene arrival notifications
+        # Subscribe to player_travel events to detect arrivals
+        try:
+            from engine.events.event_bus import get_event_bus as get_eb
+            eb = get_eb()
+            eb.subscribe("player_travel", self._on_player_travel_wrapper)
+            logger.debug("FlaskScene: %s subscribed to player_travel", self.scene_name)
+        except Exception as exc:
+            logger.debug("FlaskScene: player_travel subscription skipped: %s", exc)
+
+    # v1.52.0 [2026-03-22] — Cross-scene arrival notification
+    # CONNECTS: city_map.travel(), EventBus player_travel
+    # CALLED BY: EventBus when player travels to any scene
+
+    def _on_player_travel_wrapper(self, data: Dict[str, Any]) -> None:
+        """Handle player_travel event — call on_player_arrival if destination matches."""
+        destination = (data or {}).get("to", "")
+        display_name = (self.SCENE_METADATA or {}).get("display_name", "")
+        if destination == display_name:
+            from_location = data.get("from", "Unknown")
+            try:
+                self.on_player_arrival(from_location, data)
+                # Also broadcast to all connected Socket.IO clients
+                if hasattr(self, "socketio"):
+                    self.socketio.emit("player_arrived", {
+                        "from": from_location,
+                        "to": destination,
+                        "energy_cost": data.get("energy_cost", 0),
+                        "heat_add": data.get("heat_add", 0),
+                    })
+            except Exception as exc:
+                logger.debug("%s.on_player_arrival error: %s", self.scene_name, exc)
+
+    def on_player_arrival(self, from_location: str, travel_data: Dict[str, Any]) -> None:
+        """Subclass hook — called when a player arrives at this scene via travel.
+
+        Override to greet the player, update NPC proximity, sync state, etc.
+
+        Args:
+            from_location: The scene the player traveled from.
+            travel_data: Full travel event data (energy_cost, heat_add, etc.).
+        """
+        logger.info("%s: player arrived from %s", self.scene_name, from_location)
+
     def _on_world_tick_wrapper(self, data: Dict[str, Any]) -> None:
         """Internal wrapper — calls subclass on_world_tick if defined."""
         if hasattr(self, "on_world_tick"):
