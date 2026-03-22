@@ -168,7 +168,8 @@ class NexusVectorStore:
             self._collections[collection_key] = collection
             return collection
         except Exception as exc:
-            logger.error("Failed to get/create collection %s: %s", collection_name, exc)
+            # v1.49.3 [2026-03-22] — Structured logging context
+            logger.error("[VectorStore] Failed to get/create collection (operation=get_collection, collection=%s): %s", collection_name, exc)
             raise
 
     # ──── Core operations ─────────────────────────────────────────────────
@@ -200,7 +201,7 @@ class NexusVectorStore:
         embeddings = svc.embed_batch([text], purpose=collection)
         if len(embeddings) != 1:
             logger.warning(
-                "Vector store add skipped for %s: embedding unavailable (got %s)",
+                "[VectorStore] Add skipped — embedding unavailable (operation=add, entry_id=%s, got=%d)",
                 entry_id,
                 len(embeddings),
             )
@@ -216,7 +217,7 @@ class NexusVectorStore:
             self._adds += 1
             logger.debug("Vector store: added %s to %s", entry_id, collection)
         except Exception as exc:
-            logger.warning("Vector store add failed for %s: %s", entry_id, exc)
+            logger.warning("[VectorStore] Add failed (operation=add, entry_id=%s): %s", entry_id, exc)
             raise
 
     def add_batch(
@@ -267,7 +268,7 @@ class NexusVectorStore:
             embeddings = svc.embed_batch(chunk_docs, purpose=collection)
             if len(embeddings) != len(chunk_ids):
                 logger.warning(
-                    "Batch add skipped for chunk %d-%d: embedding len %d != ids %d",
+                    "[VectorStore] Batch add skipped — embedding mismatch (operation=add_batch, chunk=%d-%d, embed_len=%d, ids_len=%d)",
                     i,
                     i + len(chunk_ids),
                     len(embeddings),
@@ -284,12 +285,12 @@ class NexusVectorStore:
                 added += len(chunk_ids)
             except Exception as exc:
                 logger.warning(
-                    "Batch add failed for chunk %d-%d: %s",
+                    "[VectorStore] Batch add failed (operation=add_batch, chunk=%d-%d): %s",
                     i, i + len(chunk_ids), exc,
                 )
 
         self._adds += added
-        logger.info("Vector store: batch added %d/%d to %s", added, len(entries), collection)
+        logger.info("[VectorStore] Batch added (operation=add_batch, added=%d, total=%d, collection=%s)", added, len(entries), collection)
         return added
 
     def search(
@@ -362,7 +363,7 @@ class NexusVectorStore:
             return search_results
 
         except Exception as exc:
-            logger.warning("Vector search failed in %s: %s", collection, exc)
+            logger.warning("[VectorStore] Search failed (operation=search, collection=%s): %s", collection, exc)
             return []
 
     def search_multi(
@@ -465,9 +466,9 @@ class NexusVectorStore:
             client.delete_collection(name=collection_name)
             if collection in self._collections:
                 del self._collections[collection]
-            logger.info("Reset collection: %s", collection_name)
+            logger.info("[VectorStore] Reset collection (operation=reset, collection=%s)", collection_name)
         except Exception as exc:
-            logger.warning("Reset collection %s failed: %s", collection_name, exc)
+            logger.warning("[VectorStore] Reset collection failed (operation=reset, collection=%s): %s", collection_name, exc)
 
 
 # ──── Helpers ────────────────────────────────────────────────────────────────
