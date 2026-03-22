@@ -1,0 +1,162 @@
+{%- extends "neon_base.html" -%}
+{%- set scene_key = "cyberspace" -%}
+{%- set scene_display_name = "CYBERSPACE" -%}
+{%- set scene_accent = "#00ff41" -%}
+{%- set scene_accent_rgb = "0 255 65" -%}
+
+{#
+  CYBERSPACE — v1.49.0 [2026-03-22]
+  Hacking minigame: 5x5 grid, ICE combat, trace system, programs.
+
+  Change Log:
+    v1.49.0 [2026-03-22] — Full hacking minigame UI: grid, HUD, programs panel,
+                            narration feed, jack-in/out flow
+    v1.0.0  [2026-03-22] — Initial scaffold via Creation Kit
+#}
+
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='cyberspace.css') }}">
+{% endblock %}
+
+{% block scene_content %}
+<div class="cyberspace-scene" data-scene="cyberspace">
+
+  <!-- ── Splash / Jack-In Screen ───────────────────────────────────── -->
+  <div id="cs-splash" class="cs-splash">
+    <div class="cs-splash-inner">
+      <h1 class="cs-splash-title">CYBERSPACE</h1>
+      <p class="cs-splash-subtitle">NeonCity Network Interface</p>
+      <div class="cs-splash-ascii">
+<pre>
+  _____ __ __ _____ _____ _____ _____ _____ _____ _____
+ |     |  |  | __  |   __| __  |   __|  _  |  _  |     |
+ |   --|_   _| __ -|   __|    -|__   |   __|     |   --|
+ |_____|_|___|_____|_____|__|__|_____|__|  |__|__|_____|
+</pre>
+      </div>
+      <button id="cs-jack-in-btn" class="cs-btn cs-btn-primary cs-pulse">
+        &gt; JACK IN _
+      </button>
+      <p class="cs-splash-hint">Navigate the grid. Hack data vaults. Avoid ICE. Escape alive.</p>
+    </div>
+  </div>
+
+  <!-- ── Main Game UI (hidden until jacked in) ─────────────────────── -->
+  <div id="cs-game" class="cs-game" style="display: none;">
+
+    <!-- ── Top HUD Bar ─────────────────────────────────────────────── -->
+    <header class="cs-hud">
+      <div class="cs-hud-item">
+        <span class="cs-hud-label">HP</span>
+        <div class="cs-bar-outer">
+          <div id="cs-hp-bar" class="cs-bar-inner cs-bar-hp" style="width: 100%"></div>
+        </div>
+        <span id="cs-hp-text" class="cs-hud-value">100</span>
+      </div>
+      <div class="cs-hud-item">
+        <span class="cs-hud-label">TRACE</span>
+        <div class="cs-bar-outer">
+          <div id="cs-trace-bar" class="cs-bar-inner cs-bar-trace" style="width: 0%"></div>
+        </div>
+        <span id="cs-trace-text" class="cs-hud-value">0%</span>
+      </div>
+      <div class="cs-hud-item">
+        <span class="cs-hud-label">CREDITS</span>
+        <span id="cs-credits-text" class="cs-hud-value cs-credits">&curren;0</span>
+      </div>
+      <div class="cs-hud-item">
+        <span class="cs-hud-label">TURN</span>
+        <span id="cs-turn-text" class="cs-hud-value">0</span>
+      </div>
+      <div class="cs-hud-item cs-hud-cloak" id="cs-cloak-indicator" style="display: none;">
+        <span class="cs-hud-label">CLOAK</span>
+        <span id="cs-cloak-text" class="cs-hud-value">0</span>
+      </div>
+      <button id="cs-jack-out-btn" class="cs-btn cs-btn-danger cs-btn-sm">JACK OUT</button>
+    </header>
+
+    <!-- ── Game Area: Grid + Sidebar ───────────────────────────────── -->
+    <div class="cs-game-area">
+
+      <!-- ── Network Grid ──────────────────────────────────────────── -->
+      <div class="cs-grid-container">
+        <div id="cs-grid" class="cs-grid">
+          <!-- 5x5 grid rendered by JS -->
+        </div>
+        <!-- ── Movement Controls ─────────────────────────────────── -->
+        <div class="cs-controls">
+          <div class="cs-dpad">
+            <button class="cs-dpad-btn cs-dpad-n" data-dir="north" title="Move North">&#x25B2;</button>
+            <button class="cs-dpad-btn cs-dpad-w" data-dir="west" title="Move West">&#x25C0;</button>
+            <button class="cs-dpad-btn cs-dpad-center" disabled>&#x2B24;</button>
+            <button class="cs-dpad-btn cs-dpad-e" data-dir="east" title="Move East">&#x25B6;</button>
+            <button class="cs-dpad-btn cs-dpad-s" data-dir="south" title="Move South">&#x25BC;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Sidebar: Programs + Narration ─────────────────────────── -->
+      <div class="cs-sidebar">
+
+        <!-- ── Programs Panel ──────────────────────────────────────── -->
+        <section class="cs-panel cs-programs-panel">
+          <h2 class="cs-panel-title">&gt; PROGRAMS</h2>
+          <div id="cs-programs" class="cs-programs-list">
+            <!-- Rendered by JS -->
+          </div>
+          <div id="cs-target-prompt" class="cs-target-prompt" style="display: none;">
+            <p>Select target node on the grid...</p>
+            <button id="cs-cancel-target" class="cs-btn cs-btn-sm">Cancel</button>
+          </div>
+        </section>
+
+        <!-- ── Narration Feed ──────────────────────────────────────── -->
+        <section class="cs-panel cs-narration-panel">
+          <h2 class="cs-panel-title">&gt; DATASTREAM</h2>
+          <div id="cs-narration" class="cs-narration-feed">
+            <p class="cs-narration-line cs-dim">Awaiting connection...</p>
+          </div>
+        </section>
+
+        <!-- ── Data Stolen ─────────────────────────────────────────── -->
+        <section class="cs-panel cs-data-panel">
+          <h2 class="cs-panel-title">&gt; STOLEN DATA</h2>
+          <div id="cs-data-list" class="cs-data-list">
+            <p class="cs-dim">No data stolen yet.</p>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Game Over Overlay ─────────────────────────────────────────── -->
+  <div id="cs-gameover" class="cs-gameover-overlay" style="display: none;">
+    <div class="cs-gameover-inner">
+      <h1 id="cs-gameover-title" class="cs-gameover-title">FLATLINE</h1>
+      <p id="cs-gameover-message" class="cs-gameover-message"></p>
+      <div class="cs-gameover-stats">
+        <div class="cs-gameover-stat">
+          <span class="cs-gameover-stat-label">CREDITS</span>
+          <span id="cs-gameover-credits" class="cs-gameover-stat-value">&curren;0</span>
+        </div>
+        <div class="cs-gameover-stat">
+          <span class="cs-gameover-stat-label">TURNS</span>
+          <span id="cs-gameover-turns" class="cs-gameover-stat-value">0</span>
+        </div>
+        <div class="cs-gameover-stat">
+          <span class="cs-gameover-stat-label">DATA</span>
+          <span id="cs-gameover-data" class="cs-gameover-stat-value">0</span>
+        </div>
+      </div>
+      <p id="cs-gameover-narration" class="cs-gameover-narration"></p>
+      <button id="cs-retry-btn" class="cs-btn cs-btn-primary">&gt; JACK IN AGAIN _</button>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="{{ url_for('static', filename='cyberspace.js') }}" defer></script>
+{% endblock %}

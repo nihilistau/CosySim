@@ -1,4 +1,8 @@
 scenes:
+  auction:
+    auto_start: false
+  cyberspace:
+    auto_start: false
   oracle:
     auto_start: false
   arena:
