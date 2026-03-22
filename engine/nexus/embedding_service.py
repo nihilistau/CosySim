@@ -110,6 +110,81 @@ class EmbeddingCache:
 
 # ──── Provider protocol ──────────────────────────────────────────────────────
 
+# ──── Error classification + circuit breaker ─────────────────────────────────
+# v1.49.5 [2026-03-22] — Re-applied: ProviderHealth, error classification, circuit breaker
+# (Previously lost when a background agent overwrote the file during logging edits)
+
+class EmbeddingUnavailableError(RuntimeError):
+    """Raised when all embedding providers have failed or are circuit-broken."""
+
+
+_TRANSIENT_EXCEPTIONS = (TimeoutError, ConnectionError, ConnectionRefusedError, OSError)
+
+
+def _classify_error(exc: Exception) -> str:
+    """Classify an embedding error as 'transient' or 'permanent'."""
+    if isinstance(exc, _TRANSIENT_EXCEPTIONS):
+        return "transient"
+    status = getattr(exc, "status_code", None) or getattr(
+        getattr(exc, "response", None), "status_code", None
+    )
+    if status:
+        if status in (401, 403, 404):
+            return "permanent"
+        if status in (429, 500, 502, 503, 504):
+            return "transient"
+    msg = str(exc).lower()
+    if any(k in msg for k in ("api key", "unauthorized", "forbidden", "not found")):
+        return "permanent"
+    return "transient"
+
+
+@dataclass
+class ProviderHealth:
+    """Per-provider health tracking with circuit breaker."""
+    consecutive_failures: int = 0
+    total_failures: int = 0
+    total_successes: int = 0
+    last_error: str = ""
+    last_error_type: str = ""
+    circuit_open: bool = False
+    circuit_open_until: float = 0.0
+    PERMANENT_THRESHOLD: int = 2
+    TRANSIENT_THRESHOLD: int = 5
+    COOLDOWN_SECS: float = 300.0
+
+    def record_success(self) -> None:
+        self.consecutive_failures = 0
+        self.total_successes += 1
+        self.circuit_open = False
+
+    def record_failure(self, exc: Exception) -> None:
+        self.consecutive_failures += 1
+        self.total_failures += 1
+        self.last_error = str(exc)[:200]
+        self.last_error_type = _classify_error(exc)
+        threshold = self.PERMANENT_THRESHOLD if self.last_error_type == "permanent" else self.TRANSIENT_THRESHOLD
+        if self.consecutive_failures >= threshold:
+            self.circuit_open = True
+            self.circuit_open_until = time.time() + self.COOLDOWN_SECS
+            logger.warning("[EmbeddingService] Circuit breaker OPEN (%d failures, type=%s)",
+                           self.consecutive_failures, self.last_error_type)
+
+    def is_available(self) -> bool:
+        if not self.circuit_open:
+            return True
+        if time.time() >= self.circuit_open_until:
+            self.circuit_open = False
+            self.consecutive_failures = 0
+            return True
+        return False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"consecutive_failures": self.consecutive_failures, "total_failures": self.total_failures,
+                "total_successes": self.total_successes, "circuit_open": self.circuit_open,
+                "last_error": self.last_error, "last_error_type": self.last_error_type}
+
+
 class EmbeddingProvider(Protocol):
     """Interface for embedding providers."""
 
@@ -417,6 +492,7 @@ class EmbeddingService:
 
         # Build provider chain (lazy — providers instantiated on first use)
         self._providers: List[EmbeddingProvider] = []
+        self._provider_health: Dict[str, ProviderHealth] = {}  # v1.49.5 circuit breaker
         self._active_provider: Optional[EmbeddingProvider] = None
 
     def _ensure_providers(self) -> None:
@@ -486,16 +562,22 @@ class EmbeddingService:
         start = time.time()
         last_exc: Optional[Exception] = None
 
+        # v1.49.5 [2026-03-22] — Circuit breaker + health tracking per provider
         for provider in self._providers:
+            pname = provider.name
+            health = self._provider_health.setdefault(pname, ProviderHealth())
+            if not health.is_available():
+                logger.debug("[EmbeddingService] Provider %s circuit-broken, skipping", pname)
+                continue
             try:
                 vector = provider.embed(text, task_type=task_type)
                 elapsed_ms = (time.time() - start) * 1000
 
+                health.record_success()
                 self._cache.put(text, task_type, self._dimensions, vector)
                 with self._lock:
                     self._stats.total_embeds += 1
                     self._stats.total_texts += 1
-                    pname = provider.name
                     self._stats.provider_used[pname] = (
                         self._stats.provider_used.get(pname, 0) + 1
                     )
@@ -510,19 +592,21 @@ class EmbeddingService:
 
             except Exception as exc:
                 last_exc = exc
-                logger.debug("Provider %s failed, trying next: %s", provider.name, exc)
+                health.record_failure(exc)
+                logger.warning("[EmbeddingService] Provider %s failed (type=%s): %s",
+                               pname, _classify_error(exc), exc)
                 continue
 
         with self._lock:
             self._stats.errors += 1
         if last_exc:
-            logger.warning(
-                "[EmbeddingService] All providers failed (operation=embed, graceful skip). Last: %s",
+            logger.error(
+                "[EmbeddingService] All providers failed (operation=embed) — data NOT embedded: %s",
                 last_exc,
             )
-        else:
-            logger.warning("[EmbeddingService] No providers configured (operation=embed, graceful skip)")
-        return []
+            raise EmbeddingUnavailableError(f"All providers failed. Last: {last_exc}")
+        logger.error("[EmbeddingService] No providers configured (operation=embed)")
+        raise EmbeddingUnavailableError("No embedding providers configured")
 
     def embed_batch(
         self, texts: List[str], purpose: str = "knowledge"
@@ -562,9 +646,14 @@ class EmbeddingService:
         start = time.time()
         last_exc: Optional[Exception] = None
 
+        # v1.49.5 [2026-03-22] — Circuit breaker + health tracking per provider
         for provider in self._providers:
+            pname = provider.name
+            health = self._provider_health.setdefault(pname, ProviderHealth())
+            if not health.is_available():
+                logger.debug("[EmbeddingService] Provider %s circuit-broken, skipping batch", pname)
+                continue
             try:
-                # Process in chunks of batch_size
                 all_vectors: List[List[float]] = []
                 for chunk_start in range(0, len(uncached_texts), self._batch_size):
                     chunk = uncached_texts[chunk_start:chunk_start + self._batch_size]
@@ -572,18 +661,15 @@ class EmbeddingService:
                     all_vectors.extend(chunk_vectors)
 
                 elapsed_ms = (time.time() - start) * 1000
+                health.record_success()
 
-                # Place results and cache them
                 for j, idx in enumerate(uncached_indices):
                     results[idx] = all_vectors[j]
-                    self._cache.put(
-                        texts[idx], task_type, self._dimensions, all_vectors[j]
-                    )
+                    self._cache.put(texts[idx], task_type, self._dimensions, all_vectors[j])
 
                 with self._lock:
                     self._stats.batch_embeds += 1
                     self._stats.total_texts += len(uncached_texts)
-                    pname = provider.name
                     self._stats.provider_used[pname] = (
                         self._stats.provider_used.get(pname, 0) + 1
                     )
@@ -598,21 +684,18 @@ class EmbeddingService:
 
             except Exception as exc:
                 last_exc = exc
-                logger.debug(
-                    "Provider %s batch failed, trying next: %s", provider.name, exc
-                )
+                health.record_failure(exc)
+                logger.warning("[EmbeddingService] Provider %s batch failed (type=%s): %s",
+                               pname, _classify_error(exc), exc)
                 continue
 
         with self._lock:
             self._stats.errors += 1
         if last_exc:
-            logger.warning(
-                "[EmbeddingService] All providers failed for batch embed (operation=embed_batch, graceful skip). Last: %s",
-                last_exc,
-            )
-        else:
-            logger.warning("[EmbeddingService] No providers configured for batch (operation=embed_batch, graceful skip)")
-        return []
+            logger.error("[EmbeddingService] All providers failed for batch (operation=embed_batch): %s", last_exc)
+            raise EmbeddingUnavailableError(f"All providers failed for batch. Last: {last_exc}")
+        logger.error("[EmbeddingService] No providers configured for batch")
+        raise EmbeddingUnavailableError("No embedding providers configured")
 
     # ──── Similarity utilities ────────────────────────────────────────────
 
