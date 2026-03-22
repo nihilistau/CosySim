@@ -13,6 +13,8 @@
  * Change Log:
  *   v1.49.5 [2026-03-22] — All-Seeing Eye dashboard (tabs, health ring, service grid,
  *                            system gauges, error table, sparkline, live feed)
+ *                          — AlertRouter integration: alert card styles, severity
+ *                            variants (critical/high/medium/low), ack button, grid area
  *   v1.0.0  [2026-03-22] — Hand-crafted AAA+++ cyberpunk scene
  */
 
@@ -513,13 +515,14 @@
 .ase-grid {
   display: grid;
   grid-template-columns: 200px 1fr 1fr;
-  grid-template-rows: auto auto 1fr 1fr;
+  grid-template-rows: auto auto 1fr auto 1fr;
   gap: 12px;
   min-height: calc(100vh - 200px);
   grid-template-areas:
     "health  services  gauges"
     "health  sparkline sparkline"
     "errors  errors    errors"
+    "alerts  alerts    alerts"
     "feed    feed      feed";
 }
 .ase-health-panel   { grid-area: health; }
@@ -527,6 +530,7 @@
 .ase-gauges-panel   { grid-area: gauges; }
 .ase-sparkline-panel { grid-area: sparkline; }
 .ase-errors-panel   { grid-area: errors; }
+.ase-alerts-panel   { grid-area: alerts; }
 .ase-feed-panel     { grid-area: feed; }
 
 /* ── ASE Panel Base ──────────────────────────────────────────────── */
@@ -921,10 +925,206 @@
   white-space: nowrap;
 }
 
+/* ── ASE Alert Cards ── v1.49.5 [2026-03-22] ─────────────────────── */
+/* CONNECTS: AlertRouter severity levels (CRITICAL/HIGH/MEDIUM/LOW)  */
+/* CALLED BY: oracle.js _renderAlerts()                              */
+
+.ase-alerts {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ase-alert-count {
+  font-size: 0.5rem;
+  color: var(--or-muted);
+  font-weight: 400;
+}
+.ase-alert {
+  display: grid;
+  grid-template-columns: 6px 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+  background: rgba(8, 10, 18, 0.65);
+  border: 1px solid var(--or-border);
+  border-radius: 3px;
+  border-left: 4px solid var(--or-cyan);
+  font-family: var(--or-mono);
+  font-size: 0.52rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.ase-alert:hover {
+  border-color: var(--or-cyan);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.15);
+}
+.ase-alert__severity {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 3px;
+  background: var(--or-cyan);
+}
+.ase-alert__body {
+  min-width: 0;
+}
+.ase-alert__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.ase-alert__node {
+  color: var(--or);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.ase-alert__metric {
+  color: var(--or-muted);
+}
+.ase-alert__level {
+  font-size: 0.45rem;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.ase-alert__message {
+  color: var(--or-text);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.ase-alert__meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 0.45rem;
+  color: var(--or-muted);
+}
+.ase-alert__channels {
+  display: flex;
+  gap: 4px;
+}
+.ase-alert__channel {
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  font-size: 0.4rem;
+  color: var(--or);
+}
+.ase-alert__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.ase-alert__time {
+  font-size: 0.45rem;
+  color: var(--or-muted);
+  white-space: nowrap;
+}
+.ase-alert__ack {
+  font-size: 0.4rem;
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid var(--or-border);
+  background: transparent;
+  color: var(--or-muted);
+  cursor: pointer;
+  font-family: var(--or-mono);
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+.ase-alert__ack:hover {
+  border-color: var(--or);
+  color: var(--or);
+  background: rgba(168, 85, 247, 0.08);
+}
+.ase-alert__ack--done {
+  border-color: #22c55e;
+  color: #22c55e;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* ── Severity Variants ────────────────────────────────────────────── */
+/* v1.49.5 [2026-03-22] — Color-coded severity borders + glow        */
+
+/* CRITICAL — red border + pulsing glow */
+.ase-alert--critical {
+  border-left-color: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.15);
+  animation: ase-alert-pulse-red 2s ease-in-out infinite;
+}
+.ase-alert--critical .ase-alert__severity { background: #ef4444; }
+.ase-alert--critical .ase-alert__level {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* HIGH — orange/red border */
+.ase-alert--high {
+  border-left-color: #f97316;
+  box-shadow: 0 0 6px rgba(249, 115, 22, 0.1);
+}
+.ase-alert--high .ase-alert__severity { background: #f97316; }
+.ase-alert--high .ase-alert__level {
+  background: rgba(249, 115, 22, 0.12);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.25);
+}
+
+/* MEDIUM / WARNING — yellow border */
+.ase-alert--medium,
+.ase-alert--warning {
+  border-left-color: #eab308;
+}
+.ase-alert--medium .ase-alert__severity,
+.ase-alert--warning .ase-alert__severity { background: #eab308; }
+.ase-alert--medium .ase-alert__level,
+.ase-alert--warning .ase-alert__level {
+  background: rgba(234, 179, 8, 0.12);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+/* LOW / INFO — cyan border */
+.ase-alert--low,
+.ase-alert--info {
+  border-left-color: var(--or-cyan);
+}
+.ase-alert--low .ase-alert__severity,
+.ase-alert--info .ase-alert__severity { background: var(--or-cyan); }
+.ase-alert--low .ase-alert__level,
+.ase-alert--info .ase-alert__level {
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--or-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+/* Acknowledged alerts get muted styling */
+.ase-alert--acked {
+  opacity: 0.5;
+  border-left-color: var(--or-muted) !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+@keyframes ase-alert-pulse-red {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.15); }
+  50%      { box-shadow: 0 0 16px rgba(239, 68, 68, 0.3); }
+}
+
 /* ── ASE Scrollbars ──────────────────────────────────────────────── */
+.ase-alerts::-webkit-scrollbar,
 .ase-feed::-webkit-scrollbar,
 .ase-error-table-wrap::-webkit-scrollbar,
 .ase-trace-events::-webkit-scrollbar { width: 3px; }
+.ase-alerts::-webkit-scrollbar-thumb,
 .ase-feed::-webkit-scrollbar-thumb,
 .ase-error-table-wrap::-webkit-scrollbar-thumb,
 .ase-trace-events::-webkit-scrollbar-thumb { background: var(--or-border); border-radius: 2px; }
@@ -937,6 +1137,7 @@
       "health  services"
       "gauges  sparkline"
       "errors  errors"
+      "alerts  alerts"
       "feed    feed";
   }
 }
@@ -949,6 +1150,7 @@
       "gauges"
       "sparkline"
       "errors"
+      "alerts"
       "feed";
   }
   .ase-health-ring { width: 120px; height: 120px; }

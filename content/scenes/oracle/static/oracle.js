@@ -14,6 +14,8 @@
  *   v1.49.5 [2026-03-22] — All-Seeing Eye dashboard: OracleDashboard class,
  *                            OracleTabs switcher, health ring, service tiles,
  *                            system gauges, error table, sparkline, live feed
+ *                          — AlertRouter integration: _pollAlerts, _onAlertFeed,
+ *                            _renderAlerts with severity colors + acknowledge
  *   v1.0.0  [2026-03-22] — Hand-crafted AAA+++ scene with meditation,
  *                            fortune, conversation, resonance, city pulse
  */
@@ -330,8 +332,8 @@ const OracleTabs = {
 
 
 // ──── All-Seeing Eye Dashboard ── v1.49.5 [2026-03-22] ──────────────────
-// CONNECTS: /api/oracle/health, /api/oracle/errors, /api/oracle/trace,
-//           Socket.IO error_feed + health_update events
+// CONNECTS: /api/oracle/health, /api/oracle/errors, /api/oracle/alerts,
+//           /api/oracle/trace, Socket.IO error_feed + alert_feed + health_update
 // CALLED BY: OracleTabs.switchTo('dashboard')
 // EMITS: none (DOM-only rendering)
 
@@ -345,6 +347,7 @@ const OracleDash = {
   _sortDir: 'desc',      // 'asc' or 'desc'
   _expandedFp: null,     // fingerprint of currently expanded trace row
   _lastErrors: [],       // cached error data for sorting
+  _lastAlerts: [],       // v1.49.5 — cached alert data from AlertRouter
 
   // ── Lifecycle ─────────────────────────────────────────────────────
 
@@ -356,9 +359,11 @@ const OracleDash = {
     // Reuse the existing OracleApp socket for SocketIO events
     this._socket = OracleApp.socket;
 
-    // Listen for real-time error feed from backend
+    // Listen for real-time feeds from backend
+    // v1.49.5 [2026-03-22] — Added alert_feed listener for AlertRouter events
     if (this._socket) {
       this._socket.on('error_feed', (data) => this._onErrorFeed(data));
+      this._socket.on('alert_feed', (data) => this._onAlertFeed(data));
       this._socket.on('health_update', (data) => this._onHealthUpdate(data));
     }
 
@@ -370,11 +375,14 @@ const OracleDash = {
     if (dot) dot.classList.add('ase-feed-dot--live');
 
     // Initial fetch + start 10s polling interval
+    // v1.49.5 [2026-03-22] — Added _pollAlerts alongside health/errors
     this._pollHealth();
     this._pollErrors();
+    this._pollAlerts();
     this._pollTimer = setInterval(() => {
       this._pollHealth();
       this._pollErrors();
+      this._pollAlerts();
     }, 10000);
 
     console.debug('[Oracle/ASE] Dashboard initialized — polling every 10s');
@@ -451,6 +459,39 @@ const OracleDash = {
       });
   },
 
+  // ── Alert Polling ── v1.49.5 [2026-03-22] ────────────────────────
+  // CONNECTS: /api/oracle/alerts (AlertRouter.recent_routed + routing_stats)
+  // CALLED BY: init() polling loop
+  // EMITS: none (DOM-only rendering)
+
+  /** Fetch /api/oracle/alerts and update alerts panel */
+  _pollAlerts() {
+    fetch('/api/oracle/alerts?limit=50')
+      .then(r => {
+        if (!r.ok) throw new Error('Alerts endpoint returned ' + r.status);
+        return r.json();
+      })
+      .then(data => {
+        if (!data.ok && data.error) {
+          console.warn('[Oracle/ASE] Alerts endpoint error:', data.error);
+          return;
+        }
+        this._lastAlerts = data.alerts || [];
+
+        // Update alert count badge
+        const countEl = document.getElementById('ase-alert-count');
+        if (countEl) {
+          const unacked = this._lastAlerts.filter(a => !a.acknowledged).length;
+          countEl.textContent = unacked + ' active';
+        }
+
+        this._renderAlerts(this._lastAlerts);
+      })
+      .catch(e => {
+        console.warn('[Oracle/ASE] Alerts poll failed:', e);
+      });
+  },
+
   // ── Real-time Socket.IO Handlers ──────────────────────────────────
 
   /** Handle real-time error feed event from SocketIO */
@@ -458,6 +499,38 @@ const OracleDash = {
     if (!this._active) return;
 
     this._feedItems.unshift(event);
+    if (this._feedItems.length > 50) this._feedItems.length = 50;
+    this._renderFeed();
+  },
+
+  /**
+   * Handle real-time alert_feed event from SocketIO.
+   * v1.49.5 [2026-03-22] — AlertRouter callback → SocketIO → dashboard
+   * CONNECTS: oracle_scene._on_alert_event → alert_feed SocketIO event
+   */
+  _onAlertFeed(alert) {
+    if (!this._active) return;
+
+    // Prepend to cached alerts (newest first), cap at 50
+    this._lastAlerts.unshift(alert);
+    if (this._lastAlerts.length > 50) this._lastAlerts.length = 50;
+
+    // Update count badge
+    const countEl = document.getElementById('ase-alert-count');
+    if (countEl) {
+      const unacked = this._lastAlerts.filter(a => !a.acknowledged).length;
+      countEl.textContent = unacked + ' active';
+    }
+
+    this._renderAlerts(this._lastAlerts);
+
+    // Also push to the live feed as an event
+    this._feedItems.unshift({
+      timestamp: alert.ts,
+      level: alert.severity || 'ALERT',
+      module: alert.node || '—',
+      message: '[ALERT] ' + (alert.message || alert.metric || '—'),
+    });
     if (this._feedItems.length > 50) this._feedItems.length = 50;
     this._renderFeed();
   },
@@ -744,6 +817,104 @@ const OracleDash = {
     el.innerHTML = html;
   },
 
+  // ── Alert Rendering ── v1.49.5 [2026-03-22] ─────────────────────
+  // CONNECTS: AlertRouter severity levels, /api/oracle/alerts/<id>/ack
+  // CALLED BY: _pollAlerts, _onAlertFeed
+  // EMITS: none (DOM-only)
+
+  /**
+   * Render alert cards with severity-colored left borders.
+   * Maps severity: CRITICAL→red glow, HIGH→orange, MEDIUM→yellow, LOW→cyan.
+   */
+  _renderAlerts(alerts) {
+    const container = document.getElementById('ase-alerts');
+    if (!container) return;
+
+    if (!alerts || alerts.length === 0) {
+      container.innerHTML = '<div class="ase-empty">No active alerts</div>';
+      return;
+    }
+
+    let html = '';
+    for (const a of alerts) {
+      const sev = (a.severity || 'LOW').toLowerCase();
+      const acked = a.acknowledged ? ' ase-alert--acked' : '';
+      const time = this._formatTime(a.ts);
+      const channels = (a.channels || a.channels_routed || []);
+      const id = a.id || '';
+
+      html += '<div class="ase-alert ase-alert--' + this._esc(sev) + acked + '" data-alert-id="' + this._esc(String(id)) + '">';
+
+      // Severity dot
+      html += '<div class="ase-alert__severity"></div>';
+
+      // Body
+      html += '<div class="ase-alert__body">';
+      html += '<div class="ase-alert__header">';
+      html += '<span class="ase-alert__node">' + this._esc(a.node || '—') + '</span>';
+      html += '<span class="ase-alert__metric">' + this._esc(a.metric || '') + '</span>';
+      html += '<span class="ase-alert__level">' + this._esc((a.severity || 'LOW').toUpperCase()) + '</span>';
+      html += '</div>';
+      html += '<div class="ase-alert__message">' + this._esc(a.message || '—') + '</div>';
+
+      // Meta: source type + channels
+      html += '<div class="ase-alert__meta">';
+      html += '<span>' + this._esc(a.source_type || '') + '</span>';
+      if (channels.length > 0) {
+        html += '<span class="ase-alert__channels">';
+        for (const ch of channels) {
+          html += '<span class="ase-alert__channel">' + this._esc(ch) + '</span>';
+        }
+        html += '</span>';
+      }
+      html += '</div>';
+      html += '</div>'; // /body
+
+      // Actions: time + ack button
+      html += '<div class="ase-alert__actions">';
+      html += '<span class="ase-alert__time">' + this._esc(time) + '</span>';
+      if (id && !a.acknowledged) {
+        html += '<button class="ase-alert__ack" onclick="OracleDash._ackAlert(' + this._esc(String(id)) + ')">ACK</button>';
+      } else if (a.acknowledged) {
+        html += '<button class="ase-alert__ack ase-alert__ack--done">ACKED</button>';
+      }
+      html += '</div>';
+
+      html += '</div>'; // /alert
+    }
+
+    container.innerHTML = html;
+  },
+
+  /**
+   * Acknowledge an alert by ID via POST /api/oracle/alerts/<id>/ack.
+   * On success, marks the alert as acknowledged in the cached data and re-renders.
+   */
+  _ackAlert(alertId) {
+    fetch('/api/oracle/alerts/' + alertId + '/ack', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          // Update cached alert data
+          for (const a of this._lastAlerts) {
+            if (a.id === alertId) {
+              a.acknowledged = true;
+              break;
+            }
+          }
+          this._renderAlerts(this._lastAlerts);
+
+          // Update count badge
+          const countEl = document.getElementById('ase-alert-count');
+          if (countEl) {
+            const unacked = this._lastAlerts.filter(a => !a.acknowledged).length;
+            countEl.textContent = unacked + ' active';
+          }
+        }
+      })
+      .catch(e => console.warn('[Oracle/ASE] Ack failed:', e));
+  },
+
   // ── Sorting ───────────────────────────────────────────────────────
 
   /** Set up click handlers on sortable table headers */
@@ -867,11 +1038,18 @@ const OracleDash = {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   },
 
-  /** Format ISO timestamp or epoch to HH:MM:SS */
+  /** Format ISO timestamp or epoch to HH:MM:SS
+   *  v1.49.5 [2026-03-22] — Handle epoch seconds (AlertRouter ts) vs ms/ISO */
   _formatTime(ts) {
     if (!ts) return '—';
     try {
-      const d = new Date(ts);
+      // If ts is a number and looks like epoch seconds (< 1e12), convert to ms
+      let d;
+      if (typeof ts === 'number' && ts > 0 && ts < 1e12) {
+        d = new Date(ts * 1000);
+      } else {
+        d = new Date(ts);
+      }
       if (isNaN(d.getTime())) return String(ts).slice(0, 19);
       return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     } catch {
