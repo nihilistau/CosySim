@@ -182,6 +182,13 @@ class FlaskScene(BaseScene, NexusSceneMixin):
         5. Start optional ticker thread
         6. Run SocketIO server (blocking)
         """
+        # v1.49.4 [2026-03-22] — Oracle: auto-initialize observability stack
+        try:
+            from engine.observability.oracle import ensure_initialized
+            ensure_initialized()
+        except Exception:
+            pass  # Never block scene startup
+
         self._connect_mcp()
         self._connect_nexus()
         self._subscribe_world_events()

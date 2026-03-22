@@ -128,7 +128,9 @@ class OracleScene(FlaskScene):
         super().__init__(host=host, port=port)
         self._visit_count: int = 0
         self._setup_routes()
+        self._setup_observability_routes()
         self._setup_socketio()
+        self._wire_oracle_error_feed()
 
     # ── Routes ────────────────────────────────────────────────────────
 
@@ -144,6 +146,116 @@ class OracleScene(FlaskScene):
         def scene_state():
             """Return current scene state snapshot."""
             return jsonify(self._build_state())
+
+    # ── Oracle Observability Routes (All-Seeing Eye) ─────────────────
+    # v1.49.4 [2026-03-22] — The Oracle sees all: health, errors, traces, performance
+    # CONNECTS: ErrorAggregator, StructuredLogger, SystemMonitor, Benchmark
+    # CALLED BY: Oracle dashboard frontend (oracle.js)
+    # EMITS: JSON API responses for dashboard consumption
+
+    def _setup_observability_routes(self) -> None:
+        """Register the All-Seeing Eye observability API routes."""
+
+        @self.app.route("/api/oracle/health")
+        def oracle_health():
+            """System health: services, CPU, RAM, GPU."""
+            try:
+                from engine.logging.monitor import get_system_monitor
+                mon = get_system_monitor()
+                snapshot = mon.snapshot()
+                services = mon.check_services()
+                # Sanitize service data for JSON
+                clean_services = {}
+                for k, v in services.items():
+                    if isinstance(v, dict):
+                        clean_services[k] = v
+                    else:
+                        clean_services[k] = {"up": False, "error": str(v)}
+                return jsonify({"ok": True, "system": snapshot, "services": clean_services})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @self.app.route("/api/oracle/errors")
+        def oracle_errors():
+            """Top errors from the ErrorAggregator."""
+            try:
+                from engine.observability.error_aggregator import get_error_aggregator
+                agg = get_error_aggregator()
+                return jsonify(agg.snapshot())
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/oracle/errors/rate")
+        def oracle_error_rate():
+            """Error rate over configurable window."""
+            window = request.args.get("window", 300, type=int)
+            try:
+                from engine.observability.error_aggregator import get_error_aggregator
+                return jsonify(get_error_aggregator().get_error_rate(window))
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/oracle/trace/<trace_id>")
+        def oracle_trace(trace_id: str):
+            """Trace waterfall for a specific trace_id."""
+            try:
+                from engine.observability.structured_logger import get_structured_logger
+                events = get_structured_logger().get_trace(trace_id)
+                return jsonify({
+                    "trace_id": trace_id,
+                    "events": [
+                        {
+                            "timestamp": getattr(e, "timestamp", ""),
+                            "level": getattr(e, "level", ""),
+                            "service": getattr(e, "service", ""),
+                            "message": getattr(e, "message", "")[:200],
+                            "duration_ms": getattr(e, "duration_ms", None),
+                            "span_id": getattr(e, "span_id", ""),
+                        }
+                        for e in events
+                    ],
+                    "count": len(events),
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/oracle/logs")
+        def oracle_logs():
+            """Query structured logs with filters."""
+            level = request.args.get("level", "ERROR")
+            limit = request.args.get("limit", 50, type=int)
+            service = request.args.get("service", "")
+            try:
+                from engine.observability.structured_logger import get_structured_logger
+                sl = get_structured_logger()
+                kwargs: Dict[str, Any] = {"level": level, "limit": limit}
+                if service:
+                    kwargs["service"] = service
+                events = sl.query(**kwargs)
+                return jsonify({
+                    "logs": [
+                        {
+                            "timestamp": getattr(e, "timestamp", ""),
+                            "level": getattr(e, "level", ""),
+                            "service": getattr(e, "service", ""),
+                            "message": getattr(e, "message", "")[:300],
+                        }
+                        for e in events
+                    ],
+                    "count": len(events),
+                })
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+
+        @self.app.route("/api/oracle/diagnose")
+        def oracle_diagnose():
+            """Full diagnostic snapshot (same as scripts/oracle.py)."""
+            try:
+                from engine.observability.oracle import diagnose
+                result = diagnose(verbose=False)
+                return jsonify({"ok": True, **result})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
 
     # ── SocketIO Handlers ─────────────────────────────────────────────
 
@@ -296,6 +408,27 @@ class OracleScene(FlaskScene):
             "city": city,
             "visits": self._visit_count,
         }
+
+    # ── Oracle Error Feed ───────────────────────────────────────────
+    # v1.49.4 [2026-03-22] — Real-time error feed to dashboard via SocketIO
+    # CONNECTS: CosyLog _error_callbacks, Oracle dashboard frontend
+    # EMITS: error_feed SocketIO event
+
+    def _wire_oracle_error_feed(self) -> None:
+        """Register as an error callback recipient for real-time SocketIO feed."""
+        try:
+            from engine.observability.oracle import register_error_callback
+            register_error_callback(self._on_error_event)
+            logger.info("[%s] Oracle error feed wired (operation=init)", SCENE_ID)
+        except Exception as exc:
+            logger.debug("[%s] Oracle error feed not available: %s", SCENE_ID, exc)
+
+    def _on_error_event(self, event: Dict[str, Any]) -> None:
+        """Emit error to connected Oracle dashboard clients via SocketIO."""
+        try:
+            self.socketio.emit("error_feed", event)
+        except Exception:
+            pass  # Don't crash on emit failure
 
     # ── LLM Helpers ───────────────────────────────────────────────────
 

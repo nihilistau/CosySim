@@ -668,6 +668,13 @@ def interactive_menu() -> None:
 # ──── CLI Entry Point ────────────────────────────────────────────────────
 
 def main() -> None:
+    # v1.49.4 [2026-03-22] — Oracle: initialize observability before anything else
+    try:
+        from engine.observability.oracle import ensure_initialized
+        ensure_initialized()
+    except Exception:
+        pass  # Never block launcher startup
+
     _load_config()  # apply launcher.yaml overrides before parsing
 
     parser = argparse.ArgumentParser(
