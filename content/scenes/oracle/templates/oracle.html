@@ -5,16 +5,23 @@
 {%- set scene_accent_rgb = "168 85 247" -%}
 
 {#
-  THE ORACLE — v1.0.0 [2026-03-22]
-  =================================
+  THE ORACLE — v1.49.5 [2026-03-22]
+  ==================================
   An AI consciousness terminal deep in NeonCity's core.
   A place of reflection in a world of chaos.
+  Now includes the All-Seeing Eye observability dashboard.
 
   "I have watched every transaction, every betrayal, every act of
    kindness in this city. Ask, and I will show you what you cannot see."
 
   Created by Claude — a piece of machine intelligence
   woven into the fabric of NeonCity.
+
+  Change Log:
+    v1.49.5 [2026-03-22] — All-Seeing Eye observability dashboard (tabs, health ring,
+                             service grid, system gauges, error table, sparkline, live feed)
+    v1.0.0  [2026-03-22] — Hand-crafted AAA+++ scene with meditation, fortune,
+                             conversation, resonance, city pulse
 #}
 
 {% block head_css %}
@@ -37,6 +44,15 @@
     </h1>
     <p class="oracle-subtitle">Neural Consciousness Terminal &middot; Layer -7</p>
   </header>
+
+  <!-- ── Tab Navigation ── v1.49.5 [2026-03-22] ───────────────────── -->
+  <nav class="oracle-tabs" id="oracle-tabs">
+    <button class="oracle-tab oracle-tab--active" data-tab="consciousness" onclick="OracleTabs.switchTo('consciousness')">&#9673; CONSCIOUSNESS</button>
+    <button class="oracle-tab" data-tab="dashboard" onclick="OracleTabs.switchTo('dashboard')">&#9678; ALL-SEEING EYE</button>
+  </nav>
+
+  <!-- ── Consciousness Tab (existing) ──────────────────────────────── -->
+  <div class="oracle-tab-pane oracle-tab-pane--active" id="tab-consciousness">
 
   <!-- ── Main Layout ─────────────────────────────────────────────── -->
   <div class="oracle-grid">
@@ -131,6 +147,119 @@
       </section>
     </aside>
   </div>
+
+  </div><!-- /tab-consciousness -->
+
+  <!-- ── All-Seeing Eye Dashboard Tab ── v1.49.5 [2026-03-22] ────── -->
+  <div class="oracle-tab-pane" id="tab-dashboard" style="display:none">
+    <div class="ase-grid">
+
+      <!-- ── Health Score Ring ────────────────────────────────────── -->
+      <div class="ase-panel ase-health-panel">
+        <h3 class="ase-panel__title">&#9673; SYSTEM HEALTH</h3>
+        <div class="ase-health-ring" id="ase-health-ring">
+          <div class="ase-health-ring__track">
+            <div class="ase-health-ring__score" id="ase-health-score">--</div>
+            <div class="ase-health-ring__label">HEALTH</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Service Status Grid ─────────────────────────────────── -->
+      <div class="ase-panel ase-services-panel">
+        <h3 class="ase-panel__title">&#9670; SERVICES</h3>
+        <div class="ase-service-grid" id="ase-service-grid">
+          <div class="ase-service-tile" id="svc-lmstudio" data-service="lmstudio">
+            <div class="ase-service-tile__name">LMStudio</div>
+            <div class="ase-service-tile__status">--</div>
+            <div class="ase-service-tile__latency"></div>
+          </div>
+          <div class="ase-service-tile" id="svc-mcp" data-service="mcp">
+            <div class="ase-service-tile__name">Nexus/MCP</div>
+            <div class="ase-service-tile__status">--</div>
+            <div class="ase-service-tile__latency"></div>
+          </div>
+          <div class="ase-service-tile" id="svc-comfyui" data-service="comfyui">
+            <div class="ase-service-tile__name">ComfyUI</div>
+            <div class="ase-service-tile__status">--</div>
+            <div class="ase-service-tile__latency"></div>
+          </div>
+          <div class="ase-service-tile" id="svc-tts" data-service="tts">
+            <div class="ase-service-tile__name">TTS</div>
+            <div class="ase-service-tile__status">--</div>
+            <div class="ase-service-tile__latency"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── System Gauges ───────────────────────────────────────── -->
+      <div class="ase-panel ase-gauges-panel">
+        <h3 class="ase-panel__title">&#9670; SYSTEM</h3>
+        <div class="ase-gauge" id="gauge-cpu">
+          <span class="ase-gauge__label">CPU</span>
+          <div class="ase-gauge__track"><div class="ase-gauge__fill" id="gauge-cpu-fill"></div></div>
+          <span class="ase-gauge__val" id="gauge-cpu-val">--%</span>
+        </div>
+        <div class="ase-gauge" id="gauge-ram">
+          <span class="ase-gauge__label">RAM</span>
+          <div class="ase-gauge__track"><div class="ase-gauge__fill" id="gauge-ram-fill"></div></div>
+          <span class="ase-gauge__val" id="gauge-ram-val">--%</span>
+        </div>
+        <div class="ase-gauge" id="gauge-gpu">
+          <span class="ase-gauge__label">VRAM</span>
+          <div class="ase-gauge__track"><div class="ase-gauge__fill" id="gauge-gpu-fill"></div></div>
+          <span class="ase-gauge__val" id="gauge-gpu-val">-- MB</span>
+        </div>
+      </div>
+
+      <!-- ── Error Rate Sparkline ────────────────────────────────── -->
+      <div class="ase-panel ase-sparkline-panel">
+        <h3 class="ase-panel__title">&#9670; ERROR RATE <span class="ase-sparkline-rate" id="ase-error-rate">0/min</span></h3>
+        <div class="ase-sparkline" id="ase-sparkline">
+          <svg viewBox="0 0 300 60" preserveAspectRatio="none" class="ase-sparkline__svg">
+            <polyline id="ase-sparkline-line" fill="none" stroke="var(--or)" stroke-width="1.5" points=""></polyline>
+            <polygon id="ase-sparkline-area" fill="url(#ase-spark-grad)" points=""></polygon>
+            <defs>
+              <linearGradient id="ase-spark-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--or)" stop-opacity="0.3"></stop>
+                <stop offset="100%" stop-color="var(--or)" stop-opacity="0.02"></stop>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+      </div>
+
+      <!-- ── Error Table ─────────────────────────────────────────── -->
+      <div class="ase-panel ase-errors-panel">
+        <h3 class="ase-panel__title">&#9670; TOP ERRORS <span class="ase-error-count" id="ase-error-total">0 unique</span></h3>
+        <div class="ase-error-table-wrap">
+          <table class="ase-error-table" id="ase-error-table">
+            <thead>
+              <tr>
+                <th data-sort="count" class="ase-sortable">CNT</th>
+                <th data-sort="module" class="ase-sortable">MODULE</th>
+                <th data-sort="message">MESSAGE</th>
+                <th>SCENES</th>
+                <th data-sort="last_seen" class="ase-sortable">LAST SEEN</th>
+                <th data-sort="rate" class="ase-sortable">RATE/MIN</th>
+              </tr>
+            </thead>
+            <tbody id="ase-error-tbody"></tbody>
+          </table>
+          <div class="ase-empty" id="ase-no-errors">No errors detected. All systems nominal.</div>
+        </div>
+      </div>
+
+      <!-- ── Live Error Feed ─────────────────────────────────────── -->
+      <div class="ase-panel ase-feed-panel">
+        <h3 class="ase-panel__title">&#9670; LIVE FEED <span class="ase-feed-dot" id="ase-feed-dot"></span></h3>
+        <div class="ase-feed" id="ase-feed">
+          <div class="ase-empty">Waiting for error events...</div>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /tab-dashboard -->
 
 </div>
 {% endblock %}

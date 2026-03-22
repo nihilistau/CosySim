@@ -1,14 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <!--
-  Creation Kit — Visual Scene Editor v1.48
+  Creation Kit — Visual Scene Editor v1.49.5
   =========================================
   Drag-and-drop scene construction from the CosySim component library.
   Left: Component palette. Center: Layout canvas + live preview.
   Right: Property inspector. Supports nested layouts.
 
-  Version: v1.48.0 [2026-03-21]
+  Version: v1.49.5 [2026-03-22]
   Change Log:
+    v1.49.5 [2026-03-22] — Visual drop indicator, breadcrumb navigation,
+                            component duplication (Ctrl+D), canvas minimap
     v1.48.0 [2026-03-21] — v2: nested slot drop zones, 28 components,
                             live auto-preview, canvas drag reorder,
                             container slot visualization
@@ -813,6 +815,110 @@ body {
 
 /* ── Disabled button ───────────────────────────────────── */
 .ck-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── Visual drop indicator v1.49.5 [2026-03-22] ───────── */
+/* Glowing insertion line shown during palette drag over canvas */
+.ck-drop-indicator-line {
+  height: 3px;
+  background: var(--ck-accent);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgb(var(--ck-accent-rgb) / 0.6), 0 0 20px rgb(var(--ck-accent-rgb) / 0.3);
+  margin: 2px 20px;
+  pointer-events: none;
+  transition: opacity 0.1s;
+  opacity: 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+}
+.ck-drop-indicator-line.visible { opacity: 1; }
+
+/* ── Breadcrumb navigation v1.49.5 [2026-03-22] ───────── */
+/* Trail for nested component editing: Root > parent > slot > child */
+.ck-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgba(245,158,11,0.04);
+  border: 1px solid rgba(245,158,11,0.1);
+  border-radius: 4px;
+}
+.ck-breadcrumb__item {
+  font-family: var(--ck-mono);
+  font-size: 0.6rem;
+  color: var(--ck-text-dim);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 2px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.ck-breadcrumb__item:hover {
+  color: var(--ck-accent);
+  background: rgba(245,158,11,0.08);
+}
+.ck-breadcrumb__item.current {
+  color: var(--ck-accent);
+  font-weight: 600;
+  cursor: default;
+}
+.ck-breadcrumb__sep {
+  font-size: 0.55rem;
+  color: var(--ck-text-dim);
+  opacity: 0.4;
+  user-select: none;
+}
+
+/* ── Canvas minimap v1.49.5 [2026-03-22] ──────────────── */
+/* Small fixed overview panel showing all placed components */
+.ck-minimap {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 120px;
+  max-height: 200px;
+  background: rgba(18, 21, 30, 0.92);
+  border: 1px solid var(--ck-border);
+  border-radius: 6px;
+  padding: 6px;
+  z-index: 15;
+  overflow-y: auto;
+  backdrop-filter: blur(6px);
+}
+.ck-minimap__title {
+  font-family: var(--ck-mono);
+  font-size: 0.45rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--ck-text-dim);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.ck-minimap__block {
+  height: 6px;
+  border-radius: 2px;
+  margin: 2px 0;
+  cursor: pointer;
+  transition: all 0.12s;
+  opacity: 0.6;
+}
+.ck-minimap__block:hover { opacity: 1; transform: scaleX(1.05); }
+.ck-minimap__block.selected {
+  opacity: 1;
+  box-shadow: 0 0 6px rgb(var(--ck-accent-rgb) / 0.5);
+  height: 8px;
+}
+.ck-minimap__empty {
+  font-size: 0.5rem;
+  color: var(--ck-text-dim);
+  text-align: center;
+  padding: 4px;
+  opacity: 0.5;
+}
 </style>
 </head>
 <body>
@@ -857,10 +963,12 @@ body {
   </div>
 
   <!-- ── Center — Canvas ────────────────────────────────── -->
+  <!-- v1.49.5 [2026-03-22] — Added drop indicator line + minimap to canvas area -->
   <div class="ck-canvas-area" id="ck-canvas-area"
        ondragover="CK._onDragOver(event)"
        ondragleave="CK._onDragLeave(event)"
        ondrop="CK._onDrop(event)">
+    <div class="ck-drop-indicator-line" id="ck-drop-indicator-line"></div>
     <div class="ck-canvas" id="ck-canvas">
       <div class="ck-empty-state" id="ck-empty">
         <div class="ck-empty-icon">&#9638;</div>
@@ -868,6 +976,8 @@ body {
         <div class="ck-empty-hint">Components from the palette snap into a vertical layout. Containers have slot drop zones.</div>
       </div>
     </div>
+    <!-- v1.49.5 [2026-03-22] — Canvas minimap overview -->
+    <div class="ck-minimap" id="ck-minimap"></div>
     <!-- v1.48.0 — Live preview split pane -->
     <div class="ck-live-preview" id="ck-live-preview">
       <iframe class="ck-live-iframe" id="ck-live-iframe" sandbox="allow-same-origin"></iframe>
@@ -903,8 +1013,10 @@ body {
     <div id="ck-insp-content" style="display:none">
       <div class="ck-type-badge" id="ck-insp-type"></div>
       <div id="ck-insp-fields"></div>
-      <div style="margin-top:12px">
-        <button class="ck-btn danger" onclick="CK.deleteSelected()" style="width:100%">&#128465; Remove Component</button>
+      <!-- v1.49.5 [2026-03-22] — Duplicate + remove buttons -->
+      <div style="margin-top:12px;display:flex;gap:6px">
+        <button class="ck-btn" onclick="CK.duplicateSelected()" style="flex:1" title="Duplicate (Ctrl+D)">&#10697; Duplicate</button>
+        <button class="ck-btn danger" onclick="CK.deleteSelected()" style="flex:1">&#128465; Remove</button>
       </div>
     </div>
 
@@ -956,14 +1068,20 @@ body {
 
 <script>
 /**
- * Creation Kit Editor Controller — v1.48.0 [2026-03-21]
+ * Creation Kit Editor Controller — v1.49.5 [2026-03-22]
  *
  * Visual scene editor with nested layout support, drag reorder,
- * live preview, and 28-component palette.
+ * live preview, 28-component palette, visual drop indicators,
+ * breadcrumb navigation, component duplication, and canvas minimap.
  *
  * CONNECTS: /api/components, /api/layouts, /api/export/* REST endpoints
  * CALLED BY: DOM drag/click handlers
  * EMITS: DOM updates, REST calls for persistence, live preview refresh
+ *
+ * Change Log:
+ *   v1.49.5 [2026-03-22] — Visual drop indicator, breadcrumb nav,
+ *                           duplication (Ctrl+D), canvas minimap
+ *   v1.48.0 [2026-03-21] — Nested slots, drag reorder, live preview
  */
 'use strict';
 
@@ -979,6 +1097,7 @@ const CK = {
   _dragIdx: null,        // index being dragged for reorder
   _livePreview: false,   // live preview toggle
   _previewTimer: null,   // debounce timer for live preview
+  _dropInsertIdx: -1,    // v1.49.5 — calculated insertion index during palette drag
 
   // v1.49.3 [2026-03-22] — Undo/redo history
   _undoStack: [],        // previous layout snapshots
@@ -1062,6 +1181,10 @@ const CK = {
       } else if (e.key === 'ArrowDown' && this.selectedId) {
         e.preventDefault();
         this._moveSelected(1);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        // v1.49.5 [2026-03-22] — Ctrl+D / Cmd+D to duplicate selected
+        e.preventDefault();
+        this.duplicateSelected();
       } else if (e.key === 'Escape') {
         this.selectedId = null;
         this._renderCanvas();
@@ -1087,7 +1210,7 @@ const CK = {
   async init() {
     await this._loadCatalogue();
     this._renderPalette();
-    this._renderCanvas();
+    this._renderCanvas(); // v1.49.5 — also renders minimap
     this._setupKeyboard();
     this._updateUndoButtons();
   },
@@ -1156,19 +1279,64 @@ const CK = {
     e.currentTarget.classList.add('dragging');
   },
 
+  // v1.49.5 [2026-03-22] — Visual drop indicator: glowing insertion line
+  // CONNECTS: _onDrop (uses _dropInsertIdx), ck-drop-indicator-line DOM element
   _onDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = this._dragIdx !== null ? 'move' : 'copy';
     document.getElementById('ck-canvas-area').classList.add('drag-over');
+
+    // Calculate insertion position from mouse Y and show glowing line
+    const indicator = document.getElementById('ck-drop-indicator-line');
+    const placedEls = document.querySelectorAll('#ck-canvas > .ck-placed');
+    const canvasArea = document.getElementById('ck-canvas-area');
+    const canvasRect = canvasArea.getBoundingClientRect();
+
+    if (!placedEls.length) {
+      // No components yet — hide indicator, will append
+      this._dropInsertIdx = 0;
+      indicator.classList.remove('visible');
+      return;
+    }
+
+    let insertIdx = placedEls.length; // default: append at end
+    let indicatorY = 0;
+
+    for (let i = 0; i < placedEls.length; i++) {
+      const rect = placedEls[i].getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        insertIdx = i;
+        // Position line at the top edge of this component
+        indicatorY = rect.top - canvasRect.top + canvasArea.scrollTop - 2;
+        break;
+      }
+    }
+
+    // If appending after last, position line at the bottom of the last component
+    if (insertIdx === placedEls.length) {
+      const lastRect = placedEls[placedEls.length - 1].getBoundingClientRect();
+      indicatorY = lastRect.bottom - canvasRect.top + canvasArea.scrollTop + 2;
+    }
+
+    this._dropInsertIdx = insertIdx;
+    indicator.style.top = indicatorY + 'px';
+    indicator.classList.add('visible');
   },
 
   _onDragLeave(e) {
     document.getElementById('ck-canvas-area').classList.remove('drag-over');
+    // v1.49.5 — Hide drop indicator when leaving canvas
+    document.getElementById('ck-drop-indicator-line').classList.remove('visible');
+    this._dropInsertIdx = -1;
   },
 
+  // v1.49.5 [2026-03-22] — Drop handler uses _dropInsertIdx for positioned insertion
   _onDrop(e) {
     e.preventDefault();
     document.getElementById('ck-canvas-area').classList.remove('drag-over');
+    // Hide the visual drop indicator line
+    document.getElementById('ck-drop-indicator-line').classList.remove('visible');
     const data = e.dataTransfer.getData('text/plain');
 
     if (data.startsWith('reorder:')) {
@@ -1188,18 +1356,17 @@ const CK = {
         const item = this.layout.splice(fromIdx, 1)[0];
         const insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx;
         this.layout.splice(insertAt, 0, item);
-        if (this.selectedId === item.id) {
-          // Keep selection
-        }
       }
     } else if (this._dragType) {
-      this.addComponent(this._dragType);
+      // v1.49.5 — Insert at calculated position instead of always appending
+      this._addComponentAtIndex(this._dragType, this._dropInsertIdx);
     } else if (data) {
-      this.addComponent(data);
+      this._addComponentAtIndex(data, this._dropInsertIdx);
     }
 
     this._dragType = null;
     this._dragIdx = null;
+    this._dropInsertIdx = -1;
     this._renderCanvas();
     this._schedulePreview();
   },
@@ -1313,6 +1480,30 @@ const CK = {
     this._schedulePreview();
   },
 
+  // v1.49.5 [2026-03-22] — Insert a new component at a specific index
+  // CONNECTS: _onDrop (palette drops with visual indicator position)
+  // CALLED BY: _onDrop when _dropInsertIdx is set from _onDragOver
+  _addComponentAtIndex(compType, idx) {
+    const def = this.components[compType];
+    if (!def) return;
+    const instance = {
+      id: `${compType}_${Date.now().toString(36)}`,
+      type: compType,
+      props: JSON.parse(JSON.stringify(def.default_props || {})),
+      children: {},
+    };
+
+    this._pushUndo();
+    if (idx >= 0 && idx < this.layout.length) {
+      this.layout.splice(idx, 0, instance);
+    } else {
+      this.layout.push(instance);
+    }
+
+    this.selectedId = instance.id;
+    this._renderInspector();
+  },
+
   selectComponent(id) {
     this.selectedId = id;
     this._renderCanvas();
@@ -1326,6 +1517,61 @@ const CK = {
     this._renderCanvas();
     this._renderInspector();
     this._schedulePreview();
+  },
+
+  // v1.49.5 [2026-03-22] — Duplicate selected component with new ID
+  // Deep clones the component (including nested children) and inserts after original.
+  // CONNECTS: layout[], _renderCanvas, _renderInspector, _renderMinimap
+  // CALLED BY: Ctrl+D keyboard shortcut, duplicate button in inspector
+  duplicateSelected() {
+    if (!this.selectedId) return;
+
+    // Find the component and its parent context
+    const found = this._findWithParent(this.layout, this.selectedId);
+    if (!found) return;
+
+    const { item, parentList, index } = found;
+    const clone = this._deepClone(item);
+
+    this._pushUndo();
+    // Insert clone right after the original
+    parentList.splice(index + 1, 0, clone);
+    this.selectedId = clone.id;
+
+    this._renderCanvas();
+    this._renderInspector();
+    this._schedulePreview();
+    this._showToast('Component duplicated', 'info');
+  },
+
+  // v1.49.5 — Find item and its parent list + index for duplication
+  _findWithParent(list, id) {
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === id) return { item: list[i], parentList: list, index: i };
+      if (list[i].children) {
+        for (const slot of Object.values(list[i].children)) {
+          const found = this._findWithParent(slot, id);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
+  },
+
+  // v1.49.5 — Deep clone a component instance, generating new unique IDs
+  _deepClone(inst) {
+    const clone = JSON.parse(JSON.stringify(inst));
+    // Recursively assign new IDs to the clone and all nested children
+    const reassignIds = (node) => {
+      node.id = `${node.type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      if (node.children) {
+        for (const slot of Object.values(node.children)) {
+          for (const child of slot) reassignIds(child);
+        }
+      }
+    };
+    reassignIds(clone);
+    return clone;
   },
 
   moveComponent(idx, direction) {
@@ -1355,6 +1601,7 @@ const CK = {
     }
 
     document.getElementById('ck-stat-count').textContent = this._countAll(this.layout);
+    this._renderMinimap(); // v1.49.5 — keep minimap in sync
   },
 
   _renderPlacedComponent(inst, idx, nested) {
@@ -1405,6 +1652,7 @@ const CK = {
           <button class="ck-placed-action" onclick="event.stopPropagation();CK.moveComponent(${idx},-1)" title="Move up">&#9650;</button>
           <button class="ck-placed-action" onclick="event.stopPropagation();CK.moveComponent(${idx},1)" title="Move down">&#9660;</button>
         ` : ''}
+        <button class="ck-placed-action" onclick="event.stopPropagation();CK.selectedId='${inst.id}';CK.duplicateSelected()" title="Duplicate (Ctrl+D)">&#10697;</button>
         <button class="ck-placed-action delete" onclick="event.stopPropagation();CK.selectedId='${inst.id}';CK.deleteSelected()" title="Delete">&#10005;</button>
       </div>
     </div>`;
@@ -1465,6 +1713,38 @@ const CK = {
 
     const def = this.components[inst.type] || {};
     document.getElementById('ck-insp-type').textContent = (def.label || inst.type).toUpperCase();
+
+    // v1.49.5 [2026-03-22] — Breadcrumb navigation for nested components
+    // Shows path: Root > parent_component > slot_name > this_component
+    let breadcrumbEl = document.getElementById('ck-breadcrumb');
+    if (!breadcrumbEl) {
+      breadcrumbEl = document.createElement('div');
+      breadcrumbEl.id = 'ck-breadcrumb';
+      // Insert breadcrumb before the type badge
+      const typeBadge = document.getElementById('ck-insp-type');
+      typeBadge.parentNode.insertBefore(breadcrumbEl, typeBadge);
+    }
+    const crumbs = this._getBreadcrumb(this.selectedId);
+    if (crumbs.length > 1) {
+      // Nested — show full breadcrumb trail
+      breadcrumbEl.className = 'ck-breadcrumb';
+      breadcrumbEl.style.display = 'flex';
+      breadcrumbEl.innerHTML = crumbs.map((crumb, ci) => {
+        const isLast = ci === crumbs.length - 1;
+        const sep = isLast ? '' : '<span class="ck-breadcrumb__sep">&#9656;</span>';
+        const cls = isLast ? 'ck-breadcrumb__item current' : 'ck-breadcrumb__item';
+        // Root (id=null) deselects; parent components navigate to them
+        const clickAction = crumb.id === null
+          ? 'CK.selectedId=null;CK._renderCanvas();CK._renderInspector()'
+          : `CK.selectComponent('${crumb.id}')`;
+        const click = isLast ? '' : ` onclick="${clickAction}"`;
+        return `<span class="${cls}"${click}>${this._escHtml(crumb.label)}</span>${sep}`;
+      }).join('');
+    } else {
+      // Top-level component — hide breadcrumb
+      breadcrumbEl.style.display = 'none';
+      breadcrumbEl.innerHTML = '';
+    }
 
     const schema = def.prop_schema || [];
     fieldsEl.innerHTML = schema.map(prop => {
@@ -1848,6 +2128,91 @@ const CK = {
   _pickAsset(url) {
     if (this._assetCallback) this._assetCallback(url);
     this.closeAssetBrowser();
+  },
+
+  // ── Breadcrumb navigation v1.49.5 [2026-03-22] ─────────────────
+  // Walks the layout tree to build path from root to the target component.
+  // CONNECTS: layout[] tree, _renderInspector (renders breadcrumb trail)
+  // CALLED BY: _renderInspector when selected component is nested
+
+  _getBreadcrumb(id) {
+    const path = [];
+
+    const walk = (list, trail) => {
+      for (const item of list) {
+        const def = this.components[item.type] || {};
+        const label = def.label || item.type;
+        const currentTrail = [...trail, { id: item.id, label }];
+
+        if (item.id === id) {
+          path.push(...currentTrail);
+          return true;
+        }
+        if (item.children) {
+          for (const [slotName, slotChildren] of Object.entries(item.children)) {
+            // Add the slot name as an intermediate breadcrumb (non-clickable separator)
+            const slotTrail = [...currentTrail, { id: item.id, label: slotName }];
+            if (walk(slotChildren, slotTrail)) return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    walk(this.layout, [{ id: null, label: 'Root' }]);
+    return path;
+  },
+
+  // ── Canvas minimap v1.49.5 [2026-03-22] ──────────────────────
+  // Small overview panel at bottom-right of canvas showing colored blocks
+  // for each top-level component. Click to scroll and select.
+  // CONNECTS: layout[], selectComponent, ck-canvas DOM scrolling
+  // CALLED BY: _renderCanvas, selectComponent, deleteSelected, addComponent
+  // EMITS: scroll + selection changes on click
+
+  _renderMinimap() {
+    const el = document.getElementById('ck-minimap');
+    if (!el) return;
+
+    if (!this.layout.length) {
+      el.innerHTML = '<div class="ck-minimap__title">Minimap</div><div class="ck-minimap__empty">Empty</div>';
+      return;
+    }
+
+    // Color palette for component categories
+    const catColors = {
+      'layout': 'var(--ck-blue)',
+      'content': 'var(--ck-green)',
+      'interactive': 'var(--ck-accent)',
+      'media': 'var(--ck-purple)',
+      'data': 'var(--ck-cyan)',
+      'navigation': '#ec4899',
+      'feedback': 'var(--ck-red)',
+    };
+    const defaultColor = 'var(--ck-text-dim)';
+
+    let html = '<div class="ck-minimap__title">Minimap</div>';
+    for (let i = 0; i < this.layout.length; i++) {
+      const inst = this.layout[i];
+      const def = this.components[inst.type] || {};
+      const color = catColors[def.category] || defaultColor;
+      const selected = inst.id === this.selectedId;
+      html += `<div class="ck-minimap__block ${selected ? 'selected' : ''}"
+                    style="background:${color}"
+                    onclick="CK._minimapClick('${inst.id}', ${i})"
+                    title="${this._escAttr(def.label || inst.type)}"></div>`;
+    }
+    el.innerHTML = html;
+  },
+
+  // v1.49.5 — Click a minimap block to scroll to and select that component
+  _minimapClick(id, idx) {
+    this.selectComponent(id);
+    // Scroll the canvas to bring the component into view
+    const placedEls = document.querySelectorAll('#ck-canvas > .ck-placed');
+    if (placedEls[idx]) {
+      placedEls[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   },
 
   // ── Helpers ──────────────────────────────────────────────────────
