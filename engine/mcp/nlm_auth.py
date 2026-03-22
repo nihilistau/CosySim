@@ -33,6 +33,8 @@ _COOKIES_FILE = _PROJECT_ROOT / "data" / "nlm_cookies.json"
 _META_FILE = _PROJECT_ROOT / "data" / "nlm_meta.json"
 _NLM_HOST = "notebooklm.google.com"
 _COOKIES_LOCK = threading.Lock()
+# v1.49.5 [2026-03-22] — Meta lock to prevent race condition on nlm_meta.json
+_META_LOCK = threading.Lock()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -50,23 +52,31 @@ _COOKIES_LOCK = threading.Lock()
 
 def _load_meta() -> Dict[str, str]:
     """Load stored build label and session meta from disk."""
-    try:
-        if _META_FILE.exists():
-            return json.loads(_META_FILE.read_text(encoding="utf-8"))
-    except Exception as exc:
-        # v1.49.1 [2026-03-22] — Surface meta load failures instead of silent fallback
-        logger.warning("Failed to load NLM meta from %s, using defaults: %s", _META_FILE, exc)
+    # v1.49.5 [2026-03-22] — Thread-safe meta access
+    with _META_LOCK:
+        try:
+            if _META_FILE.exists():
+                return json.loads(_META_FILE.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("[NLMAuth] Failed to load meta from %s: %s", _META_FILE, exc)
     return {"bl": _DEFAULT_BL, "f_sid": "-1"}
 
 
 def _save_meta(meta: Dict[str, str]) -> None:
     """Persist build label and session meta to disk."""
     import datetime
-    # Stamp BL update time when BL changes
-    existing = _load_meta()
-    if meta.get("bl") and meta.get("bl") != existing.get("bl"):
-        meta["bl_updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    _META_FILE.parent.mkdir(parents=True, exist_ok=True)
+    # v1.49.5 [2026-03-22] — Thread-safe meta access
+    with _META_LOCK:
+        # Stamp BL update time when BL changes
+        existing_raw = {}
+        try:
+            if _META_FILE.exists():
+                existing_raw = json.loads(_META_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        if meta.get("bl") and meta.get("bl") != existing_raw.get("bl"):
+            meta["bl_updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        _META_FILE.parent.mkdir(parents=True, exist_ok=True)
     _META_FILE.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 

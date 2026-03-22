@@ -226,27 +226,18 @@ class LMSClient:
         try:
             r = self._client.get(f"{self.base_url}/api/v1/models", timeout=3.0)
             # v1.43.0 — Surface auth failures through structured logging
-            if r.status_code == 401:
+            if r.status_code in (401, 403):
                 logger.error(
-                    "[LMSClient] Auth failed (operation=health_check, http_status=401, token_present=%s). "
-                    "Check lmstudio.api_token in config.", bool(self._api_token)
+                    "[LMSClient] Auth failed (operation=health_check, http_status=%d, token_present=%s). "
+                    "Check lmstudio.api_token in config.", r.status_code, bool(self._api_token)
                 )
-                try:
-                    from engine.observability.structured_logger import get_structured_logger, LogLevel
-                    get_structured_logger().log(
-                        LogLevel.ERROR,
-                        "LMStudio auth failure — Bearer token rejected or missing",
-                        service="lmstudio",
-                        tags=["auth", "lmstudio", "critical"],
-                        context={"status_code": 401, "token_present": bool(self._api_token),
-                                 "base_url": self.base_url},
-                    )
-                except Exception:
-                    logger.debug("Structured logger unavailable for auth failure", exc_info=True)
+                # v1.49.5 [2026-03-22] — Feed health check auth failures into circuit breaker
+                self._record_auth_failure(r.status_code)
                 return False
+            self._record_auth_success()
             return r.status_code == 200
         except Exception as exc:
-            logger.debug("LMStudio availability check failed: %s", exc)
+            logger.warning("[LMSClient] Health check failed (operation=health_check): %s", exc)
             return False
 
     def get_models(
