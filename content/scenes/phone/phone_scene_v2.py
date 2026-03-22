@@ -355,7 +355,10 @@ class PhoneSceneV2(FlaskScene):
     # ── character seeding ────────────────────────────────────────────────────
 
     def _seed_characters(self) -> None:
-        """Load all characters and create their DM threads if missing."""
+        """Load all characters and create their DM threads if missing.
+
+        v1.52.0 — Also seeds 0xGH0ST as a special investigation character.
+        """
         try:
             chars = self.db.get_all_characters()
             for row in chars:
@@ -373,6 +376,70 @@ class PhoneSceneV2(FlaskScene):
             logger.info("Seeded %d characters into phone scene", len(chars))
         except Exception as exc:
             logger.warning("Character seeding failed: %s", exc)
+
+        # v1.52.0 — Seed 0xGH0ST as special investigation character
+        self._seed_ghost()
+
+    def _seed_ghost(self) -> None:
+        """Ensure 0xGH0ST exists as a contact with investigation arc."""
+        ghost_id = "0xgh0st"
+        try:
+            # Create DM thread if it doesn't exist
+            thread_id = self.phone_db.get_or_create_dm(ghost_id)
+            # Create investigation arc if not exists
+            inv = self.phone_db.get_investigation(ghost_id)
+            if not inv:
+                self.phone_db.create_investigation(ghost_id, thread_id)
+                logger.info("Created investigation arc for 0xGH0ST")
+            # Create a lightweight agent for ghost
+            if ghost_id not in self._agents:
+                self._agents[ghost_id] = _PhoneCharacterAgent(ghost_id, self)
+            logger.info("0xGH0ST seeded on thread %s", thread_id)
+        except Exception as exc:
+            logger.warning("0xGH0ST seeding failed: %s", exc)
+
+    # v1.52.0 [2026-03-22] — Ghost investigation stages
+    _GHOST_STAGES = [
+        {"title": "Signal Acquired", "clue": "An encrypted signal from an unknown source. Someone is watching the watchers."},
+        {"title": "Identity Fragments", "clue": "0xGH0ST leaves traces in the data. They're part of something called SPECTER."},
+        {"title": "The Network", "clue": "SPECTER is a surveillance network. 0xGH0ST wants to bring it down."},
+        {"title": "The Key", "clue": "A cryptographic key hidden in the city's infrastructure. 0xGH0ST needs your help to find it."},
+        {"title": "Endgame", "clue": "The key unlocks SPECTER's kill switch. One chance. No going back."},
+    ]
+
+    def _advance_investigation(self, thread_id: str, char_id: str) -> None:
+        """Advance the 0xGH0ST investigation arc based on message count."""
+        try:
+            stage_data = self._GHOST_STAGES
+            result = self.phone_db.advance_investigation(
+                char_id,
+                clue=stage_data[min(self.phone_db.get_investigation(char_id)["stage"] + 1, len(stage_data) - 1)]["clue"]
+                if self.phone_db.get_investigation(char_id) else "",
+            )
+            if result.get("advanced"):
+                stage = result["stage"]
+                stage_info = stage_data[min(stage, len(stage_data) - 1)]
+                # Emit investigation update
+                self._emit("investigation_update", {
+                    "stage": stage,
+                    "title": stage_info["title"],
+                    "clue": stage_info["clue"],
+                    "total_messages": result["message_count"],
+                })
+                # Also push a system message into the thread
+                self.phone_db.save_message(
+                    thread_id=thread_id,
+                    sender_id="system",
+                    content=f"[INVESTIGATION] Stage {stage}: {stage_info['title']} — {stage_info['clue']}",
+                    msg_type="system",
+                )
+                self._emit("message_new", {
+                    "thread_id": thread_id,
+                    "message": {"sender_id": "system", "content": f"Stage {stage}: {stage_info['title']}"},
+                }, room=f"thread_{thread_id}")
+                logger.info("Investigation advanced to stage %d: %s", stage, stage_info["title"])
+        except Exception as exc:
+            logger.debug("Investigation advance failed: %s", exc)
 
     # ── autonomous texting ───────────────────────────────────────────────────
 
@@ -469,8 +536,8 @@ class PhoneSceneV2(FlaskScene):
                     "thread_id": thread_id,
                     "message":   msg,
                     "char_name": char_name,
-                })
-                self._emit("thread_updated", {"thread_id": thread_id})
+                }, room=f"thread_{thread_id}")
+                self._emit("thread_updated", {"thread_id": thread_id}, room=f"thread_{thread_id}")
             except Exception as exc:
                 logger.warning("autotxt fire failed for %s: %s", char_id, exc)
             finally:
@@ -547,9 +614,22 @@ class PhoneSceneV2(FlaskScene):
 
     # ── Socket.IO ────────────────────────────────────────────────────────────
 
-    def _emit(self, event: str, data: Any) -> None:
+    # v1.52.0 [2026-03-22] — Room-targeted Socket.IO emission
+    # CONNECTS: flask_socketio rooms, join_thread handler
+    def _emit(self, event: str, data: Any, room: Optional[str] = None) -> None:
+        """Emit a Socket.IO event, optionally targeting a specific room.
+
+        Args:
+            event: Event name (e.g. 'message_new', 'typing').
+            data: Payload dict.
+            room: Optional room name (e.g. 'thread_abc123'). If None,
+                  broadcasts to all connected clients.
+        """
         try:
-            self.socketio.emit(event, data)
+            if room:
+                self.socketio.emit(event, data, to=room)
+            else:
+                self.socketio.emit(event, data)
         except Exception:
             pass
 
@@ -794,7 +874,8 @@ class PhoneSceneV2(FlaskScene):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
-            self._emit("message_new", {"thread_id": thread_id, "message": user_msg})
+            # v1.52.0 — Target thread room
+            self._emit("message_new", {"thread_id": thread_id, "message": user_msg}, room=f"thread_{thread_id}")
 
             # Determine which characters are in this thread
             try:
@@ -809,8 +890,11 @@ class PhoneSceneV2(FlaskScene):
                         if char_id == "user":
                             continue
                         try:
+                            # v1.52.0 — All emissions target thread room
+                            _room = f"thread_{thread_id}"
+
                             # Emit typing indicator
-                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": True})
+                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": True}, room=_room)
                             time.sleep(random.uniform(0.5, 2.0))
 
                             reply = self._generate_reply(char_id, content, thread_id=thread_id)
@@ -835,7 +919,7 @@ class PhoneSceneV2(FlaskScene):
                                 response_id=reply.get("response_id"),
                                 conversation_id=f"phone_{char_id}",
                             )
-                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
+                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False}, room=_room)
 
                             # Handle image requests — generate and send as separate message
                             for img_prompt in reply.get("image_requests", []):
@@ -858,7 +942,7 @@ class PhoneSceneV2(FlaskScene):
                                             "thread_id": thread_id,
                                             "message": img_msg,
                                             "char_name": char_name,
-                                        })
+                                        }, room=_room)
                                 except Exception as img_exc:
                                     logger.debug("Image generation failed: %s", img_exc)
 
@@ -875,11 +959,16 @@ class PhoneSceneV2(FlaskScene):
                                 "message":   ai_msg,
                                 "char_name": char_name,
                                 "mood":      reply.get("mood"),
-                            })
-                            self._emit("thread_updated", {"thread_id": thread_id})
+                            }, room=_room)
+                            self._emit("thread_updated", {"thread_id": thread_id}, room=_room)
+
+                            # v1.52.0 — Advance investigation arc if talking to 0xGH0ST
+                            if char_id.lower() in ("0xgh0st", "0xghost", "ghost"):
+                                self._advance_investigation(thread_id, char_id)
+
                         except Exception as exc:
                             logger.error("Reply worker error for %s: %s", char_id, exc)
-                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False})
+                            self._emit("typing", {"thread_id": thread_id, "char_id": char_id, "active": False}, room=_room)
 
             threading.Thread(target=_reply_worker, daemon=True).start()
             return jsonify({"ok": True, "message": user_msg})
@@ -906,10 +995,59 @@ class PhoneSceneV2(FlaskScene):
                         "status":    row.get("status", "online"),
                         "unread":    unread,
                     })
+                # v1.52.0 — Ensure 0xGH0ST always appears in contacts
+                ghost_ids = {c["id"] for c in contacts}
+                if "0xgh0st" not in ghost_ids:
+                    contacts.append({
+                        "id":        "0xgh0st",
+                        "name":      "0xGH0ST",
+                        "display_name": "0xGH0ST",
+                        "avatar":    "\U0001F47B",
+                        "mood":      "encrypted",
+                        "status":    "unknown",
+                        "unread":    0,
+                    })
                 return jsonify({"ok": True, "contacts": contacts})
             except Exception as exc:
                 logger.error("get_contacts: %s", exc)
                 return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── Investigation ─────────────────────────────────────────────────────
+        # v1.52.0 [2026-03-22] — 0xGH0ST investigation arc API
+        # CONNECTS: phone_db.phone_investigations, _GHOST_STAGES
+        # CALLED BY: Hacker app or investigation panel in UI
+
+        @app.route("/api/investigation/<character_id>")
+        def get_investigation(character_id: str):
+            """Get investigation state for a character (0xGH0ST arc)."""
+            inv = self.phone_db.get_investigation(character_id)
+            if not inv:
+                return jsonify({"ok": True, "investigation": None, "message": "No investigation active."})
+            # Add stage info
+            stages = self._GHOST_STAGES
+            stage_idx = min(inv["stage"], len(stages) - 1)
+            inv["stage_title"] = stages[stage_idx]["title"]
+            inv["stage_clue"] = stages[stage_idx]["clue"]
+            inv["total_stages"] = len(stages)
+            return jsonify({"ok": True, "investigation": inv})
+
+        @app.route("/api/investigation/<character_id>/clues")
+        def get_investigation_clues(character_id: str):
+            """Get all revealed clues for a character's investigation."""
+            inv = self.phone_db.get_investigation(character_id)
+            if not inv:
+                return jsonify({"ok": True, "clues": []})
+            # Build clue list from stages up to current stage
+            stages = self._GHOST_STAGES
+            revealed = []
+            for i in range(min(inv["stage"] + 1, len(stages))):
+                revealed.append({
+                    "stage": i,
+                    "title": stages[i]["title"],
+                    "clue": stages[i]["clue"],
+                    "revealed": True,
+                })
+            return jsonify({"ok": True, "clues": revealed, "current_stage": inv["stage"]})
 
         # ── Games ─────────────────────────────────────────────────────────────
         @app.route("/api/games/start", methods=["POST"])
@@ -929,7 +1067,7 @@ class PhoneSceneV2(FlaskScene):
                     msg_type="system",
                     metadata={"session_id": session_id},
                 )
-                self._emit("game_event", {"thread_id": thread_id, "event": "game_started", "session_id": session_id})
+                self._emit("game_event", {"thread_id": thread_id, "event": "game_started", "session_id": session_id}, room=f"thread_{thread_id}")
                 return jsonify({"ok": True, "session_id": session_id})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
@@ -966,7 +1104,7 @@ class PhoneSceneV2(FlaskScene):
                 "choice":    choice,
                 "challenge": challenge,
                 "round":     state["round"],
-            })
+            }, room=f"thread_{thread_id}")
 
             # AI responds to the challenge off-thread
             char_id = session.get("character_id", "")
@@ -984,7 +1122,7 @@ class PhoneSceneV2(FlaskScene):
                             content=reaction,
                             msg_type="text",
                         )
-                        self._emit("message_new", {"thread_id": thread_id, "message": msg})
+                        self._emit("message_new", {"thread_id": thread_id, "message": msg}, room=f"thread_{thread_id}")
                 except Exception as exc:
                     logger.error("game AI react: %s", exc)
 
@@ -1005,7 +1143,7 @@ class PhoneSceneV2(FlaskScene):
                 content="Game ended. Thanks for playing! 🏁",
                 msg_type="system",
             )
-            self._emit("game_event", {"thread_id": thread_id, "event": "game_ended"})
+            self._emit("game_event", {"thread_id": thread_id, "event": "game_ended"}, room=f"thread_{thread_id}")
             return jsonify({"ok": True})
 
         # ── Media static serve ────────────────────────────────────────────────
