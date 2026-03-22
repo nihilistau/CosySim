@@ -324,7 +324,10 @@ class OpalClient:
         resp = self._session.get(url, headers=headers, params=params, timeout=30)
         resp.raise_for_status()
         data = resp.json()
-        return data.get("items", data if isinstance(data, list) else [])
+        # v1.49.2 [2026-03-22] — Handle list responses from gallery API
+        if isinstance(data, list):
+            return data
+        return data.get("items", [])
 
     def gallery_get(self, item_id: str) -> Dict[str, Any]:
         """Get a specific Opal gallery item by ID.

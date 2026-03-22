@@ -31,7 +31,7 @@ def _make_batchexecute_response(rpcid: str, inner: Any) -> str:
     """Build a minimal batchexecute wrb.fr HTTP response string."""
     inner_json = json.dumps(inner, separators=(",", ":"))
     chunk = json.dumps([["wrb.fr", rpcid, inner_json]], separators=(",", ":"))
-    return f")]}'\n{chunk}\n"
+    return ")]}'\n" + chunk + "\n"
 
 
 def _make_client(cookies: str = "SID=test", at_token: str = "test_at") -> Any:
@@ -201,7 +201,7 @@ class TestOpalParseBatchexecuteResponse:
         inner = {"key": "value"}
         inner_json = json.dumps(inner, separators=(",", ":"))
         chunk = json.dumps([["wrb.fr", "ug7pge", inner_json]], separators=(",", ":"))
-        raw = f")]}'\n{chunk}"
+        raw = ")]}'\n" + chunk
         result = client._parse_batchexecute_response(raw, "ug7pge")
         assert result == inner
 
