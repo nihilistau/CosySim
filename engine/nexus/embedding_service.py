@@ -164,7 +164,8 @@ class GeminiEmbeddingProvider:
 
                 self._client = get_aistudio_client()
             except Exception as exc:
-                logger.error("Failed to create AIStudioClient: %s", exc)
+                # v1.49.3 [2026-03-22] — Structured logging context
+                logger.error("[EmbeddingService] Failed to create AIStudioClient (operation=init_provider): %s", exc)
                 raise
         return self._client
 
@@ -185,7 +186,7 @@ class GeminiEmbeddingProvider:
         except Exception as exc:
             self._error_count += 1
             self._last_error = str(exc)
-            logger.warning("Gemini embed failed: %s", exc)
+            logger.warning("[EmbeddingService] Gemini embed failed (operation=embed): %s", exc)
             raise
 
     def embed_batch(self, texts: List[str],
@@ -208,7 +209,7 @@ class GeminiEmbeddingProvider:
         except Exception as exc:
             self._error_count += 1
             self._last_error = str(exc)
-            logger.warning("Gemini batch embed failed (%d texts): %s", len(texts), exc)
+            logger.warning("[EmbeddingService] Gemini batch embed failed (operation=embed_batch, texts=%d): %s", len(texts), exc)
             raise
 
 
@@ -435,7 +436,7 @@ class EmbeddingService:
                 )
                 providers.append(gp)
             except Exception as exc:
-                logger.warning("Cannot create Gemini provider: %s", exc)
+                logger.warning("[EmbeddingService] Cannot create Gemini provider (operation=init_provider): %s", exc)
 
         if self._preferred_provider in ("local", "auto", "gemini"):
             try:
@@ -450,7 +451,7 @@ class EmbeddingService:
                 logger.debug("Cannot create LMStudio provider: %s", exc)
 
         if not providers:
-            logger.error("No embedding providers available!")
+            logger.error("[EmbeddingService] No embedding providers available (operation=init_provider)!")
 
         self._providers = providers
         if providers:
@@ -516,11 +517,11 @@ class EmbeddingService:
             self._stats.errors += 1
         if last_exc:
             logger.warning(
-                "All embedding providers failed (graceful skip). Last: %s",
+                "[EmbeddingService] All providers failed (operation=embed, graceful skip). Last: %s",
                 last_exc,
             )
         else:
-            logger.warning("No embedding providers configured (graceful skip)")
+            logger.warning("[EmbeddingService] No providers configured (operation=embed, graceful skip)")
         return []
 
     def embed_batch(
@@ -606,11 +607,11 @@ class EmbeddingService:
             self._stats.errors += 1
         if last_exc:
             logger.warning(
-                "All providers failed for batch embed (graceful skip). Last: %s",
+                "[EmbeddingService] All providers failed for batch embed (operation=embed_batch, graceful skip). Last: %s",
                 last_exc,
             )
         else:
-            logger.warning("No embedding providers configured for batch (graceful skip)")
+            logger.warning("[EmbeddingService] No providers configured for batch (operation=embed_batch, graceful skip)")
         return []
 
     # ──── Similarity utilities ────────────────────────────────────────────

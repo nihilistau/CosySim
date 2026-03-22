@@ -153,8 +153,9 @@ class NexusClient:
         actor = _resolve_governance_actor(agent_id=agent_id, created_by=created_by)
         mgr = get_governance_manager()
         if not mgr.check_permissions(actor, operation):
+            # v1.49.3 [2026-03-22] — Structured logging context
             logger.warning(
-                "Governance denied Nexus %s for actor '%s'",
+                "[NexusClient] Governance denied (operation=%s, actor=%s)",
                 operation,
                 actor,
             )
@@ -185,7 +186,7 @@ class NexusClient:
         )
         if normalized.get("errors"):
             logger.warning(
-                "Nexus entry governance rejected '%s': %s",
+                "[NexusClient] Entry governance rejected (operation=normalize_entry, title=%s): %s",
                 title[:80],
                 "; ".join(normalized["errors"]),
             )
@@ -219,7 +220,7 @@ class NexusClient:
         )
         if normalized.get("errors"):
             logger.warning(
-                "Nexus namespace normalization rejected category '%s': %s",
+                "[NexusClient] Namespace normalization rejected (operation=normalize_tags, category=%s): %s",
                 category,
                 "; ".join(normalized["errors"]),
             )
@@ -281,7 +282,7 @@ class NexusClient:
                 namespace=namespace,
             )
         except Exception as exc:
-            logger.warning("NexusEntryCreate validation failed: %s", exc)
+            logger.warning("[NexusClient] Entry validation failed (operation=add_entry): %s", exc)
             return None
         result = self._post("/api/entries", payload)
         entry_id = result.get("data", {}).get("id") if result.get("ok") else None
@@ -326,7 +327,7 @@ class NexusClient:
                     fields["category"] = normalized["category"]
                 fields["tags"] = normalized["tags"]
         except Exception as exc:
-            logger.warning("Nexus update_entry governance failed: %s", exc)
+            logger.warning("[NexusClient] Update entry governance failed (operation=update_entry): %s", exc)
             return False
         result = self._put(f"/api/entries/{entry_id}", fields)
         return result.get("ok", False)
@@ -337,7 +338,7 @@ class NexusClient:
             created_by = current.get("created_by", "") if current else ""
             self._check_governance("delete", agent_id=agent_id, created_by=created_by)
         except Exception as exc:
-            logger.warning("Nexus delete_entry governance failed: %s", exc)
+            logger.warning("[NexusClient] Delete entry governance failed (operation=delete_entry): %s", exc)
             return False
         result = self._delete(f"/api/entries/{entry_id}")
         return result.get("ok", False)
@@ -384,7 +385,7 @@ class NexusClient:
         try:
             self._check_governance("write", agent_id=agent_id, created_by=agent_id)
         except Exception as exc:
-            logger.warning("Nexus log_session governance failed: %s", exc)
+            logger.warning("[NexusClient] Log session governance failed (operation=log_session): %s", exc)
             return None
         payload = {
             "project": project, "repo": repo,
@@ -400,7 +401,7 @@ class NexusClient:
         try:
             self._check_governance("write", agent_id=agent_id, created_by=agent_id)
         except Exception as exc:
-            logger.warning("Nexus update_session governance failed: %s", exc)
+            logger.warning("[NexusClient] Update session governance failed (operation=update_session): %s", exc)
             return False
         result = self._put(f"/api/sessions/{session_id}", fields)
         return result.get("ok", False)
@@ -437,7 +438,7 @@ class NexusClient:
         try:
             self._check_governance("admin", agent_id=agent_id, created_by=agent_id)
         except Exception as exc:
-            logger.warning("Nexus add_rule governance failed: %s", exc)
+            logger.warning("[NexusClient] Add rule governance failed (operation=add_rule): %s", exc)
             return None
         result = self._post("/api/rules", {
             "scope": scope, "rule_type": rule_type, "name": name,
@@ -486,7 +487,7 @@ class NexusClient:
                     )
                 )
             except Exception as exc:
-                logger.warning("Skipping batch Nexus entry due to governance failure: %s", exc)
+                logger.warning("[NexusClient] Skipping batch entry due to governance failure (operation=batch_add): %s", exc)
         if not normalized_entries:
             return []
         result = self._post("/api/batch", {"entries": normalized_entries})
@@ -583,7 +584,7 @@ class NexusClient:
                 namespace=namespace,
             )
         except Exception as exc:
-            logger.warning("Nexus add_qa governance failed: %s", exc)
+            logger.warning("[NexusClient] Add Q&A governance failed (operation=add_qa): %s", exc)
             return None
         result = self._post("/api/qa", {
             "question": question, "answer": answer,
