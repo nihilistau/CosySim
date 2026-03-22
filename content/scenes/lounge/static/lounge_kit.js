@@ -53,7 +53,7 @@ class LoungeScene {
     this._initParticles();
     this._loadInitialState();
     if (typeof this._initExtensions === 'function') this._initExtensions();
-    console.log('[VelvetPit] Initialised — Kit Rebuild v1.50.0');
+    console.debug('[VelvetPit] Initialised — Kit Rebuild v1.50.0');
   }
 
   // ── Socket.IO Setup ─────────────────────────────────────────────
@@ -70,6 +70,19 @@ class LoungeScene {
 
     this.socket.on('disconnect', () => {
       this._addChatLine('Lost connection. Reconnecting...', 'system');
+    });
+
+    // v1.49.1 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', (attempt) => {
+      this._addChatLine('Reconnected after ' + attempt + ' attempt(s).', 'system');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) {
+        this._addChatLine('Reconnecting... (attempt ' + attempt + ')', 'system');
+      }
+    });
+    this.socket.io.on('reconnect_error', () => {
+      this._addChatLine('Reconnection failed. Retrying...', 'system');
     });
 
     // Full state sync
@@ -409,7 +422,7 @@ class LoungeScene {
   _addChatLine(text, type = 'result') {
     const feed = document.getElementById('chat-feed');
     if (!feed) {
-      console.log(`[${type}] ${text}`);
+      console.debug(`[${type}] ${text}`);
       return;
     }
     const div = document.createElement('div');

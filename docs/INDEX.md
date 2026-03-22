@@ -7,7 +7,7 @@
 | Metric | Value |
 |--------|-------|
 | Version | v1.49 Interactive Systems + Creation Kit + API-First |
-| Scenes | 20 Flask (14 game + 11 service + 6 creation) |
+| Scenes | 30 Flask targets (14 game + 11 service + 5 creation) |
 | Skills | 178+ across 38 packs via @skill decorator |
 | Components | 37 Creation Kit components across 7 categories |
 | Interceptors | 26 pre/post-call hooks in the agent pipeline |
@@ -23,7 +23,7 @@ All targets defined in `engine/control_plane_registry.py`:
 |--------|-------|---------|
 | Game | 14 | phone, penthouse, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break |
 | Service | 11 | nexus_kms, hub, nexus_panel, dashboard, admin, tts, bridge, nlm_proxy, system_control, command_center, intel_hub |
-| Creation | 5 | canvas, canvas_api, assets, creator, asset_studio |
+| Creation | 5 | canvas, canvas_api, assets (asset_studio), creator, oracle |
 
 ### Key Ports
 

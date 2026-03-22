@@ -185,7 +185,7 @@ class PenthouseScene {
   _onNpcLocation(data) {
     const name     = data.character_name || data.character_id || 'NPC';
     const location = data.location || 'unknown';
-    console.log(`[NPC] ${name} moved to ${location}`);
+    console.debug(`[NPC] ${name} moved to ${location}`);
   }
 
   /* ── Scene state handlers ───────────────────────────────────────── */
@@ -370,7 +370,7 @@ class PenthouseScene {
   _onAgentTick(data) {
     const tick = data.tick || 0;
     const actions = data.actions || [];
-    console.log(`[AgentLoop] Tick #${tick}: ${actions.length} actions`);
+    console.debug(`[AgentLoop] Tick #${tick}: ${actions.length} actions`);
 
     // Process ALL character actions from this tick
     for (const act of actions) {
@@ -962,7 +962,7 @@ function openCharPicker() {
       return r.json();
     })
     .then(d => {
-      console.log('[Penthouse] Character list:', d.count, 'characters');
+      console.debug('[Penthouse] Character list:', d.count, 'characters');
       const chars = d.characters || [];
       if (!listEl) return;
       if (d.error) {

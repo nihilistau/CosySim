@@ -533,7 +533,7 @@ class WorkflowManager:
 def get_workflow_manager() -> WorkflowManager:
     """Return the process-wide WorkflowManager singleton.
 
-    Reads ``art.comfyui_url`` from config on first call.
+    Reads ``comfyui.base_url`` from config on first call.
 
     Returns:
         The shared WorkflowManager instance.
@@ -550,7 +550,8 @@ def get_workflow_manager() -> WorkflowManager:
         except Exception:
             try:
                 from engine.config import get_config  # noqa: PLC0415
-                base_url = get_config().get("art.comfyui_url", "http://localhost:8188")
+                # v1.49.1 [2026-03-22] — Use comfyui.base_url (was stale art.comfyui_url)
+                base_url = get_config().get("comfyui.base_url", "http://localhost:8188")
             except Exception:
                 base_url = "http://localhost:8188"
         _manager_instance = WorkflowManager(base_url=base_url)

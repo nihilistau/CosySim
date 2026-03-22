@@ -50,7 +50,12 @@ from content.scenes.realm.realm_rules import register_realm_rules
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "realm"
-DEFAULT_PORT = 5562
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("realm", 5562)
+except Exception:
+    DEFAULT_PORT = 5562
 
 
 # ═══════════════════════════════════════════════════════════════

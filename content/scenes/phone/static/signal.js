@@ -23,7 +23,7 @@ class SignalTerminal {
     this._loadContacts();
     this._loadMap();
     this._initParticles();
-    console.log('[SIGNAL] Cyberdeck online.');
+    console.debug('[SIGNAL] Cyberdeck online.');
   }
 
   _initParticles() {
@@ -44,6 +44,13 @@ class SignalTerminal {
     });
     this.socket.on('disconnect', () => {
       document.getElementById('sig-status').textContent = '\u25CB OFFLINE';
+    });
+    // v1.49.1 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', () => {
+      document.getElementById('sig-status').textContent = '\u25C9 ONLINE';
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      document.getElementById('sig-status').textContent = '\u25CB RECONNECTING (' + attempt + ')';
     });
     this.socket.on('message_new', (data) => {
       if (this.activeThread && data.thread_id === this.activeThread) {

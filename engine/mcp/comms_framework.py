@@ -65,6 +65,14 @@ Usage::
     from engine.mcp.comms_framework import get_router
     router = get_router()
     router.send("char-aria", "Your friend just called.")
+
+Version: v1.49.1 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.49.1 [2026-03-22] — Audit: upgrade error swallowing from debug→warning,
+                            discriminate LLM exception types, add ctx["error"] flag,
+                            structured context in all log messages
 """
 from __future__ import annotations
 
@@ -451,7 +459,8 @@ class GameState:
             try:
                 fn(game_id, key, value)
             except Exception as exc:
-                logger.debug("GameState observer %r raised: %s", fn, exc)
+                # v1.49.1 [2026-03-22] — Upgrade to warning so observer failures are visible
+                logger.warning("GameState observer %r raised for game=%s key=%s: %s", fn, game_id, key, exc)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -591,7 +600,11 @@ class AgentGovernor:
                 ctx["auto_results"][skill_entry.name] = result
                 logger.debug("Auto skill %s: %s", skill_entry.name, str(result)[:80])
             except Exception as exc:
-                logger.debug("Auto skill %s failed: %s", skill_entry.name, exc)
+                # v1.49.1 [2026-03-22] — Upgrade from debug to warning for visibility
+                logger.warning(
+                    "Auto skill %s failed (scene=%s, agent=%s): %s",
+                    skill_entry.name, ctx.get("scene", "?"), ctx.get("agent_id", "?"), exc,
+                )
 
         # ── 3. Pre-call pipeline ─────────────────────────────────────
         bus = self._get_bus()
@@ -625,8 +638,12 @@ class AgentGovernor:
                     va = getattr(self.agent, "_virtual_agent", None)
                     if va:
                         last_response = getattr(va, "_last_response", None)
-                except Exception:
-                    logger.debug("Suppressed exception", exc_info=True)
+                except Exception as exc:
+                    # v1.49.1 [2026-03-22] — Surface agent state extraction failures
+                    logger.warning(
+                        "AgentGovernor: failed to extract agent state (agent=%s, scene=%s): %s",
+                        ctx.get("agent_id", "?"), ctx.get("scene", "?"), exc,
+                    )
                 ctx["response_id"] = agent_state.get("last_response_id", "")
                 ctx["is_stateful"] = bool(
                     ctx["response_id"] and ctx["response_id"].startswith("resp_")
@@ -639,9 +656,22 @@ class AgentGovernor:
                     ctx["processed"] = getattr(last_response, "processed", None)
                     ctx["reasoning"] = getattr(last_response, "reasoning_content", "")
                     ctx["tool_calls"] = getattr(last_response, "tool_calls", [])
-            except Exception as exc:
-                logger.error("AgentGovernor LLM call failed: %s", exc)
+            except TimeoutError as exc:
+                # v1.49.1 [2026-03-22] — Discriminate exception types for LLM failures
+                logger.error("AgentGovernor LLM call timed out (agent=%s, scene=%s): %s",
+                             ctx.get("agent_id", "?"), ctx.get("scene", "?"), exc)
                 ctx["reply"] = ""
+                ctx["error"] = "timeout"
+            except ConnectionError as exc:
+                logger.error("AgentGovernor LLM connection failed (agent=%s, scene=%s): %s",
+                             ctx.get("agent_id", "?"), ctx.get("scene", "?"), exc)
+                ctx["reply"] = ""
+                ctx["error"] = "connection"
+            except Exception as exc:
+                logger.error("AgentGovernor LLM call failed (agent=%s, scene=%s): %s",
+                             ctx.get("agent_id", "?"), ctx.get("scene", "?"), exc)
+                ctx["reply"] = ""
+                ctx["error"] = str(type(exc).__name__)
 
         # ── 5. Parse response (single pass — v3.1) ─────────────────────
         reply = ctx.get("reply", "")
@@ -736,7 +766,7 @@ def _invoke_mcp_tool(tool_name: str, args: Dict, ctx: ResponseContext) -> Any:
             import engine.mcp.comms_tools as ct
             fn = getattr(ct, tool_name, None)
         except ImportError:
-            logger.debug("Suppressed exception", exc_info=True)
+            logger.debug("comms_tools module not available for tool lookup: %s", tool_name)
     if fn is None:
         raise ValueError(f"Tool {tool_name!r} not found in MCP server or comms_tools")
     return fn(**args)
@@ -749,18 +779,15 @@ def _build_default_pipeline() -> InterceptorPipeline:
         GameInterceptor,
     )
     from engine.agents.dialogue_gate import DialogueGateInterceptor
-    from engine.agents.relationship_interceptor import RelationshipContextInterceptor
+    # v1.49.1 [2026-03-22] — Registry now has the real RelationshipContextInterceptor,
+    # no need to skip/replace. DialogueGateInterceptor still added separately.
     pipeline = InterceptorPipeline()
     for cls in get_all_interceptors():
-        # RelationshipContextInterceptor in registry is the stub; use the full one below
-        if cls.__name__ == "RelationshipContextInterceptor":
-            continue
         pipeline.add(cls())
     # GameInterceptor replaces GameSessionInterceptor + GameRulesInterceptor (one instance)
     if not any(isinstance(i, GameInterceptor) for i in pipeline._interceptors):
         pipeline.add(GameInterceptor())
     pipeline.add(DialogueGateInterceptor())          # 45
-    pipeline.add(RelationshipContextInterceptor())   # 46
     return pipeline
 
 

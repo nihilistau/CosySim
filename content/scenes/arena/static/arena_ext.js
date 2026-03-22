@@ -313,12 +313,13 @@ ArenaScene.prototype._initFighterSelects = function() {
 // v1.50.0 [2026-03-22] — Load fighters from REST API
 // CONNECTS: /api/fighters endpoint
 ArenaScene.prototype._loadFighters = function() {
+  // v1.49.1 [2026-03-22] — Add error handling for fetch calls
   fetch('/api/fighters')
     .then(r => r.ok ? r.json() : { fighters: [] })
     .then(data => {
       if (data.fighters) this._populateFighterSelects(data.fighters);
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Arena] Failed to load fighters:', err.message));
 };
 
 // v1.50.0 [2026-03-22] — Populate fighter select dropdowns with profiles
@@ -359,7 +360,7 @@ ArenaScene.prototype._loadEconomy = function() {
         this.updateCredits(data.balance);
       }
     })
-    .catch(() => {});
+    .catch(err => console.warn('[Arena] Failed to load economy:', err.message));
 };
 
 

@@ -60,7 +60,12 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SCENE_ID = "tavern"
-DEFAULT_PORT = 5558
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("tavern", 5558)
+except Exception:
+    DEFAULT_PORT = 5558
 
 
 # ---------------------------------------------------------------------------
@@ -185,8 +190,9 @@ class TavernScene(FlaskScene):
                 fired = self._fw.tick(SCENE_ID)
                 for c in fired:
                     self._emit("consequence", c)
-            except Exception:
-                pass
+            except Exception as exc:
+                # v1.49.1 [2026-03-22] — Surface tick failures
+                log.warning("Tavern MCP tick failed: %s", exc)
 
     # ------------------------------------------------------------------
     #  Background ticker
@@ -516,11 +522,8 @@ class TavernScene(FlaskScene):
                 log.debug("Investigate rumor error: %s", exc)
                 sio.emit("rumor_investigated", {"rumor_id": rumor_id, "clues": 0})
 
-        @sio.on("action")
-        def on_action(data):
-            action_type = data.get("type", "")
-            log.debug("SocketIO action: %s", action_type)
-            # Legacy handler — new actions use dedicated events above
+        # v1.49.1 [2026-03-22] — Removed legacy NOOP "action" handler
+        # (new actions use dedicated events above)
 
     def _emit(self, event: str, data: dict) -> None:
         """Push event to all connected WebSocket clients."""

@@ -16,6 +16,13 @@ Usage::
     loop.register_character(char_a)
     loop.register_character(char_b)
     loop.start(interval=30)
+
+Version: v1.49.1 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.49.1 [2026-03-22] — Audit: type guard for batch responses, upgrade error
+                            logging from debug→warning, structured context in logs
 """
 from __future__ import annotations
 
@@ -112,7 +119,8 @@ class AgentLoop:
             get_framework().get_character(character.id).enter_scene(self.scene_id)
             logger.debug("AgentLoop: MCP registered %s → %s", character.id, self.scene_id)
         except Exception as _exc:
-            logger.debug("AgentLoop.register_character MCP sync failed: %s", _exc)
+            # v1.49.1 [2026-03-22] — MCP sync failures should be visible
+            logger.warning("AgentLoop.register_character MCP sync failed for %s: %s", character.name, _exc)
 
     def unregister_character(self, character_id: str) -> None:
         self._characters.pop(character_id, None)
@@ -144,7 +152,8 @@ class AgentLoop:
             try:
                 return mgr.infer_with_pipeline(request)
             except Exception:
-                logger.debug("AgentLoop._infer pipeline inference failed, falling back to infer_processed", exc_info=True)
+                # v1.49.1 [2026-03-22] — Surface pipeline failures
+                logger.warning("AgentLoop._infer pipeline inference failed, falling back to infer_processed", exc_info=True)
         return mgr.infer_processed(request)
 
     # ── Loop control ────────────────────────────────────────────────────
@@ -242,7 +251,8 @@ class AgentLoop:
             from engine.mcp.framework import get_framework
             get_framework().tick()
         except Exception:
-            logger.debug("MCPFramework tick failed during agent loop step", exc_info=True)
+            # v1.49.1 [2026-03-22] — Framework tick failures affect game state
+            logger.warning("MCPFramework tick failed during agent loop step in scene %s", self.scene_id, exc_info=True)
 
         # ActivityBus: publish tick summary
         try:
@@ -256,7 +266,7 @@ class AgentLoop:
                 data={"tick": self._tick_count, "action_count": len(actions)},
             )
         except Exception:
-            logger.debug("Failed to publish agent_loop_tick to ActivityBus for scene %s", self.scene_id, exc_info=True)
+            logger.debug("Failed to publish agent_loop_tick to ActivityBus for scene %s", self.scene_id)
 
         return actions
 
@@ -387,7 +397,7 @@ class AgentLoop:
                 if response:
                     return self._parse_decision(response)
             except Exception as e:
-                logger.debug("agent.quick_query failed: %s", e)
+                logger.warning("agent.quick_query failed for %s in scene %s: %s", character_id, self.scene_id, e)
 
         # Use VirtualAgentManager with pipeline for rich response
         try:
@@ -418,7 +428,7 @@ class AgentLoop:
                     decision["extra_actions"] = list(proc.action_tags)
                 return decision
         except Exception as e:
-            logger.debug("VirtualAgentManager decide failed: %s", e)
+            logger.warning("VirtualAgentManager decide failed for %s in scene %s: %s", character_id, self.scene_id, e)
 
         return self._random_action(character_id)
 
@@ -430,8 +440,9 @@ class AgentLoop:
             char_node = fw.get_character(character_id)
             if char_node:
                 char_node.update_state({"mood": mood, "last_mood_source": "agent_loop"})
-        except Exception:
-            logger.debug("Failed to update mood in MCP framework for %s", character_id, exc_info=True)
+        except Exception as exc:
+            # v1.49.1 [2026-03-22] — Mood sync failures should be visible
+            logger.warning("Failed to update mood in MCP framework for %s: %s", character_id, exc)
 
     def _decide_batch(self, char_ids: List[str], contexts: Dict[str, str]) -> Dict[str, Dict]:
         """Batch-decide actions for multiple characters in parallel."""
@@ -470,8 +481,18 @@ class AgentLoop:
             return {}
 
         responses = mgr.infer_batch(requests)
+        # v1.49.1 [2026-03-22] — Type guard: verify response count matches request count
+        if len(responses) != len(ordered_ids):
+            logger.warning(
+                "Batch decide: response count mismatch (expected %d, got %d) in scene %s",
+                len(ordered_ids), len(responses), self.scene_id,
+            )
         results = {}
         for cid, resp in zip(ordered_ids, responses):
+            if resp is None:
+                logger.warning("Batch decide: null response for %s in scene %s", cid, self.scene_id)
+                results[cid] = self._random_action(cid)
+                continue
             text = resp.content or resp.reasoning_content or ""
             if text:
                 results[cid] = self._parse_decision(text)

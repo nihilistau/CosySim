@@ -23,10 +23,11 @@ Keyboard shortcuts:
     L              — show log panel
     Q / Ctrl+C     — quit (stops launched subprocesses)
 
-Version: v1.42.1 [2026-03-21]
+Version: v1.49.1 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.49.1 [2026-03-22] — Version stamp sync, HAR_REAL_ROOT via env var
     v1.42.1 [2026-03-21] — External type handler in _start_one, priority-sorted
                             autostart via start_priority field
     v1.42.0 [2026-03-21] — Three-pillar architecture (game/service/creation)
@@ -72,7 +73,8 @@ from textual.widgets import (
 from textual.timer import Timer
 
 # ──── HAR Directory Roots ─────────────────────────────────────────────────
-HAR_REAL_ROOT = Path(r"C:\Files\Models\HAR_Files")
+# v1.49.1 [2026-03-22] — Use env var instead of hardcoded Windows path
+HAR_REAL_ROOT = Path(os.environ.get("COSYSIM_HAR_ROOT", r"C:\Files\Models\HAR_Files"))
 HAR_LOCAL_ROOT = PROJECT_ROOT / "data" / "har_files"
 ACCOUNTS_COOKIES_DIR = PROJECT_ROOT / "data" / "accounts"    # {acct}_cookies.json
 ACCOUNTS_LEGACY_DIR = PROJECT_ROOT / "data" / "google_accounts"  # {acct}/cookies.json

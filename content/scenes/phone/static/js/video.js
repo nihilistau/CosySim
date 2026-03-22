@@ -20,7 +20,7 @@ const VideoCall = {
     setupSocketListeners() {
         // Video call events
         this.socket.on('video_call_started', (data) => {
-            console.log('Video call started:', data);
+            console.debug('Video call started:', data);
             this.callId = data.call_id;
             this.callActive = true;
             this.updateCallStatus('Connected');
@@ -29,14 +29,14 @@ const VideoCall = {
         });
         
         this.socket.on('video_call_answered', (data) => {
-            console.log('Video call answered:', data);
+            console.debug('Video call answered:', data);
             this.callActive = true;
             this.updateCallStatus('Connected');
             this.startCallTimer();
         });
         
         this.socket.on('video_call_ended', (data) => {
-            console.log('Video call ended:', data);
+            console.debug('Video call ended:', data);
             this.endCall();
         });
         
@@ -46,7 +46,7 @@ const VideoCall = {
         });
         
         this.socket.on('video_toggled', (data) => {
-            console.log('Video toggled:', data.enabled);
+            console.debug('Video toggled:', data.enabled);
         });
         
         // Error handling
@@ -57,7 +57,7 @@ const VideoCall = {
     },
     
     async startCall() {
-        console.log('Starting video call...');
+        console.debug('Starting video call...');
         this.showLoading();
         
         // Request user camera permission
@@ -70,7 +70,7 @@ const VideoCall = {
     },
     
     async joinCall(callId) {
-        console.log('Joining video call:', callId);
+        console.debug('Joining video call:', callId);
         this.callId = callId;
         this.showLoading();
         
@@ -84,7 +84,7 @@ const VideoCall = {
     },
     
     endCall() {
-        console.log('Ending video call...');
+        console.debug('Ending video call...');
         
         // Stop timer
         this.stopCallTimer();
@@ -176,7 +176,7 @@ const VideoCall = {
             // Hide placeholder
             document.getElementById('user-video-placeholder').style.display = 'none';
             
-            console.log('User camera access granted');
+            console.debug('User camera access granted');
         } catch (error) {
             console.warn('Camera access denied or not available:', error);
             // Show placeholder
@@ -249,13 +249,13 @@ const VideoMessage = {
     
     setupSocketListeners() {
         this.socket.on('video_message_received', (data) => {
-            console.log('Video message received:', data);
+            console.debug('Video message received:', data);
             this.displayVideoMessage(data);
         });
     },
     
     async sendVideoMessage(text, mood = 'happy') {
-        console.log('Sending video message...');
+        console.debug('Sending video message...');
         
         // Emit video message event
         this.socket.emit('send_video_message', {

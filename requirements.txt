@@ -177,8 +177,8 @@ numpy==1.26.4
 #nvidia-cusparse-cu12==12.5.4.2
 #nvidia-cusparselt-cu12==0.6.3
 #nvidia-ml-py==12.575.51
-#nvidia-modelopt==0.33.1
-#nvidia-modelopt-core==0.33.1
+#nvidia-modelopt==0.33.0  # v1.49.1: synced with pyproject.toml (0.33.1 unavailable)
+#nvidia-modelopt-core==0.33.0
 #nvidia-nccl-cu12==2.26.2
 #nvidia-nvjitlink-cu12==12.6.85
 #nvidia-nvtx-cu12==12.6.77

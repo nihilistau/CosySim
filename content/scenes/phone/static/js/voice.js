@@ -41,11 +41,11 @@ function startCall(type = 'voice') {
         type: type
     });
     
-    console.log('Starting call...');
+    console.debug('Starting call...');
 }
 
 function handleIncomingCall(data) {
-    console.log('Incoming call:', data);
+    console.debug('Incoming call:', data);
     
     currentCall = {
         id: data.call_id,
@@ -90,7 +90,7 @@ function answerCall() {
 }
 
 function handleCallAnswered(data) {
-    console.log('Call answered:', data);
+    console.debug('Call answered:', data);
     
     if (currentCall) {
         currentCall.status = 'active';
@@ -119,7 +119,7 @@ function endCall() {
 }
 
 function handleCallEnded(data) {
-    console.log('Call ended:', data);
+    console.debug('Call ended:', data);
     
     if (data && data.duration) {
         callDuration = data.duration;
@@ -260,7 +260,7 @@ async function startMicrophone() {
         mediaRecorder.start(2000);
         isRecording = true;
         
-        console.log('Microphone started');
+        console.debug('Microphone started');
     } catch (error) {
         console.error('Error accessing microphone:', error);
         alert('Could not access microphone');
@@ -272,7 +272,7 @@ function stopMicrophone() {
         mediaRecorder.stop();
         mediaRecorder.stream.getTracks().forEach(track => track.stop());
         isRecording = false;
-        console.log('Microphone stopped');
+        console.debug('Microphone stopped');
     }
 }
 
@@ -280,7 +280,7 @@ function stopMicrophone() {
 function handleCallAudio(data) {
     if (data.type === 'text') {
         // Text-only response (no TTS available)
-        console.log('Character:', data.text);
+        console.debug('Character:', data.text);
         
         // Display text in call screen (optional)
         showCallTranscript(data.text, 'assistant');
@@ -356,12 +356,12 @@ function stopVoiceMessageRecording() {
 async function uploadVoiceMessage(audioBlob) {
     // TODO: Upload audio to server
     // For now, just show a placeholder
-    console.log('Voice message recorded:', audioBlob);
+    console.debug('Voice message recorded:', audioBlob);
     alert('Voice message recording feature coming soon!');
 }
 
 function handleVoiceMessageReceived(data) {
-    console.log('Voice message received:', data);
+    console.debug('Voice message received:', data);
     
     // Add voice message to chat UI
     addVoiceMessageToUI(data);
@@ -571,7 +571,7 @@ function hideRecordingIndicator() {
 
 function showCallTranscript(text, role) {
     // Optional: Show transcript during call
-    console.log(`[${role}]: ${text}`);
+    console.debug(`[${role}]: ${text}`);
 }
 
 function formatDuration(seconds) {

@@ -27,10 +27,11 @@ Usage:
 Auto-start flags live in config/launcher.yaml — edit that file to control
 which targets launch with --core / --services / --scenes.
 
-Version: v1.42.1 [2026-03-21]
+Version: v1.49.1 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.49.1 [2026-03-22] — Version stamp sync with project version
     v1.42.1 [2026-03-21] — Managed Nexus KMS via external type, priority-sorted
                             service launch, _start_external_proc helper
     v1.42.0 [2026-03-21] — Three-pillar architecture (game/service/creation)

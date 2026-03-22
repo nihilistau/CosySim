@@ -154,8 +154,8 @@ def create_nlm_proxy_app() -> Flask:
             if updated_at:
                 bl_age_days = (datetime.datetime.now(datetime.timezone.utc) -
                                datetime.datetime.fromisoformat(updated_at)).days
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("BL age calculation failed in health check: %s", exc)
 
         return jsonify({
             "status": "ok" if cookies else "no_cookies",
@@ -724,8 +724,8 @@ def create_nlm_proxy_app() -> Flask:
                 for item in data[0]:
                     if isinstance(item, list) and item and isinstance(item[0], str):
                         thread_ids.append(item[0])
-        except (IndexError, TypeError):
-            pass
+        except (IndexError, TypeError) as exc:
+            logger.warning("Failed to parse thread IDs for notebook %s: %s", notebook_id, exc)
         threads = []
         for tid in thread_ids[:10]:  # cap at 10 threads per request
             t_args = json.dumps([[], None, None, tid, page_size])
@@ -1015,7 +1015,8 @@ def create_nlm_proxy_app() -> Flask:
             return jsonify({"error": "Ljjv0c failed", "detail": data}), 502
         try:
             session_id = data[0] if isinstance(data, list) else ""
-        except (IndexError, TypeError):
+        except (IndexError, TypeError) as exc:
+            logger.warning("Failed to extract research session_id for %s: %s", notebook_id, exc)
             session_id = ""
         return jsonify({"session_id": session_id, "notebook_id": notebook_id, "query": query})
 
@@ -1093,8 +1094,8 @@ def create_nlm_proxy_app() -> Flask:
                 for item in data[0]:
                     if isinstance(item, list) and item and isinstance(item[0], str):
                         thread_ids.append(item[0])
-        except (IndexError, TypeError):
-            pass
+        except (IndexError, TypeError) as exc:
+            logger.debug("Thread ID parse error for %s: %s", notebook_id, exc)
         return jsonify({"threads": [{"thread_id": tid} for tid in thread_ids],
                         "count": len(thread_ids), "notebook_id": notebook_id})
 
@@ -1134,8 +1135,8 @@ def create_nlm_proxy_app() -> Flask:
         mindmap_str = ""
         try:
             mindmap_str = _extract_strings(data, min_len=5)[0] if _extract_strings(data, min_len=5) else ""
-        except (IndexError, TypeError):
-            pass
+        except (IndexError, TypeError) as exc:
+            logger.debug("Mindmap extraction error for %s: %s", notebook_id, exc)
         try:
             mindmap = json.loads(mindmap_str)
         except (json.JSONDecodeError, TypeError):
@@ -1169,8 +1170,8 @@ def create_nlm_proxy_app() -> Flask:
             # queries_remaining is typically at data[2] as an integer
             if isinstance(data, list) and len(data) > 2 and isinstance(data[2], (int, float)):
                 profile["queries_remaining"] = int(data[2])
-        except (IndexError, TypeError):
-            pass
+        except (IndexError, TypeError) as exc:
+            logger.debug("User profile parse error: %s", exc)
         return jsonify(profile)
 
     @app.route("/user/plan", methods=["GET"])
@@ -1203,8 +1204,8 @@ def create_nlm_proxy_app() -> Flask:
         try:
             if isinstance(data, list) and len(data) > 2 and isinstance(data[2], (int, float)):
                 remaining = int(data[2])
-        except (IndexError, TypeError):
-            pass
+        except (IndexError, TypeError) as exc:
+            logger.debug("Quota parse error: %s", exc)
         return jsonify({"queries_remaining": remaining})
 
     # ── Read/Write: rate limiter control ────────────────────────────────

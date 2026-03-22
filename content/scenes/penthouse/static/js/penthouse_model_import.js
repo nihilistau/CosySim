@@ -525,7 +525,7 @@
         entry.model._importedMixer = mixer;
       }
 
-      console.log('[ModelImport] Applied', modelMeta.filename, 'to', charId);
+      console.debug('[ModelImport] Applied', modelMeta.filename, 'to', charId);
     }, undefined, function (err) {
       console.error('[ModelImport] Failed to load model for character:', err);
       setStatus('Failed to apply model to ' + charId, true);

@@ -3,6 +3,13 @@
  */
 'use strict';
 
+// v1.49.1 [2026-03-22] — XSS escape helper for dynamic content
+function _esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 class TheArcadeScene {
   constructor() {
     this.socket      = null;
@@ -24,7 +31,7 @@ class TheArcadeScene {
     this._setupSocket();
     this._setupDiceSelector();
     this._loadLeaderboard();
-    console.log('[TheArcade] init complete');
+    console.debug('[TheArcade] init complete');
   }
 
   // ── Socket.IO ──────────────────────────────────────────────────────
@@ -351,7 +358,7 @@ class TheArcadeScene {
     const pin = document.createElement('div');
     pin.className = 'clue-pin';
     pin.id = `clue-pin-${num}`;
-    pin.innerHTML = `<div class="clue-pin__num">Clue #${num}</div>${text}`;
+    pin.innerHTML = `<div class="clue-pin__num">Clue #${num}</div>${_esc(text)}`;
     grid.appendChild(pin);
 
     // Draw strings to previous pins
@@ -406,7 +413,7 @@ class TheArcadeScene {
     if (!msgs) return;
     const msg = document.createElement('div');
     msg.className = 'chat-msg ' + (who === 'you' ? 'chat-you' : 'chat-gm');
-    msg.innerHTML = `<strong>${who === 'you' ? 'You' : '\uD83C\uDFAD GameMaster'}:</strong> ${text}`;
+    msg.innerHTML = `<strong>${who === 'you' ? 'You' : '\uD83C\uDFAD GameMaster'}:</strong> ${_esc(text)}`;
     msgs.appendChild(msg);
     msgs.scrollTop = msgs.scrollHeight;
   }

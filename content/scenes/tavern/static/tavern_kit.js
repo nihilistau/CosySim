@@ -56,6 +56,19 @@ class TavernScene {
       this._addChatLine('Lost connection. Reconnecting...', 'system');
     });
 
+    // v1.49.1 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', (attempt) => {
+      this._addChatLine('Reconnected after ' + attempt + ' attempt(s).', 'system');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) {
+        this._addChatLine('Reconnecting... (attempt ' + attempt + ')', 'system');
+      }
+    });
+    this.socket.io.on('reconnect_error', () => {
+      this._addChatLine('Reconnection failed. Retrying...', 'system');
+    });
+
     // Full state sync
     this.socket.on('state_update', (data) => this._applyState(data));
     this.socket.on('tavern_state', (data) => this._applyState(data));
@@ -207,7 +220,7 @@ class TavernScene {
   _addChatLine(text, type = 'result') {
     const feed = document.getElementById('chat-feed');
     if (!feed) {
-      console.log(`[${type}] ${text}`);
+      console.debug(`[${type}] ${text}`);
       return;
     }
     const div = document.createElement('div');
