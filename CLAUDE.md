@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-CosySim is a local-first multi-scene AI simulation framework. 20 interactive scenes run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline governs all agent behavior.
+CosySim is a local-first multi-scene AI simulation framework. 32 launch targets (15 game + 11 service + 6 creation) run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline with ~1,000 skills across 95 packs governs all agent behavior.
 
 ## Commands
 
@@ -57,10 +57,10 @@ Health check endpoints: `GET http://localhost:{port}/health`
 ```
 Browser (Neon HUD v2 — vanilla JS, Jinja2, Socket.IO)
     ↓ Socket.IO / REST
-20 Flask scenes  (content/scenes/{name}/)  ports 5555–5580, 8500
+32 targets (15 game + 11 service + 6 creation)  ports 5555–8800
     ↓
 Skills (engine/skills/builtin/)     ←→    MCP Pipeline (engine/mcp/)
-@skill decorator · 38 packs              26 interceptors · AgentGovernor
+@skill decorator · 95 packs · ~1000      24 interceptors · AgentGovernor
                     ↓
 Engine Layer (engine/)
   lmstudio/   — ServerController, LMLink federation, TaskQueue
@@ -87,10 +87,11 @@ get_router()              # AgentRouter
 ### Interceptor Pipeline Priority Order
 
 ```
-Pri 4  → NexusPrompt (context hydration)
 Pri 5  → NaturalMoodDrift (neurochemistry tagging)
-Pri 8–16 → Identity & scene injection
-Pri 92–93 → Post-call sync (mood parsing, relationship events)
+Pri 6  → NexusPrompt (context hydration)
+Pri 7–16 → Identity, scene injection, routing
+Pri 20–70 → Skills, games, guardrails
+Pri 80–93 → Post-call sync (shaping, TTS, mood parsing, relationships)
 ```
 All agent replies pass through this pipeline. Register interceptors in `config/default.yaml` under `comms.interceptors`.
 
@@ -206,7 +207,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.49** (Interactive Systems + Creation Kit + API-First)
+- Current: **v1.50** (Three-Pillar Architecture + Documentation Overhaul)
 
 ### Navigational Comments
 
@@ -231,4 +232,4 @@ Tag code blocks with what they connect to, who calls them, and what they emit:
 
 ## Docs
 
-All documentation is in `docs/` with `docs/INDEX.md` as the entry point. `docs/ARCHITECTURE.md` and `docs/MCP_FRAMEWORK.md` are the best starting points for deep dives.
+All documentation is in `docs/` (25 files) with `docs/INDEX.md` as the entry point. `docs/ARCHITECTURE.md` and `docs/MCP_FRAMEWORK.md` are the best starting points for deep dives. Knowledge pipeline: `docs/NEXUS.md`. Operations: `docs/OPERATIONS.md`.
