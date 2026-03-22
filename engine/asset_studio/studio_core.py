@@ -302,7 +302,8 @@ class AssetStudioCore:
         if flags.get("asset_studio.comfyui_enabled"):
             try:
                 import requests  # noqa: PLC0415
-                comfyui_url = self._cfg.get("art.comfyui_url", "http://localhost:8188")
+                # v1.49.1 [2026-03-22] — Use comfyui.base_url (was stale art.comfyui_url)
+                comfyui_url = self._cfg.get("comfyui.base_url", "http://localhost:8188")
                 resp = requests.get(f"{comfyui_url}/system_stats", timeout=3)
                 backends["comfyui"] = {"status": "online", "code": resp.status_code}
             except Exception as e:

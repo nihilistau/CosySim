@@ -49,7 +49,12 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "heist"
-DEFAULT_PORT = 5565
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("heist", 5565)
+except Exception:
+    DEFAULT_PORT = 5565
 
 # Crew personality templates
 CREW_TEMPLATES = {

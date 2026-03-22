@@ -37,7 +37,12 @@ from .coders_state import (
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "coders"
-DEFAULT_PORT = 5564
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("coders", 5564)
+except Exception:
+    DEFAULT_PORT = 5564
 
 
 # v1.51.0 [2026-03-22] — Migrated to FlaskScene

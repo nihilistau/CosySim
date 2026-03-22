@@ -80,7 +80,7 @@ class GridScene {
     }
   }
 
-  _addChatLine(text, type) { console.log(`[${type}] ${text}`); }
+  _addChatLine(text, type) { console.debug(`[${type}] ${text}`); }
   _log(text, type) { this._addChatLine(text, type); }
 
   // ── Toast notifications ────────────────────────────────────

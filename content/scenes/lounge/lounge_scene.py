@@ -56,7 +56,12 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-LOUNGE_PORT = 5557
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port
+    LOUNGE_PORT = get_port("lounge", 5557)
+except Exception:
+    LOUNGE_PORT = 5557
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  LOUNGE SCENE

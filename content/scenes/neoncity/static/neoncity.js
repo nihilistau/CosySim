@@ -127,12 +127,12 @@ class NeonCityScene {
         this.socket = io(this.socketUrl, { transports: ['websocket', 'polling'] });
 
         this.socket.on('connect', () => {
-            console.log('[NeonCity] Socket connected.');
+            console.debug('[NeonCity] Socket connected.');
             this.loadCityState();
         });
 
         this.socket.on('disconnect', () => {
-            console.log('[NeonCity] Socket disconnected.');
+            console.debug('[NeonCity] Socket disconnected.');
         });
 
         this.socket.on('city_state', (data) => this._onCityState(data));

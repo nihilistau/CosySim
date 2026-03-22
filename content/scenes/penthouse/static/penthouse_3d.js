@@ -176,7 +176,7 @@
     onResize();
 
     animate();
-    console.log('[Penthouse3D] v2.0 AAA++ initialised');
+    console.debug('[Penthouse3D] v2.0 AAA++ initialised');
 
     // External animation callbacks (used by character_bridge.js)
     const _externalAnimCallbacks = [];

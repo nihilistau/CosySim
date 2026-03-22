@@ -58,12 +58,10 @@ services:
     auto_start: true
   system_control:
     auto_start: true
-  totally_nonexistent_scene_xyz:
-    auto_start: true
   tts:
     auto_start: false
 
-# v1.50.0 [2026-03-22] â€” Three-pillar configuration
+# v1.50.0 [2026-03-22] - Three-pillar configuration
 # Used by launcher_system.py, launcher_game.py, launcher_creation.py
 pillars:
   system:

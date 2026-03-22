@@ -53,8 +53,9 @@ def _load_meta() -> Dict[str, str]:
     try:
         if _META_FILE.exists():
             return json.loads(_META_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
+    except Exception as exc:
+        # v1.49.1 [2026-03-22] — Surface meta load failures instead of silent fallback
+        logger.warning("Failed to load NLM meta from %s, using defaults: %s", _META_FILE, exc)
     return {"bl": _DEFAULT_BL, "f_sid": "-1"}
 
 
@@ -91,8 +92,9 @@ def _get_bl() -> str:
                     "consider importing a fresh HAR or CDP capture.",
                     age_days, bl,
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            # v1.49.1 [2026-03-22] — Log BL age check failures
+            logger.debug("BL age check failed: %s", exc)
     return bl
 
 

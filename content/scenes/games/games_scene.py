@@ -33,7 +33,12 @@ from engine.scenes.flask_scene import FlaskScene
 log = logging.getLogger(__name__)
 
 SCENE_ID = "games"
-DEFAULT_PORT = 5567
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("games", 5567)
+except Exception:
+    DEFAULT_PORT = 5567
 GAMEMASTER_ID = "gamemaster"
 
 # Games available in THE ARCADE

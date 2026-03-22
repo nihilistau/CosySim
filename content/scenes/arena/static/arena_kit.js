@@ -144,7 +144,7 @@ class ArenaScene {
   _appendCommentary(text, type = 'round') {
     const feed = document.getElementById('commentary-feed');
     if (!feed) {
-      console.log(`[${type}] ${text}`);
+      console.debug(`[${type}] ${text}`);
       return;
     }
 
@@ -187,7 +187,7 @@ class ArenaScene {
     }
 
     // Fallback -- console
-    console.log(`[toast:${severity}] ${text}`);
+    console.debug(`[toast:${severity}] ${text}`);
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────

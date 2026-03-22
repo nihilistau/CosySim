@@ -466,7 +466,8 @@ class TuningEngine:
         try:
             from engine.asset_studio.workflow_manager import get_workflow_manager  # noqa: PLC0415
             wm = get_workflow_manager()
-            save_dir = Path(get_config().get("art.output_dir", "data/art/output"))
+            # v1.49.1 [2026-03-22] — Use comfyui.output_dir (was stale art.output_dir)
+            save_dir = Path(get_config().get("comfyui.output_dir", "data/art/output"))
             save_dir.mkdir(parents=True, exist_ok=True)
 
             for i, variant in enumerate(job.variants):

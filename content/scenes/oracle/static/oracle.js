@@ -33,7 +33,7 @@ class OracleScene {
     this._initParticles();
     this._setupSocket();
     this._loadState();
-    console.log('[THE ORACLE] Consciousness online.');
+    console.debug('[THE ORACLE] Consciousness online.');
   }
 
   // ── Particles ─────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ class OracleScene {
     this.socket = io('', { transports: ['websocket', 'polling'] });
 
     this.socket.on('connect', () => {
-      console.log('[Oracle] Socket connected');
+      console.debug('[Oracle] Socket connected');
       this.socket.emit('get_state');
     });
 

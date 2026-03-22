@@ -35,7 +35,7 @@
         this._applySceneConfig(this._data.scene || {});
         this._applyAnimationConfig(this._data.animations || {});
         this._loaded = true;
-        console.log('[PenthouseConfig] All configs loaded and applied');
+        console.debug('[PenthouseConfig] All configs loaded and applied');
         return this._data;
       } catch (err) {
         console.error('[PenthouseConfig] Load error:', err);
@@ -269,7 +269,7 @@
     setTimeout(() => {
       PenthouseConfig.load().then(data => {
         if (data) {
-          console.log('[PenthouseConfig] Loaded:', Object.keys(data).join(', '));
+          console.debug('[PenthouseConfig] Loaded:', Object.keys(data).join(', '));
           // Emit custom event so other scripts can react
           window.dispatchEvent(new CustomEvent('penthouse-config-loaded', { detail: data }));
         }

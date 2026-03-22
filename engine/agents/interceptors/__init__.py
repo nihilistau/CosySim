@@ -43,8 +43,8 @@ from engine.agents.interceptors.conversation_recap import ConversationRecapInter
 from engine.agents.interceptors.relationship_event import RelationshipEventInterceptor
 from engine.agents.interceptors.nexus_prompt import NexusPromptInterceptor
 from engine.characters.neurochemistry import NeurochemistryInterceptor
-# RelationshipContextInterceptor: re-export the split version (uses get_character_memory)
-from engine.agents.interceptors.relationship_context import RelationshipContextInterceptor  # noqa: F401
+# v1.49.1 [2026-03-22] — Use the real RelationshipContextInterceptor (not the split stub)
+from engine.agents.relationship_interceptor import RelationshipContextInterceptor  # noqa: F401
 from engine.agents.dialogue_gate import DialogueGateInterceptor  # noqa: F401
 # Backward-compat aliases — GameInterceptor merged GameSession + GameRules in v3.1
 GameSessionInterceptor = GameInterceptor

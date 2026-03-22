@@ -89,7 +89,8 @@ class ImageGenerator:
                 from pathlib import Path as _Path  # noqa: PLC0415
                 from engine.config import get_config as _get_config  # noqa: PLC0415
                 _cfg = _get_config()
-                save_dir = _Path(_cfg.get("art.output_dir", "data/art/output"))
+                # v1.49.1 [2026-03-22] — Use comfyui.output_dir (was stale art.output_dir)
+                save_dir = _Path(_cfg.get("comfyui.output_dir", "data/art/output"))
                 save_dir.mkdir(parents=True, exist_ok=True)
                 _model = wm.select_model([model]) if "model" in locals() else None
                 wf_params: Dict[str, Any] = {

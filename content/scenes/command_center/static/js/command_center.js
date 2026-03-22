@@ -8,6 +8,13 @@ const CC = (function () {
     const MAX_FEED = 200;
     let socket = null;
     let paused = false;
+
+    // v1.49.1 [2026-03-22] — XSS escape helper for dynamic content
+    function _esc(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
     let startTime = Date.now();
     let sceneData = [];          // Cached scene summaries
     let selectedScene = null;    // Currently focused scene ID
@@ -290,8 +297,8 @@ const CC = (function () {
                 }
                 list.innerHTML = msgs.map(m =>
                     `<div class="feed-item compact">
-                        <span class="feed-type scene">${m.speaker || "?"}</span>
-                        <span class="feed-msg">${m.text || ""}</span>
+                        <span class="feed-type scene">${_esc(m.speaker || "?")}</span>
+                        <span class="feed-msg">${_esc(m.text || "")}</span>
                     </div>`
                 ).join("");
             })

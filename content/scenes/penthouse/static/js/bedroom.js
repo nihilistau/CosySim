@@ -102,7 +102,7 @@ function init() {
     buildViewPresetButtons();
 
     animate();
-    console.log('Bedroom v6 initialized');
+    console.debug('Bedroom v6 initialized');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1099,15 +1099,15 @@ function connectSocket() {
 
     // ── Bed game → sex pose integration ──────────────────────────────
     socket.on('bedgame_started', (data) => {
-        console.log('[BedGame] Started:', data);
+        console.debug('[BedGame] Started:', data);
         // Poses are applied per-action, not on start
     });
     socket.on('bedgame_action', (data) => {
-        console.log('[BedGame] Action:', data);
+        console.debug('[BedGame] Action:', data);
         _applyBedGamePose(data);
     });
     socket.on('bedgame_ended', (data) => {
-        console.log('[BedGame] Ended');
+        console.debug('[BedGame] Ended');
         CharModels.stopPose(false); // smooth return to standing
     });
     socket.on('world_event', (evt) => {

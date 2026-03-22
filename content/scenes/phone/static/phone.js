@@ -26,14 +26,14 @@ class SignalScene {
     this._setupSocket();
     this.loadContacts();
     this._autoResizeInput();
-    console.log('[SIGNAL] Scene initialised');
+    console.debug('[SIGNAL] Scene initialised');
   }
 
   _setupSocket() {
     this.socket = io({ transports: ['websocket', 'polling'] });
 
     this.socket.on('connect', () => {
-      console.log('[SIGNAL] Socket connected:', this.socket.id);
+      console.debug('[SIGNAL] Socket connected:', this.socket.id);
       this.socket.emit('get_contacts');
       this.socket.emit('get_0xgh0st_status');
     });

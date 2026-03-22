@@ -82,7 +82,8 @@ class VideoGenerator:
                 from pathlib import Path as _Path  # noqa: PLC0415
                 from engine.config import get_config as _get_config  # noqa: PLC0415
                 _cfg2 = _get_config()
-                save_dir = _Path(_cfg2.get("art.output_dir", "data/art/output"))
+                # v1.49.1 [2026-03-22] — Use comfyui.output_dir (was stale art.output_dir)
+                save_dir = _Path(_cfg2.get("comfyui.output_dir", "data/art/output"))
                 save_dir.mkdir(parents=True, exist_ok=True)
                 wan_params: Dict[str, Any] = {
                     "positive": positive,
@@ -173,8 +174,9 @@ class VideoGenerator:
         from engine.config import get_config  # noqa: PLC0415
 
         cfg = get_config()
-        comfyui_url = cfg.get("art.comfyui_url", "http://localhost:8188").rstrip("/")
-        checkpoint = cfg.get("art.checkpoint", "v1-5-pruned-emaonly.ckpt")
+        # v1.49.1 [2026-03-22] — Use comfyui.base_url (was stale art.comfyui_url)
+        comfyui_url = cfg.get("comfyui.base_url", "http://localhost:8188").rstrip("/")
+        checkpoint = cfg.get("comfyui.checkpoint", "v1-5-pruned-emaonly.ckpt")
 
         if seed < 0:
             seed = random.randint(0, 2 ** 32)

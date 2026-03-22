@@ -33,7 +33,12 @@ from engine.mcp.tag_registry import TagRegistry
 log = logging.getLogger(__name__)
 
 SCENE_ID = "command_center"
-DEFAULT_PORT = 5566
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("command_center", 5566)
+except Exception:
+    DEFAULT_PORT = 5566
 
 
 # v1.51.0 [2026-03-22] — Migrated to FlaskScene

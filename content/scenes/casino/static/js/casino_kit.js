@@ -43,7 +43,7 @@ class CasinoScene {
     this._setupBenchPolling();
     this._loadInitialState();
     if (typeof this._initExtensions === 'function') this._initExtensions();
-    console.log('[ClubNoir] Scene initialised (Kit v1.50)');
+    console.debug('[ClubNoir] Scene initialised (Kit v1.50)');
   }
 
   // ── Socket.IO Setup ───────────────────────────────────────────────
@@ -310,7 +310,7 @@ class CasinoScene {
   _addChatLine(text, type = 'result') {
     const log = document.getElementById('chat-log');
     if (!log) {
-      console.log(`[${type}] ${text}`);
+      console.debug(`[${type}] ${text}`);
       return;
     }
     const div = document.createElement('div');

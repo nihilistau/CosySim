@@ -66,7 +66,12 @@ from .neoncity_state import (
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "neoncity"
-DEFAULT_PORT = 5563
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("neoncity", 5563)
+except Exception:
+    DEFAULT_PORT = 5563
 
 
 # v1.50.0 [2026-03-22] — Port check utility for scene online detection

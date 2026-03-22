@@ -32,7 +32,12 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "nexus_panel"
-DEFAULT_PORT = 5570
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("nexus_panel", 5570)
+except Exception:
+    DEFAULT_PORT = 5570
 
 _MODULE_METADATA = {
     "name": "nexus_panel",
