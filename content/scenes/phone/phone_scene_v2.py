@@ -687,7 +687,15 @@ class PhoneSceneV2(FlaskScene):
         # ── Page ─────────────────────────────────────────────────────────────
         @app.route("/")
         def index():
+            # v1.52.0 — CosyPhone OS (feature-rich phone/cyberdeck)
+            # The game's entry point — this is where it all begins
             return render_template("phone_ui_v2.html")
+
+        # v1.52.0 — SIGNAL terminal as alternate UI (neon_base)
+        @app.route("/signal")
+        def signal_terminal():
+            """SIGNAL cyberdeck terminal — lightweight neon_base messaging."""
+            return render_template("signal.html")
 
         # ── Threads ─────────────────────────────────────────────────────────
         @app.route("/api/threads")
