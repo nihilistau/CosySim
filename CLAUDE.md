@@ -38,6 +38,12 @@ python -m pytest tests/test_bedroom_game.py -v    # Single file
 python -m pytest -m "unit" tests/                 # By marker
 python -m pytest -n auto tests/                   # Parallel (6x faster)
 
+# Oracle — system diagnostics (use BEFORE and AFTER debugging)
+python scripts/oracle.py                          # Full health + errors + performance
+python scripts/oracle.py --health                 # Service health only
+python scripts/oracle.py --errors                 # Top errors by count
+python scripts/oracle.py --perf                   # LLM latency, benchmarks
+
 # Training
 python3 training/auto_train.py --status
 ```
@@ -102,6 +108,86 @@ All agent replies pass through this pipeline. Register interceptors in `config/d
 
 Use `infer_processed()` for tag extraction, `infer_stream()` for raw streaming.
 
+## The Oracle — Observability System
+
+The Oracle is CosySim's unified observability system. **Use it constantly.** It tells you exactly what's broken, where, and how often — no searching through log files.
+
+### CLI Diagnostic (use this FIRST when debugging)
+
+```bash
+# Full system diagnostic — health, errors, performance
+python scripts/oracle.py
+
+# Targeted checks
+python scripts/oracle.py --health     # Service health grid
+python scripts/oracle.py --errors     # Top errors with counts + affected scenes
+python scripts/oracle.py --perf       # LLM latency, p95, benchmarks
+python scripts/oracle.py --trace ID   # Trace waterfall for a trace_id
+python scripts/oracle.py --logs 20    # Last 20 error-level log entries
+python scripts/oracle.py -v           # Verbose: full details + trace IDs
+```
+
+### Python API (use in code)
+
+```python
+# Quick diagnostic from any context
+from engine.observability.oracle import diagnose
+diagnose()  # Prints health + errors + perf to console
+
+# Structured logger with auto-initialization
+from engine.observability.oracle import get_logger
+logger = get_logger(__name__)
+logger.info("[scene_name] Something happened (operation=chat)")
+logger.error("[scene_name] Failed (operation=embed, agent=%s): %s", agent_id, exc)
+
+# Error aggregation
+from engine.observability.error_aggregator import get_error_aggregator
+agg = get_error_aggregator()
+agg.snapshot()       # {total_unique, total_count, top_errors, error_rate}
+agg.get_top_errors() # Top 20 errors by count
+```
+
+### Oracle Dashboard (browser)
+
+The Oracle scene (`python launcher.py oracle`) has an "All-Seeing Eye" tab with:
+- Real-time error feed via WebSocket
+- Service health grid (LMStudio, Nexus, ComfyUI, TTS)
+- Error table with counts, affected scenes, trace links
+- API: `/api/oracle/health`, `/api/oracle/errors`, `/api/oracle/trace/<id>`
+
+### Mandatory Workflow
+
+1. **Before fixing a bug:** Run `python scripts/oracle.py` — check if the error is already captured and fingerprinted
+2. **After making changes:** Run `python scripts/oracle.py --errors` — verify the error count dropped
+3. **When a scene won't start:** Run `python scripts/oracle.py --health` — check which services are down
+4. **When LLM responses are slow:** Run `python scripts/oracle.py --perf` — check p95 latency
+5. **When investigating a failure chain:** Use `python scripts/oracle.py --trace <id>` — follow the request end-to-end
+
+### How It Works
+
+The Oracle auto-initializes when any scene starts (via `FlaskScene.start()`). It installs three handlers on the Python root logger:
+1. **StructuredLogger** → SQLite (`data/structured_logs.db`) + JSONL — queryable, traceable
+2. **CosyLogger** → ring buffer → Phone panel live feed
+3. **OracleHandler** → ERROR+ events → ErrorAggregator (fingerprint/count) + Oracle dashboard SocketIO
+
+Every `logging.getLogger(__name__)` call in any module automatically flows through all three. No code changes needed — existing loggers are captured by the root handler.
+
+### Log Message Format
+
+All log messages MUST follow this format for Oracle to parse them correctly:
+```
+[SCENE_ID_or_MODULE] Description (operation=what_was_happening): details
+```
+
+Examples:
+```python
+logger.info("[tavern] Scene created on port %d (operation=init)", port)
+logger.warning("[AgentGovernor] Auto skill failed (operation=auto_skill, skill=%s): %s", name, exc)
+logger.error("[EmbeddingService] All providers failed (operation=embed): %s", exc)
+```
+
+The `[prefix]` is used by the ErrorAggregator to identify which scene/module produced the error. The `operation=` tag categorizes the failure for grouping.
+
 ## Python Conventions
 
 - **Imports**: Absolute only (`from engine.config import get_config`). Group: stdlib → third-party → engine → content → local. No relative imports.
@@ -109,8 +195,8 @@ Use `infer_processed()` for tag extraction, `infer_stream()` for raw streaming.
 - **Docstrings**: Google style (summary, `Args:`, `Returns:`, `Raises:`).
 - **Naming**: PascalCase classes, snake_case functions/files, UPPER_SNAKE constants, `_underscore` private.
 - **Format**: 4-space indent, double quotes, f-strings, 88–100 char soft limit, 120 max.
-- **Logging**: `logger = logging.getLogger(__name__)` per module. Never use `print()`. Use structured logging patterns — include context (scene, agent, operation) in log messages.
-- **Monitoring**: Every new feature must include monitoring hooks. Log errors structurally, not silently. Use health check endpoints, EventChain for activity tracking, and Nexus for persistent metrics. Embedding/API errors must be caught and surfaced, not swallowed.
+- **Logging**: `logger = logging.getLogger(__name__)` per module (or `from engine.observability.oracle import get_logger` for trace support). Never use `print()`. All log messages MUST use the Oracle format: `"[module] Description (operation=X): detail"`. See **The Oracle** section above.
+- **Monitoring**: Every new feature must include monitoring hooks. Log errors structurally with `logger.error("[module] What failed (operation=X): %s", exc)` — the Oracle auto-surfaces these. Use `python scripts/oracle.py` to verify. Embedding/API errors must be caught and surfaced, not swallowed.
 - **State**: Mutable game state must sync to MCPFramework. Access config via `get_config().get("dot.path", default)`. Never hardcode ports, paths, or model names.
 
 ## Adding a Skill

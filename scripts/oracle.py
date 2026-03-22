@@ -76,10 +76,13 @@ def _show_health() -> None:
         print(f"  CPU: {cpu:.0f}%  |  RAM: {ram:.0f}%")
         services = mon.check_services()
         for name, info in services.items():
-            status = "UP" if info.get("up") else "DOWN"
-            latency = info.get("latency_ms", 0)
-            icon = "[OK]" if info.get("up") else "[!!]"
-            print(f"  {icon} {name:20s} {status:4s}  ({latency:.0f}ms)")
+            if isinstance(info, dict):
+                status = "UP" if info.get("up") else "DOWN"
+                latency = info.get("latency_ms", 0) or 0
+                icon = "[OK]" if info.get("up") else "[!!]"
+                print(f"  {icon} {name:20s} {status:4s}  ({latency:.0f}ms)")
+            else:
+                print(f"  [??] {name:20s} {info}")
     except Exception as exc:
         print(f"  [!] Unavailable: {exc}")
 
