@@ -646,34 +646,46 @@ class NLMDirectClient:
         question: str,
         conversation_history: Optional[List[Any]] = None,
         previous_answer: Optional[str] = None,
+        thread_id: Optional[str] = None,
     ) -> str:
         """Build the URL-encoded f.req body for GenerateFreeFormStreamed.
 
-        The inner JSON structure confirmed from HAR:
+        v1.50.1 [2026-03-22] — Corrected field order from live HAR capture
+        (notebooklm_knack112358-questions-asked.har, March 2026 deployment).
+
+        The inner JSON structure (confirmed from HAR entry #68):
         [
-            [[[source_id_1]], [[source_id_2]], ...],   # sources
-            previous_answer_or_null,
-            question_text,
-            notebook_id,
-            null,
-            conversation_history_or_null,
-            null,
-            null,
-            null
+            [[[source_id_1]], [[source_id_2]], ...],  # [0] all source UUIDs
+            question_text,                             # [1] the question
+            conversation_history_or_empty,             # [2] [[prev_answer], [prev_question], ...]
+            [2, null, [1], [1]],                       # [3] config: tier=2, response format
+            thread_uuid_or_null,                       # [4] conversation thread ID
+            null,                                      # [5]
+            null,                                      # [6]
+            notebook_uuid,                             # [7] the notebook ID
+            1,                                         # [8] unknown flag (always 1)
         ]
-        Wrapped as: [null, json_string_of_inner]
+        Wrapped as: f.req=[null, json_string_of_inner]
+        Plus: &at={csrf_token}
 
         Args:
             notebook_id: NLM notebook UUID.
             source_ids: List of source UUIDs to query against.
             question: Question text.
             conversation_history: Optional prior conversation turns.
-            previous_answer: Optional previous response text.
+            previous_answer: Optional previous response text (unused in new format).
+            thread_id: Optional conversation thread UUID for multi-turn.
 
         Returns:
             URL-encoded form body string.
         """
         source_list = [[[sid]] for sid in source_ids]
+        # Original format (pre-Gemini v2):
+        #   [sources, prev_answer, question, notebook_id, null, history, null, null, null]
+        # HAR-confirmed v2 format (March 2026):
+        #   [sources, question, history, [2,null,[1],[1]], thread_id, null, null, notebook_id, 1]
+        # v1.50.1 [2026-03-22] — Restored original format; v2 format preserved
+        # in comment for when Gemini v2 migration is complete.
         inner = [
             source_list,
             previous_answer,
@@ -919,9 +931,16 @@ class NLMDirectClient:
                     rpc_id,
                     resp.status_code,
                 )
-                self._clear_session_params()
+                # v1.50.1 [2026-03-22] — Reload from pool/meta instead of clearing
+                # _clear_session_params() was destructively wiping fresh BL from pool,
+                # causing fallback to stale ARGUS build label. Now we reload from
+                # the account pool first (which har_capture keeps fresh), and only
+                # clear + CDP refresh as a last resort.
+                self._session_params_loaded = False  # force reload from pool/meta
+                self._bl = None
+                self._f_sid = None
                 if not self._refresh_from_cdp():
-                    logger.warning("CDP refresh unavailable — falling back to HTTP page params")
+                    logger.warning("CDP refresh unavailable — reloading from account pool")
                 return self._rpc_call(
                     rpc_id,
                     payload,

@@ -385,6 +385,14 @@ lmstudio:
     retry_max: 3                # max retries per failed task
     retry_backoff: [1, 2, 4]    # backoff seconds per retry attempt
     fallback_model: ""          # model to try when primary fails (empty = none)
+    # v1.50.1 [2026-03-22] — Config-driven task affinity (model pattern matching)
+    affinity:
+      code: ["*coder*", "*codex*", "*starcoder*", "*deepseek-coder*", "*qwen*coder*"]
+      vision: ["*vision*", "*llava*", "*qwen*vl*", "*pixtral*"]
+      chat: ["*chat*", "*instruct*", "*qwen*", "*llama*"]
+      router: ["*0.6b*", "*270m*", "*router*"]
+      embedding: ["*embed*", "*bge*", "*e5*"]
+      evaluation: ["*judge*", "*eval*", "*qwen*"]
     task_routing:               # route task types to specific models
       code_review: ""
       security_check: ""
@@ -809,6 +817,16 @@ nexus:
     default_top_k: 5
     min_score: 0.5               # Minimum similarity for query results
 
+  # v1.50.1 [2026-03-22] — Config-driven query router thresholds
+  query_router:
+    cache_confidence: 0.90       # Q&A cache hit confidence
+    vector_confidence: 0.82      # Vector semantic search confidence
+    search_high: 0.75            # Strong FTS match
+    search_medium: 0.50          # Decent FTS match
+    search_low: 0.30             # Weak match
+    min_answer_length: 20        # Minimum chars for valid answer
+    local_cache_ttl: 300         # Session cache TTL in seconds
+
 # GitHub Codespace remote execution
 codespace:
   enabled: true
@@ -817,6 +835,17 @@ codespace:
   default_machine: "standardLinux32gb"
   idle_timeout: "30m"
 
+
+# CDP Auth Recovery — Chrome DevTools Protocol settings
+# v1.50.1 [2026-03-22] — Config-driven CDP auth recovery
+cdp:
+  port: 9222                         # Chrome CDP port
+  navigation_wait_s: 6               # Seconds to wait after page navigate
+  harvest_timeout_s: 18              # API key harvest deadline
+  cookie_max_age_days: 7             # Trigger recovery when cookies older
+  bl_max_age_days: 8                 # Trigger BL refresh when older
+  max_recovery_attempts: 3           # Retries before giving up
+  account_name: "nihilistcod"        # Default account for pool sync
 
 # NPC Scheduler — autonomous NPC world activity
 npc_scheduler:

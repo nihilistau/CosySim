@@ -318,7 +318,7 @@ def main() -> None:
         for info in pool.list_accounts():
             acct = pool.get_by_name(info["name"])
             age = round(acct.cookie_age_days(), 1) if acct else "?"
-            stale = "⚠ STALE" if (acct and acct.is_stale()) else "✓"
+            stale = "! STALE" if (acct and acct.is_stale()) else "ok"
             print(f"  {stale}  {info['name']}  age={age}d  cookies={info['cookie_count']}  services={info['services']}")
         stale = pool.get_stale_accounts()
         if stale:

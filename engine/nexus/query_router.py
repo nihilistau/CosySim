@@ -120,9 +120,17 @@ class NexusQueryRouter:
         self._llm_callback = llm_callback
         self._stats = RouterStats()
         self._lock = threading.Lock()
+        # Read config overrides, falling back to class defaults
+        cfg = get_config()
+        self.CACHE_CONFIDENCE = cfg.get("nexus.query_router.cache_confidence", self.CACHE_CONFIDENCE)
+        self.VECTOR_CONFIDENCE = cfg.get("nexus.query_router.vector_confidence", self.VECTOR_CONFIDENCE)
+        self.SEARCH_HIGH = cfg.get("nexus.query_router.search_high", self.SEARCH_HIGH)
+        self.SEARCH_MEDIUM = cfg.get("nexus.query_router.search_medium", self.SEARCH_MEDIUM)
+        self.SEARCH_LOW = cfg.get("nexus.query_router.search_low", self.SEARCH_LOW)
+        self.MIN_ANSWER_LENGTH = cfg.get("nexus.query_router.min_answer_length", self.MIN_ANSWER_LENGTH)
         # Local answer cache to avoid repeated Nexus API calls within session
         self._local_cache: Dict[str, Tuple[QueryResult, float]] = {}
-        self._local_cache_ttl = 300  # 5 minutes
+        self._local_cache_ttl = cfg.get("nexus.query_router.local_cache_ttl", 300)
 
     def _get_client(self):
         """Lazy-load NexusClient."""

@@ -121,6 +121,31 @@ class EmbeddingUnavailableError(RuntimeError):
 _TRANSIENT_EXCEPTIONS = (TimeoutError, ConnectionError, ConnectionRefusedError, OSError)
 
 
+# v1.50.1 [2026-03-22] — Trigger CDP auth recovery when Gemini API keys fail
+_AUTH_RECOVERY_COOLDOWN = 600.0
+_last_auth_recovery_time: float = 0.0
+
+def _trigger_auth_recovery() -> None:
+    global _last_auth_recovery_time
+    now = time.time()
+    if now - _last_auth_recovery_time < _AUTH_RECOVERY_COOLDOWN:
+        return
+    _last_auth_recovery_time = now
+    def _recover() -> None:
+        try:
+            from engine.nexus.cdp_auth_recovery import check_and_recover_if_needed
+            logger.info("[EmbeddingService] Triggering CDP auth recovery (operation=auth_recovery)")
+            status = check_and_recover_if_needed()
+            if status.healthy:
+                logger.info("[EmbeddingService] Auth recovery succeeded: %s (operation=auth_recovery)", status.summary())
+            else:
+                logger.warning("[EmbeddingService] Auth recovery failed: %s (operation=auth_recovery)", status.summary())
+        except Exception as exc:
+            logger.warning("[EmbeddingService] Auth recovery error (operation=auth_recovery): %s", exc)
+    t = threading.Thread(target=_recover, name="cdp-auth-recovery", daemon=True)
+    t.start()
+
+
 def _classify_error(exc: Exception) -> str:
     """Classify an embedding error as 'transient' or 'permanent'."""
     if isinstance(exc, _TRANSIENT_EXCEPTIONS):
@@ -169,6 +194,8 @@ class ProviderHealth:
             self.circuit_open_until = time.time() + self.COOLDOWN_SECS
             logger.warning("[EmbeddingService] Circuit breaker OPEN (%d failures, type=%s)",
                            self.consecutive_failures, self.last_error_type)
+            if self.last_error_type == "permanent":
+                _trigger_auth_recovery()
 
     def is_available(self) -> bool:
         if not self.circuit_open:

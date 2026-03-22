@@ -656,7 +656,34 @@ class ServerController:
             except Exception:
                 logger.debug("Health check error", exc_info=True)
 
+            # v1.50.1 [2026-03-22] — Auto-unload idle agent instances
+            try:
+                self._reap_idle_instances()
+            except Exception:
+                logger.debug("Idle reaper error", exc_info=True)
+
             self._health_stop.wait(self._health_check_interval)
+
+    def _reap_idle_instances(self) -> None:
+        """Unload agent instances that have been idle longer than jit_ttl_seconds."""
+        ttl = float(self._config.get("lmstudio.jit_ttl_seconds", 300))
+        if ttl <= 0:
+            return
+        with self._lock:
+            idle_keys = [
+                key for key, inst in self._instances.items()
+                if inst.agent_id and inst.idle_seconds > ttl
+            ]
+        for key in idle_keys:
+            inst = self._instances.get(key)
+            if not inst:
+                continue
+            logger.info("[ServerController] Reaping idle instance: %s (agent=%s, idle=%.0fs, ttl=%.0fs) (operation=reap_idle)",
+                        key, inst.agent_id, inst.idle_seconds, ttl)
+            try:
+                self.release_agent_instance(inst.agent_id)
+            except Exception as exc:
+                logger.warning("[ServerController] Failed to reap %s (operation=reap_idle): %s", key, exc)
 
     @property
     def last_health(self) -> Optional[ServerHealth]:
