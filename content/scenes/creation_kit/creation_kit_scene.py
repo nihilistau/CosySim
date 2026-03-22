@@ -1998,30 +1998,43 @@ class CreationKitScene(FlaskScene):
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
         @self.app.route("/api/export/scene", methods=["POST"])
-        # v1.49.0 [2026-03-21] — Full scene factory: HTML + CSS + JS
+        # v1.52.0 [2026-03-22] — Full scene factory with auto-registration
+        # CONNECTS: create_scene(), control_plane_registry, launcher.yaml
+        # CALLED BY: Creation Kit editor "Export" button
+        # EMITS: Scene directory with HTML + CSS + JS + test + registration
         def api_export_scene():
-            """Export layout to a full scene directory with HTML, CSS, and JS."""
+            """Export layout to a full scene directory with auto-registration.
+
+            Generates HTML, CSS, JS from the layout, scaffolds the scene
+            directory with a FlaskScene subclass, creates a test file,
+            and registers the scene in control_plane_registry.py and
+            launcher.yaml so it's immediately launchable.
+            """
             data = request.get_json(force=True) or {}
             scene_key = data.get("scene_key", "")
             if not scene_key or not scene_key.isidentifier():
                 return jsonify({"ok": False, "error": "Invalid scene_key"}), 400
 
             try:
-                # Generate all three files
+                # Generate all three files from layout
                 html = export_full_template(data)
                 css = export_scene_css(data)
                 js = export_scene_js(data)
 
-                # Use scene_template to scaffold directory
+                # Use scene_template to scaffold directory + register
                 display_name = data.get("name", scene_key.replace("_", " ").title())
                 accent = data.get("accent_color", "#06b6d4")
                 description = data.get("description", "Scene created by Creation Kit.")
 
+                # v1.52.0 — create_scene now also generates test file
+                # and auto-registers in control_plane_registry + launcher.yaml
                 result = create_scene(
                     name=scene_key,
                     display_name=display_name,
                     accent=accent,
                     description=description,
+                    generate_test=True,
+                    auto_register=True,
                 )
 
                 # Overwrite scaffolded files with Kit-generated versions
@@ -2044,20 +2057,36 @@ class CreationKitScene(FlaskScene):
                 js_path = scene_dir / "static" / f"{scene_key}.js"
                 js_path.write_text(js, encoding="utf-8")
 
+                # v1.52.0 — Find the next available port for launch instructions
+                from engine.port_registry import get_port
+                scene_port = get_port(scene_key, 5590)
+
                 return jsonify({
                     "ok": True,
                     "scene_key": scene_key,
                     "path": str(scene_dir),
+                    "port": scene_port,
                     "files": {
                         "html": str(template_path),
                         "css": str(css_path),
                         "js": str(js_path),
+                        "scene_py": str(scene_dir / f"{scene_key}_scene.py"),
+                        "test": str(SCENES_DIR.parent.parent / "tests" / f"test_{scene_key}.py"),
                     },
+                    "registered": True,
+                    "launch_cmd": f"python launcher.py {scene_key}",
+                    "url": f"http://localhost:{scene_port}",
                     "message": (
                         f"Scene '{display_name}' exported to content/scenes/{scene_key}/ "
-                        f"(HTML + CSS + JS)"
+                        f"(HTML + CSS + JS + test). Registered in launcher. "
+                        f"Launch with: python launcher.py {scene_key}"
                     ),
                 })
+            except FileExistsError:
+                return jsonify({
+                    "ok": False,
+                    "error": f"Scene '{scene_key}' already exists. Delete it first or choose a different name.",
+                }), 409
             except Exception as exc:
                 logger.error("Scene export failed: %s", exc, exc_info=True)
                 return jsonify({"ok": False, "error": str(exc)}), 500

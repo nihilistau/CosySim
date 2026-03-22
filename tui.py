@@ -285,9 +285,10 @@ class CosySimTUI(App[None]):
 
     selected_index: reactive[int] = reactive(0)
 
-    def __init__(self, autostart: bool = True) -> None:
+    def __init__(self, autostart: bool = True, pillar_filter: str | None = None) -> None:
         super().__init__()
         self._autostart = autostart
+        self._pillar_filter = pillar_filter  # v1.50.0 — optional pillar filter
         self._rows: List[TargetRow] = []
         self._launched_threads: Dict[str, threading.Thread] = {}
         self._launched_procs: Dict[str, subprocess.Popen] = {}
@@ -302,12 +303,17 @@ class CosySimTUI(App[None]):
         with Horizontal():
             # Left panel — target list
             with Vertical(id="left-panel"):
-                # Three pillar sections
-                pillar_sections = [
+                # Three pillar sections (filtered if --pillar is set)
+                # v1.50.0 [2026-03-22] — Pillar filter support
+                all_pillars = [
                     ("  NEONCITY", "game"),
                     ("  SERVICES", "service"),
                     ("  CREATION KIT", "creation"),
                 ]
+                pillar_sections = (
+                    [(l, p) for l, p in all_pillars if p == self._pillar_filter]
+                    if self._pillar_filter else all_pillars
+                )
                 for idx, (section_label, pillar) in enumerate(pillar_sections):
                     if idx > 0:
                         yield Rule()
@@ -488,6 +494,10 @@ class CosySimTUI(App[None]):
     # ── On mount ──────────────────────────────────────────────────────────
 
     def on_mount(self) -> None:
+        # v1.50.0 [2026-03-22] — Set subtitle based on pillar filter
+        if self._pillar_filter:
+            pillar_labels = {"game": "Game Scenes", "service": "System Services", "creation": "Creation Kit"}
+            self.sub_title = pillar_labels.get(self._pillar_filter, self._pillar_filter.title())
         self._select(0)
         self._do_refresh()
         self._refresh_timer = self.set_interval(10, self._do_refresh)
@@ -1164,11 +1174,21 @@ class CosySimTUI(App[None]):
 
 # ──── Entry Point ─────────────────────────────────────────────────────────
 
-def main() -> None:
+def main(pillar: str | None = None) -> None:
+    """TUI entry point.
+
+    Args:
+        pillar: Optional pillar filter ('service', 'game', 'creation').
+                If provided, only that pillar's targets are shown.
+    """
     import argparse
     parser = argparse.ArgumentParser(description="CosySim TUI Launcher")
     parser.add_argument("--no-autostart", dest="autostart", action="store_false",
                         help="Open TUI without auto-launching targets")
+    # v1.50.0 [2026-03-22] — Pillar filter for focused TUI views
+    parser.add_argument("--pillar", choices=["service", "game", "creation"],
+                        default=pillar,
+                        help="Show only targets from this pillar")
     parser.set_defaults(autostart=True)
     args = parser.parse_args()
 
@@ -1180,7 +1200,7 @@ def main() -> None:
         os._exit(1)
     _sig.signal(_sig.SIGINT, _force_exit)
 
-    app = CosySimTUI(autostart=args.autostart)
+    app = CosySimTUI(autostart=args.autostart, pillar_filter=args.pillar)
     app.run()
 
 

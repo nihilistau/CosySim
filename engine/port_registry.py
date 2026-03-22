@@ -59,6 +59,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "grid": 5569,
     "lab_break": 5571,
     "creation_kit": 5592,  # v1.47.0 — Creation Kit visual editor
+    "oracle": 5572,        # v1.52.0 — THE ORACLE (Claude's signature scene)
     "intel_hub": 5580,
     # ── Launcher-managed services (8500–8800) ──
     "hub": 8500,

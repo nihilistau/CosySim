@@ -243,7 +243,10 @@
 <div class="cs-navbar__spacer" aria-hidden="true"></div>
 
 {# ── Neon HUD — inject after navbar spacer ─────────────────────────── #}
+{# v1.50.0 [2026-03-22] — Respect hide_hud flag (documented in neon_base.html) #}
+{% if not hide_hud %}
 {% include 'neon_hud.html' %}
+{% endif %}
 
 <script src="{{ _js_url }}" defer></script>
 <script src="/shared/js/cosysim-transitions.js" defer></script>

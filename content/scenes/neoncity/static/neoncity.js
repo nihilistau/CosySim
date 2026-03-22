@@ -1,5 +1,5 @@
 /**
- * NeonCity — v1.46 "Interactive Systems"
+ * NeonCity — v1.52 "Three Pillars"
  * Living World Hub client-side controller.
  *
  * Handles Socket.IO state sync, district navigation, faction bars,
@@ -7,8 +7,13 @@
  * crew operations, inventory context menu, heat warnings,
  * and rich event feed with color-coded cards.
  *
- * Version: v1.46.0 [2026-03-21]
+ * Version: v1.52.0 [2026-03-22]
  * Change Log:
+ *   v1.52.0 [2026-03-22] — Three Pillars: district online/offline detection,
+ *                            exchange_credits result handler, credit flash
+ *                            animations, NPC typing indicator, enhanced
+ *                            _renderDistricts with NPC/desc updates, same-scene
+ *                            district travel handling
  *   v1.46.0 [2026-03-21] — Rich event feed (color-coded cards, type icons,
  *                            severity dots, impact badges, click-to-expand)
  *   v1.45.0 [2026-03-21] — Mission detail modal, crew ops launcher,
@@ -142,6 +147,8 @@ class NeonCityScene {
         this.socket.on('district_alert', (data) => this._onDistrictAlert(data));
         this.socket.on('hud_state', (data) => this._onHudState(data));
         this.socket.on('hud_update', (data) => this._onHudUpdate(data));
+        // v1.52.0 — Exchange credits result handler
+        this.socket.on('exchange_result', (data) => this._onExchangeResult(data));
         this.socket.on('error', (data) => {
             console.warn('[NeonCity] Server error:', data.message || data);
         });
@@ -264,11 +271,24 @@ class NeonCityScene {
         document.getElementById('modal-faction-fill').style.background =
             data.faction_color || '#06b6d4';
 
-        // NPCs
+        // v1.52.0 — NPCs with recruit buttons
         const npcContainer = document.getElementById('modal-npc-list');
         if (npcContainer) {
+            const ROLE_MAP = {
+                'FIXER': 'fixer', 'ARMORER': 'tech', 'INFO_BROKER': 'lookout',
+                'EXEC': 'face', 'SEC_AGENT': 'muscle', 'CORP_LIAISON': 'face',
+                'BARTENDER': 'supplier', 'DANCER': 'face', 'CONTACT': 'fixer',
+                '0xGH0ST': 'hacker', 'NETRUNNER': 'hacker', 'SYSOP': 'tech',
+                'STREET_KID': 'lookout', 'GANGER': 'muscle', 'INFORMANT': 'lookout',
+            };
             npcContainer.innerHTML = (d.npcs || [])
-                .map(n => `<span class="modal-npc-tag">${n}</span>`)
+                .map(n => {
+                    const role = ROLE_MAP[n] || 'unknown';
+                    return `<div class="modal-npc-card">
+                        <span class="modal-npc-tag">${this._esc(n)}</span>
+                        <button class="nc-btn nc-btn--xs" onclick="event.stopPropagation();NeonCityApp.recruitNpc('${this._esc(n)}', '${role}')">RECRUIT</button>
+                    </div>`;
+                })
                 .join('');
         }
 
@@ -415,9 +435,11 @@ class NeonCityScene {
 
     /**
      * Handle NPC action city event.
+     * v1.52.0 [2026-03-22] — Remove typing indicator on NPC reply
      * @param {Object} data - City event payload.
      */
     _onCityEvent(data) {
+        this._removeTypingIndicator();
         const payload = data.payload || {};
         const desc = payload.description || payload.action || JSON.stringify(payload);
         this._appendChatEntry('event', `[${(payload.npc_id || 'NPC').toUpperCase()}]`, desc);
@@ -444,7 +466,9 @@ class NeonCityScene {
 
     /**
      * Update district cards with live state.
+     * v1.52.0 [2026-03-22] — Also updates NPC tags and descriptions
      * @param {Object} state - City state object.
+     * CONNECTS: _build_city_state(), district card DOM
      */
     _renderDistricts(state) {
         const districts = state.districts || {};
@@ -461,7 +485,48 @@ class NeonCityScene {
                 }
                 aEl.lastChild.textContent = ` ${level.toUpperCase()}`;
             }
+
+            // v1.52.0 — Update NPC tags dynamically
+            const npcEl = document.getElementById(`npcs-${key}`);
+            if (npcEl && d.npcs && Array.isArray(d.npcs)) {
+                npcEl.innerHTML = d.npcs
+                    .map(n => `<span class="nc-npc-tag">${this._esc(n)}</span>`)
+                    .join('');
+            }
         });
+    }
+
+    // v1.52.0 [2026-03-22] — District scene online/offline status polling
+    // CONNECTS: /api/district/scene_status, district card DOM
+    // CALLED BY: DOMContentLoaded, 60s interval
+
+    /**
+     * Fetch district scene statuses and update indicators on cards.
+     */
+    async _updateDistrictStatuses() {
+        try {
+            const res = await fetch('/api/district/scene_status');
+            const statuses = await res.json();
+            this._districtSceneStatuses = statuses;
+            Object.entries(statuses).forEach(([key, info]) => {
+                const statusEl = document.getElementById(`status-${key}`);
+                if (!statusEl) return;
+                const dot = statusEl.querySelector('.status-dot');
+                const label = statusEl.querySelector('.status-label');
+                const card = statusEl.closest('.nc-district');
+                if (info.is_running) {
+                    if (dot) dot.className = 'status-dot online';
+                    if (label) { label.textContent = 'ONLINE'; label.className = 'status-label online'; }
+                    if (card) card.classList.remove('district-offline');
+                } else {
+                    if (dot) dot.className = 'status-dot offline';
+                    if (label) { label.textContent = 'OFFLINE'; label.className = 'status-label offline'; }
+                    if (card) card.classList.add('district-offline');
+                }
+            });
+        } catch (e) {
+            console.warn('[NeonCity] district scene_status fetch failed:', e);
+        }
     }
 
     /**
@@ -524,14 +589,26 @@ class NeonCityScene {
     }
 
     /**
-     * Update the credit balance display.
+     * Update the credit balance display with optional flash animation.
+     * v1.52.0 [2026-03-22] — Added flash animation on value change
      * @param {number} balance - Current credit balance.
      */
     _updateCredits(balance) {
         if (balance === undefined || balance === null) return;
         const el1 = document.getElementById('credit-balance');
         const el2 = document.getElementById('econ-balance');
-        if (el1) el1.textContent = balance.toLocaleString();
+        // Detect direction of change for flash animation
+        const prev = this._lastCredits ?? balance;
+        this._lastCredits = balance;
+        const flashClass = balance > prev ? 'flash-up' : balance < prev ? 'flash-down' : '';
+        if (el1) {
+            el1.textContent = balance.toLocaleString();
+            if (flashClass) {
+                el1.classList.remove('flash-up', 'flash-down');
+                void el1.offsetWidth; // force reflow to restart animation
+                el1.classList.add(flashClass);
+            }
+        }
         if (el2) el2.textContent = `₢ ${balance.toLocaleString()}`;
     }
 
@@ -559,7 +636,10 @@ class NeonCityScene {
 
     // ── User actions ──────────────────────────────────────────────────────
 
-    /** Send a chat message to the active district. */
+    /**
+     * Send a chat message to the active district.
+     * v1.52.0 [2026-03-22] — Added typing indicator while waiting for NPC reply
+     */
     sendMessage() {
         const input = document.getElementById('chat-input');
         if (!input) return;
@@ -569,13 +649,34 @@ class NeonCityScene {
 
         this._appendChatEntry('player', '[YOU]', text);
 
-        // Emit to server (future: NPC response via agent loop)
+        // Emit to server — show typing indicator while waiting
         if (this.socket && this.activeDistrict) {
+            this._showTypingIndicator();
             this.socket.emit('district_chat', {
                 district: this.activeDistrict,
                 message: text,
             });
         }
+    }
+
+    // v1.52.0 [2026-03-22] — NPC typing indicator
+    /** Show a typing indicator in the chat log. */
+    _showTypingIndicator() {
+        this._removeTypingIndicator();
+        const log = document.getElementById('chat-log');
+        if (!log) return;
+        const div = document.createElement('div');
+        div.className = 'chat-entry npc nc-typing-entry';
+        div.id = 'npc-typing';
+        div.innerHTML = '<span class="entry-src">[NPC]</span><span class="nc-typing"><span class="nc-typing__dot"></span><span class="nc-typing__dot"></span><span class="nc-typing__dot"></span></span>';
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    /** Remove the typing indicator from the chat log. */
+    _removeTypingIndicator() {
+        const existing = document.getElementById('npc-typing');
+        if (existing) existing.remove();
     }
 
     /** Buy intel from information broker. */
@@ -593,6 +694,28 @@ class NeonCityScene {
         if (amount <= 0) return;
         if (this.socket) {
             this.socket.emit('exchange_credits', { amount, direction });
+        }
+    }
+
+    // v1.52.0 [2026-03-22] — Exchange credits result handler
+    // CONNECTS: exchange_credits Socket.IO handler
+    // CALLED BY: Socket.IO 'exchange_result' event
+    /**
+     * Handle exchange credits result from server.
+     * @param {Object} data - Exchange result payload.
+     */
+    _onExchangeResult(data) {
+        if (data.success) {
+            this._showToast('EXCHANGE', data.message || 'Exchange complete.', 4000);
+            this._appendChatEntry('system', '[BANK]', data.message || `${data.action} ₵${data.amount}`);
+            if (data.wallet !== undefined) this._updateCredits(data.wallet);
+            if (data.balance !== undefined) {
+                const econ = document.getElementById('econ-balance');
+                if (econ) econ.textContent = `₢ ${data.balance.toLocaleString()}`;
+            }
+        } else {
+            this._showToast('EXCHANGE FAILED', data.error || 'Unknown error.', 5000);
+            this._appendChatEntry('system', '[BANK]', data.error || 'Exchange failed.');
         }
     }
 
@@ -844,24 +967,27 @@ class NeonCityScene {
             unknown: '\u2753',
         };
 
+        // v1.52.0 — Crew cards with dismiss button and ops count
         roster.innerHTML = members.map(m => {
             const icon = m.role_icon || ROLE_ICONS[m.role] || '\u2753';
             const name = m.character_id || m.name || m.id || 'Unknown';
             const avail = m.available !== false;
             const availClass = avail ? 'available' : 'unavailable';
             const availLabel = avail ? 'READY' : 'DEPLOYED';
+            const opsCount = m.operations_count || 0;
             return `
             <div class="crew-card ${availClass}" data-crew-id="${this._esc(name)}">
                 <div class="crew-left">
                     <span class="crew-icon">${icon}</span>
                     <div>
                         <div class="crew-name">${this._esc(name)}</div>
-                        <div class="crew-role">${this._esc(m.role_label || m.role || 'unknown')}</div>
+                        <div class="crew-role">${this._esc(m.role_label || m.role || 'unknown')}${opsCount ? ` \u00b7 ${opsCount} ops` : ''}</div>
                     </div>
                 </div>
                 <div class="crew-right">
                     <span class="crew-avail ${availClass}">${availLabel}</span>
                     <span class="crew-level">LV${m.level || 1}</span>
+                    <button class="nc-btn nc-btn--xs nc-btn--ghost crew-dismiss" onclick="event.stopPropagation();NeonCityApp.dismissCrewMember('${this._esc(name)}')" title="Dismiss ${this._esc(name)}">\u2715</button>
                 </div>
                 <div class="crew-loyalty-bar">
                     <div class="crew-loyalty-fill" style="width:${m.loyalty || 50}%"></div>
@@ -1064,13 +1190,21 @@ class NeonCityScene {
         if (locEl) locEl.textContent = `\u25C9 ${m.location || '???'}`;
         if (descEl) descEl.textContent = m.description || '';
 
-        // Objectives checklist
+        // v1.52.0 — Clickable objectives: mark complete via /api/missions/objective
+        // CONNECTS: MissionManager.complete_objective(), progress bar
         if (objList) {
             const objs = m.objectives || [];
-            objList.innerHTML = objs.map(o => {
+            const missionId = this._activeMissionId;
+            const isActive = (m.status || '') === 'active';
+            objList.innerHTML = objs.map((o, idx) => {
                 const done = o.completed ? 'checked' : '';
                 const opt = o.optional ? ' <span class="obj-optional">[OPTIONAL]</span>' : '';
-                return `<div class="mm-obj-row ${done}">
+                const clickable = isActive && !o.completed ? 'clickable' : '';
+                const objId = o.id || `obj_${idx}`;
+                const onclick = (isActive && !o.completed)
+                    ? `onclick="NeonCityApp.completeObjective('${this._esc(missionId)}', '${this._esc(objId)}')"`
+                    : '';
+                return `<div class="mm-obj-row ${done} ${clickable}" ${onclick} title="${isActive && !o.completed ? 'Click to mark complete' : ''}">
                     <span class="mm-obj-check">${o.completed ? '\u2611' : '\u2610'}</span>
                     <span class="mm-obj-desc">${this._esc(o.description)}${opt}</span>
                 </div>`;
@@ -1225,6 +1359,37 @@ class NeonCityScene {
             }
         } catch (err) {
             this._showToast('ERROR', err.message, 5000);
+        }
+    }
+
+    // ── Mission Objective Completion ─────────────────────────────────
+    // v1.52.0 [2026-03-22] — Click objectives to mark them complete
+    // CONNECTS: /api/missions/objective, MissionManager.complete_objective()
+
+    /**
+     * Mark a mission objective as complete.
+     * @param {string} missionId
+     * @param {string} objectiveId - Objective identifier string.
+     */
+    async completeObjective(missionId, objectiveId) {
+        try {
+            const res = await fetch('/api/missions/objective', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mission_id: missionId, objective_id: objectiveId }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                this._showToast('OBJECTIVE COMPLETE', data.message || 'Objective marked done.', 4000);
+                this._appendChatEntry('event', '[MISSIONS]', data.message || 'Objective completed!');
+                // Refresh the mission detail modal to show updated progress
+                this.openMissionDetail(missionId);
+                this.refreshHud();
+            } else {
+                this._showToast('FAILED', data.error || data.message || 'Cannot complete objective.', 4000);
+            }
+        } catch (err) {
+            this._showToast('ERROR', err.message, 4000);
         }
     }
 
@@ -1478,6 +1643,37 @@ class NeonCityScene {
         }
     }
 
+    // ── Crew Recruitment ─────────────────────────────────────────────
+    // v1.52.0 [2026-03-22] — Recruit NPCs from district modal
+    // CONNECTS: /api/crew/recruit, CrewManager
+    // CALLED BY: District modal NPC recruit buttons
+
+    /**
+     * Recruit an NPC from a district to the player's crew.
+     * @param {string} npcId - NPC identifier (e.g. 'FIXER', '0xGH0ST')
+     * @param {string} role - Crew role (fixer, hacker, muscle, etc.)
+     */
+    async recruitNpc(npcId, role) {
+        try {
+            const res = await fetch('/api/crew/recruit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ character_id: npcId, role }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                this._showToast('CREW RECRUITED!', data.message || `${npcId} joined your crew as ${role}.`, 5000);
+                this._appendChatEntry('event', '[CREW]', data.message || `${npcId} recruited!`);
+                this.refreshHud();
+            } else {
+                this._showToast('RECRUIT FAILED', data.error || data.message || 'Cannot recruit.', 5000);
+                this._appendChatEntry('system', '[CREW]', data.error || data.message || 'Recruitment failed.');
+            }
+        } catch (err) {
+            this._showToast('ERROR', err.message, 4000);
+        }
+    }
+
     // ── Inventory interaction ────────────────────────────────────────
     // v1.45.0 [2026-03-21] — Context menu for use/equip/sell
     // CONNECTS: Inventory, /api/inventory/use
@@ -1508,9 +1704,14 @@ class NeonCityScene {
         const isConsumable = ['drug', 'food'].includes(cat);
         const isEquipment = ['weapon', 'cyberware', 'cyberdeck', 'clothing', 'tool'].includes(cat);
 
+        // v1.52.0 — Rich context menu with description, price, rarity
         let html = `<div class="ctx-title">${this._esc(item.name || itemId)}</div>`;
         html += `<div class="ctx-desc">${this._esc(item.description || '')}</div>`;
-        html += `<div class="ctx-meta">${this._esc(cat)} ${item.rarity ? '/ ' + item.rarity : ''}</div>`;
+        html += `<div class="ctx-meta">`;
+        html += `<span>${this._esc(cat)}${item.rarity ? ' / ' + item.rarity : ''}</span>`;
+        if (item.sell_price) html += `<span class="ctx-price">Sell: ₵${item.sell_price}</span>`;
+        if (item.quantity > 1) html += `<span class="ctx-qty">x${item.quantity}</span>`;
+        html += `</div>`;
         html += '<div class="ctx-actions">';
 
         if (isConsumable) {
@@ -1546,8 +1747,10 @@ class NeonCityScene {
 
     /**
      * Use/equip/sell an inventory item.
+     * v1.52.0 [2026-03-22] — Show consumable effect feedback with stat changes
      * @param {string} itemId
      * @param {string} action - 'use', 'equip', 'unequip', 'sell'
+     * CONNECTS: /api/inventory/use, _apply_consumable_effect()
      */
     async _useItem(itemId, action) {
         this._closeContextMenu();
@@ -1558,8 +1761,25 @@ class NeonCityScene {
                 body: JSON.stringify({ item_id: itemId, action }),
             });
             const data = await res.json();
-            const msg = data.message || data.result || `${action} ${itemId}`;
-            this._showToast(action.toUpperCase(), msg, 4000);
+            if (!data.ok) {
+                this._showToast('FAILED', data.error || 'Action failed.', 4000);
+                return;
+            }
+            // v1.52.0 — Show consumable effect details
+            if (action === 'use' && data.effect) {
+                const effect = data.effect;
+                const changes = effect.changes || {};
+                const parts = [];
+                if (changes.health) parts.push(`HP ${changes.health > 0 ? '+' : ''}${changes.health}`);
+                if (changes.energy) parts.push(`EN ${changes.energy > 0 ? '+' : ''}${changes.energy}`);
+                if (changes.heat)   parts.push(`HT ${changes.heat > 0 ? '+' : ''}${changes.heat}`);
+                const detail = parts.length ? parts.join(' / ') : '';
+                this._showToast('USED', `${effect.message || itemId}${detail ? '\n' + detail : ''}`, 5000);
+                this._appendChatEntry('system', '[ITEM]', effect.message || `Used ${itemId}`);
+            } else {
+                const msg = data.message || data.result || `${action} ${itemId}`;
+                this._showToast(action.toUpperCase(), msg, 4000);
+            }
             this.refreshHud();
         } catch (err) {
             this._showToast('ERROR', err.message, 4000);
@@ -1762,10 +1982,11 @@ class NeonCityScene {
     // ── Private helpers ───────────────────────────────────────────────────
 
     /**
-     * Enter a district (placeholder for future scene navigation).
+     * Enter a district — handles offline scenes, same-scene travel, redirects.
+     * v1.52.0 [2026-03-22] — Offline scene detection, same-scene handling
      * @param {string} districtKey
+     * CONNECTS: /api/district/enter, _port_check()
      */
-    // v1.43.0 [2026-03-21] — Wire district entry to CityMap travel API
     async _enterDistrict(districtKey) {
         this.closeModal();
         const label = districtKey.replace(/_/g, ' ').toUpperCase();
@@ -1779,18 +2000,37 @@ class NeonCityScene {
             });
             const data = await res.json();
 
-            if (data.success && data.url) {
-                const cost = [];
-                if (data.energy_cost) cost.push(`-${data.energy_cost} energy`);
-                if (data.heat_add)    cost.push(`+${data.heat_add} heat`);
-                const costStr = cost.length ? ` (${cost.join(', ')})` : '';
-                this._appendChatEntry('system', '[CITY]',
-                    `Arrived at ${data.scene}.${costStr} Redirecting...`);
-                setTimeout(() => { window.location.href = data.url; }, 1500);
-            } else {
+            if (!data.success) {
                 this._appendChatEntry('system', '[CITY]',
                     `Travel failed: ${data.message || data.error || 'Unknown error'}`);
+                return;
             }
+
+            // v1.52.0 — Same-scene travel (street_level → NEON CITY)
+            if (data.same_scene) {
+                this._appendChatEntry('system', '[CITY]', 'You are already in Neon City.');
+                this.refreshHud();
+                this._loadCityMap();
+                return;
+            }
+
+            // v1.52.0 — Offline scene detection
+            if (!data.is_running) {
+                this._showToast('SCENE OFFLINE',
+                    `${data.scene} is not running (port ${data.port}). Launch it via the TUI or launcher.`, 6000);
+                this._appendChatEntry('system', '[CITY]',
+                    `Cannot travel to ${data.scene} — scene is offline. Start it with: python launcher.py ${data.scene.toLowerCase().replace(/ /g, '_')}`);
+                return;
+            }
+
+            // Scene is online — proceed with travel
+            const cost = [];
+            if (data.energy_cost) cost.push(`-${data.energy_cost} energy`);
+            if (data.heat_add)    cost.push(`+${data.heat_add} heat`);
+            const costStr = cost.length ? ` (${cost.join(', ')})` : '';
+            this._appendChatEntry('system', '[CITY]',
+                `Arrived at ${data.scene}.${costStr} Redirecting...`);
+            setTimeout(() => { window.location.href = data.url; }, 1500);
         } catch (err) {
             this._appendChatEntry('system', '[CITY]', `Network error: ${err.message}`);
         }
@@ -1861,6 +2101,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Fetch living-world district status on load and every 60 s
     NeonCityApp.fetchDistrictStatus();
     setInterval(() => NeonCityApp.fetchDistrictStatus(), 60_000);
+
+    // v1.52.0 — Fetch district scene online/offline status on load and every 60 s
+    NeonCityApp._updateDistrictStatuses();
+    setInterval(() => NeonCityApp._updateDistrictStatuses(), 60_000);
 
     // Refresh faction status every 30 s
     setInterval(() => {
