@@ -35,6 +35,13 @@ class GridScene {
     this.socket = io();
     this.socket.on('connect', () => this._log('Connected to THE GRID', 'system'));
     this.socket.on('disconnect', () => this._log('Disconnected', 'system'));
+    // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', (attempt) => {
+      console.debug('[Grid] Reconnected after ' + attempt + ' attempt(s)');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) console.debug('[Grid] Reconnecting... (attempt ' + attempt + ')');
+    });
     this.socket.on('state_update', (data) => this._applyState(data));
     this.socket.on('error', (data) => this._showToast(data.message || 'Error', 'danger'));
   }

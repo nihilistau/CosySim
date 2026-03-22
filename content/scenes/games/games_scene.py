@@ -30,8 +30,7 @@ from flask_socketio import emit
 
 from engine.scenes.flask_scene import FlaskScene
 
-log = logging.getLogger(__name__)
-
+# v1.49.2 [2026-03-22] — Removed duplicate 'log' variable (CLAUDE.md standard: use 'logger')
 SCENE_ID = "games"
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
 try:
@@ -78,7 +77,7 @@ class GamesScene(FlaskScene):
         # Wire bench route (TTS already registered by FlaskScene)
         self.register_bench_route(self.app, self.socketio)
 
-        log.info("GamesScene (THE ARCADE) created on port %d", port)
+        logger.info("GamesScene (THE ARCADE) created on port %d", port)
 
     # ── MCP Integration ──────────────────────────────────────────────
 
@@ -96,9 +95,9 @@ class GamesScene(FlaskScene):
                 "tod_rounds": 0,
                 "active_game": None,
             })
-            log.info("GamesScene (THE ARCADE) MCP wired")
+            logger.info("GamesScene (THE ARCADE) MCP wired")
         except Exception as exc:
-            log.warning("MCP wiring skipped: %s", exc)
+            logger.warning("MCP wiring skipped: %s", exc)
             self._scene_node = None
 
     def _register_gamemaster(self) -> None:
@@ -136,12 +135,12 @@ class GamesScene(FlaskScene):
                     scene_roles=[SCENE_ID],
                 )
                 apply_default_skills(GAMEMASTER_ID)
-                log.info("GameMaster character registered")
+                logger.info("GameMaster character registered")
 
             if self._fw:
                 self._fw.get_character(GAMEMASTER_ID).enter_scene(SCENE_ID)
         except Exception as exc:
-            log.warning("GameMaster registration skipped: %s", exc)
+            logger.warning("GameMaster registration skipped: %s", exc)
 
     def _get_gamemaster_reply(self, prompt: str) -> str:
         """Get an AI response from the GameMaster character."""
@@ -177,7 +176,7 @@ class GamesScene(FlaskScene):
             proc = mgr.infer_processed(req)
             return (proc.clean_text or "").strip()
         except Exception as exc:
-            log.debug("GameMaster AI unavailable: %s", exc)
+            logger.debug("GameMaster AI unavailable: %s", exc)
             return ""
 
     def _get_governance_context(self, character_id: str) -> str:
@@ -368,7 +367,7 @@ class GamesScene(FlaskScene):
 
         @sio.on("connect")
         def on_connect():
-            log.debug("THE ARCADE client connected")
+            logger.debug("THE ARCADE client connected")
             scores = {}
             state = {}
             if self._scene_node:
@@ -385,7 +384,7 @@ class GamesScene(FlaskScene):
 
         @sio.on("disconnect")
         def on_disconnect():
-            log.debug("THE ARCADE client disconnected")
+            logger.debug("THE ARCADE client disconnected")
 
         # ── New v0.68 handlers ────────────────────────────────────────
 

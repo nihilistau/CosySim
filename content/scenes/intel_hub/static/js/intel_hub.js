@@ -145,6 +145,14 @@ class BriefingRoomScene {
         console.debug('[BriefingRoom] Socket disconnected');
       });
 
+      // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+      this.socket.io.on('reconnect', (attempt) => {
+        console.debug('[BriefingRoom] Reconnected after ' + attempt + ' attempt(s)');
+      });
+      this.socket.io.on('reconnect_attempt', (attempt) => {
+        if (attempt % 3 === 0) console.debug('[BriefingRoom] Reconnecting... (attempt ' + attempt + ')');
+      });
+
       this.socket.on('metrics_update', (data) => {
         this._renderSystemStats(data.system || {});
         this._updateStatusLights(data);

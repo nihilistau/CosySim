@@ -42,6 +42,14 @@ class SignalScene {
       console.warn('[SIGNAL] Socket disconnected');
     });
 
+    // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', (attempt) => {
+      console.debug('[Phone] Reconnected after ' + attempt + ' attempt(s)');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) console.debug('[Phone] Reconnecting... (attempt ' + attempt + ')');
+    });
+
     // Contact list
     this.socket.on('contacts', (data) => {
       this._renderContacts(Array.isArray(data) ? data : []);

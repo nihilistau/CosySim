@@ -58,6 +58,14 @@ class ArenaScene {
       this._log('Connection lost. Reconnecting...', 'system');
     });
 
+    // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', (attempt) => {
+      console.debug('[ArenaKit] Reconnected after ' + attempt + ' attempt(s)');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) console.debug('[ArenaKit] Reconnecting... (attempt ' + attempt + ')');
+    });
+
     // Full state sync
     this.socket.on('state_update', (data) => this._applyState(data));
 

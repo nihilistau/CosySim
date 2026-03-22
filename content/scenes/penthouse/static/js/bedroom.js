@@ -7,6 +7,8 @@
 let scene, camera, renderer, controls;
 let ambientLight, directionalLight, pointLights = [];
 let clock = new THREE.Clock();
+// v1.49.2 [2026-03-22] — Track whether we reused penthouse3D's renderer
+let _reusedPenthouse3D = false;
 
 // Location 3D markers  { id → THREE.Mesh }
 const locationMarkers = {};
@@ -59,38 +61,61 @@ let cameraAnimating = false;
 // ═══════════════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════════════
-// v1.50.1 [2026-03-22] — Fixed canvas ID: template uses 'penthouse-canvas' not 'bedroom-canvas'
+// v1.49.2 [2026-03-22] — Reuse penthouse3D scene/renderer if available to prevent
+// dual-renderer conflict on the same canvas. Falls back to own if penthouse3D absent.
 function init() {
-    const canvas = document.getElementById('penthouse-canvas');
-    if (!canvas) {
-        console.error('[Bedroom] canvas#penthouse-canvas not found in DOM — 3D scene cannot render');
-        return;
-    }
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a2e);
-
-    camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
-    camera.position.set(CONFIG.cameraPos.x, CONFIG.cameraPos.y, CONFIG.cameraPos.z);
-
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.target.set(CONFIG.cameraTarget.x, CONFIG.cameraTarget.y, CONFIG.cameraTarget.z);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.minDistance = 2;
-    controls.maxDistance = 30;
-    controls.maxPolarAngle = Math.PI / 2.05;
-    controls.minPolarAngle = 0.2;
-    controls.zoomSpeed = 1.2;
+    // Try to reuse penthouse3D's already-initialized renderer
+    if (window.penthouse3D && window.penthouse3D.isInitialized && window.penthouse3D.isInitialized()) {
+        scene = window.penthouse3D.getScene();
+        camera = window.penthouse3D.getCamera();
+        renderer = window.penthouse3D.getRenderer();
+        _reusedPenthouse3D = true;
+        console.debug('[Bedroom] Reusing penthouse3D scene/camera/renderer');
+        // Still set up OrbitControls on the shared renderer
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(CONFIG.cameraTarget.x, CONFIG.cameraTarget.y, CONFIG.cameraTarget.z);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 2;
+        controls.maxDistance = 30;
+        controls.maxPolarAngle = Math.PI / 2.05;
+        controls.minPolarAngle = 0.2;
+        controls.zoomSpeed = 1.2;
     controls.rotateSpeed = 0.8;
     controls.panSpeed = 0.8;
     controls.enablePan = true;
     controls.update();
+
+    } else {
+        // Fallback: create own renderer (penthouse3D not available)
+        const canvas = document.getElementById('penthouse-canvas');
+        if (!canvas) {
+            console.error('[Bedroom] canvas#penthouse-canvas not found in DOM — 3D scene cannot render');
+            return;
+        }
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+        camera.position.set(CONFIG.cameraPos.x, CONFIG.cameraPos.y, CONFIG.cameraPos.z);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(CONFIG.cameraTarget.x, CONFIG.cameraTarget.y, CONFIG.cameraTarget.z);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 2;
+        controls.maxDistance = 30;
+        controls.maxPolarAngle = Math.PI / 2.05;
+        controls.minPolarAngle = 0.2;
+        controls.zoomSpeed = 1.2;
+        console.debug('[Bedroom] Created own renderer (penthouse3D not available)');
+    }
 
     createLighting();
     createRoom();
@@ -102,7 +127,7 @@ function init() {
     buildViewPresetButtons();
 
     animate();
-    console.debug('Bedroom v6 initialized');
+    console.debug('[Bedroom] v6 initialized (reused3D=%s)', _reusedPenthouse3D);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -30,7 +30,7 @@ from engine.mcp.framework import get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 SCENE_ID = "command_center"
 # v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
@@ -88,7 +88,7 @@ class CommandCenterScene(FlaskScene):
             from content.scenes.command_center.command_center_rules import register_command_center_rules
             register_command_center_rules()
         except Exception as exc:
-            log.warning("Failed to register command center rules: %s", exc)
+            logger.warning("Failed to register command center rules: %s", exc)
 
     # ------------------------------------------------------------------
     # Lazy accessors for singletons
@@ -100,7 +100,7 @@ class CommandCenterScene(FlaskScene):
                 from engine.observability.metrics_collector import get_metrics_collector
                 self._collector = get_metrics_collector()
             except Exception:
-                log.debug("MetricsCollector not available")
+                logger.debug("MetricsCollector not available")
         return self._collector
 
     def _get_metrics_db(self):
@@ -109,7 +109,7 @@ class CommandCenterScene(FlaskScene):
                 from engine.observability.metrics_db import get_metrics_db
                 self._metrics_db = get_metrics_db()
             except Exception:
-                log.debug("MetricsDB not available")
+                logger.debug("MetricsDB not available")
         return self._metrics_db
 
     def _get_activity_bus(self):
@@ -118,7 +118,7 @@ class CommandCenterScene(FlaskScene):
                 from engine.services.activity_bus import get_activity_bus
                 self._activity_bus = get_activity_bus()
             except Exception:
-                log.debug("ActivityBus not available")
+                logger.debug("ActivityBus not available")
         return self._activity_bus
 
     # ------------------------------------------------------------------
@@ -588,7 +588,7 @@ class CommandCenterScene(FlaskScene):
                 else:
                     return jsonify({"error": f"Unknown event type: {event_type}"}), 400
 
-                log.info("Injected %s into %s: %s", event_type, scene_id, content[:80])
+                logger.info("Injected %s into %s: %s", event_type, scene_id, content[:80])
                 return jsonify({"ok": True, "type": event_type, "scene": scene_id})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -605,7 +605,7 @@ class CommandCenterScene(FlaskScene):
                 coord = get_coordinator()
                 for key, value in data.items():
                     coord.update(char_id, key, value, persist=True)
-                log.info("Edited stats for %s: %s", char_id, data)
+                logger.info("Edited stats for %s: %s", char_id, data)
                 return jsonify({"ok": True, "char_id": char_id, "updated": data})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -913,7 +913,7 @@ class CommandCenterScene(FlaskScene):
                     turns=int(turns),
                     issued_by="command_center",
                 )
-                log.info("Directive injected: %s in %s → %s (%d turns)",
+                logger.info("Directive injected: %s in %s → %s (%d turns)",
                          character_id, scene_id, directive[:60], turns)
                 return jsonify({
                     "ok": True, "character_id": character_id,
@@ -957,7 +957,7 @@ class CommandCenterScene(FlaskScene):
                 except Exception:
                     pass
 
-                log.info("Broadcast to %s from %s: %s", scene_id, sender, message[:80])
+                logger.info("Broadcast to %s from %s: %s", scene_id, sender, message[:80])
                 return jsonify({"ok": True, "scene_id": scene_id, "sender": sender})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -1031,7 +1031,7 @@ class CommandCenterScene(FlaskScene):
                     "source": "command_center",
                 })
 
-                log.info("Transfer %s: %s → %s", character_id, from_scene, to_scene)
+                logger.info("Transfer %s: %s → %s", character_id, from_scene, to_scene)
                 return jsonify({
                     "ok": True, "character_id": character_id,
                     "from_scene": from_scene, "to_scene": to_scene,
@@ -1176,7 +1176,7 @@ class CommandCenterScene(FlaskScene):
                         pass
 
             except Exception as exc:
-                log.debug("Command center tick error: %s", exc)
+                logger.debug("Command center tick error: %s", exc)
 
             time.sleep(self._tick_interval)
 

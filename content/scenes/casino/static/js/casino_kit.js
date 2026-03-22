@@ -64,6 +64,14 @@ class CasinoScene {
       this._setPhase('DISCONNECTED');
     });
 
+    // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', (attempt) => {
+      console.debug('[Casino] Reconnected after ' + attempt + ' attempt(s)');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) console.debug('[Casino] Reconnecting... (attempt ' + attempt + ')');
+    });
+
     // Full state sync
     this.socket.on('state_update', (data) => this._applyState(data));
     this.socket.on('casino_state', (data) => this._applyCasinoState(data));

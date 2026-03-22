@@ -193,11 +193,25 @@
       doorway:   { x:  0,   y: 0, z: -6.5 },
     };
 
+    // v1.49.2 [2026-03-22] — Initialization tracking + onReady callback for race condition fix
+    let _initialized = false;
+    let _initError = null;
+    const _readyCallbacks = [];
+
     window.penthouse3D = {
       switchView,
       getViewNames: () => Object.keys(CAMERA_VIEWS),
       toggleFirstPerson: toggleFirstPersonMode,
       isFirstPerson: () => fpsMode,
+
+      // ── Initialization state API ────────────────────────────────
+      isInitialized: () => _initialized,
+      getInitError: () => _initError,
+      onReady: (cb) => {
+        if (_initialized) { cb(window.penthouse3D); return; }
+        if (_initError) { console.warn('[Penthouse3D] init failed, callback skipped:', _initError); return; }
+        _readyCallbacks.push(cb);
+      },
 
       // ── Character integration API ─────────────────────────────────
       getScene: () => scene,
@@ -1721,12 +1735,32 @@
 
   // ═══════════════════════════════════════════════════════════════════
   //  BOOTSTRAP
+  // v1.49.2 [2026-03-22] — Wrapped in try/catch, fires penthouse3d:ready event
   // ═══════════════════════════════════════════════════════════════════
 
+  function _safeInit() {
+    try {
+      init();
+      _initialized = true;
+      // Fire queued callbacks
+      for (const cb of _readyCallbacks) {
+        try { cb(window.penthouse3D); } catch (e) { console.warn('[Penthouse3D] onReady callback error:', e); }
+      }
+      _readyCallbacks.length = 0;
+      // Emit custom event for listeners
+      document.dispatchEvent(new CustomEvent('penthouse3d:ready', { detail: window.penthouse3D }));
+      console.debug('[Penthouse3D] Initialized successfully');
+    } catch (err) {
+      _initError = err;
+      console.error('[Penthouse3D] Initialization FAILED:', err);
+      document.dispatchEvent(new CustomEvent('penthouse3d:error', { detail: err }));
+    }
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', _safeInit);
   } else {
-    init();
+    _safeInit();
   }
 
 })();
