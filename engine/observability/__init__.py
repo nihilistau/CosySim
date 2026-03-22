@@ -83,6 +83,20 @@ from engine.observability.structured_logger import (
     traced,
 )
 
+# v1.49.4 [2026-03-22] — Oracle: unified observability facade + error aggregation
+from engine.observability.oracle import (
+    diagnose,
+    ensure_initialized,
+    get_logger as oracle_get_logger,
+    register_error_callback,
+    unregister_error_callback,
+)
+from engine.observability.error_aggregator import (
+    ErrorAggregator,
+    ErrorBucket,
+    get_error_aggregator,
+)
+
 # v1.40 health check + service discovery
 from engine.observability.health_checker import (
     HealthChecker,
