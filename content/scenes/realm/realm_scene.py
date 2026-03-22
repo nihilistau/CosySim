@@ -12,6 +12,13 @@ Architecture:
   Player — Chooses actions via UI; choices feed into Director pipeline.
 
 All state flows through ``RealmGameState`` → synced to ``MCPFramework``.
+
+Version: v1.49.5 [2026-03-22]
+
+Change Log:
+    v1.49.5 [2026-03-22] — Character classes (4) + branching quest library (12 quests, 3 tiers)
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene
+    v1.49.3 [2026-03-22] — Structured logging context
 """
 from __future__ import annotations
 
@@ -32,12 +39,14 @@ from engine.scenes.flask_scene import FlaskScene
 from engine.mcp.framework import get_framework
 
 from .realm_state import (
+    CHARACTER_CLASSES,
     DIRECTOR_PERSONALITIES,
     EQUIPMENT_SLOTS,
     ITEM_CATALOG,
     MURDER_ROOMS,
     MURDER_WEAPONS,
     MurderMysteryState,
+    QUEST_LIBRARY,
     REALM_LOCATIONS,
     RealmGameState,
     SKILL_TREE,
@@ -406,6 +415,8 @@ class RealmScene(FlaskScene):
             return render_template(
                 "realm.html",
                 personalities=DIRECTOR_PERSONALITIES,
+                character_classes=CHARACTER_CLASSES,
+                quest_library_count=len(QUEST_LIBRARY),
                 skills=list(SKILL_TREE.keys()),
                 weapons=MURDER_WEAPONS,
                 rooms=MURDER_ROOMS,
@@ -438,6 +449,12 @@ class RealmScene(FlaskScene):
                 self._director_conv_id = None
                 self._assistant_conv_id = None
 
+                # v1.49.5 [2026-03-22] — Apply character class if provided
+                class_id = data.get("class_id")
+                class_result = None
+                if class_id and class_id in CHARACTER_CLASSES:
+                    class_result = self.state.apply_class_bonus(class_id)
+
                 # Register timers in MCP framework
                 try:
                     fw = get_framework()
@@ -446,8 +463,16 @@ class RealmScene(FlaskScene):
                     pass
 
                 # Get opening narration from Director
+                class_intro = ""
+                if class_result and "error" not in class_result:
+                    cls_info = CHARACTER_CLASSES[class_id]
+                    class_intro = (
+                        f" The player is a {cls_info['name']} — {cls_info['description']}. "
+                        f"Reference their class abilities: {', '.join(a['name'] for a in cls_info['abilities'])}."
+                    )
                 opening_prompt = (
-                    "Begin a new LitRPG adventure. The player has just arrived in a mysterious realm. "
+                    "Begin a new LitRPG adventure. The player has just arrived in a mysterious realm."
+                    f"{class_intro} "
                     "Set the scene dramatically and present their first choices. "
                     "Keep it to 2-3 paragraphs."
                 )
@@ -465,6 +490,7 @@ class RealmScene(FlaskScene):
                 return jsonify({
                     "success": True,
                     "session_id": self.state.session_id,
+                    "class": class_result,
                     "narration": result.get("narration", ""),
                     "choices": result.get("choices", []),
                     "assistant": assistant_msg,
@@ -870,6 +896,165 @@ class RealmScene(FlaskScene):
             self.socketio.emit("quest_accepted", quest)
             return jsonify({**result, "narration": narration.get("narration", "")})
 
+        # ── Character Class Routes ──────────────────────────────────
+        # v1.49.5 [2026-03-22] — Character class selection and abilities
+        # CONNECTS: CHARACTER_CLASSES, RealmGameState.apply_class_bonus
+        # CALLED BY: Frontend class selection UI
+        # EMITS: class_selected SocketIO event
+
+        @self.app.route("/api/classes")
+        def class_list():
+            """Return all available character classes with stats and abilities."""
+            return jsonify({"classes": CHARACTER_CLASSES})
+
+        @self.app.route("/api/game/select_class", methods=["POST"])
+        def select_class():
+            """Select a character class for the current game.
+
+            Accepts JSON: {"class_id": "fighter"}.
+            Applies stat bonuses and grants class abilities.
+            """
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            if self.state.player_class:
+                return jsonify({"error": f"Class already selected: {self.state.player_class}"}), 400
+            data = request.get_json(silent=True) or {}
+            class_id = data.get("class_id")
+            if not class_id:
+                return jsonify({"error": "class_id required"}), 400
+            result = self.state.apply_class_bonus(class_id)
+            if "error" in result:
+                return jsonify(result), 400
+            # Director acknowledges the class choice
+            cls_info = CHARACTER_CLASSES[class_id]
+            narration = self._director_infer(
+                f"The player has chosen the {cls_info['name']} class — {cls_info['description']}. "
+                f"Abilities unlocked: {', '.join(a['name'] for a in cls_info['abilities'])}. "
+                "Acknowledge their choice dramatically and hint at how it will shape their journey."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("class_selected", result)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        @self.app.route("/api/game/use_ability", methods=["POST"])
+        def use_ability():
+            """Use a class ability during gameplay.
+
+            Accepts JSON: {"ability_name": "Shield Wall"}.
+            """
+            if not self.state or self.state.ended:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            ability_name = data.get("ability_name")
+            if not ability_name:
+                return jsonify({"error": "ability_name required"}), 400
+            result = self.state.use_class_ability(ability_name)
+            if "error" in result:
+                return jsonify(result), 400
+            # Director narrates the ability usage
+            narration = self._director_infer(
+                f"The player uses their class ability: '{ability_name}' — {result['effect']}. "
+                "Describe the dramatic effect in the current scene."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("ability_used", result)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        # ── Branching Quest Library Routes ─────────────────────────
+        # v1.49.5 [2026-03-22] — 12-quest library with branching narrative paths
+        # CONNECTS: QUEST_LIBRARY, RealmGameState.get_quest_library
+        # CALLED BY: Frontend quest journal UI
+        # EMITS: quest_branch_chosen SocketIO event
+
+        @self.app.route("/api/quests/library")
+        def quest_library():
+            """Return the full branching quest library, filtered by tier if requested."""
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            tier = request.args.get("tier", type=int)
+            return jsonify({
+                "quests": self.state.get_quest_library(tier=tier),
+                "player_level": self.state.player_stats.get("level", 1),
+            })
+
+        @self.app.route("/api/quests/library/accept", methods=["POST"])
+        def quest_library_accept():
+            """Accept a quest from the branching quest library.
+
+            Accepts JSON: {"quest": "missing_merchant"}.
+            """
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            quest_key = data.get("quest")
+            if not quest_key:
+                return jsonify({"error": "quest key required"}), 400
+            result = self.state.accept_library_quest(quest_key)
+            if "error" in result:
+                return jsonify(result), 400
+            quest = result["quest"]
+            # Director narrates the quest hook
+            quest_data = QUEST_LIBRARY.get(quest_key, {})
+            narration = self._director_infer(
+                f"The player discovers a new quest: '{quest_data.get('name', quest_key)}'. "
+                f"{quest_data.get('intro', '')} "
+                "Set the scene for this quest and present the branching choices: "
+                + ", ".join(
+                    f"'{bk}': {bv['description']}"
+                    for bk, bv in quest_data.get("branches", {}).items()
+                )
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("quest_accepted", quest)
+            return jsonify({
+                **result,
+                "narration": narration.get("narration", ""),
+                "branches": {
+                    bk: {"description": bv["description"]}
+                    for bk, bv in quest_data.get("branches", {}).items()
+                },
+            })
+
+        @self.app.route("/api/quests/branch", methods=["POST"])
+        def quest_branch():
+            """Choose a branching path for an active library quest.
+
+            Accepts JSON: {"quest": "missing_merchant", "branch": "search_forest"}.
+            Resolves the quest and grants rewards.
+            """
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            quest_key = data.get("quest")
+            branch_key = data.get("branch")
+            if not quest_key or not branch_key:
+                return jsonify({"error": "quest and branch keys required"}), 400
+            result = self.state.choose_quest_branch(quest_key, branch_key)
+            if "error" in result:
+                return jsonify(result), 400
+            # Director narrates the branch outcome
+            narration = self._director_infer(
+                f"The player chose path '{result['description']}' for quest '{result['quest_name']}'. "
+                f"Outcome: {result['outcome']} "
+                f"They earned {result['rewards']['xp']} XP and {result['rewards']['gold']} gold. "
+                + (f"They found: {result['bonus_item']['name']}. " if result.get("bonus_item") else "")
+                + "Narrate this dramatically and present what happens next."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("quest_branch_chosen", {
+                "quest": quest_key,
+                "branch": branch_key,
+                "rewards": result["rewards"],
+                "outcome": result["outcome"],
+            })
+            if result.get("leveled_up"):
+                self.socketio.emit("level_up", {"level": self.state.player_stats.get("level", 1)})
+            return jsonify({
+                **result,
+                "narration": narration.get("narration", ""),
+                "state": self.state.to_dict(),
+            })
+
         # ── Equipment Routes ──
 
         @self.app.route("/api/equipment")
@@ -1232,5 +1417,12 @@ class RealmScene(FlaskScene):
                 {"path": "/api/shop/catalog",     "methods": ["GET"],  "description": "Shop catalog"},
                 {"path": "/api/shop/buy",         "methods": ["POST"], "description": "Buy item"},
                 {"path": "/api/shop/sell",        "methods": ["POST"], "description": "Sell item"},
+                # v1.49.5 [2026-03-22] — Character classes + branching quest library
+                {"path": "/api/classes",                "methods": ["GET"],  "description": "List character classes"},
+                {"path": "/api/game/select_class",      "methods": ["POST"], "description": "Select character class"},
+                {"path": "/api/game/use_ability",       "methods": ["POST"], "description": "Use class ability"},
+                {"path": "/api/quests/library",         "methods": ["GET"],  "description": "Branching quest library"},
+                {"path": "/api/quests/library/accept",  "methods": ["POST"], "description": "Accept library quest"},
+                {"path": "/api/quests/branch",          "methods": ["POST"], "description": "Choose quest branch"},
             ],
         }
