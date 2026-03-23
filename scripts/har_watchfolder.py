@@ -187,8 +187,51 @@ def watch_loop(interval: int = DEFAULT_INTERVAL) -> None:
     while True:
         try:
             har_files = list(WATCH_DIR.glob("*.har"))
-            for har_path in har_files:
+            json_files = list(WATCH_DIR.glob("*.json"))
+            for har_path in har_files + json_files:
                 if har_path.name in seen:
+                    continue
+
+                # Protocol Monitor JSON exports → ARGUS rpcid import
+                if har_path.suffix == ".json":
+                    logger.info("Protocol Monitor JSON detected: %s", har_path.name)
+                    try:
+                        from scripts.argus.importers.protocol_monitor import (
+                            import_protocol_monitor_json,
+                            merge_into_registry,
+                        )
+                        pm_result = import_protocol_monitor_json(har_path)
+                        if "error" not in pm_result:
+                            counts = merge_into_registry(pm_result)
+                            logger.info(
+                                "Protocol Monitor import: %d rpcids, %d gRPC, %d cookies",
+                                pm_result["stats"]["unique_rpcids"],
+                                pm_result["stats"]["unique_grpc_methods"],
+                                pm_result["stats"]["cookies_found"],
+                            )
+                            # Also import cookies if found
+                            if pm_result.get("cookies"):
+                                account_name = _infer_account_name(har_path)
+                                from engine.integrations.google_account_pool import get_account_pool
+                                pool = get_account_pool()
+                                acct = pool.get_by_name(account_name)
+                                if acct:
+                                    acct.cookies.update(pm_result["cookies"])
+                                    pool.save()
+                            dest = IMPORTED_DIR / f"{har_path.stem}_{int(time.time())}.json"
+                            shutil.move(str(har_path), str(dest))
+                            _store_nexus_event("protocol_monitor_import", {
+                                "rpcids": pm_result["stats"]["unique_rpcids"],
+                                "grpc_methods": pm_result["stats"]["unique_grpc_methods"],
+                                **counts,
+                            })
+                        else:
+                            logger.error("Protocol Monitor import failed: %s", pm_result["error"])
+                            dest = FAILED_DIR / har_path.name
+                            shutil.move(str(har_path), str(dest))
+                    except Exception as exc:
+                        logger.error("Protocol Monitor import error: %s", exc)
+                    seen.add(har_path.name)
                     continue
 
                 account_name = _infer_account_name(har_path)
