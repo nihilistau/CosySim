@@ -58,9 +58,16 @@ def create_app() -> Tuple[Flask, SocketIO]:
     from apps.assistant.routes.views import views_bp
     from apps.assistant.routes.api import api_bp, register_socketio_events
     from apps.assistant.routes.openai_compat import openai_bp
+    from apps.assistant.routes.auth import auth_bp, init_auth_table
 
+    init_auth_table()
+
+    from apps.assistant.routes.training import training_bp
+
+    app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(views_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(training_bp, url_prefix="/api/training")
     app.register_blueprint(openai_bp)
 
     register_socketio_events(socketio)

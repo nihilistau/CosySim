@@ -1763,6 +1763,238 @@ class NotebookLMSDK:
         )
         return {"deleted": data is not None}
 
+    # ──── gRPC Methods (Heap-Discovered) ─────────────────────────
+    # These use LabsTailwindOrchestrationService directly.
+    # Payload formats are based on ARGUS heap analysis + Chrome MCP captures.
+    # v1.0.0 [2026-03-23] — Initial implementations
+
+    def create_artifact(
+        self,
+        notebook_id: str,
+        artifact_type: str = "report",
+        context: str = "",
+    ) -> Dict[str, Any]:
+        """Create a new artifact (note, guide, report, etc.) via gRPC.
+
+        Args:
+            notebook_id: Notebook UUID
+            artifact_type: Type string (report, study_guide, faq, timeline, etc.)
+            context: Optional context/instructions for generation
+
+        Returns:
+            Dict with artifact data or error
+        """
+        sources = self.list_sources(notebook_id)
+        source_ids = [[[s.id]] for s in sources]
+
+        payload = [
+            source_ids,
+            None, None, None, None,
+            [artifact_type, [["[CONTEXT]", context or ""]], ""],
+            None,
+            CHAT_RESPONSE_CONFIG,
+        ]
+        return self._call_grpc("CreateArtifact", payload)
+
+    def derive_artifact(
+        self,
+        notebook_id: str,
+        source_artifact_id: str,
+        instructions: str = "",
+    ) -> Dict[str, Any]:
+        """Create a new artifact derived from an existing one.
+
+        Args:
+            notebook_id: Notebook UUID
+            source_artifact_id: UUID of the artifact to derive from
+            instructions: How to transform/derive
+
+        Returns:
+            Dict with new artifact data
+        """
+        payload = [notebook_id, source_artifact_id, instructions]
+        return self._call_grpc("DeriveArtifact", payload)
+
+    def generate_artifact(
+        self,
+        notebook_id: str,
+        artifact_type: str = "interactive_mindmap",
+        context: str = "",
+    ) -> Dict[str, Any]:
+        """Generate an artifact using the same format as Studio tab buttons.
+
+        This matches the payload format captured from clicking Mind Map,
+        Flashcards, Quiz, etc. in the NLM Studio tab.
+
+        Args:
+            notebook_id: Notebook UUID
+            artifact_type: One of: interactive_mindmap, flashcards, quiz,
+                          infographic, data_table, slide_deck, report
+            context: Optional context text
+
+        Returns:
+            Dict with generation result
+        """
+        sources = self.list_sources(notebook_id)
+        source_ids = [[[s.id]] for s in sources]
+
+        payload = [
+            source_ids,
+            None, None, None, None,
+            [artifact_type, [["[CONTEXT]", context or ""]], ""],
+            None,
+            CHAT_RESPONSE_CONFIG,
+        ]
+        return self._call_grpc("GenerateArtifact", payload)
+
+    def check_source_freshness(
+        self,
+        notebook_id: str,
+        source_id: str,
+    ) -> Dict[str, Any]:
+        """Check if a source needs refreshing.
+
+        Args:
+            notebook_id: Notebook UUID
+            source_id: Source UUID to check
+
+        Returns:
+            Dict with freshness status
+        """
+        payload = [notebook_id, source_id]
+        return self._call_grpc("CheckSourceFreshness", payload)
+
+    def discover_sources(
+        self,
+        notebook_id: str,
+        query: str = "",
+    ) -> Dict[str, Any]:
+        """Auto-discover relevant sources for a notebook.
+
+        Args:
+            notebook_id: Notebook UUID
+            query: Optional search query to guide discovery
+
+        Returns:
+            Dict with discovered source suggestions
+        """
+        payload = [notebook_id, query]
+        return self._call_grpc("DiscoverSourcesAsync", payload)
+
+    def mutate_source(
+        self,
+        notebook_id: str,
+        source_id: str,
+        updates: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """Modify an existing source.
+
+        Args:
+            notebook_id: Notebook UUID
+            source_id: Source UUID to modify
+            updates: Dict of fields to update
+
+        Returns:
+            Dict with updated source data
+        """
+        payload = [notebook_id, source_id, updates or {}]
+        return self._call_grpc("MutateSource", payload)
+
+    def refresh_source(self, notebook_id: str, source_id: str) -> Dict[str, Any]:
+        """Force-refresh a source's content.
+
+        Args:
+            notebook_id: Notebook UUID
+            source_id: Source UUID to refresh
+
+        Returns:
+            Dict with refresh status
+        """
+        payload = [notebook_id, source_id]
+        return self._call_grpc("RefreshSource", payload)
+
+    def delete_sources_bulk(
+        self,
+        notebook_id: str,
+        source_ids: List[str],
+    ) -> Dict[str, Any]:
+        """Bulk delete multiple sources.
+
+        Args:
+            notebook_id: Notebook UUID
+            source_ids: List of source UUIDs to delete
+
+        Returns:
+            Dict with deletion status
+        """
+        payload = [notebook_id, source_ids]
+        return self._call_grpc("DeleteSources", payload)
+
+    def mutate_project(
+        self,
+        notebook_id: str,
+        updates: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """Modify notebook properties via gRPC.
+
+        Args:
+            notebook_id: Notebook UUID
+            updates: Dict of fields to update
+
+        Returns:
+            Dict with updated notebook data
+        """
+        payload = [notebook_id, updates or {}]
+        return self._call_grpc("MutateProject", payload)
+
+    def delete_projects_bulk(self, notebook_ids: List[str]) -> Dict[str, Any]:
+        """Bulk delete multiple notebooks.
+
+        Args:
+            notebook_ids: List of notebook UUIDs to delete
+
+        Returns:
+            Dict with deletion status
+        """
+        payload = [notebook_ids]
+        return self._call_grpc("DeleteProjects", payload)
+
+    def get_artifact_user_state(
+        self,
+        notebook_id: str,
+        artifact_id: str,
+    ) -> Dict[str, Any]:
+        """Get user's state for an artifact (read status, etc.).
+
+        Args:
+            notebook_id: Notebook UUID
+            artifact_id: Artifact UUID
+
+        Returns:
+            Dict with user state data
+        """
+        payload = [notebook_id, artifact_id]
+        return self._call_grpc("GetArtifactUserState", payload)
+
+    def upsert_artifact_user_state(
+        self,
+        notebook_id: str,
+        artifact_id: str,
+        state_updates: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """Update user's artifact state.
+
+        Args:
+            notebook_id: Notebook UUID
+            artifact_id: Artifact UUID
+            state_updates: Dict of state fields to update
+
+        Returns:
+            Dict with updated state
+        """
+        payload = [notebook_id, artifact_id, state_updates or {}]
+        return self._call_grpc("UpsertArtifactUserState", payload)
+
 
 # ──── Module-Level Convenience ───────────────────────────────────────
 
