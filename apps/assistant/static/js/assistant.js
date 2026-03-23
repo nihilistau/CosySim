@@ -124,14 +124,29 @@
   });
 
   // ── Message Rendering ────────────────────────────────────────
-  function appendMessage(role, content) {
+  function appendMessage(role, content, msgId) {
     const div = document.createElement('div');
     div.className = `msg msg--${role}`;
+    if (msgId) div.dataset.msgId = msgId;
 
-    const roleLabel = document.createElement('div');
+    const header = document.createElement('div');
+    header.className = 'msg-header';
+
+    const roleLabel = document.createElement('span');
     roleLabel.className = 'msg-role';
     roleLabel.textContent = role === 'assistant' ? `Assistant · ${els.modelSelect.value}` : role;
-    div.appendChild(roleLabel);
+    header.appendChild(roleLabel);
+
+    if (msgId && state.currentId) {
+      const forkBtn = document.createElement('button');
+      forkBtn.className = 'msg-fork-btn';
+      forkBtn.textContent = '⑂ Fork';
+      forkBtn.title = 'Fork conversation from this message';
+      forkBtn.addEventListener('click', () => forkFromMessage(msgId));
+      header.appendChild(forkBtn);
+    }
+
+    div.appendChild(header);
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'msg-content';
@@ -218,7 +233,7 @@
     els.messages.innerHTML = '';
     hideWelcome();
     for (const msg of conv.messages || []) {
-      appendMessage(msg.role, msg.content);
+      appendMessage(msg.role, msg.content, msg.id);
     }
     if (!conv.messages?.length) {
       showWelcome();
@@ -429,6 +444,38 @@
       els.settingTempVal.textContent = els.settingTemp.value;
     });
 
+    // Compare
+    const compareBtn = $('compare-btn');
+    const compareModal = $('compare-modal');
+    const compareClose = $('compare-close');
+    const compareRun = $('compare-run');
+    if (compareBtn && compareModal) {
+      compareBtn.addEventListener('click', () => {
+        populateModelSelects();
+        compareModal.showModal();
+      });
+      compareClose.addEventListener('click', () => compareModal.close());
+      compareRun.addEventListener('click', runComparison);
+    }
+
+    // Playground
+    const pgBtn = $('playground-btn');
+    const pgModal = $('playground-modal');
+    const pgClose = $('playground-close');
+    const pgRun = $('pg-run');
+    const pgTemp = $('pg-temp');
+    if (pgBtn && pgModal) {
+      pgBtn.addEventListener('click', () => {
+        populateModelSelects();
+        pgModal.showModal();
+      });
+      pgClose.addEventListener('click', () => pgModal.close());
+      pgRun.addEventListener('click', runPlayground);
+      pgTemp.addEventListener('input', () => {
+        $('pg-temp-val').textContent = pgTemp.value;
+      });
+    }
+
     // File upload
     els.fileInput.addEventListener('change', () => {
       if (els.fileInput.files.length) handleFiles(els.fileInput.files);
@@ -471,6 +518,97 @@
         if (els.sidebar.classList.contains('open')) els.sidebar.classList.remove('open');
       }
     });
+  }
+
+  // ── Fork ──────────────────────────────────────────────────────
+  async function forkFromMessage(msgId) {
+    if (!state.currentId) return;
+    const result = await api.post(`/api/conversations/${state.currentId}/fork`, {
+      from_message_id: msgId,
+    });
+    if (result && result.id) {
+      await loadConversations();
+      loadConversation(result.id);
+    }
+  }
+
+  // ── Compare ──────────────────────────────────────────────────
+  function populateModelSelects() {
+    const selects = ['compare-model-a', 'compare-model-b', 'pg-model'];
+    for (const id of selects) {
+      const sel = $(id);
+      if (!sel || sel.options.length > 1) continue;
+      sel.innerHTML = '';
+      for (const m of state.models) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = `${m.id} (${m.vendor})`;
+        sel.appendChild(opt);
+      }
+    }
+  }
+
+  async function runComparison() {
+    const prompt = $('compare-prompt').value.trim();
+    if (!prompt) return;
+
+    const modelA = $('compare-model-a').value;
+    const modelB = $('compare-model-b').value;
+    const results = $('compare-results');
+    const runBtn = $('compare-run');
+
+    runBtn.disabled = true;
+    runBtn.textContent = 'Comparing...';
+    results.style.display = 'none';
+
+    const data = await api.post('/api/compare', { prompt, model_a: modelA, model_b: modelB });
+
+    runBtn.disabled = false;
+    runBtn.textContent = 'Compare';
+
+    if (data) {
+      $('compare-header-a').textContent = data.model_a.model;
+      $('compare-header-b').textContent = data.model_b.model;
+      $('compare-body-a').innerHTML = renderMarkdown(data.model_a.response);
+      $('compare-body-b').innerHTML = renderMarkdown(data.model_b.response);
+      results.style.display = 'grid';
+    }
+  }
+
+  // ── Playground ───────────────────────────────────────────────
+  async function runPlayground() {
+    const system = $('pg-system').value.trim();
+    const prompt = $('pg-input').value.trim();
+    const model = $('pg-model').value;
+    const temp = parseFloat($('pg-temp').value);
+    const output = $('pg-output');
+    const runBtn = $('pg-run');
+
+    if (!prompt) return;
+
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running...';
+    output.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+
+    const messages = [];
+    if (system) messages.push({ role: 'system', content: system });
+    messages.push({ role: 'user', content: prompt });
+
+    try {
+      const res = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages, temperature: temp, max_tokens: 4096 }),
+      });
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content || data.error?.message || 'No response';
+      output.innerHTML = renderMarkdown(text);
+    } catch (err) {
+      output.textContent = `Error: ${err.message}`;
+    }
+
+    runBtn.disabled = false;
+    runBtn.textContent = 'Run';
   }
 
   // ── Init ─────────────────────────────────────────────────────

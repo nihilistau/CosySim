@@ -169,6 +169,61 @@ def update_settings():
 
 # ──── Cache ──────────────────────────────────────────────────────────
 
+# ──── Branching ──────────────────────────────────────────────────────
+
+@api_bp.route("/conversations/<conv_id>/fork", methods=["POST"])
+def fork_conversation(conv_id: str):
+    """Fork a conversation from a specific message."""
+    data = request.get_json(silent=True) or {}
+    from_msg = data.get("from_message_id")
+    if not from_msg:
+        return jsonify({"error": "from_message_id required"}), 400
+    new_conv = models.fork_conversation(conv_id, from_msg)
+    if not new_conv:
+        return jsonify({"error": "fork failed"}), 400
+    return jsonify(new_conv), 201
+
+
+# ──── Comparison ─────────────────────────────────────────────────────
+
+@api_bp.route("/compare", methods=["POST"])
+def compare_models():
+    """Send the same prompt to two models and return both responses."""
+    data = request.get_json(silent=True) or {}
+    prompt = data.get("prompt", "")
+    model_a = data.get("model_a", "gpt-5.4")
+    model_b = data.get("model_b", "claude-opus-4.6")
+
+    if not prompt:
+        return jsonify({"error": "prompt required"}), 400
+
+    messages = [{"role": "user", "content": prompt}]
+    settings = models.get_all_settings()
+    temp = settings.get("temperature", 0.7)
+    max_tok = settings.get("max_tokens", 4096)
+    sys_prompt = settings.get("system_prompt", "")
+
+    resolved_a = resolve_model(model_a)
+    resolved_b = resolve_model(model_b)
+
+    response_a, provider_a = router.dispatch(
+        list(messages), resolved_a, temperature=temp,
+        max_tokens=max_tok, system_prompt=sys_prompt, use_cache=False,
+    )
+    response_b, provider_b = router.dispatch(
+        list(messages), resolved_b, temperature=temp,
+        max_tokens=max_tok, system_prompt=sys_prompt, use_cache=False,
+    )
+
+    return jsonify({
+        "prompt": prompt,
+        "model_a": {"model": resolved_a, "provider": provider_a, "response": response_a},
+        "model_b": {"model": resolved_b, "provider": provider_b, "response": response_b},
+    })
+
+
+# ──── Cache ──────────────────────────────────────────────────────────
+
 @api_bp.route("/cache/stats", methods=["GET"])
 def cache_stats_endpoint():
     from apps.assistant.services.cache import cache_stats
