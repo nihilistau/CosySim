@@ -11,7 +11,7 @@ import os
 import threading
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import requests
 
@@ -331,6 +331,89 @@ class GithubCopilotClient:
                     pass
 
         return full_text, final_message_id
+
+    # ──── Streaming variant ──────────────────────────────────────────────────
+
+    # v1.0.0 [2026-03-23] — Token-by-token streaming for Assistant Platform
+    def send_message_stream(
+        self,
+        thread_id: str,
+        content: str,
+        model: str = "claude-sonnet-4.6",
+        parent_message_id: str = "root",
+    ) -> Generator[str, None, None]:
+        """Send a message and yield response chunks as they arrive.
+
+        Same as send_message() but yields each content delta instead of
+        accumulating. Use this for real-time streaming UIs.
+
+        Args:
+            thread_id: Thread to post to.
+            content: User message text.
+            model: Copilot model ID.
+            parent_message_id: Parent message ID for threading.
+
+        Yields:
+            Content text chunks as they arrive from the SSE stream.
+        """
+        response_message_id = str(uuid.uuid4())
+        payload = {
+            "responseMessageID": response_message_id,
+            "content": content,
+            "intent": "conversation",
+            "references": [],
+            "context": [],
+            "currentURL": "https://github.com/copilot",
+            "streaming": True,
+            "confirmations": [],
+            "customInstructions": [],
+            "model": model,
+            "mode": "immersive",
+            "parentMessageID": parent_message_id,
+            "mediaContent": [],
+            "skillOptions": {"deepCodeSearch": False},
+            "requestTrace": False,
+        }
+
+        headers = self._base_headers()
+        headers["content-type"] = "text/event-stream"
+        headers["accept"] = "text/event-stream, text/event-stream"
+
+        url = f"{_API_BASE}/github/chat/threads/{thread_id}/messages"
+
+        resp = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            stream=True,
+            timeout=120,
+        )
+
+        if resp.status_code not in (200, 201):
+            raise RuntimeError(
+                f"send_message_stream returned {resp.status_code}: {resp.text[:200]}"
+            )
+
+        for raw_line in resp.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            if raw_line.startswith("data: "):
+                chunk_str = raw_line[6:]
+                if chunk_str.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(chunk_str)
+                    chunk_type = chunk.get("type", "")
+                    if chunk_type == "content":
+                        body = chunk.get("body", "")
+                        if body:
+                            yield body
+                    elif chunk_type == "complete":
+                        body = chunk.get("body", "")
+                        if body:
+                            yield body
+                except json.JSONDecodeError:
+                    pass
 
     # ──── High-level helpers ──────────────────────────────────────────────────
 

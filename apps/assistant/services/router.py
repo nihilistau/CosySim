@@ -110,8 +110,7 @@ def dispatch_stream(
     if backend == "lmstudio":
         yield from _stream_lmstudio(messages, resolved, temperature, max_tokens)
     elif backend == "copilot":
-        text = _call_copilot(messages, resolved)
-        yield text
+        yield from _stream_copilot(messages, resolved)
     elif backend == "nlm":
         text = _call_nlm(messages)
         yield text
@@ -144,6 +143,29 @@ def _call_copilot(messages: List[Dict[str, Any]], model: str) -> str:
     if isinstance(response, tuple):
         return response[0] if response[0] else str(response)
     return str(response)
+
+
+def _stream_copilot(messages: List[Dict[str, Any]], model: str) -> Generator[str, None, None]:
+    """Stream from GitHub Copilot token-by-token."""
+    from engine.integrations.github_copilot_client import GithubCopilotClient
+
+    account = DEFAULT_SETTINGS.get("account", "nihilistcod")
+    client = GithubCopilotClient(account)
+    thread_id = client.create_thread()
+
+    parts = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if role == "system":
+            parts.append(f"System: {content}")
+        elif role == "assistant":
+            parts.append(f"Assistant: {content}")
+        else:
+            parts.append(content)
+    prompt = "\n\n".join(parts)
+
+    yield from client.send_message_stream(thread_id, prompt, model=model)
 
 
 def _call_lmstudio(
