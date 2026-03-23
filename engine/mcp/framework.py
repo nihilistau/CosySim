@@ -474,7 +474,8 @@ class MCPCharacterNode:
         try:
             from engine.mcp.character_registry import get_character_registry
             return get_character_registry().get_character_summary(self.character_id) or {}
-        except Exception:
+        except Exception as e:
+            logger.debug("[MCPCharacterNode] get_summary failed (operation=get_summary): %s", e)
             return {"character_id": self.character_id}
 
     def get_state(self) -> Dict:
@@ -483,7 +484,8 @@ class MCPCharacterNode:
             from engine.mcp.character_registry import get_character_registry
             state = get_character_registry().get_state(self.character_id)
             return state.__dict__ if state else {}
-        except Exception:
+        except Exception as e:
+            logger.debug("[MCPCharacterNode] get_state failed (operation=get_state): %s", e)
             return {}
 
     def update_state(self, data: Dict) -> None:
@@ -500,7 +502,8 @@ class MCPCharacterNode:
         try:
             from engine.mcp.character_registry import get_character_registry
             return get_character_registry().has_skill(self.character_id, skill_id)
-        except Exception:
+        except Exception as e:
+            logger.debug("[MCPCharacterNode] has_skill check failed (operation=has_skill): %s", e)
             return False
 
     def brief(self) -> str:
@@ -654,7 +657,8 @@ class MCPSceneNode:
         try:
             from engine.mcp.scene_rules_engine import get_rules_engine
             return get_rules_engine().get_available_actions(self.scene_id, character_id, stats=stats)
-        except Exception:
+        except Exception as e:
+            logger.debug("[MCPSceneNode] get_available_actions failed (operation=get_actions): %s", e)
             return []
 
     # ── Present characters ────────────────────────────────────────────
@@ -1314,7 +1318,8 @@ class MCPFramework:
             try:
                 from engine.config import get_config
                 data_dir = get_config().get("paths.data_dir", "./data")
-            except Exception:
+            except Exception as e:
+                logger.debug("[MCPFramework] Config unavailable for save path (operation=save_state): %s", e)
                 data_dir = "./data"
             path = str(Path(data_dir) / "mcp_framework_state.json")
 
@@ -1364,7 +1369,8 @@ class MCPFramework:
             try:
                 from engine.config import get_config
                 data_dir = get_config().get("paths.data_dir", "./data")
-            except Exception:
+            except Exception as e:
+                logger.debug("[MCPFramework] Config unavailable for load path (operation=load_state): %s", e)
                 data_dir = "./data"
             path = str(Path(data_dir) / "mcp_framework_state.json")
 

@@ -191,11 +191,13 @@ class HousekeepingService:
         """Check health of all external services."""
         import requests
 
+        from engine.port_registry import get_service_url
+
         services = {
-            "lmstudio": {"url": "http://localhost:1234/api/v1/models", "status": "unknown"},
-            "comfyui": {"url": "http://127.0.0.1:8188/system_stats", "status": "unknown"},
-            "tts": {"url": "http://localhost:8600/health", "status": "unknown"},
-            "mcp_bridge": {"url": "http://localhost:8601/health", "status": "unknown"},
+            "lmstudio": {"url": get_service_url("lmstudio", "/api/v1/models"), "status": "unknown"},
+            "comfyui": {"url": get_service_url("comfyui", "/system_stats"), "status": "unknown"},
+            "tts": {"url": get_service_url("tts", "/health"), "status": "unknown"},
+            "mcp_bridge": {"url": get_service_url("bridge", "/health"), "status": "unknown"},
         }
 
         for name, info in services.items():

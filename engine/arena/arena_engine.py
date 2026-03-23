@@ -38,7 +38,9 @@ logger = logging.getLogger(__name__)
 # Module constants
 # ---------------------------------------------------------------------------
 
-_LMSTUDIO_DEFAULT_URL: str = "http://localhost:1234"
+def _lmstudio_default_url() -> str:
+    from engine.port_registry import get_service_url
+    return get_service_url("lmstudio")
 _AGENT_MAX_TOKENS: int = 150
 _AGENT_TEMPERATURE: float = 0.8
 _COMMENTARY_MAX_TOKENS: int = 120
@@ -440,7 +442,7 @@ class ArenaEngine:
         self._matches: Dict[str, ArenaMatch] = {}
         self._fighter_profiles: Dict[str, Fighter] = {}
         self._lmstudio_url: str = self._cfg.get(
-            "lmstudio.base_url", _LMSTUDIO_DEFAULT_URL
+            "lmstudio.base_url", _lmstudio_default_url()
         )
         logger.info("ArenaEngine initialised (lmstudio=%s)", self._lmstudio_url)
 
@@ -1407,8 +1409,8 @@ class ArenaEngine:
                     if isinstance(content, str):
                         content = _json.loads(content)
                     fighters[fid] = Fighter.from_dict(content)
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("[ArenaEngine] Failed to parse fighter entry %s (operation=leaderboard): %s", fid, e)
         except Exception as exc:  # noqa: BLE001
             logger.debug("Leaderboard Nexus search failed: %s", exc)
 

@@ -3,6 +3,7 @@ Video Message Service
 Handles video message generation (async video clips with character)
 """
 
+import logging
 import os
 import uuid
 import subprocess
@@ -18,6 +19,8 @@ from content.simulation.database.db import Database
 from content.simulation.services.media_generator import MediaGenerator
 from content.simulation.services.voice_message import VoiceMessageGenerator
 from engine.assets import AssetManager, VideoAsset
+
+logger = logging.getLogger(__name__)
 
 
 class VideoMessageGenerator:
@@ -46,7 +49,8 @@ class VideoMessageGenerator:
             spec = get_media_config().video_spec("message")
             self.fps = spec.get("fps", 24)
             self.resolution = (spec.get("width", 640), spec.get("height", 480))
-        except Exception:
+        except Exception as e:
+            logger.debug("[VideoMessage] MediaConfig unavailable, using defaults (operation=init): %s", e)
             self.fps = 24
             self.resolution = (640, 480)
     
@@ -172,8 +176,8 @@ class VideoMessageGenerator:
                         chain_id=chain_id, scene_id=scene_id,
                         character_id=character_id,
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[VideoMessage] EventChain log failed (operation=generate): %s", e)
 
             # MCP: publish to ActivityBus
             try:
@@ -185,8 +189,8 @@ class VideoMessageGenerator:
                     scene=scene_id,
                     data={"filename": Path(video_path).name if video_path else "", "duration": audio_data.get("duration", 0), "mood": mood, "chain_id": chain_id},
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[VideoMessage] ActivityBus publish failed (operation=generate): %s", e)
 
             return result
         

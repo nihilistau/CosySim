@@ -281,8 +281,8 @@ class PresetManager:
                     p.builtin = False
                     with self._lock:
                         self._presets[p.id] = p
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[PresetManager] Failed to parse custom preset (operation=load_custom): %s", e)
         except Exception:
             logger.debug("Could not load custom presets from Nexus", exc_info=True)
 

@@ -23,7 +23,8 @@ from engine.config import get_config
 
 try:
     from engine.integrations.nlm_rpc_registry import get_rpc_registry as _get_registry
-except Exception:
+except Exception as e:
+    logging.getLogger(__name__).debug("[NLMRpcConstants] RPC registry unavailable (operation=import): %s", e)
     _get_registry = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,8 @@ class _RateLimiter:
 def _get_rate_limit() -> float:
     try:
         return float(get_config().get("notebooklm.rate_limit_seconds", 1.5))
-    except Exception:
+    except Exception as e:
+        logger.debug("[NLMRpcConstants] Config unavailable, using default rate limit (operation=get_rate_limit): %s", e)
         return 1.5
 
 
@@ -98,8 +100,8 @@ def _rpc(operation: str, fallback: str) -> str:
             rpcid = reg.get_rpcid(operation)
             if rpcid:
                 return rpcid
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[NLMRpcConstants] YAML registry lookup failed (operation=resolve_rpc_id): %s", e)
     if _registry_available:
         rid = _get_rpc_id(operation)
         if rid:
@@ -358,8 +360,8 @@ if _get_registry is not None:
         if _sc:
             _SOURCE_CONFIG = _sc
         del _reg, _wc, _sc
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[NLMRpcConstants] Shared config load failed (operation=init): %s", e)
 
 # gRPC endpoint for real free-form chat (GenerateFreeFormStreamed)
 _GRPC_CHAT_URL = (

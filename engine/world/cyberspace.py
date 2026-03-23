@@ -186,8 +186,8 @@ class CyberspaceEngine:
         try:
             from engine.world.event_cascade import get_event_cascade
             get_event_cascade().emit(f"cyberspace_{event}", data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CyberspaceEngine] Event cascade emit failed (operation=fire_event): %s", e)
 
     # ── Network Management ────────────────────────────────────────────────
 

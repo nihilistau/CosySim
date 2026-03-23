@@ -623,8 +623,9 @@ class CosySimTUI(App[None]):
 
         # Nexus health
         try:
+            from engine.port_registry import get_service_url
             req = urllib.request.Request(
-                "http://localhost:8700/api/health",
+                get_service_url("nexus", "/api/health"),
                 headers={"Accept": "application/json"},
             )
             with urllib.request.urlopen(req, timeout=3) as resp:
@@ -652,8 +653,9 @@ class CosySimTUI(App[None]):
             except Exception:
                 pass
 
+            from engine.port_registry import get_service_url
             req = urllib.request.Request(
-                "http://localhost:1234/api/v1/models",
+                get_service_url("lmstudio", "/api/v1/models"),
                 headers=headers,
             )
             with urllib.request.urlopen(req, timeout=3) as resp:

@@ -79,12 +79,15 @@ Quick start::
 """
 from __future__ import annotations
 
+import logging
 import random
 import re
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -769,8 +772,8 @@ class DialogSystem:
                     context=f"dialog_turn:{turn} char:{character_id} scene:{scene}",
                     source="dialog_mood",
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[DialogSystem] Data collection failed (operation=record_turn): %s", e)
 
     def get_branch_point(
         self,

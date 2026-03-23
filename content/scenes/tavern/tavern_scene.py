@@ -447,8 +447,8 @@ class TavernScene(FlaskScene):
                         "tavern.quest_accepted",
                         {"quest_id": quest_id, "title": q.title},
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
                 sio.emit("quest_started", {
                     "quest_id": quest_id,
                     "title": q.title,
@@ -493,8 +493,8 @@ class TavernScene(FlaskScene):
                         transaction_type=TransactionType.SPEND,
                         description=f"Ordered {item.name} at The Rusty Anchor",
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
             from .tavern_skills import buy_drink_and_rumor
             result = buy_drink_and_rumor(drink_name=drink)
             self._sync_mcp_state()
@@ -528,8 +528,8 @@ class TavernScene(FlaskScene):
         """Push event to all connected WebSocket clients."""
         try:
             self.socketio.emit(event, data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
 
     # ------------------------------------------------------------------
     #  BaseScene interface
@@ -549,8 +549,8 @@ class TavernScene(FlaskScene):
             try:
                 self._event_bus_ref.unsubscribe("world.tick", self._on_world_tick)
                 self._event_bus_ref.unsubscribe("world.time_change", self._on_time_change)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:
@@ -563,8 +563,8 @@ class TavernScene(FlaskScene):
                     "day": getattr(time_data, "day", 1),
                     "weather": str(getattr(time_data, "weather", "clear")),
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
 
     def _on_time_change(self, event: dict) -> None:
         """Last call at 02:00 — refresh quest board at dawn (06:00)."""

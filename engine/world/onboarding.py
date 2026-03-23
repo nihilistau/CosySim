@@ -630,8 +630,8 @@ class OnboardingManager:
         try:
             from engine.world.event_cascade import get_event_cascade
             get_event_cascade().emit(f"onboarding_{event}", data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OnboardingManager] Event cascade emit failed (operation=fire_event): %s", e)
 
     # ── Core API ─────────────────────────────────────────────────────────
 
@@ -857,7 +857,8 @@ class OnboardingManager:
         """
         try:
             ps = _player_state()
-        except Exception:
+        except Exception as e:
+            logger.debug("[OnboardingManager] PlayerState unavailable (operation=check_passive_progress): %s", e)
             return None
 
         result = None
@@ -875,8 +876,8 @@ class OnboardingManager:
                 if "faction_standing" not in self._completed_objectives:
                     extra = self.advance("faction_standing")
                     result = result or extra
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[OnboardingManager] Faction standing check failed (operation=check_passive_progress): %s", e)
 
         return result
 
@@ -1130,8 +1131,8 @@ class OnboardingManager:
             try:
                 if self._SAVE_PATH.exists():
                     self._SAVE_PATH.unlink()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[OnboardingManager] Save file cleanup failed (operation=reset): %s", e)
 
         logger.info("OnboardingManager: reset to defaults")
 

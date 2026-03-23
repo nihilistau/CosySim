@@ -237,8 +237,8 @@ class CrewManager:
                     f"{character_id} doesn't trust you enough (score {score:+.1f}, "
                     f"need {_MIN_RECRUIT_SCORE:+.1f}). Build the relationship first."
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CrewManager] Relationship check failed (operation=can_recruit): %s", e)
         return True, "OK"
 
     def recruit(
@@ -278,8 +278,8 @@ class CrewManager:
                         f"{character_id} doesn't trust you enough (score {score:+.1f}, "
                         f"need {_MIN_RECRUIT_SCORE:+.1f}). Build the relationship first."
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CrewManager] Relationship check failed (operation=recruit): %s", e)
 
         if role not in CREW_ROLES:
             role = "unknown"
@@ -297,8 +297,8 @@ class CrewManager:
         try:
             profile = get_player_profile()
             profile.add_crew_member(character_id, crew_tag=f"crew:{role}", notes=notes)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CrewManager] PlayerProfile update failed (operation=recruit): %s", e)
 
         self._save()
         logger.info("CrewManager: %s recruited as %s", character_id, role)
@@ -323,8 +323,8 @@ class CrewManager:
         try:
             profile = get_player_profile()
             profile.set_relationship_type(character_id, "friend", notes=f"Left crew: {reason}" if reason else "Left crew")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CrewManager] PlayerProfile update failed (operation=dismiss): %s", e)
 
         self._save()
         logger.info("CrewManager: %s dismissed (%s)", character_id, reason)
@@ -453,8 +453,8 @@ class CrewManager:
             try:
                 from engine.world.player_state import get_player_state
                 get_player_state().earn_credits(op.reward_credits, reason=f"crew_op:{op.op_type}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CrewManager] Credit reward failed (operation=complete_op): %s", e)
 
         return {
             "op_id": op.op_id,
@@ -555,8 +555,8 @@ class CrewManager:
             for op_data in data.get("operations", []):
                 try:
                     self._operations.append(CrewOperation.from_dict(op_data))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CrewManager] Operation load skipped (operation=load): %s", e)
         logger.info("CrewManager loaded: %d members, %d operations", len(self._members), len(self._operations))
 
 

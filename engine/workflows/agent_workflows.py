@@ -79,7 +79,7 @@ def knowledge_distill(
     topic: str = "",
     categories: Optional[List[str]] = None,
     output_path: str = "training/datasets/custom/distilled.jsonl",
-    nexus_url: str = "http://localhost:8700",
+    nexus_url: str = "",
     max_items: int = 500,
 ) -> WorkflowResult:
     """Extract knowledge from Nexus and distill into training-ready format.
@@ -96,6 +96,9 @@ def knowledge_distill(
     Returns:
         WorkflowResult with distillation stats.
     """
+    if not nexus_url:
+        from engine.port_registry import get_service_url
+        nexus_url = get_service_url("nexus")
     start = time.time()
     result = WorkflowResult(workflow="knowledge_distill")
 
@@ -204,7 +207,7 @@ def dataset_curate(
     sources: Optional[List[str]] = None,
     output_dir: str = "training/datasets/custom",
     fmt: str = "instruction",
-    nexus_url: str = "http://localhost:8700",
+    nexus_url: str = "",
     min_quality: float = 0.5,
 ) -> WorkflowResult:
     """Multi-source dataset curation with quality scoring.
@@ -219,6 +222,9 @@ def dataset_curate(
     Returns:
         WorkflowResult with curation stats.
     """
+    if not nexus_url:
+        from engine.port_registry import get_service_url
+        nexus_url = get_service_url("nexus")
     start = time.time()
     result = WorkflowResult(workflow="dataset_curate")
 
@@ -276,7 +282,7 @@ def research_pipeline(
     question: str,
     depth: str = "shallow",
     output_path: Optional[str] = None,
-    nexus_url: str = "http://localhost:8700",
+    nexus_url: str = "",
 ) -> WorkflowResult:
     """Automated research with source synthesis.
 
@@ -291,6 +297,9 @@ def research_pipeline(
     Returns:
         WorkflowResult with research findings.
     """
+    if not nexus_url:
+        from engine.port_registry import get_service_url
+        nexus_url = get_service_url("nexus")
     start = time.time()
     result = WorkflowResult(workflow="research_pipeline")
 
@@ -603,10 +612,13 @@ WORKFLOWS = {
 
 
 def run_all(
-    nexus_url: str = "http://localhost:8700",
+    nexus_url: str = "",
     output_base: str = "data/workflow_results",
 ) -> List[WorkflowResult]:
     """Run all workflows and collect results."""
+    if not nexus_url:
+        from engine.port_registry import get_service_url
+        nexus_url = get_service_url("nexus")
     results = []
     Path(output_base).mkdir(parents=True, exist_ok=True)
 
@@ -642,17 +654,17 @@ def main() -> None:
     p_distill = sub.add_parser("distill", help="Knowledge distillation from Nexus")
     p_distill.add_argument("--topic", default="", help="Focus topic")
     p_distill.add_argument("--output", default="training/datasets/custom/distilled.jsonl")
-    p_distill.add_argument("--nexus-url", default="http://localhost:8700")
+    p_distill.add_argument("--nexus-url", default="")
 
     p_curate = sub.add_parser("curate", help="Dataset curation")
     p_curate.add_argument("--output", default="training/datasets/custom")
     p_curate.add_argument("--format", default="instruction", choices=["instruction", "chat_ml", "sharegpt"])
-    p_curate.add_argument("--nexus-url", default="http://localhost:8700")
+    p_curate.add_argument("--nexus-url", default="")
 
     p_research = sub.add_parser("research", help="Research pipeline")
     p_research.add_argument("--question", required=True, help="Research question")
     p_research.add_argument("--output", default=None)
-    p_research.add_argument("--nexus-url", default="http://localhost:8700")
+    p_research.add_argument("--nexus-url", default="")
 
     p_metrics = sub.add_parser("metrics", help="Metrics extraction")
     p_metrics.add_argument("--scope", default="all", choices=["tests", "codebase", "training", "all"])

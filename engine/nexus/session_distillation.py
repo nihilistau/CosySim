@@ -32,8 +32,20 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
-NLM_PROXY_URL = os.environ.get("NLM_PROXY_URL", "http://localhost:8800")
+def _get_nexus_url() -> str:
+    env = os.environ.get("NEXUS_URL")
+    if env:
+        return env
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
+
+
+def _get_nlm_proxy_url() -> str:
+    env = os.environ.get("NLM_PROXY_URL")
+    if env:
+        return env
+    from engine.port_registry import get_service_url
+    return get_service_url("nlm_proxy")
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 STATE_FILE = (
     REPO_ROOT / ".github" / "hooks" / "logs" / "session_distillation.json"
@@ -65,7 +77,7 @@ DISTILLATION_QUESTIONS: List[str] = [
 def _nexus_get(path: str, timeout: int = 8) -> Optional[Any]:
     """GET from Nexus API. Returns parsed JSON or None."""
     try:
-        url = f"{NEXUS_URL}/api{path}"
+        url = f"{_get_nexus_url()}/api{path}"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read())
@@ -77,7 +89,7 @@ def _nexus_get(path: str, timeout: int = 8) -> Optional[Any]:
 def _nexus_post(path: str, data: Dict[str, Any], timeout: int = 8) -> Optional[Dict]:
     """POST to Nexus API. Returns response dict or None."""
     try:
-        url = f"{NEXUS_URL}/api{path}"
+        url = f"{_get_nexus_url()}/api{path}"
         body = json.dumps(data).encode()
         req = urllib.request.Request(
             url, data=body, method="POST",
@@ -93,7 +105,7 @@ def _nexus_post(path: str, data: Dict[str, Any], timeout: int = 8) -> Optional[D
 def _nlm_post(path: str, data: Dict[str, Any], timeout: int = 60) -> Optional[Dict]:
     """POST to NLM proxy. Returns response dict or None."""
     try:
-        url = f"{NLM_PROXY_URL}{path}"
+        url = f"{_get_nlm_proxy_url()}{path}"
         body = json.dumps(data).encode()
         req = urllib.request.Request(
             url, data=body, method="POST",
@@ -109,7 +121,7 @@ def _nlm_post(path: str, data: Dict[str, Any], timeout: int = 60) -> Optional[Di
 def _nlm_get(path: str, timeout: int = 10) -> Optional[Any]:
     """GET from NLM proxy. Returns parsed JSON or None."""
     try:
-        url = f"{NLM_PROXY_URL}{path}"
+        url = f"{_get_nlm_proxy_url()}{path}"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read())
@@ -413,7 +425,7 @@ def run_distillation(
     if not notebook_id:
         logger.error(
             "Cannot proceed: NLM proxy unavailable or notebook creation failed. "
-            "Start the NLM proxy at %s first.", NLM_PROXY_URL
+            "Start the NLM proxy at %s first.", _get_nlm_proxy_url()
         )
         stats["error"] = "NLM proxy unavailable"
         return stats

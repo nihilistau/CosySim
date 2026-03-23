@@ -56,8 +56,10 @@ def create_bridge_app(
         try:
             from engine.lmstudio.lms_client import get_lms_client
             lmstudio_url = get_lms_client().base_url
-        except Exception:
-            lmstudio_url = "http://127.0.0.1:1234"
+        except Exception as e:
+            logger.debug("[WebBridge] LMSClient unavailable, using default URL (operation=init): %s", e)
+            from engine.port_registry import get_service_url
+            lmstudio_url = get_service_url("lmstudio")
 
     app = FastAPI(title="CosySim Bridge", version="1.0.0")
 
@@ -82,7 +84,8 @@ def create_bridge_app(
                 from engine.utils import get_lmstudio_headers
                 r = await client.get(f"{lmstudio_url}/api/v1/models", headers=get_lmstudio_headers(), timeout=3.0)
                 lms_ok = r.status_code == 200
-        except Exception:
+        except Exception as e:
+            logger.debug("[WebBridge] LMStudio health check failed (operation=health): %s", e)
             lms_ok = False  # LMStudio unreachable — expected when offline
         return {
             "status": "ok",

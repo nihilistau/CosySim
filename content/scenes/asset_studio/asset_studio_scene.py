@@ -370,8 +370,8 @@ class AssetStudioScene(FlaskScene):
                     "url": flask_url,
                     "filename": filename,
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Asset update emit failed (operation=inject): %s", SCENE_ID, e)
 
             logger.info("[%s] Injected asset (operation=inject): %s → %s", SCENE_ID, source_filename, target_path)
             return jsonify({

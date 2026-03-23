@@ -154,8 +154,11 @@ class VoiceStudio:
     Integrates with VoiceDesigner for persistence and Qwen3-TTS for generation.
     """
 
-    def __init__(self, db, voice_dir: Optional[str] = None, tts_url: str = "http://localhost:8600"):
+    def __init__(self, db, voice_dir: Optional[str] = None, tts_url: str = ""):
         self.db = db
+        if not tts_url:
+            from engine.port_registry import get_service_url
+            tts_url = get_service_url("tts")
         self.tts_url = tts_url.rstrip("/")
         self.voice_dir = Path(voice_dir) if voice_dir else VOICE_DIR
         self.voice_dir.mkdir(parents=True, exist_ok=True)

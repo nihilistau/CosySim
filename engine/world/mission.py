@@ -641,8 +641,8 @@ class MissionManager:
         # Minor rep penalty
         try:
             get_player_state().adjust_reputation(-3, reason=f"abandoned:{mission_id}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MissionManager] Rep penalty failed (operation=abandon): %s", e)
 
         self._save()
         self._fire_event("mission_abandoned", mission_id, m.title)
@@ -669,8 +669,8 @@ class MissionManager:
         # Rep penalty scales with difficulty
         try:
             get_player_state().adjust_reputation(-(m.difficulty * 3), reason=f"failed:{mission_id}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MissionManager] Rep penalty failed (operation=fail): %s", e)
 
         self._save()
         self._fire_event("mission_failed", mission_id, m.title)

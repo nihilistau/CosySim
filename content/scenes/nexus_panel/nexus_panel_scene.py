@@ -1104,7 +1104,7 @@ class NexusPanelScene(FlaskScene):
                     notebook_id=nb_id,
                     store_in_nexus=data.get("store_in_nexus", False),
                     nexus_category=data.get("nexus_category", "distillation"),
-                    nexus_url=get_config().get("nexus.url", "http://localhost:8700"),
+                    nexus_url=get_config().get("nexus.base_url", "http://localhost:8700"),
                 )
                 self._log_activity("studio_flashcards",
                                    f"{result.get('count', 0)} cards from {nb_id}", "studio")
@@ -1126,7 +1126,7 @@ class NexusPanelScene(FlaskScene):
                     notebook_id=nb_id,
                     store_in_nexus=data.get("store_in_nexus", False),
                     nexus_category=data.get("nexus_category", "distillation"),
-                    nexus_url=get_config().get("nexus.url", "http://localhost:8700"),
+                    nexus_url=get_config().get("nexus.base_url", "http://localhost:8700"),
                 )
                 self._log_activity("studio_quiz",
                                    f"{result.get('count', 0)} questions from {nb_id}", "studio")
@@ -1192,7 +1192,7 @@ class NexusPanelScene(FlaskScene):
                 result = get_nlm_node_bridge().distill_to_nexus(
                     notebook_id=nb_id,
                     nexus_category=data.get("nexus_category", "distillation"),
-                    nexus_url=get_config().get("nexus.url", "http://localhost:8700"),
+                    nexus_url=get_config().get("nexus.base_url", "http://localhost:8700"),
                 )
                 total = result.get("nexus_count", 0)
                 self._log_activity("distill_to_nexus",

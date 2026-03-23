@@ -285,8 +285,8 @@ class AnonymousCharacter:
                 if row and row[0]:
                     m = json.loads(row[0])
                     return m.get("anon_state", self._default_state())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[AnonymousCharacter] Failed to load state (operation=load_state): %s", e)
         return self._default_state()
 
     def _default_state(self) -> Dict:
@@ -400,8 +400,8 @@ class AnonymousCharacter:
                 scene="phone",
                 data={"persona_type": self.persona_type, "msg_count": self.state["message_count"], "reply_to": bool(user_reply)},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[AnonymousCharacter] ActivityBus publish failed (operation=send_message): %s", e)
 
         return response
 
@@ -572,8 +572,8 @@ class AnonymousCharacter:
                 delta = datetime.now() - datetime.fromisoformat(last)
                 if delta < timedelta(hours=2):
                     return False
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[AnonymousCharacter] Failed to parse last_contact (operation=should_reach_out): %s", e)
 
         return random.random() < 0.05  # 5% chance per check
 

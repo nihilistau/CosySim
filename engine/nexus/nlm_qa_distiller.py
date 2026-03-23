@@ -204,9 +204,15 @@ class NLMQADistiller:
 
     def __init__(
         self,
-        proxy_url: str = "http://localhost:8800",
-        nexus_url: str = "http://localhost:8700",
+        proxy_url: str = "",
+        nexus_url: str = "",
     ) -> None:
+        if not proxy_url:
+            from engine.port_registry import get_service_url
+            proxy_url = get_service_url("nlm_proxy")
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self._proxy_url = proxy_url.rstrip("/")
         self._nexus_url = nexus_url.rstrip("/")
 
@@ -699,7 +705,7 @@ if __name__ == "__main__":
     parser.add_argument("--questions", type=int, default=20, help="Number of questions")
     parser.add_argument("--templates", action="store_true", help="List available templates")
     parser.add_argument("--bulk", action="store_true", help="Distill all templates")
-    parser.add_argument("--proxy", default="http://localhost:8800", help="NLM proxy URL")
+    parser.add_argument("--proxy", default="", help="NLM proxy URL")
     args = parser.parse_args()
 
     if args.templates:

@@ -1,5 +1,8 @@
+import logging
 import re, json, urllib.parse, base64
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 OUT = Path("data/heap_output/gemini_aistudio_analysis")
 HAR_DIR = Path("data/har_files")
@@ -21,7 +24,8 @@ for e in har["log"]["entries"]:
                     if isinstance(item, list) and len(item) >= 3 and item[0] == "wrb.fr":
                         inner = json.loads(item[2]) if isinstance(item[2], str) else item[2]
                         print(json.dumps(inner, indent=2)[:3000])
-            except: pass
+            except (ValueError, json.JSONDecodeError, KeyError, IndexError) as e:
+                logger.debug("[analyze_gemini_deep2] Failed to decode otAQ7b response (operation=rpcid_decode): %s", e)
 
 # ── NXpLKc Gemini↔NLM notebook link ──────────────────────────────────────
 print("\n=== GEMINI↔NLM NOTEBOOK LINK (NXpLKc) ===")
@@ -38,7 +42,8 @@ for e in har["log"]["entries"]:
                 for item in chunk:
                     if isinstance(item, list) and len(item) >= 3 and item[0] == "wrb.fr":
                         print(json.dumps(json.loads(item[2]) if isinstance(item[2],str) else item[2], indent=2)[:2000])
-            except: pass
+            except (ValueError, json.JSONDecodeError, KeyError, IndexError) as e:
+                logger.debug("[analyze_gemini_deep2] Failed to decode NXpLKc response (operation=rpcid_decode): %s", e)
 
 # ── ProxyUnaryCall thought signature ─────────────────────────────────────
 print("\n=== ProxyUnaryCall THOUGHT SIGNATURE ===")

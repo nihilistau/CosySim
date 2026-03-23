@@ -269,8 +269,8 @@ class AssetStudioCore:
                     "url": result.get("url", ""),
                     "error": result.get("error", ""),
                 })
-        except Exception:
-            pass  # Socket emission is best-effort.
+        except Exception as e:
+            logger.debug("[StudioCore] Socket event emission failed (operation=emit_event): %s", e)
 
     # ── Generator factory ─────────────────────────────────────────────────────
 

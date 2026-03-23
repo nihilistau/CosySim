@@ -127,23 +127,21 @@ def _list_layouts() -> List[Dict[str, Any]]:
 # CALLED BY: /api/creation-kit/export route
 # EMITS: Scene directory with HTML/CSS/JS/Python
 
-def _export_component_html(comp: Dict[str, Any]) -> str:
-    """Render a single component instance to HTML.
+def _compute_shared_props(
+    comp: Dict[str, Any],
+    comp_def: Dict[str, Any],
+    props: Dict[str, Any],
+) -> None:
+    """Compute shared/universal props: pct, variant_cls, status_cls, id_attr, slots, inv_slots, tab_buttons.
+
+    Mutates *props* in-place.
 
     Args:
         comp: Component instance with type + props.
-
-    Returns:
-        HTML string.
+        comp_def: Component definition from the registry.
+        props: Merged default + instance props dict.
     """
-    comp_def = get_component(comp.get("type", ""))
-    if not comp_def:
-        return f'<!-- Unknown component: {comp.get("type", "?")} -->'
-
-    template = comp_def["html_template"]
-    props = {**comp_def["default_props"], **comp.get("props", {})}
-
-    # Handle computed props
+    # Percentage for stat bars
     if "pct" not in props and "value" in props and "max_value" in props:
         max_v = max(1, props.get("max_value", 100))
         props["pct"] = round((props.get("value", 0) / max_v) * 100)
@@ -185,23 +183,34 @@ def _export_component_html(comp: Dict[str, Any]) -> str:
             for i, t in enumerate(tabs)
         )
 
+
+def _compute_component_props(comp: Dict[str, Any], props: Dict[str, Any]) -> None:
+    """Compute per-component-type props (all the if/elif blocks).
+
+    Mutates *props* in-place.
+
+    Args:
+        comp: Component instance with type + props.
+        props: Merged default + instance props dict.
+    """
     # Faction rows helper
-    if "faction_rows" not in props and comp.get("type") == "faction_bars":
-        rows = []
-        for entry in props.get("factions", "").split(","):
-            parts = entry.strip().split(":")
-            if len(parts) == 3:
-                name, color, power = parts
-                rows.append(
-                    f'  <div class="faction-row" data-faction="{name}">\n'
-                    f'    <span class="faction-name" style="color:{color}">{name}</span>\n'
-                    f'    <div class="faction-bar-track">\n'
-                    f'      <div class="faction-bar-fill" style="width:{power}%;background:{color}"></div>\n'
-                    f'    </div>\n'
-                    f'    <span class="faction-power">{power}</span>\n'
-                    f'  </div>'
-                )
-        props["faction_rows"] = "\n".join(rows)
+    if comp.get("type") == "faction_bars":
+        if "faction_rows" not in props:
+            rows = []
+            for entry in props.get("factions", "").split(","):
+                parts = entry.strip().split(":")
+                if len(parts) == 3:
+                    name, color, power = parts
+                    rows.append(
+                        f'  <div class="faction-row" data-faction="{name}">\n'
+                        f'    <span class="faction-name" style="color:{color}">{name}</span>\n'
+                        f'    <div class="faction-bar-track">\n'
+                        f'      <div class="faction-bar-fill" style="width:{power}%;background:{color}"></div>\n'
+                        f'    </div>\n'
+                        f'    <span class="faction-power">{power}</span>\n'
+                        f'  </div>'
+                    )
+            props["faction_rows"] = "\n".join(rows)
 
     # Clock/credits helpers
     if comp.get("type") == "scene_header":
@@ -474,6 +483,26 @@ def _export_component_html(comp: Dict[str, Any]) -> str:
                 )
         props["zone_buttons"] = "\n".join(buttons)
 
+
+def _export_component_html(comp: Dict[str, Any]) -> str:
+    """Render a single component instance to HTML.
+
+    Args:
+        comp: Component instance with type + props.
+
+    Returns:
+        HTML string.
+    """
+    comp_def = get_component(comp.get("type", ""))
+    if not comp_def:
+        return f'<!-- Unknown component: {comp.get("type", "?")} -->'
+
+    template = comp_def["html_template"]
+    props = {**comp_def["default_props"], **comp.get("props", {})}
+
+    _compute_shared_props(comp, comp_def, props)
+    _compute_component_props(comp, props)
+
     # Render template with safe formatting
     try:
         return template.format(**props)
@@ -604,26 +633,20 @@ def _collect_ids(components: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     return ids
 
 
-def export_scene_css(layout: Dict[str, Any]) -> str:
-    """Generate scene-specific CSS from layout configuration.
-
-    Derives a full color palette from the accent color and generates
-    styles for all CK-prefixed components used in the layout.
+def _css_root_palette(accent: str, r: int, g: int, b: int, name: str) -> str:
+    """Generate the file header and :root CSS block with the scene palette.
 
     Args:
-        layout: Full layout dict.
+        accent: Hex accent color string.
+        r: Red component (0-255).
+        g: Green component (0-255).
+        b: Blue component (0-255).
+        name: Human-readable scene name.
 
     Returns:
-        CSS file content string.
+        CSS string for the header + :root block.
     """
-    accent = layout.get("accent_color", "#06b6d4")
-    scene_key = layout.get("scene_key", "scene")
-    name = layout.get("name", "Scene")
-    r, g, b = _hex_to_rgb(accent)
-
-    types = _collect_types(layout.get("components", []))
-
-    css = f"""/* ============================================================
+    return f"""/* ============================================================
    {name} — Scene Styles
    Generated by Creation Kit v1.49
    Accent: {accent}
@@ -648,6 +671,23 @@ def export_scene_css(layout: Dict[str, Any]) -> str:
 }}
 
 """
+
+
+def _css_component_blocks(types: set, r: int, g: int, b: int) -> str:
+    """Generate conditional per-component CSS blocks.
+
+    Only emits CSS for component types actually present in *types*.
+
+    Args:
+        types: Set of component type strings used in the layout.
+        r: Red component (0-255).
+        g: Green component (0-255).
+        b: Blue component (0-255).
+
+    Returns:
+        CSS string with all matched component blocks.
+    """
+    css = ""
 
     # Component-specific CSS — only for types actually used
     if "ck-alert" in str(types) or "alert_banner" in types:
@@ -1154,8 +1194,16 @@ def export_scene_css(layout: Dict[str, Any]) -> str:
 
 """
 
-    # Always include scrollbar
-    css += """/* ── Scrollbar ─────────────────────────────────────────── */
+    return css
+
+
+def _css_responsive() -> str:
+    """Generate the scrollbar and responsive CSS (always included).
+
+    Returns:
+        CSS string for scrollbar + responsive media queries.
+    """
+    return """/* ── Scrollbar ─────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--scene-border); border-radius: 2px; }
 
@@ -1168,6 +1216,29 @@ def export_scene_css(layout: Dict[str, Any]) -> str:
 }
 """
 
+
+def export_scene_css(layout: Dict[str, Any]) -> str:
+    """Generate scene-specific CSS from layout configuration.
+
+    Derives a full color palette from the accent color and generates
+    styles for all CK-prefixed components used in the layout.
+
+    Args:
+        layout: Full layout dict.
+
+    Returns:
+        CSS file content string.
+    """
+    accent = layout.get("accent_color", "#06b6d4")
+    name = layout.get("name", "Scene")
+    r, g, b = _hex_to_rgb(accent)
+
+    types = _collect_types(layout.get("components", []))
+
+    css = _css_root_palette(accent, r, g, b, name)
+    css += _css_component_blocks(types, r, g, b)
+    css += _css_responsive()
+
     return css
 
 
@@ -1177,43 +1248,17 @@ def export_scene_css(layout: Dict[str, Any]) -> str:
 # CALLED BY: export_scene route
 # EMITS: JS file content
 
-def export_scene_js(layout: Dict[str, Any]) -> str:
-    """Generate scene-specific JavaScript from layout configuration.
-
-    Creates Socket.IO connection, element bindings, stat bar updaters,
-    chat log handlers, button wiring, toast system, and lifecycle.
+def _js_class_header(class_name: str, name: str) -> str:
+    """Generate JS class boilerplate: file header, constructor, lifecycle methods.
 
     Args:
-        layout: Full layout dict.
+        class_name: PascalCase JS class name.
+        name: Human-readable scene name.
 
     Returns:
-        JS file content string.
+        JS string through the start of _applyState.
     """
-    scene_key = layout.get("scene_key", "scene")
-    name = layout.get("name", "Scene")
-    components = layout.get("components", [])
-    types = _collect_types(components)
-    ids = _collect_ids(components)
-
-    # Collect stat bar IDs
-    stat_ids = [i for i in ids if i["type"] == "stat_bar" and i["prop"] == "stat_id"]
-    # Collect chat log IDs
-    chat_ids = [i for i in ids if i["type"] == "chat_log" and i["prop"] == "chat_id"]
-    chat_input_ids = [i for i in ids if i["type"] == "chat_log" and i["prop"] == "input_id"]
-    # Collect button IDs
-    btn_ids = [i for i in ids if i["type"] == "button" and i["prop"] == "btn_id" and i["id"]]
-    # Collect button_group buttons
-    btn_group_buttons = []
-    for comp in _flatten_components(components):
-        if comp.get("type") == "button_group":
-            for entry in comp.get("props", {}).get("buttons", "").split(","):
-                parts = entry.strip().split(":")
-                if len(parts) >= 3:
-                    btn_group_buttons.append({"text": parts[0], "id": parts[2]})
-
-    class_name = "".join(w.capitalize() for w in scene_key.split("_")) + "Scene"
-
-    js = f"""/**
+    return f"""/**
  * {name} — Scene Controller
  * Generated by Creation Kit v1.49
  *
@@ -1265,7 +1310,18 @@ class {class_name} {{
     this.state = state;
 """
 
-    # Stat bar updaters
+
+def _js_stat_updaters(stat_ids: List[Dict[str, str]], types: set) -> str:
+    """Generate stat bar update code inside _applyState.
+
+    Args:
+        stat_ids: List of stat bar ID dicts.
+        types: Set of component type strings.
+
+    Returns:
+        JS string for stat bar + HUD badge updaters, closing _applyState.
+    """
+    js = ""
     for sid in stat_ids:
         bar_id = sid["id"]
         val_id = f"val-{bar_id}"
@@ -1292,7 +1348,27 @@ class {class_name} {{
 """
 
     js += "  }\n\n"
+    return js
 
+
+def _js_ui_wiring(
+    btn_ids: List[Dict[str, str]],
+    btn_group_buttons: List[Dict[str, str]],
+    chat_input_ids: List[Dict[str, str]],
+    components: List[Dict[str, Any]],
+) -> str:
+    """Generate _setupUI method: button, chat, and interactive component wiring.
+
+    Args:
+        btn_ids: List of button ID dicts.
+        btn_group_buttons: List of button-group button dicts.
+        chat_input_ids: List of chat input ID dicts.
+        components: Full component tree (for flattening).
+
+    Returns:
+        JS string for the complete _setupUI method + action/sendMessage helpers.
+    """
+    js = ""
     # UI setup — wire buttons
     js += "  // ── UI wiring ──────────────────────────────────────────────────\n\n"
     js += "  _setupUI() {\n"
@@ -1397,58 +1473,23 @@ class {class_name} {{
 
 """
 
-    # Chat log helper
-    if chat_ids:
-        primary_chat = chat_ids[0]["id"]
-        js += f"""  // ── Chat log ──────────────────────────────────────────────────
+    return js
 
-  _addChatLine(text, type = '') {{
-    const feed = document.getElementById('{primary_chat}');
-    if (!feed) return;
-    const div = document.createElement('div');
-    div.className = 'chat-entry ' + type;
-    div.textContent = text;
-    feed.appendChild(div);
-    feed.scrollTop = feed.scrollHeight;
-    while (feed.children.length > 80) feed.removeChild(feed.firstChild);
-  }}
 
-  _log(text, type) {{ this._addChatLine(text, type); }}
+def _js_api_fetchers(components: List[Dict[str, Any]]) -> tuple:
+    """Generate API data fetcher methods for data-driven components.
 
-"""
-    else:
-        js += """  _addChatLine(text, type) { console.log(`[${type}] ${text}`); }
-  _log(text, type) { this._addChatLine(text, type); }
+    Args:
+        components: Full component tree (for flattening).
 
-"""
-
-    # Toast system
-    if "toast_container" in types:
-        js += """  // ── Toast notifications ────────────────────────────────────
-
-  _showToast(text, severity = 'info') {
-    const container = document.querySelector('.ck-toast-container');
-    if (!container) return;
-    const toast = document.createElement('div');
-    toast.className = 'ck-toast';
-    toast.textContent = text;
-    toast.style.borderLeftColor = severity === 'danger' ? '#ef4444' :
-      severity === 'success' ? '#22c55e' : severity === 'warning' ? '#f59e0b' : 'var(--scene-accent)';
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
-  }
-
-"""
-    else:
-        js += """  _showToast(text) { console.log('[toast]', text); }
-
-"""
-
-    # v1.49.2 [2026-03-22] — API-first data fetchers
-    # Generate client-side fetch + render for data-driven components
+    Returns:
+        Tuple of (js_string, load_calls_list) where load_calls_list
+        contains the ``this._loadX()`` call strings for bootstrap.
+    """
+    js = ""
     all_comps = _flatten_components(components)
 
-    # Inventory grid → fetch + render
+    # Inventory grid
     inv_comps = [c for c in all_comps if c.get("type") == "inventory_grid"]
     if inv_comps:
         grid_id = inv_comps[0].get("props", {}).get("grid_id", "inventory-grid")
@@ -1473,7 +1514,7 @@ class {class_name} {{
 
 """
 
-    # Event feed → fetch + render
+    # Event feed
     feed_comps = [c for c in all_comps if c.get("type") == "event_feed"]
     if feed_comps:
         feed_id = feed_comps[0].get("props", {}).get("feed_id", "events-list")
@@ -1500,7 +1541,7 @@ class {class_name} {{
 
 """
 
-    # Faction bars → fetch + render
+    # Faction bars
     faction_comps = [c for c in all_comps if c.get("type") == "faction_bars"]
     if faction_comps:
         js += """  // ── Faction bars (API-first) ──────────────────────────────────
@@ -1525,7 +1566,7 @@ class {class_name} {{
 
 """
 
-    # NPC roster → fetch + render
+    # NPC roster
     npc_comps = [c for c in all_comps if c.get("type") == "npc_roster"]
     if npc_comps:
         roster_id = npc_comps[0].get("props", {}).get("roster_id", "npc-roster")
@@ -1549,7 +1590,7 @@ class {class_name} {{
 
 """
 
-    # Mission board → fetch + render
+    # Mission board
     mission_comps = [c for c in all_comps if c.get("type") == "mission_board"]
     if mission_comps:
         board_id = mission_comps[0].get("props", {}).get("board_id", "mission-list")
@@ -1574,7 +1615,7 @@ class {class_name} {{
 
 """
 
-    # Crew roster → fetch + render
+    # Crew roster
     crew_comps = [c for c in all_comps if c.get("type") == "crew_roster"]
     if crew_comps:
         roster_id = crew_comps[0].get("props", {}).get("roster_id", "crew-roster")
@@ -1599,7 +1640,7 @@ class {class_name} {{
 
 """
 
-    # Data table → fetch + render
+    # Data table
     table_comps = [c for c in all_comps if c.get("type") == "data_table"]
     if table_comps:
         table_id = table_comps[0].get("props", {}).get("table_id", "data-table")
@@ -1621,6 +1662,36 @@ class {class_name} {{
   }}
 
 """
+
+    # Build load_calls list
+    load_calls: List[str] = []
+    if inv_comps:
+        load_calls.append("this._loadInventory();")
+    if feed_comps:
+        load_calls.append("this._loadEvents();")
+    if faction_comps:
+        load_calls.append("this._loadFactions();")
+    if npc_comps:
+        load_calls.append("this._loadNPCs();")
+    if mission_comps:
+        load_calls.append("this._loadMissions();")
+    if crew_comps:
+        load_calls.append("this._loadCrew();")
+
+    return js, load_calls
+
+
+def _js_interactive_components(components: List[Dict[str, Any]]) -> str:
+    """Generate JS for dice roller, combat log, dialogue choices, and minimap.
+
+    Args:
+        components: Full component tree (for flattening).
+
+    Returns:
+        JS string with interactive component methods.
+    """
+    js = ""
+    all_comps = _flatten_components(components)
 
     # v1.50.0 [2026-03-22] — Dice roller JS
     dice_comps = [c for c in all_comps if c.get("type") == "dice_roller"]
@@ -1711,20 +1782,20 @@ class {class_name} {{
 
 """
 
-    # Add data loading calls to _loadInitialState
-    load_calls = []
-    if inv_comps:
-        load_calls.append("this._loadInventory();")
-    if feed_comps:
-        load_calls.append("this._loadEvents();")
-    if faction_comps:
-        load_calls.append("this._loadFactions();")
-    if npc_comps:
-        load_calls.append("this._loadNPCs();")
-    if mission_comps:
-        load_calls.append("this._loadMissions();")
-    if crew_comps:
-        load_calls.append("this._loadCrew();")
+    return js
+
+
+def _js_bootstrap(class_name: str, load_calls: List[str]) -> str:
+    """Generate _loadAllData method (if needed) and DOMContentLoaded bootstrap.
+
+    Args:
+        class_name: PascalCase JS class name.
+        load_calls: List of ``this._loadX()`` call strings.
+
+    Returns:
+        JS string closing the class and adding bootstrap code.
+    """
+    js = ""
 
     if load_calls:
         js += "  // ── Load all data on init ──────────────────────────────────\n\n"
@@ -1733,7 +1804,6 @@ class {class_name} {{
             js += f"    {call}\n"
         js += "  }\n\n"
 
-    # Bootstrap — include _loadAllData in init
     init_extra = "\n    this._loadAllData();" if load_calls else ""
 
     js += f"""}}
@@ -1744,6 +1814,103 @@ document.addEventListener('DOMContentLoaded', () => {{
   SceneApp.init();{init_extra}
 }});
 """
+
+    return js
+
+
+def export_scene_js(layout: Dict[str, Any]) -> str:
+    """Generate scene-specific JavaScript from layout configuration.
+
+    Creates Socket.IO connection, element bindings, stat bar updaters,
+    chat log handlers, button wiring, toast system, and lifecycle.
+
+    Args:
+        layout: Full layout dict.
+
+    Returns:
+        JS file content string.
+    """
+    scene_key = layout.get("scene_key", "scene")
+    name = layout.get("name", "Scene")
+    components = layout.get("components", [])
+    types = _collect_types(components)
+    ids = _collect_ids(components)
+
+    # Collect stat bar IDs
+    stat_ids = [i for i in ids if i["type"] == "stat_bar" and i["prop"] == "stat_id"]
+    # Collect chat log IDs
+    chat_ids = [i for i in ids if i["type"] == "chat_log" and i["prop"] == "chat_id"]
+    chat_input_ids = [i for i in ids if i["type"] == "chat_log" and i["prop"] == "input_id"]
+    # Collect button IDs
+    btn_ids = [i for i in ids if i["type"] == "button" and i["prop"] == "btn_id" and i["id"]]
+    # Collect button_group buttons
+    btn_group_buttons = []
+    for comp in _flatten_components(components):
+        if comp.get("type") == "button_group":
+            for entry in comp.get("props", {}).get("buttons", "").split(","):
+                parts = entry.strip().split(":")
+                if len(parts) >= 3:
+                    btn_group_buttons.append({"text": parts[0], "id": parts[2]})
+
+    class_name = "".join(w.capitalize() for w in scene_key.split("_")) + "Scene"
+
+    js = _js_class_header(class_name, name)
+    js += _js_stat_updaters(stat_ids, types)
+    js += _js_ui_wiring(btn_ids, btn_group_buttons, chat_input_ids, components)
+
+    # Chat log helper
+    if chat_ids:
+        primary_chat = chat_ids[0]["id"]
+        js += f"""  // ── Chat log ──────────────────────────────────────────────────
+
+  _addChatLine(text, type = '') {{
+    const feed = document.getElementById('{primary_chat}');
+    if (!feed) return;
+    const div = document.createElement('div');
+    div.className = 'chat-entry ' + type;
+    div.textContent = text;
+    feed.appendChild(div);
+    feed.scrollTop = feed.scrollHeight;
+    while (feed.children.length > 80) feed.removeChild(feed.firstChild);
+  }}
+
+  _log(text, type) {{ this._addChatLine(text, type); }}
+
+"""
+    else:
+        js += """  _addChatLine(text, type) { console.log(`[${type}] ${text}`); }
+  _log(text, type) { this._addChatLine(text, type); }
+
+"""
+
+    # Toast system
+    if "toast_container" in types:
+        js += """  // ── Toast notifications ────────────────────────────────────
+
+  _showToast(text, severity = 'info') {
+    const container = document.querySelector('.ck-toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'ck-toast';
+    toast.textContent = text;
+    toast.style.borderLeftColor = severity === 'danger' ? '#ef4444' :
+      severity === 'success' ? '#22c55e' : severity === 'warning' ? '#f59e0b' : 'var(--scene-accent)';
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+  }
+
+"""
+    else:
+        js += """  _showToast(text) { console.log('[toast]', text); }
+
+"""
+
+    # v1.49.2 [2026-03-22] — API-first data fetchers
+    fetcher_js, load_calls = _js_api_fetchers(components)
+    js += fetcher_js
+
+    js += _js_interactive_components(components)
+    js += _js_bootstrap(class_name, load_calls)
 
     return js
 
@@ -1797,6 +1964,14 @@ class CreationKitScene(FlaskScene):
         def index():
             return render_template("creation_kit.html")
 
+        self._setup_component_routes()
+        self._setup_layout_routes()
+        self._setup_asset_routes()
+        self._setup_export_routes()
+
+    def _setup_component_routes(self) -> None:
+        """Register component catalogue routes."""
+
         # ── Component catalogue ───────────────────────────────────────
 
         @self.app.route("/api/components")
@@ -1815,6 +1990,9 @@ class CreationKitScene(FlaskScene):
             if not comp:
                 return jsonify({"error": "Component not found"}), 404
             return jsonify(comp)
+
+    def _setup_layout_routes(self) -> None:
+        """Register layout CRUD routes."""
 
         # ── Layout CRUD ───────────────────────────────────────────────
 
@@ -1848,6 +2026,9 @@ class CreationKitScene(FlaskScene):
                 path.unlink()
                 return jsonify({"ok": True})
             return jsonify({"error": "Not found"}), 404
+
+    def _setup_asset_routes(self) -> None:
+        """Register asset browsing routes."""
 
         # ── Asset browsing ─────────────────────────────────────────
         # v1.50.0 [2026-03-22] — Asset library + registry browsing
@@ -1984,6 +2165,9 @@ class CreationKitScene(FlaskScene):
                 str(full_path.parent),
                 full_path.name,
             )
+
+    def _setup_export_routes(self) -> None:
+        """Register export routes."""
 
         # ── Export ────────────────────────────────────────────────────
 

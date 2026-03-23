@@ -205,23 +205,23 @@ class CasinoScene(FlaskScene):
     def _on_mood_event(self, evt) -> None:
         try:
             self.socketio.emit("mood_update", evt.payload)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Mood update emit failed (operation=on_mood_event): %s", SCENE_ID, e)
 
     def _on_env_change(self, evt) -> None:
         if evt.payload.get("scene_id") == SCENE_ID:
             try:
                 self.socketio.emit("environment_update", evt.payload)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Environment update emit failed (operation=on_env_change): %s", SCENE_ID, e)
 
     def _on_story_beat(self, evt) -> None:
         if evt.payload.get("scene_id") == SCENE_ID:
             self.events_log.append({"type": "story_beat", "data": evt.payload})
             try:
                 self.socketio.emit("story_beat", evt.payload)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Story beat emit failed (operation=on_story_beat): %s", SCENE_ID, e)
 
     def _check_timers(self) -> None:
         """Check if any casino timers have completed."""
@@ -278,8 +278,8 @@ class CasinoScene(FlaskScene):
         try:
             if self._economy:
                 return int(self._economy.get_balance("player"))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Economy balance check failed (operation=economy_balance): %s", SCENE_ID, e)
         return self.player_chips
 
     def _economy_spend(self, amount: int, reason: str = "casino_buy_in") -> bool:
@@ -463,8 +463,8 @@ class CasinoScene(FlaskScene):
         try:
             if self._consequence:
                 return len(self._consequence.poll(scene=SCENE_ID, peek=True))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Consequence poll failed (operation=pending_count): %s", SCENE_ID, e)
         return 0
 
     # ══════════════════════════════════════════════════════════════════
@@ -580,7 +580,8 @@ class CasinoScene(FlaskScene):
                     )
                 else:
                     system = "You are a casino character. Keep responses short. Use [MOOD:emotion] tags."
-            except Exception:
+            except Exception as e:
+                logger.debug("[%s] System prompt build failed (operation=agent_reply): %s", SCENE_ID, e)
                 system = "You are a casino character. Keep responses short. Use [MOOD:emotion] tags."
 
             # Append governance context (interceptor injections, scene rules)
@@ -612,8 +613,8 @@ class CasinoScene(FlaskScene):
                     char_node = get_framework().get_character(character_id)
                     if char_node:
                         char_node.update_state({"mood": result["mood"]})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] Framework mood sync failed (operation=agent_reply): %s", SCENE_ID, e)
                 try:
                     from engine.mcp.state_coordinator import get_coordinator
                     get_coordinator().update(
@@ -622,8 +623,8 @@ class CasinoScene(FlaskScene):
                         source="casino_reply",
                         scene=SCENE_ID,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] State coordinator mood sync failed (operation=agent_reply): %s", SCENE_ID, e)
 
             return result
         except Exception as exc:
@@ -638,7 +639,8 @@ class CasinoScene(FlaskScene):
         try:
             from engine.mcp.comms_framework import build_governance_context
             return build_governance_context(character_id, "casino", "") or ""
-        except Exception:
+        except Exception as e:
+            logger.debug("[%s] Governance context failed (operation=get_governance_context): %s", SCENE_ID, e)
             return ""
 
     # ══════════════════════════════════════════════════════════════════
@@ -853,8 +855,8 @@ class CasinoScene(FlaskScene):
             try:
                 from engine.skills.builtin.social_skills import mood_contagion
                 mood_contagion(HUSTLER_ID, "frustration", intensity=0.3, scene_id=SCENE_ID)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Mood contagion failed (operation=showdown): %s", SCENE_ID, e)
 
         # Agent comments
         self.dealer_comment = self._agent_text(
@@ -888,8 +890,8 @@ class CasinoScene(FlaskScene):
                     self.player_chips,
                     metadata={"round": self.round_number, "hand": player_eval["rank"]},
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Leaderboard submit failed (operation=showdown): %s", SCENE_ID, e)
 
         return self._get_game_state()
 
@@ -1318,8 +1320,8 @@ class CasinoScene(FlaskScene):
                 try:
                     from engine.world.player_state import get_player_state as _gps
                     _gps().earn_credits(abs(bj["winnings"]), "casino_win")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] PlayerState credit sync failed (operation=blackjack_win): %s", SCENE_ID, e)
                 bj["active"] = False
                 dealer_says = "Blackjack! The house pays 3:2."
 
@@ -1453,8 +1455,8 @@ class CasinoScene(FlaskScene):
                     _ps.earn_credits(abs(bj.get("winnings", 0)), "casino_win")
                 elif _bj_result in ("loss", "bust"):
                     _ps.spend_credits(abs(bj.get("bet", 0)), "casino_loss")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] PlayerState credit sync failed (operation=blackjack_result): %s", SCENE_ID, e)
 
             # Get dealer reaction
             dealer_says = self._agent_text(
@@ -1517,8 +1519,8 @@ class CasinoScene(FlaskScene):
         """Hook: emit scene_started event before serving."""
         try:
             self._fw.emit_event("scene_started", {"scene_id": SCENE_ID, "port": CASINO_PORT}, source=SCENE_ID)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Framework event emit failed (operation=on_before_serve): %s", SCENE_ID, e)
 
     def on_shutdown(self) -> None:
         """Hook: unsubscribe world events and save framework state."""
@@ -1526,12 +1528,12 @@ class CasinoScene(FlaskScene):
             try:
                 self._event_bus.unsubscribe("world.tick", self._on_world_tick)
                 self._event_bus.unsubscribe("world.time_change", self._on_time_change)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] EventBus unsubscribe failed (operation=on_shutdown): %s", SCENE_ID, e)
         try:
             self._fw.save_state()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Framework state save failed (operation=on_shutdown): %s", SCENE_ID, e)
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:
@@ -1544,8 +1546,8 @@ class CasinoScene(FlaskScene):
                     "day": getattr(time_data, "day", 1),
                     "weather": str(getattr(time_data, "weather", "clear")),
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] World tick emit failed (operation=on_world_tick): %s", SCENE_ID, e)
 
     def _on_time_change(self, event: dict) -> None:
         """Happy hour 18:00-20:00 — 2x economy multiplier."""

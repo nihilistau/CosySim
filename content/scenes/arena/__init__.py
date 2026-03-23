@@ -489,7 +489,8 @@ class ArenaScene(FlaskScene):
                 if match.status == MatchStatus.COMPLETE:
                     try:
                         bets_resolved = self._engine.resolve_bets(match_id)
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("[%s] Bet resolution failed (operation=play_round): %s", SCENE_ID, e)
                         bets_resolved = []
                     emit("match_complete", {
                         "match": match.to_dict(),
@@ -522,8 +523,8 @@ class ArenaScene(FlaskScene):
                 try:
                     from engine.economy.economy import get_economy_manager
                     balance = get_economy_manager().get_balance("player")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] Balance check failed (operation=place_bet): %s", SCENE_ID, e)
                 emit("bet_placed", {"bet": bet.to_dict(), "balance": balance})
             except Exception as exc:
                 logger.warning("[%s] place_bet failed (operation=bet, match=%s): %s", SCENE_ID, match_id, exc)
@@ -662,7 +663,8 @@ class ArenaScene(FlaskScene):
                     if match.status == MatchStatus.COMPLETE:
                         try:
                             bets_resolved = self._engine.resolve_bets(match_id)
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("[%s] Auto-play bet resolution failed (operation=auto_play): %s", SCENE_ID, e)
                             bets_resolved = []
                         self.socketio.emit("match_complete", {
                             "match": match.to_dict(),
@@ -1027,8 +1029,8 @@ class ArenaScene(FlaskScene):
                 {"scene_id": SCENE_ID, "port": ARENA_PORT},
                 source=SCENE_ID,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Framework event emit failed (operation=on_start): %s", SCENE_ID, e)
 
     def on_shutdown(self) -> None:
         """Hook: stop all auto-play and tournament threads during shutdown."""

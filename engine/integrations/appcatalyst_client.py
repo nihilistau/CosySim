@@ -84,8 +84,8 @@ class AppCatalystClient:
                 self._api_key = key
                 logger.debug("AppCatalyst API key loaded from SecretManager")
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[AppCatalystClient] SecretManager key lookup failed (operation=load_api_key): %s", e)
 
         # 2. Try config
         try:
@@ -99,8 +99,8 @@ class AppCatalystClient:
                 self._api_key = key
                 logger.debug("AppCatalyst API key loaded from config")
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[AppCatalystClient] Config key lookup failed (operation=load_api_key): %s", e)
 
         # 3. Environment variable
         import os

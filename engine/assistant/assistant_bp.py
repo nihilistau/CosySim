@@ -222,8 +222,8 @@ def assistant_status() -> Any:
                 "available": tts_health.get("status") == "ok",
                 "backends": tts_health.get("backends", {}),
             }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[AssistantBP] TTS health check failed (operation=status): %s", e)
 
         return jsonify({
             "name": assistant.name,

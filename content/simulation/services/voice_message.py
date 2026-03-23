@@ -40,7 +40,8 @@ class VoiceMessageGenerator:
             from engine.media.media_config import get_media_config
             spec = get_media_config().audio_spec("voice_message")
             self.sample_rate = spec.get("sample_rate", 22050)
-        except Exception:
+        except Exception as e:
+            logger.debug("[VoiceMessage] MediaConfig unavailable, using defaults (operation=init): %s", e)
             self.sample_rate = 22050
         self.prompt_wav = None  # Character's voice sample
         self.prompt_text = "Hello, this is my voice."
@@ -48,9 +49,14 @@ class VoiceMessageGenerator:
         # Qwen3-TTS server URL (fallback when CosyVoice unavailable)
         try:
             from engine.config import get_config
-            self._tts_url = get_config().get("tts.server_url", "http://localhost:8600")
-        except Exception:
-            self._tts_url = "http://localhost:8600"
+            self._tts_url = get_config().get("tts.server_url", "")
+            if not self._tts_url:
+                from engine.port_registry import get_service_url
+                self._tts_url = get_service_url("tts")
+        except Exception as e:
+            logger.debug("[VoiceMessage] Config unavailable, using default TTS URL (operation=init): %s", e)
+            from engine.port_registry import get_service_url
+            self._tts_url = get_service_url("tts")
     
     def set_character_voice(self, prompt_wav_path: str, prompt_text: str = None):
         """
@@ -187,8 +193,8 @@ class VoiceMessageGenerator:
                         chain_id=chain_id, scene_id=scene_id,
                         character_id=character_id,
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[VoiceMessage] EventChain log failed (operation=generate): %s", e)
 
             # MCP: publish to ActivityBus
             try:
@@ -200,11 +206,11 @@ class VoiceMessageGenerator:
                     scene=scene_id,
                     data={"filename": filename, "duration": duration, "emotion": emotion, "chain_id": chain_id},
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[VoiceMessage] ActivityBus publish failed (operation=generate): %s", e)
 
             return result
-        
+
         except Exception as e:
             print(f"Error generating voice message: {e}")
             return None
@@ -305,8 +311,8 @@ class VoiceMessageGenerator:
                         chain_id=chain_id, scene_id=scene_id,
                         character_id=character_id,
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[VoiceMessage] EventChain log failed (operation=qwen3_tts): %s", e)
             return result
         except Exception as e:
             logger.debug("Qwen3-TTS server unavailable: %s", e)

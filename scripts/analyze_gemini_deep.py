@@ -1,6 +1,9 @@
 """Deep decode of Gemini BardChatUi rpcids + AI Studio MakerSuiteService endpoints"""
+import logging
 import re, json, urllib.parse
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 OUT = Path("data/heap_output/gemini_aistudio_analysis")
 HAR_DIR = Path("data/har_files")
@@ -32,8 +35,9 @@ for e in entries:
                         p = first[0]
                         if isinstance(p, list) and len(p) >= 2:
                             payload = p[1][:300] if isinstance(p[1], str) else str(p[1])[:300]
-            except: pass
-        
+            except (ValueError, json.JSONDecodeError, KeyError, IndexError) as e:
+                logger.debug("[analyze_gemini_deep] Failed to decode f.req payload (operation=rpcid_decode): %s", e)
+
         # decode response
         resp_decoded = ""
         if resp and resp.startswith(")]}"):
@@ -46,7 +50,8 @@ for e in entries:
                         for item in chunk:
                             if isinstance(item, list) and len(item) >= 3 and item[0] == "wrb.fr":
                                 resp_decoded = str(item[2])[:400] if item[2] else "(empty)"
-                    except: pass
+                    except (ValueError, json.JSONDecodeError, KeyError, IndexError) as e:
+                        logger.debug("[analyze_gemini_deep] Failed to decode response chunk (operation=rpcid_decode): %s", e)
                     break
         
         if rid not in gemini_rpcids or resp_decoded:
