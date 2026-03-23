@@ -36,6 +36,8 @@ All targets defined in `engine/control_plane_registry.py`:
 | 8501–8504 | Streamlit apps (dashboard, admin, assets, creator) | Auto |
 | 8600 | TTS Server | Launcher |
 | 8700 | Nexus KMS (auto-start, priority 0) | Auto |
+| 5800 | Model Proxy (OpenAI-compat, FastAPI) | Manual |
+| 5593 | Advanced Assistant (chat UI + proxy) | Manual |
 | 8800 | NLM Proxy | Auto |
 
 ---
@@ -79,6 +81,18 @@ All targets defined in `engine/control_plane_registry.py`:
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming audio |
 | [Asset Studio](ASSET_STUDIO.md) | ComfyUI integration, workflows, tuning engine |
 | [Training](TRAINING.md) | Data flywheel, DataCollector, AutoTrain, LoRA fine-tuning, benchmarks |
+
+## Tools and SDKs
+
+| Doc | Description |
+|-----|-------------|
+| [Advanced Assistant](../apps/assistant/README.md) | Standalone chat UI + OpenAI proxy — 80+ models, branching, comparison, playground, caching, auth |
+| [Exploration Journal](EXPLORATION_JOURNAL.md) | Narrative of reverse-engineering Google APIs — batchexecute, CDP, ARGUS, Chrome MCP |
+| [Integrations SDK](INTEGRATIONS_SDK.md) | Complete API reference — LMStudio, NotebookLM (56 methods), Copilot, Colab, Sheets |
+| [NotebookLM SDK Design](NLM_SDK_DESIGN.md) | SDK internals — 42 rpcids, 25 gRPC methods, payload formats, gotchas |
+| [NLM API Reference](NLM_API_REFERENCE.md) | Auto-generated ARGUS API catalog for NotebookLM |
+| [Gemini API Reference](GEMINI_API_REFERENCE.md) | Auto-generated ARGUS API catalog for Gemini |
+| [AI Studio API Reference](AISTUDIO_API_REFERENCE.md) | Auto-generated ARGUS API catalog for AI Studio |
 
 ## Development
 
