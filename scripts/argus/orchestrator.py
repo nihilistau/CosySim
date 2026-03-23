@@ -2,7 +2,7 @@
 
 Usage::
 
-    # Run full scan (requires Chrome on CDP port 9222, logged into Google)
+    # Run full scan (requires Chrome on CDP port 9223, logged into Google)
     python -m scripts.argus.orchestrator
 
     # Run a specific target only

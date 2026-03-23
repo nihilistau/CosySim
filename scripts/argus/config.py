@@ -134,7 +134,7 @@ def _derive_heap_discovered(data: Dict[str, Any]) -> Dict[str, str]:
 
 # ──── Chrome CDP ────
 CDP_HOST = "localhost"
-CDP_PORT = 9222
+CDP_PORT = 9223
 CDP_URL  = f"http://{CDP_HOST}:{CDP_PORT}"
 
 # ──── tshark ────

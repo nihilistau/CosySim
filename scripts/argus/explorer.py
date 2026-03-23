@@ -536,7 +536,7 @@ class RpcTester:
 class CdpDiscovery:
     """Monitors live Chrome traffic via CDP to discover new rpcids."""
 
-    CDP_URL = "http://localhost:9222"
+    CDP_URL = "http://localhost:9223"
 
     def __init__(self) -> None:
         self._loader = RegistryLoader()

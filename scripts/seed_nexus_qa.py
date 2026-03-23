@@ -97,7 +97,7 @@ QA_PAIRS: List[Tuple[str, str, str]] = [
         "How does the Google cookie/auth system work?",
         "Google auth cookies for NLM, Colab, and GitHub Copilot are stored in data/accounts/pool.json "
         "via GoogleAccountPool. har_capture.py extracts fresh cookies: CDP mode connects to running Chrome "
-        "port 9222 and calls Network.getCookies() silently in ~1s. Scheduler task #49 (cookie-auto-refresh) "
+        "port 9223 and calls Network.getCookies() silently in ~1s. Scheduler task #49 (cookie-auto-refresh) "
         "runs this every 72h automatically. Task #48 (cookie-health-check) alerts Nexus if cookies go stale. "
         "Drop a .har file into data/hars/ and har_watchfolder.py auto-imports it within 30s.",
         "system",
@@ -165,7 +165,7 @@ QA_PAIRS: List[Tuple[str, str, str]] = [
         "Web Bridge: localhost:8601 (Socket.IO real-time)\n"
         "Hub: localhost:8500 (scene hub + navigation)\n"
         "Nexus Panel: localhost:5570 (dashboard + Librarian)\n"
-        "Chrome CDP: localhost:9222 (remote debugging for cookie capture)",
+        "Chrome CDP: localhost:9223 (remote debugging for cookie capture)",
         "system",
     ),
 

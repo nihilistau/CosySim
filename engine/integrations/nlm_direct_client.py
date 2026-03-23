@@ -75,7 +75,7 @@ _NLM_BUILD_LABEL_PREFIX = "boq_labs-tailwind-frontend_"
 # Chrome DevTools Protocol — used for live token refresh from running NLM tabs
 def _cdp_port() -> int:
     from engine.config import get_config
-    return int(get_config().get("cdp.port", 9222))
+    return int(get_config().get("cdp.port", 9223))
 
 def _cdp_tabs_url() -> str:
     return f"http://localhost:{_cdp_port()}/json"
@@ -402,7 +402,7 @@ class NLMDirectClient:
     def _refresh_from_cdp(self) -> bool:
         """Extract fresh session tokens from a live NotebookLM Chrome tab via CDP.
 
-        Chrome must be running with ``--remote-debugging-port=9222``. The
+        Chrome must be running with ``--remote-debugging-port=9223``. The
         ``websockets`` library connects to the tab's DevTools WebSocket and
         evaluates JavaScript to read ``WIZ_global_data`` directly from the
         authenticated page — bypassing the HTTP-fetch token path that goes

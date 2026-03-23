@@ -198,7 +198,7 @@ def cmd_tabs() -> None:
 
     tabs = LiveDebugger.list_tabs()
     if not tabs:
-        print("No Chrome tabs found. Is Chrome running with --remote-debugging-port=9222?")
+        print("No Chrome tabs found. Is Chrome running with --remote-debugging-port=9223?")
         return
     print("Open Chrome tabs:")
     for i, tab in enumerate(tabs):

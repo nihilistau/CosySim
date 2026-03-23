@@ -83,7 +83,7 @@ class FlaskScene(BaseScene, NexusSceneMixin):
 
     # ── Construction ─────────────────────────────────────────────────
 
-    def __init__(self, host: str = "localhost", port: Optional[int] = None) -> None:
+    def __init__(self, host: str = "0.0.0.0", port: Optional[int] = None) -> None:
         """Initialize the Flask scene.
 
         Creates Flask app, SocketIO, registers shared assets and all

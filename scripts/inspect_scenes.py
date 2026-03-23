@@ -209,7 +209,7 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,  # Show browser so user can see
-            args=["--remote-debugging-port=9222", "--window-size=1400,900"]
+            args=["--remote-debugging-port=9223", "--window-size=1400,900"]
         )
         context: BrowserContext = await browser.new_context(viewport={"width": 1400, "height": 900})
 
@@ -249,7 +249,7 @@ async def main():
             json.dump(all_results, f, indent=2, default=str)
         print(f"\n\nFull report saved: {report_path}")
 
-        print("\nBrowser left open on port 9222 for 30s — you can inspect too")
+        print("\nBrowser left open on port 9223 for 30s — you can inspect too")
         await asyncio.sleep(30)
         await browser.close()
 

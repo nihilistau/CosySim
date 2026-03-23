@@ -766,7 +766,7 @@ class ChainRunner:
 def import_cookies_from_chrome() -> bool:
     """Extract cookies from the running Chrome and add to account pool.
 
-    Uses CDP (port 9222) — Chrome must be running.
+    Uses CDP (port 9223) — Chrome must be running.
     No HAR capture, no user action needed.
     """
     import asyncio
@@ -775,7 +775,7 @@ def import_cookies_from_chrome() -> bool:
         try:
             from playwright.async_api import async_playwright
             async with async_playwright() as pw:
-                browser = await pw.chromium.connect_over_cdp("http://localhost:9222")
+                browser = await pw.chromium.connect_over_cdp("http://localhost:9223")
                 ctx = browser.contexts[0] if browser.contexts else None
                 if not ctx:
                     print("  ✗ No browser context found")
@@ -816,7 +816,7 @@ def import_cookies_from_chrome() -> bool:
 
         except Exception as exc:
             print(f"  ✗ Cookie extraction failed: {exc}")
-            print("  Is Chrome running with --remote-debugging-port=9222?")
+            print("  Is Chrome running with --remote-debugging-port=9223?")
             return False
 
     return asyncio.run(_extract())
@@ -838,7 +838,7 @@ def main() -> None:
     args = p.parse_args()
 
     if args.import_cookies:
-        print("\n  Extracting cookies from running Chrome (port 9222)...")
+        print("\n  Extracting cookies from running Chrome (port 9223)...")
         ok = import_cookies_from_chrome()
         sys.exit(0 if ok else 1)
 
