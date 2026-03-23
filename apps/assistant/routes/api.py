@@ -167,6 +167,22 @@ def update_settings():
     return jsonify({"ok": True})
 
 
+# ──── Cache ──────────────────────────────────────────────────────────
+
+@api_bp.route("/cache/stats", methods=["GET"])
+def cache_stats_endpoint():
+    from apps.assistant.services.cache import cache_stats
+    return jsonify(cache_stats())
+
+
+@api_bp.route("/cache/clear", methods=["POST"])
+def cache_clear_endpoint():
+    from apps.assistant.services.cache import cache_clear
+    data = request.get_json(silent=True) or {}
+    deleted = cache_clear(model=data.get("model"))
+    return jsonify({"deleted": deleted})
+
+
 # ──── SocketIO Events ────────────────────────────────────────────────
 
 def register_socketio_events(socketio: SocketIO) -> None:
