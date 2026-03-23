@@ -38,6 +38,7 @@ def create_app() -> Tuple[Flask, SocketIO]:
     )
     app.config["SECRET_KEY"] = SECRET_KEY
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
 
     CORS(app)
     socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
