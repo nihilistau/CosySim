@@ -471,7 +471,7 @@ class RpcTester:
                 elif param_name == "source_config":
                     payload.append([1, None, None, None, None, None, None, None, None, None, [1]])
                 elif param_name == "write_config":
-                    payload.append([2, None, None, [1, None, None, None, None, None, None, None, None, None, [1]], [[2, 1]]])
+                    payload.append([2, None, None, [1, None, None, None, None, None, None, None, None, None, [1]], [[2, 1, 3]]])
                 elif param_name in params:
                     payload.append(params[param_name])
                 else:

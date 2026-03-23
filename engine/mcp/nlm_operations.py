@@ -564,7 +564,7 @@ def get_audio_options(
         Dict with options list [{id, label, description}].
     """
     args = json.dumps(
-        [[2, None, None, [1, None, None, None, None, None, None, None, None, None, [1]], [[2, 1]]], None, 1],
+        [[2, None, None, [1, None, None, None, None, None, None, None, None, None, [1]], [[2, 1, 3]]], None, 1],
         separators=(",", ":"),
     )
     _rpc_id, data = _batchexecute(RPC_GET_AUDIO_OPTIONS, args, cookies, notebook_id)
