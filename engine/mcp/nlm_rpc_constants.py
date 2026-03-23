@@ -338,11 +338,12 @@ DOC_TYPE_BRIEF   = 2  # standard brief document (used in most cases)
 DOC_TYPE_NOTE    = 9  # deep research / long-form note type
 
 # Write config object shared by several write RPCs (ciyUvf, R7cb6c).
-# Observed verbatim across 3 different HAR captures — do not change.
-# Structure matches the "write operation metadata" envelope used by NLM.
+# v1.50.2 [2026-03-23] — Updated from [[2,1]] to [[2,1,3]] per Chrome MCP capture.
+# The third element (3) was added in the March 2026 NLM deployment.
+# Old format [[2,1]] causes HTTP 400 on ciyUvf (GenerateDoc).
 _WRITE_CONFIG = [2, None, None,
                  [1, None, None, None, None, None, None, None, None, None, [1]],
-                 [[2, 1]]]
+                 [[2, 1, 3]]]
 
 # Source config object used by izAoDd (ADD_SOURCE RPC).
 # This is the "source creation metadata" envelope — confirmed from HAR.

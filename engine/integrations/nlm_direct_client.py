@@ -2099,7 +2099,7 @@ class NLMDirectClient:
             [
                 2, None, None,
                 [1, None, None, None, None, None, None, None, None, None, [1]],
-                [[2, 1]],
+                [[2, 1, 3]],
             ],
             None,
             1,

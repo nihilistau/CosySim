@@ -139,16 +139,19 @@ WRITE_CONFIG = [
     None,    # [2] Reserved
     [1, None, None, None, None, None, None, None, None, None, [1]],
     #  [3] Source config envelope — [3][0]=create flag, [3][10]=feature flags
-    [[2, 1]],
-    #  [4] Model quality marker — [2, 1] = standard quality
+    [[2, 1, 3]],
+    #  [4] Model quality marker — updated 2026-03-23 from [[2,1]] to [[2,1,3]]
+    #  The third element (3) was added in the March 2026 NLM deployment.
+    #  Sending the old [[2,1]] format causes HTTP 400 on ciyUvf (GenerateDoc).
 ]
 """Write config template for document generation and note saving.
 
 Position [0] is overridden with DocType value per call.
-Position [4] controls model quality: [[2, 1]] = standard, [[3, 1]] = high.
+Position [4] controls model quality: [[2, 1, 3]] = standard (updated March 2026).
 
 GOTCHA: This array must match EXACTLY what the browser sends.
 Changing any None position to a value may cause silent failures.
+The [[2,1]] → [[2,1,3]] change broke ARGUS crawlers until captured via Chrome MCP.
 """
 
 SOURCE_CONFIG = [1, None, None, None, None, None, None, None, None, None, [1]]
