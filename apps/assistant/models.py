@@ -42,6 +42,8 @@ def init_db() -> None:
             title TEXT NOT NULL DEFAULT 'New Chat',
             model TEXT NOT NULL DEFAULT 'gpt-5.4',
             system_prompt TEXT DEFAULT '',
+            parent_id TEXT DEFAULT NULL,
+            forked_from_msg TEXT DEFAULT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             message_count INTEGER DEFAULT 0
@@ -119,6 +121,61 @@ def get_conversation(conv_id: str) -> Optional[Dict[str, Any]]:
     result = dict(conv)
     result["messages"] = [dict(m) for m in messages]
     return result
+
+
+def fork_conversation(
+    conv_id: str,
+    from_message_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Fork a conversation from a specific message, creating a new branch.
+
+    Copies all messages up to and including from_message_id into a new
+    conversation. The new conversation has parent_id set to the original.
+
+    Returns the new conversation dict, or None if source not found.
+    """
+    source = get_conversation(conv_id)
+    if not source:
+        return None
+
+    # Get messages up to the fork point
+    messages_to_copy = []
+    for msg in source.get("messages", []):
+        messages_to_copy.append(msg)
+        if msg["id"] == from_message_id:
+            break
+
+    if not messages_to_copy:
+        return None
+
+    # Create new conversation
+    new_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    title = f"Fork: {source['title']}"
+
+    conn = _get_conn()
+    conn.execute(
+        "INSERT INTO conversations (id, title, model, system_prompt, parent_id, forked_from_msg, created_at, updated_at, message_count) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (new_id, title, source["model"], source.get("system_prompt", ""),
+         conv_id, from_message_id, now, now, len(messages_to_copy)),
+    )
+
+    # Copy messages
+    for msg in messages_to_copy:
+        msg_id = str(uuid.uuid4())
+        conn.execute(
+            "INSERT INTO messages (id, conversation_id, role, content, model, provider, created_at, token_count, metadata) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (msg_id, new_id, msg["role"], msg["content"], msg.get("model", ""),
+             msg.get("provider", ""), msg["created_at"], msg.get("token_count", 0),
+             msg.get("metadata", "{}")),
+        )
+
+    conn.commit()
+    conn.close()
+
+    return get_conversation(new_id)
 
 
 def update_conversation(conv_id: str, **kwargs: Any) -> bool:
