@@ -6,7 +6,7 @@ import time
 
 async def debug(url: str, tab_id: str) -> None:
     import websockets
-    ws_url = f"ws://localhost:9222/devtools/page/{tab_id}"
+    ws_url = f"ws://localhost:9223/devtools/page/{tab_id}"
     async with websockets.connect(ws_url, max_size=10_000_000) as ws:
         _id = 0
 

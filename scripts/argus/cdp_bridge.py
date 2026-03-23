@@ -1,6 +1,6 @@
 """ARGUS CDP Bridge — async WebSocket client to Chrome DevTools Protocol.
 
-Connects to a running Chrome instance on :9222 and provides:
+Connects to a running Chrome instance on :9223 and provides:
 - Tab enumeration and selection
 - Domain enable/disable (Network, Runtime, HeapProfiler, Debugger)
 - Event subscription and dispatch
@@ -208,7 +208,10 @@ class CDPBridge:
         await bridge.disconnect()
     """
 
-    def __init__(self, host: str = "localhost", port: int = 9222) -> None:
+    def __init__(self, host: str = "localhost", port: int = 0) -> None:
+        if port == 0:
+            from scripts.argus.config import CDP_PORT
+            port = CDP_PORT
         self._base_url = f"http://{host}:{port}"
         self._sessions: Dict[str, CDPSession] = {}
 
@@ -223,7 +226,7 @@ class CDPBridge:
         except Exception as exc:
             raise ConnectionError(
                 f"Cannot reach Chrome CDP at {self._base_url} — "
-                f"start Chrome with --remote-debugging-port=9222. Error: {exc}"
+                f"start Chrome with --remote-debugging-port=9223. Error: {exc}"
             ) from exc
 
     def get_tab_by_url(self, url_fragment: str) -> Optional[Dict[str, Any]]:

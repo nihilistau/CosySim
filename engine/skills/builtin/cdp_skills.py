@@ -214,7 +214,7 @@ def cdp_snap(port: int = 5556) -> str:
 @skill(
     pack="cdp",
     description=(
-        "List all Chrome tabs currently open on the debug port (9222). "
+        "List all Chrome tabs currently open on the debug port (9223). "
         "Returns tab ID, title, and URL for each tab. "
         "Use to find which tab corresponds to a given scene."
     ),

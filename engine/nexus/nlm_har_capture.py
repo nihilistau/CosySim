@@ -3,7 +3,7 @@ NLM HAR Capture — Automated Chrome cookie extraction for NotebookLM.
 
 Extraction methods (tried in order)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-1. CDP (Chrome DevTools Protocol) — requires Chrome with --remote-debugging-port=9222.
+1. CDP (Chrome DevTools Protocol) — requires Chrome with --remote-debugging-port=9223.
    Fastest, most reliable.  If Chrome is already running without the debug flag,
    it won't work.
 
@@ -54,7 +54,7 @@ _COOKIES_FILE = _PROJECT_ROOT / "data" / "nlm_cookies.json"
 _META_FILE = _PROJECT_ROOT / "data" / "nlm_meta.json"
 _NLM_HOST = "notebooklm.google.com"
 _CDP_HOST = "localhost"
-_CDP_PORT = 9222
+_CDP_PORT = 9223
 _CDP_URL = f"http://{_CDP_HOST}:{_CDP_PORT}"
 
 # Google Chrome install paths on Windows
@@ -288,7 +288,7 @@ def _find_chrome() -> Optional[str]:
 
 
 def _is_cdp_running() -> bool:
-    """Check if Chrome is already running with remote debugging on port 9222."""
+    """Check if Chrome is already running with remote debugging on port 9223."""
     try:
         req = urllib.request.Request(f"{_CDP_URL}/json/version", headers={"User-Agent": "CosySim"})
         with urllib.request.urlopen(req, timeout=3) as resp:

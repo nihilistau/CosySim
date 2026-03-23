@@ -67,7 +67,7 @@ LOG_PATH    = ROOT / "logs" / "cdp.log"
 EVENTS_PATH = ROOT / "logs" / "cdp_events.jsonl"   # machine-readable parallel log
 MARKER_PATH = ROOT / "logs" / "cdp_markers.jsonl"  # timeline marker index
 
-CDP_PORT = 9222
+CDP_PORT = 9223
 
 # ── Scene port map ────────────────────────────────────────────────────────────
 

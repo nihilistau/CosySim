@@ -636,7 +636,7 @@ def create_nlm_proxy_app() -> Flask:
     def capture_cookies():
         """Automatically capture auth cookies from Chrome via CDP.
 
-        Requires Chrome to be running with --remote-debugging-port=9222,
+        Requires Chrome to be running with --remote-debugging-port=9223,
         OR launches Chrome automatically using the existing user profile.
 
         Body (JSON): {} (no params needed)

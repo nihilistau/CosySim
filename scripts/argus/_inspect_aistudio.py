@@ -5,7 +5,7 @@ from playwright.async_api import async_playwright
 
 async def main():
     async with async_playwright() as p:
-        browser = await p.chromium.connect_over_cdp("http://localhost:9222")
+        browser = await p.chromium.connect_over_cdp("http://localhost:9223")
         ctx = browser.contexts[0]
 
         for page in ctx.pages:

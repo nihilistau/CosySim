@@ -2,7 +2,7 @@
 
 Diagnoses and auto-fixes Google service authentication (NLM cookies +
 Gemini API keys) by connecting to the Chrome DevTools Protocol endpoint
-at localhost:9222.  No interactive browser window required — works with
+at localhost:9223.  No interactive browser window required — works with
 the headless Chrome instance already running for ARGUS/NLM automation.
 
 Version: v1.50.1 [2026-03-22]
@@ -14,7 +14,7 @@ Change Log:
 
 Recovery procedure
 ------------------
-1. Detect Chrome CDP at localhost:9222.
+1. Detect Chrome CDP at localhost:9223.
 2. Open a disposable Chrome tab for navigation.
 3. Inject saved cookies (data/nlm_cookies.json) via Network.setCookie.
 4. Navigate to NotebookLM → verify login.
@@ -73,14 +73,14 @@ def _get_cdp_config() -> Dict[str, Any]:
         from engine.config import get_config
         cfg = get_config()
         return {
-            "port": cfg.get("cdp.port", 9222),
+            "port": cfg.get("cdp.port", 9223),
             "navigation_wait_s": cfg.get("cdp.navigation_wait_s", 6),
             "harvest_timeout_s": cfg.get("cdp.harvest_timeout_s", 18),
             "account_name": cfg.get("cdp.account_name", "nihilistcod"),
         }
     except Exception:
         return {
-            "port": 9222,
+            "port": 9223,
             "navigation_wait_s": 6,
             "harvest_timeout_s": 18,
             "account_name": "nihilistcod",
@@ -476,7 +476,7 @@ async def _async_check() -> AuthStatus:
     status = AuthStatus()
     version_data = _cdp_get("/json/version")
     if not version_data:
-        status.errors.append("Chrome CDP not reachable at localhost:9222")
+        status.errors.append("Chrome CDP not reachable at localhost:9223")
         return status
     status.cdp_available = True
     status.chrome_version = version_data.get("Browser", "")
@@ -507,7 +507,7 @@ async def _async_recover(keys_only: bool = False) -> AuthStatus:
     # 1. CDP available?
     version_data = _cdp_get("/json/version")
     if not version_data:
-        status.errors.append("Chrome CDP not reachable at localhost:9222")
+        status.errors.append("Chrome CDP not reachable at localhost:9223")
         status.duration_s = time.time() - t0
         return status
     status.cdp_available = True

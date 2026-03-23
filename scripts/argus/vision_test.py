@@ -31,7 +31,7 @@ REMOVE_JS = """() => {
 
 async def main():
     async with async_playwright() as p:
-        browser = await p.chromium.connect_over_cdp("http://localhost:9222")
+        browser = await p.chromium.connect_over_cdp("http://localhost:9223")
         ctx = browser.contexts[0]
 
         page = next((pg for pg in ctx.pages if "aistudio" in pg.url), None)

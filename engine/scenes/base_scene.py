@@ -67,7 +67,7 @@ class BaseScene(BaseSceneRoutesMixin, ABC):
     - Common scene lifecycle methods
     """
     
-    def __init__(self, scene_name: str, host: str = "localhost", port: int = 5000):
+    def __init__(self, scene_name: str, host: str = "0.0.0.0", port: int = 5000):
         """
         Initialize base scene
         

@@ -2079,7 +2079,7 @@ def _fmt_duration(seconds: float) -> str:
 def _argus_weekly_scan_callback() -> Dict[str, Any]:
     """Weekly: run full ARGUS scan (NLM + Gemini + AI Studio) via Playwright + CDP.
 
-    Requires Chrome to be running with ``--remote-debugging-port=9222``
+    Requires Chrome to be running with ``--remote-debugging-port=9223``
     and the user to be logged into Google services.
     On success, stores discoveries in Nexus and regenerates API reference docs.
     """

@@ -5,7 +5,7 @@ Usage:
     python scripts/scene_health_check.py --port 5569  # check one scene
     python scripts/scene_health_check.py --fix        # print fix suggestions
     python scripts/scene_health_check.py --host 127.0.0.1  # custom scene host
-    python scripts/scene_health_check.py --chrome 9222 # custom debug port
+    python scripts/scene_health_check.py --chrome 9223 # custom debug port
 
 What it checks (per scene):
     1. HTTP reachability + /api/health response
@@ -19,7 +19,7 @@ What it checks (per scene):
 
 Requires:
     pip install websockets
-    Chrome launched with --remote-debugging-port=9222
+    Chrome launched with --remote-debugging-port=9223
 
 Copilot agent usage:
     Run before and after any template or scene_py change.
@@ -162,7 +162,7 @@ def _check_scene_http(port: int, host: str = DEFAULT_HOST) -> SceneResult:
 async def _cdp_check_page(
     page_url: str,
     tab_id: str,
-    chrome_port: int = 9222,
+    chrome_port: int = 9223,
     chrome_host: str = DEFAULT_HOST,
 ) -> tuple[list[str], list[str]]:
     """Navigate to page_url and collect console errors + pattern matches.
@@ -235,7 +235,7 @@ async def _cdp_check_page(
 
 
 async def _get_chrome_tab(
-    chrome_port: int = 9222,
+    chrome_port: int = 9223,
     chrome_host: str = DEFAULT_HOST,
 ) -> str | None:
     """Return the first non-devtools tab ID from Chrome debug port."""
@@ -254,7 +254,7 @@ async def _get_chrome_tab(
 async def check_scenes(
     ports: list[int] | None = None,
     host: str = DEFAULT_HOST,
-    chrome_port: int = 9222,
+    chrome_port: int = 9223,
     chrome_host: str = DEFAULT_HOST,
     use_cdp: bool = True,
     show_fixes: bool = False,
@@ -339,7 +339,7 @@ def main() -> None:
     parser.add_argument("--host", default=DEFAULT_HOST, help="Scene host (default: localhost)")
     parser.add_argument("--fix", action="store_true", help="Show fix suggestions")
     parser.add_argument("--no-cdp", action="store_true", help="Skip CDP/JS checks")
-    parser.add_argument("--chrome", type=int, default=9222, help="Chrome debug port")
+    parser.add_argument("--chrome", type=int, default=9223, help="Chrome debug port")
     parser.add_argument("--chrome-host", default=DEFAULT_HOST, help="Chrome debug host (default: localhost)")
     args = parser.parse_args()
 
