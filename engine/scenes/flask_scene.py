@@ -31,7 +31,7 @@ consistent startup, health checking, and shutdown across all scenes.
             "description": "Cheap ale. Cheaper lies.",
         }
 
-        def __init__(self, host="0.0.0.0", port=5558):
+        def __init__(self, host="localhost", port=5558):
             super().__init__(host=host, port=port)
             self.tavern_state = TavernState()
             self._register_tavern_routes()
@@ -83,7 +83,7 @@ class FlaskScene(BaseScene, NexusSceneMixin):
 
     # ── Construction ─────────────────────────────────────────────────
 
-    def __init__(self, host: str = "0.0.0.0", port: Optional[int] = None) -> None:
+    def __init__(self, host: str = "localhost", port: Optional[int] = None) -> None:
         """Initialize the Flask scene.
 
         Creates Flask app, SocketIO, registers shared assets and all
@@ -91,7 +91,7 @@ class FlaskScene(BaseScene, NexusSceneMixin):
         first, then register their own routes and SocketIO handlers.
 
         Args:
-            host: Bind address (default ``0.0.0.0``).
+            host: Bind address (default ``localhost``).
             port: Bind port.  Falls back to ``SCENE_METADATA["port"]``
                   if not provided.
         """

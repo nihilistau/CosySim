@@ -30,7 +30,11 @@ def lib_db(tmp_path):
         mock_cfg.return_value = MagicMock()
         mock_cfg.return_value.get = lambda k, d=None: d
         from engine.asset_studio.asset_library import AssetLibrary
-        return AssetLibrary(db_path=str(tmp_path / "test_lib.db"))
+        lib = AssetLibrary(db_path=str(tmp_path / "test_lib.db"))
+        yield lib
+        # Force cleanup of SQLite connections before tmp_path removal
+        import gc
+        gc.collect()
 
 
 class TestAssetLibrary:

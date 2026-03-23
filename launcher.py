@@ -123,7 +123,7 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
     """Start one target in the foreground. Blocks until it exits."""
     t = info["type"]
     if t == "flask":
-        _import_class(info["cls"])().start()
+        _import_class(info["cls"])(host=info.get("host", "0.0.0.0")).start()
     elif t == "streamlit":
         script = PROJECT_ROOT / info["script"]
         if not script.exists():
@@ -132,7 +132,7 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
         subprocess.run([
             sys.executable, "-m", "streamlit", "run", str(script),
             f"--server.port={info['port']}",
-            "--server.address=0.0.0.0",
+            f"--server.address={info.get('host', '0.0.0.0')}",
             "--server.headless=true",
             "--browser.gatherUsageStats=false",
             "--logger.level=warning",
@@ -140,7 +140,7 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
     elif t == "fastapi":
         import uvicorn  # type: ignore
         uvicorn.run(_import_factory(info["factory"]),
-                    host="0.0.0.0", port=info["port"], log_level="warning")
+                    host=info.get("host", "0.0.0.0"), port=info["port"], log_level="warning")
     elif t == "node":
         script_dir = PROJECT_ROOT / info["script"]
         subprocess.run(["npm", "run", "dev"], cwd=str(script_dir))
@@ -199,7 +199,7 @@ def _start_streamlit_proc(info: Dict[str, Any],
             [sys.executable, "-m", "streamlit", "run", str(script),
              f"--server.port={info['port']}",
              "--server.headless=true",
-             "--server.address=0.0.0.0",
+             f"--server.address={info.get('host', '0.0.0.0')}",
              "--browser.gatherUsageStats=false",
              "--logger.level=warning"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
