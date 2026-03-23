@@ -292,6 +292,9 @@ _RPCID_FALLBACKS: Dict[str, Tuple[str, str]] = {
     "deep_research":        ("QA9ei",  "Start async deep research session"),
     "add_research_source":  ("LBwxtb", "Add AI-generated research doc as source"),
 
+    # ── Analytics ─────────────────────────────────────────────────
+    "analytics":            ("AUrzMb", "Notebook analytics / usage stats"),
+
     # ── User & Account ───────────────────────────────────────────
     "user_profile":         ("JFMDGd", "Get user email, name, queries remaining"),
     "ai_summary":           ("VfAZjd", "Fetch AI summary of notebook"),

@@ -190,38 +190,84 @@ async def discover_grpc():
             label = e.get("aria") or e.get("text", "")
             print(f"  [{e['role'] or e['tag']}] {label[:60]}")
 
-        # Click each tab/button and capture traffic
+        # Click buttons by text content (NLM uses Angular, not standard aria-labels)
         click_targets = [
-            ("Notes/Artifacts", "[aria-label*='Note'], [data-tab*='note']"),
-            ("Study Guide", "[aria-label*='Study'], [aria-label*='Guide'], [aria-label*='guide']"),
-            ("Audio Overview", "[aria-label*='Audio'], [aria-label*='audio'], [data-tab*='audio']"),
-            ("Sources panel", "[aria-label*='Source'], [aria-label*='source']"),
-            ("Chat panel", "[aria-label*='Chat'], [aria-label*='chat']"),
-            ("Discover sources", "[aria-label*='Discover'], [aria-label*='discover'], [aria-label*='Suggest']"),
-            ("Share notebook", "[aria-label*='Share'], [aria-label*='share']"),
-            ("Settings/More", "[aria-label*='More'], [aria-label*='Settings'], [aria-label*='setting']"),
-            ("Model selector", "[aria-label*='Model'], [aria-label*='model']"),
+            "Analytics",
+            "Share notebook",
+            "Settings",
+            "Add source",
+            "Fast research",
         ]
 
-        for name, selector in click_targets:
+        for text in click_targets:
             try:
-                r = await cmd(
-                    "Runtime.evaluate",
-                    {
-                        "expression": (
-                            f"(() => {{ const el = document.querySelector(\"{selector}\");"
-                            "if (el) { el.click(); return 'clicked'; } return 'not_found'; }})()"
-                        )
-                    },
+                js = (
+                    "(() => {"
+                    "  const btns = Array.from(document.querySelectorAll('button'));"
+                    f"  const btn = btns.find(b => b.textContent.includes('{text}') && b.offsetParent !== null);"
+                    "  if (btn) { btn.click(); return 'clicked'; }"
+                    "  return 'not_found';"
+                    "})()"
                 )
+                r = await cmd("Runtime.evaluate", {"expression": js})
                 status = r.get("result", {}).get("value", "not_found")
                 if status == "clicked":
-                    print(f"  Clicked: {name}")
-                    await drain_events(4, name)
+                    print(f"  Clicked: {text}")
+                    await drain_events(4, text)
+                    # Close any dialog
+                    await cmd(
+                        "Runtime.evaluate",
+                        {
+                            "expression": (
+                                "document.dispatchEvent("
+                                "new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));"
+                            )
+                        },
+                    )
+                    await asyncio.sleep(0.5)
                 else:
-                    print(f"  Skip: {name} (not found)")
+                    print(f"  Skip: {text} (not found)")
             except Exception as e:
-                print(f"  Error: {name} — {e}")
+                print(f"  Error: {text} — {e}")
+
+        # Inject a chat question to trigger GenerateFreeFormStreamed
+        print()
+        print("Injecting chat question...")
+        inject_js = (
+            "(() => {"
+            "  const inputs = Array.from(document.querySelectorAll('textarea, input[type=text]'));"
+            "  const chat = inputs.find(e => e.offsetParent !== null);"
+            "  if (!chat) return 'no_input';"
+            "  const proto = chat.tagName === 'TEXTAREA' ? HTMLTextAreaElement : HTMLInputElement;"
+            "  const setter = Object.getOwnPropertyDescriptor(proto.prototype, 'value').set;"
+            "  setter.call(chat, 'What are the 3 most important concepts?');"
+            "  chat.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText'}));"
+            "  chat.dispatchEvent(new Event('change', {bubbles: true}));"
+            "  return 'injected: ' + chat.tagName;"
+            "})()"
+        )
+        r = await cmd("Runtime.evaluate", {"expression": inject_js})
+        print(f"  Input: {r.get('result', {}).get('value', '?')}")
+
+        await asyncio.sleep(1)
+
+        # Click submit
+        submit_js = (
+            "(() => {"
+            "  const btns = Array.from(document.querySelectorAll('button'));"
+            "  const btn = btns.find(b => {"
+            "    const t = b.textContent.trim().toLowerCase();"
+            "    return (t.includes('submit') || t === 'send' || t === '') && b.offsetParent !== null;"
+            "  });"
+            "  if (btn) { btn.click(); return 'clicked: ' + btn.textContent.trim().substring(0,20); }"
+            "  return 'no_submit';"
+            "})()"
+        )
+        r = await cmd("Runtime.evaluate", {"expression": submit_js})
+        print(f"  Submit: {r.get('result', {}).get('value', '?')}")
+
+        print("  Capturing chat traffic for 20s...")
+        await drain_events(20, "chat_question")
 
         # ──── Report ─────────────────────────────────────────────
         print()
