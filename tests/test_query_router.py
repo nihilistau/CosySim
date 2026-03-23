@@ -8,6 +8,17 @@ import pytest
 from engine.nexus.query_router import NexusQueryRouter, QueryResult, RouterStats
 
 
+# v1.50.2 [2026-03-23] — Patch vector store globally so it doesn't
+# interfere with tier-specific tests. The vector store (Tier 2) returns
+# real results from local ChromaDB, bypassing the mocked Nexus client.
+@pytest.fixture(autouse=True)
+def _disable_vector_search(monkeypatch):
+    """Disable vector search in all query router tests."""
+    monkeypatch.setattr(
+        NexusQueryRouter, "_try_vector_search", lambda self, q: None
+    )
+
+
 # ── QueryResult tests ────────────────────────────────────────────────────
 
 class TestQueryResult:
