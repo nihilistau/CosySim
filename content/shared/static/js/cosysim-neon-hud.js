@@ -144,7 +144,7 @@
 
       const phoneDetach = document.getElementById('phone-overlay-detach');
       if (phoneDetach) phoneDetach.addEventListener('click', () => {
-        window.open('http://localhost:5555', '_blank');
+        window.open(window.COSYSIM?.services?.phone || 'http://localhost:5555', '_blank');
       });
 
       // Nexus search
@@ -590,7 +590,7 @@
       const btn      = document.getElementById('hud-toggle-phone');
       // Lazy-load iframe — only set src once to preserve state across toggles
       if (frame && (!frame.src || frame.src === '' || frame.src === 'about:blank')) {
-        frame.src = 'http://localhost:5555';
+        frame.src = window.COSYSIM?.services?.phone || 'http://localhost:5555';
       }
       if (overlay) {
         overlay.setAttribute('aria-hidden', 'false');
@@ -622,8 +622,8 @@
       const checks = [
         // Use local scene endpoints that proxy or don't need cross-origin auth
         { id: 'sys-nexus',    url: '/api/hud/state' },  // local, always works
-        { id: 'sys-tts',      url: 'http://localhost:8600/health' },
-        { id: 'sys-comfy',    url: 'http://localhost:8188/history' },
+        { id: 'sys-tts',      url: (window.COSYSIM?.services?.tts || 'http://localhost:8600') + '/health' },
+        { id: 'sys-comfy',    url: (window.COSYSIM?.services?.comfyui || 'http://localhost:8188') + '/history' },
       ];
       // LMStudio check: use local /api/hud/state response (already polled)
       const lmsDot = document.getElementById('sys-lmstudio');

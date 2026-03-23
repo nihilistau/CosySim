@@ -98,6 +98,17 @@
   {# ── Inline style overrides from child template ─────────────────── #}
   {% block head_style %}{% endblock %}
 
+  {# ── Service URL config (consumed by JS via window.COSYSIM.services) ── #}
+  <script>
+    window.COSYSIM = window.COSYSIM || {};
+    window.COSYSIM.services = {
+      phone:   '{{ phone_url | default("http://localhost:5555") }}',
+      tts:     '{{ tts_url | default("http://localhost:8600") }}',
+      comfyui: '{{ comfyui_url | default("http://localhost:8188") }}',
+      nexus:   '{{ nexus_url | default("http://localhost:8700") }}'
+    };
+  </script>
+
   {# ── Head scripts (rare — prefer body_scripts) ─────────────────── #}
   {% block head_scripts %}{% endblock %}
 </head>

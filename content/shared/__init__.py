@@ -419,6 +419,26 @@ def register_shared_assets(app):
 
     app.register_blueprint(shared_bp)
 
+    # Inject service URLs into all Jinja2 templates so neon_base.html can
+    # populate window.COSYSIM.services for JS consumption.
+    @app.context_processor
+    def _inject_service_urls():
+        try:
+            from engine.port_registry import get_service_url
+            return {
+                "phone_url": get_service_url("phone"),
+                "tts_url": get_service_url("tts"),
+                "comfyui_url": get_service_url("comfyui"),
+                "nexus_url": get_service_url("nexus"),
+            }
+        except Exception:
+            return {
+                "phone_url": "http://localhost:5555",
+                "tts_url": "http://localhost:8600",
+                "comfyui_url": "http://localhost:8188",
+                "nexus_url": "http://localhost:8700",
+            }
+
     # Auto-mount news ticker API on every scene
     try:
         from engine.world.news_ticker import create_news_ticker_blueprint

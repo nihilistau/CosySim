@@ -907,7 +907,7 @@ class CosySimTUI(App[None]):
         if t == "flask":
             mod, cls_name = info["cls"].rsplit(".", 1)
             scene_cls = getattr(importlib.import_module(mod), cls_name)
-            instance = scene_cls()
+            instance = scene_cls(host=info.get("host", "0.0.0.0"))
             _log_path = str(PROJECT_ROOT / "tui_autostart.log")
 
             def _flask_target() -> None:
@@ -933,7 +933,7 @@ class CosySimTUI(App[None]):
             proc = subprocess.Popen(
                 [sys.executable, "-m", "streamlit", "run", str(script),
                  f"--server.port={info['port']}", "--server.headless=true",
-                 "--server.address=0.0.0.0", "--browser.gatherUsageStats=false",
+                 f"--server.address={info.get('host', '0.0.0.0')}", "--browser.gatherUsageStats=false",
                  "--logger.level=warning"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
@@ -945,7 +945,7 @@ class CosySimTUI(App[None]):
             thread = threading.Thread(
                 target=uvicorn.run,
                 args=(factory(),),
-                kwargs={"host": "0.0.0.0", "port": info["port"], "log_level": "warning"},
+                kwargs={"host": info.get("host", "0.0.0.0"), "port": info["port"], "log_level": "warning"},
                 daemon=True, name=f"cosysim-{name}",
             )
             thread.start()
