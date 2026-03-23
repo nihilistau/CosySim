@@ -51,6 +51,8 @@ def create_app() -> Tuple[Flask, SocketIO]:
 
     # ── Init database ────────────────────────────────────────────
     init_db()
+    from apps.assistant.services.cache import init_cache_table
+    init_cache_table()
 
     # ── Register blueprints ──────────────────────────────────────
     from apps.assistant.routes.views import views_bp

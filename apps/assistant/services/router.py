@@ -64,6 +64,7 @@ def dispatch(
     temperature: float = 0.7,
     max_tokens: int = 4096,
     system_prompt: str = "",
+    use_cache: bool = True,
     **kwargs: Any,
 ) -> Tuple[str, str]:
     """Non-streaming dispatch to the correct backend.
@@ -78,14 +79,34 @@ def dispatch(
     if system_prompt and not any(m.get("role") == "system" for m in messages):
         messages = [{"role": "system", "content": system_prompt}] + messages
 
+    # Check cache before calling backend
+    if use_cache:
+        try:
+            from apps.assistant.services.cache import cache_get, cache_set
+            cached = cache_get(messages, resolved, temperature)
+            if cached is not None:
+                return cached, f"{backend} (cached)"
+        except Exception:
+            pass
+
     if backend == "copilot":
-        return _call_copilot(messages, resolved), "copilot"
+        result = _call_copilot(messages, resolved)
     elif backend == "lmstudio":
-        return _call_lmstudio(messages, resolved, temperature, max_tokens), "lmstudio"
+        result = _call_lmstudio(messages, resolved, temperature, max_tokens)
     elif backend == "nlm":
-        return _call_nlm(messages), "nlm"
+        result = _call_nlm(messages)
     else:
-        return _call_copilot(messages, resolved), "copilot"
+        result = _call_copilot(messages, resolved)
+
+    # Store in cache
+    if use_cache and result:
+        try:
+            from apps.assistant.services.cache import cache_set
+            cache_set(messages, resolved, result, temperature)
+        except Exception:
+            pass
+
+    return result, backend
 
 
 def dispatch_stream(
