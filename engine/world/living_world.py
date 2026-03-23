@@ -72,7 +72,8 @@ def _get_territory():
     try:
         from engine.world.territory import get_territory_manager
         return get_territory_manager()
-    except Exception:
+    except Exception as e:
+        logger.debug("[LivingWorld] Territory manager unavailable (operation=lazy_load): %s", e)
         return None
 
 
@@ -80,7 +81,8 @@ def _get_event_bus():
     try:
         from engine.events.event_bus import get_event_bus
         return get_event_bus()
-    except Exception:
+    except Exception as e:
+        logger.debug("[LivingWorld] EventBus unavailable (operation=lazy_load): %s", e)
         return None
 
 
@@ -352,8 +354,8 @@ class LivingWorld:
                                 ctrl[d_name] = ai_ctrl
                         if ctrl:
                             mkt.update_territory_multipliers(ctrl)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[LivingWorld] Territory multiplier update failed (operation=faction_tick): %s", e)
             except Exception as exc:
                 logger.debug("LivingWorld: faction tick failed: %s", exc)
 
@@ -399,8 +401,8 @@ class LivingWorld:
         if bus:
             try:
                 bus.publish("living_world_tick", result.to_dict())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[LivingWorld] EventBus publish failed (operation=tick_summary): %s", e)
 
         logger.debug(
             "LivingWorld tick #%d: %s — %d NPC moves, %d faction decisions, "
@@ -449,8 +451,8 @@ class LivingWorld:
             try:
                 mkt = _get_market()
                 mkt.apply_event(market_effect)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[LivingWorld] Market event apply failed (operation=apply_event_effects): %s", e)
 
         # NPC interruptions
         interrupts = event.get("npc_interrupts", [])
@@ -465,16 +467,16 @@ class LivingWorld:
                             reason=event.get("narrative", event["name"]),
                             location=event.get("district", ""),
                         )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[LivingWorld] NPC interrupt failed (operation=apply_event_effects): %s", e)
 
         # Broadcast event
         bus = _get_event_bus()
         if bus:
             try:
                 bus.publish("world_event", event)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[LivingWorld] EventBus world_event publish failed (operation=apply_event_effects): %s", e)
 
     # ──── Status / Queries ────
 
@@ -494,25 +496,29 @@ class LivingWorld:
             wt = ws.get_time()
             status["game_time"] = wt.to_display()
             status["time_of_day"] = wt.time_of_day
-        except Exception:
+        except Exception as e:
+            logger.debug("[LivingWorld] Game time unavailable (operation=get_status): %s", e)
             status["game_time"] = "unknown"
 
         try:
             mkt = _get_market()
             status["market"] = mkt.get_stats()
-        except Exception:
+        except Exception as e:
+            logger.debug("[LivingWorld] Market stats unavailable (operation=get_status): %s", e)
             status["market"] = {}
 
         try:
             rm = _get_routine_manager()
             status["npc_routines"] = rm.get_stats()
-        except Exception:
+        except Exception as e:
+            logger.debug("[LivingWorld] NPC routine stats unavailable (operation=get_status): %s", e)
             status["npc_routines"] = {}
 
         try:
             ai = _get_faction_ai()
             status["faction_ai"] = ai.get_stats()
-        except Exception:
+        except Exception as e:
+            logger.debug("[LivingWorld] Faction AI stats unavailable (operation=get_status): %s", e)
             status["faction_ai"] = {}
 
         status["weather"] = self._last_weather
@@ -562,16 +568,16 @@ class LivingWorld:
 
         try:
             _get_market().reset()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[LivingWorld] Market reset failed (operation=reset): %s", e)
         try:
             _get_routine_manager().reset()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[LivingWorld] Routine manager reset failed (operation=reset): %s", e)
         try:
             _get_faction_ai().reset()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[LivingWorld] Faction AI reset failed (operation=reset): %s", e)
 
 
 # ──── Singleton ────

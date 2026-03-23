@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Critical Rules
+
+These rules override all defaults. Follow them exactly — no exceptions.
+
+1. **Never declare "fixed" without proof.** Run the app or tests and show passing output before reporting success. "This should work now" is not acceptable — show evidence.
+2. **Reuse existing code.** When working implementations exist in the codebase, READ and BUILD ON them. Do NOT reverse-engineer or reimplement from scratch. Grep the codebase first.
+3. **No unrequested refactors.** Stick to the user's stated priorities and task list. If you think a refactor is needed, ASK FIRST. Never reorder the user's priority list.
+4. **Verify before editing.** Before modifying any file, confirm it actually needs changes for the current task. Do not make unnecessary edits to files outside scope. Run `git diff` before committing to catch accidental reverts.
+5. **Windows-aware.** This project runs on Windows. Use Python scripts instead of shell scripts. Be aware of path separators (`\` vs `/`), encoding issues, and port conflicts. LMStudio API base is `http://localhost:1234/v1` — do not deviate.
+6. **Always verify UI changes.** After ANY JS/CSS/HTML change, run `python scripts/browser_test.py` before declaring done. Never skip browser testing.
+
 ## What This Project Is
 
 CosySim is a local-first multi-scene AI simulation framework. 32 launch targets (15 game + 11 service + 6 creation) run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline with ~1,000 skills across 95 packs governs all agent behavior.

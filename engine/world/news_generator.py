@@ -565,8 +565,8 @@ class WorldNewsGenerator:
             bus = get_event_bus()
             for sub_id in self._subscription_ids:
                 bus.unsubscribe(sub_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WorldNewsGenerator] EventBus unsubscribe failed (operation=stop): %s", e)
 
         self._subscription_ids.clear()
         self._started = False

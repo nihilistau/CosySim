@@ -23,7 +23,10 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = "http://localhost:8700"
+
+def _get_nexus_url() -> str:
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
 DEFAULT_OUTPUT = Path(
     __import__("os").environ.get(
         "COSYSIM_KNOWLEDGE_EXPORT_DIR",
@@ -36,7 +39,7 @@ def _fetch_nexus(path: str) -> dict:
     """Fetch from Nexus API."""
     try:
         req = urllib.request.Request(
-            f"{NEXUS_URL}{path}",
+            f"{_get_nexus_url()}{path}",
             headers={"Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:

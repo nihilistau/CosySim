@@ -51,11 +51,12 @@ def _default_base_url() -> str:
         host = cfg.get("lmstudio", {}).get("host", "localhost")
         port = cfg.get("lmstudio", {}).get("port", 1234)
         return f"http://{host}:{port}/api/v1"
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[LLMService] Config unavailable, using default URL (operation=resolve_url): %s", e)
 
-    # 3) Safe default
-    return "http://localhost:1234/api/v1"
+    # 3) Safe default — resolve from port registry
+    from engine.port_registry import get_service_url
+    return get_service_url("lmstudio", "/api/v1")
 
 
 class LLMService:
@@ -97,7 +98,8 @@ class LLMService:
             from engine.lmstudio.chat import is_ready
             self._connected = is_ready()
             return self._connected
-        except Exception:
+        except Exception as e:
+            logger.debug("[LLMService] LLM availability check failed (operation=is_available): %s", e)
             self._connected = False
             return False
 
@@ -113,8 +115,8 @@ class LLMService:
             if resolved:
                 self._model_cache = resolved
                 return resolved
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[LLMService] Model resolution failed (operation=get_active_model): %s", e)
         return None
 
     # ─────────────────────────────────────────────
@@ -165,8 +167,8 @@ class LLMService:
                         scene=None,
                         data={"tokens_out": len(_reply.split()), "temperature": temperature},
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[LLMService] ActivityBus publish failed (operation=chat): %s", e)
                 return _reply
             return self._fallback_response(messages)
         except Exception as e:
@@ -196,7 +198,8 @@ class LLMService:
         # Build system prompt from character
         try:
             system_prompt = character.get_system_prompt()
-        except Exception:
+        except Exception as e:
+            logger.debug("[LLMService] System prompt generation failed (operation=chat_with_character): %s", e)
             system_prompt = f"You are {character.name}, a virtual companion. Be warm, engaging, and stay in character."
 
         # Add memory context if available
@@ -204,8 +207,8 @@ class LLMService:
             memory_context = character.build_context(user_message)
             if memory_context:
                 system_prompt += f"\n\n## Relevant Memories\n{memory_context}"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[LLMService] Memory context build failed (operation=chat_with_character): %s", e)
 
         # Build message history
         messages = []

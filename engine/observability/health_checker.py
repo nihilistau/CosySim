@@ -431,8 +431,10 @@ class HealthChecker:
         try:
             import urllib.request
 
+            from engine.port_registry import get_service_url
+
             with urllib.request.urlopen(
-                "http://localhost:8188/system_stats", timeout=2
+                get_service_url("comfyui", "/system_stats"), timeout=2
             ) as resp:
                 data = json.loads(resp.read())
             latency = (_time_module.monotonic() - start) * 1000
@@ -464,8 +466,10 @@ class HealthChecker:
         try:
             import urllib.request
 
+            from engine.port_registry import get_service_url
+
             with urllib.request.urlopen(
-                "http://localhost:5050/health", timeout=2
+                get_service_url("cosyvoice_tts", "/health"), timeout=2
             ) as resp:
                 data = json.loads(resp.read())
             latency = (_time_module.monotonic() - start) * 1000

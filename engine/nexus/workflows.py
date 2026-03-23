@@ -46,7 +46,10 @@ class ContentWorkflow:
         nexus_url: Nexus API base URL.
     """
 
-    def __init__(self, nexus_url: str = "http://127.0.0.1:8700") -> None:
+    def __init__(self, nexus_url: str = "") -> None:
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self._url = nexus_url
 
     def _store(self, title: str, content: str, tags: List[str]) -> Optional[str]:
@@ -255,7 +258,10 @@ class ResearchWorkflow:
         nexus_url: Nexus API base URL.
     """
 
-    def __init__(self, nexus_url: str = "http://127.0.0.1:8700") -> None:
+    def __init__(self, nexus_url: str = "") -> None:
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self._url = nexus_url
 
     def research(
@@ -430,7 +436,10 @@ class NotebookWorkflow:
         },
     }
 
-    def __init__(self, nexus_url: str = "http://127.0.0.1:8700") -> None:
+    def __init__(self, nexus_url: str = "") -> None:
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self._url = nexus_url
 
     def seed_notebook_knowledge(self, notebook_id: str = "all") -> Dict[str, Any]:

@@ -931,5 +931,6 @@ def get_character_modifier(character_id: str, modifier: str) -> float:
             return 1.0
         mods = state.get_modifiers()
         return getattr(mods, modifier, 1.0)
-    except Exception:
+    except Exception as e:
+        logger.debug("[Neurochemistry] Modifier lookup failed (operation=get_modifier): %s", e)
         return 1.0

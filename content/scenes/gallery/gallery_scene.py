@@ -307,8 +307,8 @@ class GalleryScene(FlaskScene):
         try:
             from engine.overlay import mount_overlay
             mount_overlay(self.app, self.socketio)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Overlay mount skipped (operation=init): %s", SCENE_ID, e)
 
         self._register_routes()
         self._register_socketio()
@@ -321,8 +321,8 @@ class GalleryScene(FlaskScene):
         # Bench route (FlaskScene already registers TTS)
         try:
             self.register_bench_route(self.app, self.socketio)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Bench route registration skipped (operation=init): %s", SCENE_ID, e)
 
         # THE OBSCURA state
         self._curator_mood: str = "contemplative"
@@ -339,8 +339,8 @@ class GalleryScene(FlaskScene):
             ctx = build_governance_context(char_id, "gallery", "")
             if ctx:
                 return ctx
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Governance context failed (operation=get_governor_context): %s", SCENE_ID, e)
         # Fallback: basic state info
         lines: List[str] = []
         try:
@@ -350,8 +350,8 @@ class GalleryScene(FlaskScene):
                 mood = state.get("mood", "neutral")
                 energy = state.get("energy", 50)
                 lines.append(f"Current mood: {mood} | Energy: {energy:.0f}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] State coordinator unavailable (operation=get_governor_context): %s", SCENE_ID, e)
         return "\n".join(lines)
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
@@ -385,14 +385,14 @@ class GalleryScene(FlaskScene):
             try:
                 self._event_bus.unsubscribe("world.tick", self._on_world_tick)
                 self._event_bus.unsubscribe("world.time_change", self._on_time_change)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] EventBus unsubscribe failed (operation=on_shutdown): %s", SCENE_ID, e)
         if self._ticker_thread and self._ticker_thread.is_alive():
             self._ticker_thread.join(timeout=3)
         try:
             get_framework().save_state()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Framework state save failed (operation=on_shutdown): %s", SCENE_ID, e)
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:
@@ -405,8 +405,8 @@ class GalleryScene(FlaskScene):
                     "day": getattr(time_data, "day", 1),
                     "weather": str(getattr(time_data, "weather", "clear")),
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] World tick emit failed (operation=on_world_tick): %s", SCENE_ID, e)
 
     def _on_time_change(self, event: dict) -> None:
         """Rotate featured exhibit at midnight."""
@@ -468,8 +468,8 @@ class GalleryScene(FlaskScene):
                     "characters": {cid: c.to_dict() for cid, c in self.characters.items()},
                     "log": self.gallery_log[-5:],
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Gallery update emit failed (operation=ticker): %s", SCENE_ID, e)
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
@@ -487,8 +487,8 @@ class GalleryScene(FlaskScene):
     def _on_art_event(self, evt) -> None:
         try:
             self.socketio.emit("art_event", evt.payload)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Art event emit failed (operation=on_art_event): %s", SCENE_ID, e)
 
     # ── Character Seeding ──────────────────────────────────────────────────
 
@@ -521,8 +521,8 @@ class GalleryScene(FlaskScene):
                     fw = get_framework()
                     fw.get_character(char_id).enter_scene(SCENE_ID)
                     fw.get_character(char_id).update_state({"role": role})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] Framework character setup skipped (operation=seed): %s", SCENE_ID, e)
             logger.info("[%s] Seeded %d characters (operation=seed)", SCENE_ID, len(self.characters))
         except Exception as exc:
             logger.warning("[%s] Character seeding failed (operation=seed): %s", SCENE_ID, exc)
@@ -623,15 +623,15 @@ class GalleryScene(FlaskScene):
                         source="gallery_evaluation",
                         scene=SCENE_ID,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] State coordinator update failed (operation=evaluate): %s", SCENE_ID, e)
                 try:
                     fw = get_framework()
                     fw.get_character(char_id).update_state({
                         "artworks_evaluated": gc.artworks_evaluated,
                     })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] Framework state update failed (operation=evaluate): %s", SCENE_ID, e)
 
             # Store evaluation on artwork
             artwork.evaluations.append({
@@ -722,8 +722,8 @@ class GalleryScene(FlaskScene):
                         )
                         text = agent.run(prompt) or ""
                         alternatives.append({"text": text.strip(), "approach": "contrarian" if i else "thoughtful"})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] Alternative debate generation failed (operation=debate): %s", SCENE_ID, e)
 
                 # Pick the longer/more substantive one
                 best = max(alternatives, key=lambda a: len(a.get("text", ""))) if alternatives else {"text": ""}
@@ -831,8 +831,8 @@ class GalleryScene(FlaskScene):
                     "scene_id": SCENE_ID, "char_id": char_id,
                     "artwork_id": art.id, "title": art.title,
                 }, source=SCENE_ID)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Framework event emit failed (operation=create_art): %s", SCENE_ID, e)
 
             self._log("artwork_created", f"{gc.name} created '{art.title}'")
             return art
@@ -896,8 +896,8 @@ class GalleryScene(FlaskScene):
             )
             if item and item.content:
                 commentary = item.content[:300]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Content engine commentary failed (operation=enrich_piece): %s", SCENE_ID, e)
         return {**piece, "commentary": commentary}
 
     def _default_commentary(self, piece: Dict) -> str:
@@ -967,8 +967,8 @@ class GalleryScene(FlaskScene):
                             "reason": "Content profile does not permit access to this exhibit."
                         })
                         return
-                except Exception:
-                    pass  # Gate unavailable — proceed
+                except Exception as e:
+                    logger.debug("[%s] Content gate unavailable (operation=private_viewing): %s", SCENE_ID, e)
 
             # Economy spend
             try:
@@ -987,8 +987,8 @@ class GalleryScene(FlaskScene):
                     -250, TransactionType.SPEND, "gallery",
                     f"Private viewing: {piece['title']}"
                 )
-            except Exception:
-                pass  # Economy unavailable — proceed
+            except Exception as e:
+                logger.debug("[%s] Economy transaction failed (operation=private_viewing): %s", SCENE_ID, e)
 
             detail = self._get_piece_detail(piece_id) or dict(piece)
             emit("private_viewing_granted", {
@@ -1004,8 +1004,8 @@ class GalleryScene(FlaskScene):
                     {"piece_id": piece_id, "piece_title": piece["title"]},
                     scene="gallery",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] EventBus publish failed (operation=private_viewing): %s", SCENE_ID, e)
 
         @self.socketio.on("commission_work")
         def on_commission_work(data):
@@ -1043,8 +1043,8 @@ class GalleryScene(FlaskScene):
                     {"description": description, "intensity": intensity, "url": result.get("url")},
                     scene="gallery",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] EventBus publish failed (operation=commission): %s", SCENE_ID, e)
 
     def _get_state(self) -> Dict:
         return {

@@ -3,6 +3,7 @@ Video Call Handler
 Real-time video calls with generated character faces and lip sync
 """
 
+import logging
 import os
 import time
 import queue
@@ -18,6 +19,8 @@ sys.path.insert(0, str(project_root))
 from content.simulation.database.db import Database
 from content.simulation.services.media_generator import MediaGenerator
 from content.simulation.services.voice_call import VoiceCallHandler
+
+logger = logging.getLogger(__name__)
 
 
 class VideoCallHandler:
@@ -107,8 +110,8 @@ class VideoCallHandler:
                 scene=None,
                 data={"call_id": call_id},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[VideoCall] ActivityBus publish failed (operation=start_call): %s", e)
 
         return call_id
     
@@ -175,8 +178,8 @@ class VideoCallHandler:
                 scene=None,
                 data={"call_id": call_id, "duration": video_call_info.get("duration") if isinstance(video_call_info, dict) else None},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[VideoCall] ActivityBus publish failed (operation=end_call): %s", e)
 
         return video_call_info
     

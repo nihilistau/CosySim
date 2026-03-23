@@ -81,8 +81,8 @@ class VoiceGenerator:
                     if design:
                         description = design.description
                         effective_backend = "qwen3"
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[VoiceGen] Voice designer lookup failed for %s (operation=generate): %s", character_id, e)
 
             result = mgr.synthesize(
                 text=text,
@@ -137,8 +137,8 @@ class VoiceGenerator:
             for k, v in VOICE_PROFILES.items():
                 backend = v.get("backend", "piper")
                 voices.setdefault(backend, []).append({"id": k, **v})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[VoiceGen] Failed to load voice profiles (operation=list_voices): %s", e)
 
         try:
             from engine.tts.voice_designer import VoiceDesigner  # noqa: PLC0415
@@ -149,8 +149,8 @@ class VoiceGenerator:
                     "description": design.description,
                     "model_size": design.model_size,
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[VoiceGen] Failed to load voice designs (operation=list_voices): %s", e)
 
         return voices
 

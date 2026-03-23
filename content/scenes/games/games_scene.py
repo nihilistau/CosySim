@@ -357,8 +357,8 @@ class GamesScene(FlaskScene):
         try:
             self.mount_overlay(app)
             self.mount_skills_server(app)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GamesScene] Silent exception suppressed (operation=best_effort): %s", e)
 
     # ── Socket.IO Events ─────────────────────────────────────────────
 

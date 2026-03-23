@@ -568,100 +568,120 @@ class AgentLoop:
         }
 
         if action == "move":
-            loc = self.scene_map.get_location_by_name(target)
-            if loc:
-                success = self.scene_map.move_character(character_id, loc.id)
-                result["success"] = success
-                result["description"] = f"{character.name} moved to the {target}." if success else f"{target} is full."
-            else:
-                result["success"] = False
-                result["description"] = f"{character.name} doesn't know where '{target}' is."
-
+            self._execute_move(result, character, target, timestamp)
         elif action == "speak":
-            # Stateful dialog: generate actual speech with conversation memory
-            dialog = self._generate_dialog(character_id, decision)
-            if dialog:
-                message = dialog
-                result["message"] = dialog
+            self._execute_speak(result, character_id, character, decision, timestamp)
+        elif action in ("flirt", "touch", "kiss", "cuddle", "intimate"):
+            self._execute_physical(result, character_id, character, action, target, timestamp)
+        elif action == "interact":
+            self._execute_interact(result, character, message, timestamp)
+        else:  # idle
+            self._execute_idle(result, character)
+
+        self._post_execute(character_id, character, action, target, message, result)
+
+        return result
+
+    def _execute_move(self, result: Dict, character: Any, target: str, timestamp: str) -> None:
+        """Handle the 'move' action — relocate character to a named location."""
+        loc = self.scene_map.get_location_by_name(target)
+        if loc:
+            success = self.scene_map.move_character(result["character_id"], loc.id)
+            result["success"] = success
+            result["description"] = f"{character.name} moved to the {target}." if success else f"{target} is full."
+        else:
+            result["success"] = False
+            result["description"] = f"{character.name} doesn't know where '{target}' is."
+
+    def _execute_speak(self, result: Dict, character_id: str, character: Any, decision: Dict, timestamp: str) -> None:
+        """Handle the 'speak' action — generate dialog and log to shared conversation."""
+        dialog = self._generate_dialog(character_id, decision)
+        message = dialog if dialog else result["message"]
+        if dialog:
+            result["message"] = dialog
+        with self._log_lock:
+            self.shared_log.append({
+                "name": character.name, "text": message,
+                "timestamp": timestamp, "type": "speech",
+            })
+            self.shared_log = self.shared_log[-self._shared_log_max:]
+        result["description"] = f'{character.name} says: "{message}"'
+
+        # Emit character_speaking so the UI chat panel shows the speech
+        if self.socketio and message:
+            self.socketio.emit("character_speaking", {
+                "character_id": character_id,
+                "character_name": character.name,
+                "message": message,
+                "timestamp": timestamp,
+            })
+
+    def _execute_physical(self, result: Dict, character_id: str, character: Any, action: str, target: str, timestamp: str) -> None:
+        """Handle physical interaction actions (flirt/touch/kiss/cuddle/intimate)."""
+        nearby = self.scene_map.get_nearby_characters(character_id)
+        target_id = None
+        for nid in nearby:
+            other = self._characters.get(nid)
+            if other and (other.name.lower() == target.lower() or not target):
+                target_id = nid
+                break
+        if target_id:
+            other = self._characters[target_id]
+            desc_map = {
+                "flirt": f"{character.name} flirts with {other.name}",
+                "touch": f"{character.name} gently touches {other.name}",
+                "kiss": f"{character.name} kisses {other.name}",
+                "cuddle": f"{character.name} cuddles up to {other.name}",
+                "intimate": f"{character.name} and {other.name} share an intimate moment",
+            }
+            result["description"] = desc_map.get(action, f"{character.name} interacts with {other.name}")
             with self._log_lock:
                 self.shared_log.append({
-                    "name": character.name, "text": message,
-                    "timestamp": timestamp, "type": "speech",
+                    "name": character.name, "text": f"*{result['description']}*",
+                    "timestamp": timestamp, "type": "action",
                 })
                 self.shared_log = self.shared_log[-self._shared_log_max:]
-            result["description"] = f'{character.name} says: "{message}"'
+            arousal_boost = {"flirt": 0.05, "touch": 0.08, "kiss": 0.12, "cuddle": 0.10, "intimate": 0.20}
+            delta = arousal_boost.get(action, 0.05)
+            for cid in (character_id, target_id):
+                c = self._characters.get(cid)
+                if c and hasattr(c, 'adjust_arousal'):
+                    c.adjust_arousal(delta)
+        else:
+            result["success"] = False
+            result["description"] = f"No one nearby to {action} with."
 
-            # Emit character_speaking so the UI chat panel shows the speech
-            if self.socketio and message:
-                self.socketio.emit("character_speaking", {
-                    "character_id": character_id,
-                    "character_name": character.name,
-                    "message": message,
-                    "timestamp": timestamp,
+    def _execute_interact(self, result: Dict, character: Any, message: str, timestamp: str) -> None:
+        """Handle the 'interact' action — perform a location-based activity."""
+        loc = self.scene_map.get_character_location(result["character_id"])
+        if loc and loc.interactions:
+            activity = random.choice(loc.interactions) if not message else message
+            result["description"] = f"{character.name} {activity} at the {loc.name}."
+            with self._log_lock:
+                self.shared_log.append({
+                    "name": character.name, "text": f"*{result['description']}*",
+                    "timestamp": timestamp, "type": "action",
                 })
+                self.shared_log = self.shared_log[-self._shared_log_max:]
+        else:
+            result["description"] = f"{character.name} looks around."
 
-        elif action in ("flirt", "touch", "kiss", "cuddle", "intimate"):
-            # Physical interaction — check proximity
-            nearby = self.scene_map.get_nearby_characters(character_id)
-            target_id = None
-            for nid in nearby:
-                other = self._characters.get(nid)
-                if other and (other.name.lower() == target.lower() or not target):
-                    target_id = nid
-                    break
-            if target_id:
-                other = self._characters[target_id]
-                desc_map = {
-                    "flirt": f"{character.name} flirts with {other.name}",
-                    "touch": f"{character.name} gently touches {other.name}",
-                    "kiss": f"{character.name} kisses {other.name}",
-                    "cuddle": f"{character.name} cuddles up to {other.name}",
-                    "intimate": f"{character.name} and {other.name} share an intimate moment",
-                }
-                result["description"] = desc_map.get(action, f"{character.name} interacts with {other.name}")
-                with self._log_lock:
-                    self.shared_log.append({
-                        "name": character.name, "text": f"*{result['description']}*",
-                        "timestamp": timestamp, "type": "action",
-                    })
-                    self.shared_log = self.shared_log[-self._shared_log_max:]
-                arousal_boost = {"flirt": 0.05, "touch": 0.08, "kiss": 0.12, "cuddle": 0.10, "intimate": 0.20}
-                delta = arousal_boost.get(action, 0.05)
-                for cid in (character_id, target_id):
-                    c = self._characters.get(cid)
-                    if c and hasattr(c, 'adjust_arousal'):
-                        c.adjust_arousal(delta)
-            else:
-                result["success"] = False
-                result["description"] = f"No one nearby to {action} with."
+    def _execute_idle(self, result: Dict, character: Any) -> None:
+        """Handle the 'idle' action — pick a random idle description."""
+        loc = self.scene_map.get_character_location(result["character_id"])
+        loc_name = loc.name if loc else "the room"
+        idle_descs = [
+            f"{character.name} looks around the {loc_name} thoughtfully.",
+            f"{character.name} stretches and relaxes at the {loc_name}.",
+            f"{character.name} checks their phone.",
+            f"{character.name} gazes out the window.",
+            f"{character.name} hums softly to themselves.",
+            f"{character.name} adjusts their hair in a nearby mirror.",
+        ]
+        result["description"] = random.choice(idle_descs)
 
-        elif action == "interact":
-            loc = self.scene_map.get_character_location(character_id)
-            if loc and loc.interactions:
-                activity = random.choice(loc.interactions) if not message else message
-                result["description"] = f"{character.name} {activity} at the {loc.name}."
-                with self._log_lock:
-                    self.shared_log.append({
-                        "name": character.name, "text": f"*{result['description']}*",
-                        "timestamp": timestamp, "type": "action",
-                    })
-                    self.shared_log = self.shared_log[-self._shared_log_max:]
-            else:
-                result["description"] = f"{character.name} looks around."
-
-        else:  # idle
-            loc = self.scene_map.get_character_location(character_id)
-            loc_name = loc.name if loc else "the room"
-            idle_descs = [
-                f"{character.name} looks around the {loc_name} thoughtfully.",
-                f"{character.name} stretches and relaxes at the {loc_name}.",
-                f"{character.name} checks their phone.",
-                f"{character.name} gazes out the window.",
-                f"{character.name} hums softly to themselves.",
-                f"{character.name} adjusts their hair in a nearby mirror.",
-            ]
-            result["description"] = random.choice(idle_descs)
-
+    def _post_execute(self, character_id: str, character: Any, action: str, target: str, message: str, result: Dict) -> None:
+        """Shared post-execution: log to EventChain, publish to ActivityBus, emit to UI."""
         # Log to EventChain
         self._log_action(result)
 
@@ -681,8 +701,6 @@ class AgentLoop:
         # Emit to UI
         if self.socketio:
             self.socketio.emit("agent_action", result)
-
-        return result
 
     def _log_action(self, result: Dict) -> None:
         """Log action to EventChain (best-effort)."""

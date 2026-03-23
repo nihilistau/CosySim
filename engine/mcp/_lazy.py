@@ -14,7 +14,10 @@ gets a reference to the same function object, and each call delegates to
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 # Override dict — tests can swap in mocks here.
 _overrides: dict[str, Any] = {}
@@ -33,7 +36,8 @@ def _get_rag():
     try:
         from content.simulation.database.rag import RAGManager
         return RAGManager()
-    except Exception:
+    except Exception as e:
+        logger.debug("[_lazy] RAGManager unavailable (operation=get_rag): %s", e)
         return None
 
 

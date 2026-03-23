@@ -266,7 +266,8 @@ class NLMHybrid:
         try:
             with urllib.request.urlopen(f"{_PROXY_BASE}/health", timeout=3) as resp:
                 proxy_health = json.loads(resp.read())
-        except Exception:
+        except Exception as e:
+            logger.debug("[NLMHybrid] Proxy health check failed (operation=get_health): %s", e)
             proxy_health = {"status": "unreachable"}
 
         return {

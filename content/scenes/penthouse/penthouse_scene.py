@@ -730,18 +730,18 @@ class CharacterProfile:
 #  ROLEPLAY PROMPT BUILDER
 # ══════════════════════════════════════════════════════════════════════
 
-def build_roleplay_system_prompt(
-    character: Character,
+def _build_others_context(
     profile: "CharacterProfile",
-    scene_state: Dict,
     all_profiles: Dict,
-    story_beats: List[str],
+    scene_state: Dict,
     active_scenario: Optional[str] = None,
-) -> str:
-    stats = profile.stats
-    p_info = PERSONALITY_PROFILES.get(profile.personality_key, PERSONALITY_PROFILES["playful_tease"])
-    compliance = stats.compliance_score(p_info.get("compliance_mod", 0))
+    story_beats: Optional[List[str]] = None,
+) -> tuple:
+    """Build context text for other characters, scenario, story beats, and props.
 
+    Returns:
+        Tuple of (others_text, scenario_context, beats_text, props_text).
+    """
     other_chars = []
     for cid, pr in all_profiles.items():
         if pr is not profile:
@@ -749,12 +749,6 @@ def build_roleplay_system_prompt(
                 "name": scene_state.get("characters", {}).get(cid, {}).get("name", "Unknown"),
                 "profile": pr,
             })
-
-    loc_name = scene_state.get("characters", {}).get(character.id, {}).get("location", "the penthouse")
-    loc_id   = scene_state.get("characters", {}).get(character.id, {}).get("location_id", "bed")
-    loc_data = scene_state.get("locations", {}).get(loc_id, {})
-    available_actions = loc_data.get("interactions", [])
-    room_props = scene_state.get("room_props", [])
 
     scenario_context = ""
     if active_scenario and active_scenario in PREMADE_SCENARIOS:
@@ -766,6 +760,7 @@ def build_roleplay_system_prompt(
         beats_text = "\n\nUPCOMING STORY BEATS:\n"
         beats_text += "\n".join(f"• {b}" for b in story_beats[:5])
 
+    room_props = scene_state.get("room_props", [])
     props_text = ""
     if room_props:
         props_desc = [
@@ -782,7 +777,17 @@ def build_roleplay_system_prompt(
         if op.props_held:
             others_text += f" They're holding: {', '.join(op.props_held)}."
 
-    stat_desc = stats.describe()
+    return others_text, scenario_context, beats_text, props_text
+
+
+def _build_compliance_text(stats: "AgentStats", personality_key: str) -> str:
+    """Compute compliance score and return a human-readable compliance description.
+
+    Returns:
+        A string describing the character's current compliance level.
+    """
+    p_info = PERSONALITY_PROFILES.get(personality_key, PERSONALITY_PROFILES["playful_tease"])
+    compliance = stats.compliance_score(p_info.get("compliance_mod", 0))
     compliance_txt = (
         "highly compliant right now — open and willing"
         if compliance > 75 else
@@ -792,6 +797,31 @@ def build_roleplay_system_prompt(
         if compliance > 25 else
         "feeling very resistant and defiant tonight"
     )
+    return compliance_txt
+
+
+def build_roleplay_system_prompt(
+    character: Character,
+    profile: "CharacterProfile",
+    scene_state: Dict,
+    all_profiles: Dict,
+    story_beats: List[str],
+    active_scenario: Optional[str] = None,
+) -> str:
+    stats = profile.stats
+    p_info = PERSONALITY_PROFILES.get(profile.personality_key, PERSONALITY_PROFILES["playful_tease"])
+
+    loc_name = scene_state.get("characters", {}).get(character.id, {}).get("location", "the penthouse")
+    loc_id   = scene_state.get("characters", {}).get(character.id, {}).get("location_id", "bed")
+    loc_data = scene_state.get("locations", {}).get(loc_id, {})
+    available_actions = loc_data.get("interactions", [])
+
+    others_text, scenario_context, beats_text, props_text = _build_others_context(
+        profile, all_profiles, scene_state, active_scenario, story_beats,
+    )
+
+    stat_desc = stats.describe()
+    compliance_txt = _build_compliance_text(stats, profile.personality_key)
 
     prompt = f"""You are {character.name}, a fully embodied character in an immersive adult roleplay simulation.
 
@@ -1382,6 +1412,30 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
     # ── Routes ──────────────────────────────────────────────────────────
     def _setup_routes(self) -> None:
         """Register all Flask routes — core routes here, groups via mixins."""
+        self._setup_core_routes()
+        self._setup_api_routes()
+
+        # ── YAML Config API routes ──────────────────────────────────────
+        self._setup_config_routes()
+
+        # Delegate route groups to mixins
+        self._setup_character_routes()
+        self._setup_stat_routes()
+        self._setup_outfit_routes()
+        self._setup_spatial_routes()
+        self._setup_props_routes()
+        self._setup_director_routes()
+        self._setup_bedgame_routes()
+        self._setup_scenario_routes()
+        self._setup_conversation_routes()
+        self._setup_event_routes()
+        self._setup_agent_routes()
+        self._setup_utility_routes()
+        self._setup_model_routes()
+        self._setup_anim_studio_routes()
+
+    def _setup_core_routes(self) -> None:
+        """Register core Flask routes — index, classic, scene state, time, lighting, furniture, locations."""
 
         @self.app.route("/")
         def index():
@@ -1464,6 +1518,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                 }
             return jsonify(locs)
 
+    def _setup_api_routes(self) -> None:
+        """Register API routes — economy, world context endpoints."""
+
         @self.app.route("/api/economy")
         def api_economy():
             """Return current economy state for this scene."""
@@ -1485,25 +1542,6 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         def api_world_context():
             """Return living world context for the penthouse scene."""
             return jsonify(self._get_world_context_for_character())
-
-        # ── YAML Config API routes ──────────────────────────────────────
-        self._setup_config_routes()
-
-        # Delegate route groups to mixins
-        self._setup_character_routes()
-        self._setup_stat_routes()
-        self._setup_outfit_routes()
-        self._setup_spatial_routes()
-        self._setup_props_routes()
-        self._setup_director_routes()
-        self._setup_bedgame_routes()
-        self._setup_scenario_routes()
-        self._setup_conversation_routes()
-        self._setup_event_routes()
-        self._setup_agent_routes()
-        self._setup_utility_routes()
-        self._setup_model_routes()
-        self._setup_anim_studio_routes()
 
     # ── YAML Config API ────────────────────────────────────────────────
     def _setup_config_routes(self) -> None:
@@ -1558,6 +1596,13 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
     # ── SocketIO─────────────────────────────────────────────────────────
     def _setup_socketio(self):
+        self._setup_socketio_core()
+        self._setup_socketio_stats()
+        self._setup_socketio_director()
+        self._setup_socketio_economy()
+
+    def _setup_socketio_core(self):
+        """Register connect, disconnect, request_state, chat_message handlers."""
 
         @self.socketio.on("connect")
         def handle_connect():
@@ -1610,6 +1655,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
             threading.Thread(target=_respond, daemon=True, name="chat-respond").start()
 
+    def _setup_socketio_stats(self):
+        """Register quick_stat handler."""
+
         @self.socketio.on("quick_stat")
         def handle_quick_stat(data):
             cid = data.get("character_id")
@@ -1624,7 +1672,8 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                     pass
                 self._broadcast_state()
 
-        # ── Penthouse v0.68 — new socket handlers ──────────────────────
+    def _setup_socketio_director(self):
+        """Register get_scenarios, load_scenario, director_nudge handlers."""
 
         @self.socketio.on("get_scenarios")
         def handle_get_scenarios(data):
@@ -1715,6 +1764,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                 "beat": {"type": direction, "instruction": instruction},
                 "direction": direction,
             })
+
+    def _setup_socketio_economy(self):
+        """Register get_economy, spend_credits, world_tick handlers."""
 
         @self.socketio.on("get_economy")
         def handle_get_economy(data):

@@ -72,8 +72,8 @@ def _save_meta(meta: Dict[str, str]) -> None:
         try:
             if _META_FILE.exists():
                 existing_raw = json.loads(_META_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[NLMAuth] Failed to read existing meta file (operation=save_meta): %s", e)
         if meta.get("bl") and meta.get("bl") != existing_raw.get("bl"):
             meta["bl_updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         _META_FILE.parent.mkdir(parents=True, exist_ok=True)

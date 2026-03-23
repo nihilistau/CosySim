@@ -548,7 +548,8 @@ class WorldSim:
         try:
             ws = self._get_world_state()
             return _game_time_string(ws.get_time())
-        except Exception:
+        except Exception as e:
+            logger.debug("[WorldSim] Game time unavailable (operation=current_time): %s", e)
             return "Day 0 00:00"
 
     def _fire_npc_action(self) -> SimEvent:
@@ -750,8 +751,8 @@ class WorldSim:
             try:
                 from engine.world.player_state import get_player_state
                 get_player_state().adjust_heat(heat_impact, reason="ghost_message")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WorldSim] Heat adjustment failed (operation=hacker_event): %s", e)
 
         event = SimEvent(
             id=str(uuid.uuid4()),

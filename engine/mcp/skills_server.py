@@ -57,7 +57,8 @@ def _skill_to_json_schema(meta: Any) -> Dict[str, Any]:
     sig = inspect.signature(func)
     try:
         hints = get_type_hints(func)
-    except Exception:
+    except Exception as e:
+        logger.debug("[SkillsServer] Type hints extraction failed (operation=skill_to_schema): %s", e)
         hints = {}
 
     properties: Dict[str, Any] = {}

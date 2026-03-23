@@ -860,8 +860,8 @@ class AuctionScene(FlaskScene):
         try:
             ps = get_player_state()
             self._bidder_state.credits = ps.credits
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] PlayerState credit sync failed (operation=start_session): %s", SCENE_ID, e)
 
         # Select 5 random items from catalog (no duplicates within session)
         items = random.sample(AUCTION_CATALOG, min(self.ITEMS_PER_SESSION, len(AUCTION_CATALOG)))
@@ -1278,7 +1278,8 @@ class AuctionScene(FlaskScene):
             ps = get_player_state()
             available = ps.credits
             self._bidder_state.credits = available
-        except Exception:
+        except Exception as e:
+            logger.debug("[%s] PlayerState credit check failed (operation=place_bid): %s", SCENE_ID, e)
             available = self._bidder_state.credits
 
         if amount > available:
@@ -1519,15 +1520,15 @@ class AuctionScene(FlaskScene):
         for timer in self._npc_timers:
             try:
                 timer.cancel()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] NPC timer cancel failed (operation=cancel_timers): %s", SCENE_ID, e)
         self._npc_timers.clear()
 
         if self._lot_timer:
             try:
                 self._lot_timer.cancel()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Lot timer cancel failed (operation=cancel_timers): %s", SCENE_ID, e)
             self._lot_timer = None
 
     # ══════════════════════════════════════════════════════════════════

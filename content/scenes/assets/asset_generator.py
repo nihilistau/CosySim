@@ -7,6 +7,7 @@ Connects to:
   - CosyVoice TTS (local)
 """
 
+import logging
 import streamlit as st
 import sys
 from pathlib import Path
@@ -16,6 +17,8 @@ from engine.paths import ROOT as project_root
 sys.path.insert(0, str(project_root))
 import os
 os.chdir(project_root)
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(
     page_title="CosySim – Asset Generator",
@@ -66,7 +69,8 @@ def get_character_list():
         from engine.assets import AssetManager
         am = AssetManager()
         return am.search(asset_type="character")
-    except Exception:
+    except Exception as e:
+        logger.debug("[AssetGenerator] Failed to list characters (operation=get_character_list): %s", e)
         return []
 
 
@@ -76,7 +80,8 @@ def get_character(char_id: str):
         from content.simulation.character_system.character import Character
         db = Database()
         return Character.load(char_id, db=db)
-    except Exception:
+    except Exception as e:
+        logger.debug("[AssetGenerator] Failed to load character (operation=get_character): %s", e)
         return None
 
 
@@ -106,12 +111,13 @@ def main():
 
         st.markdown("---")
         st.markdown("## 🔗 Navigation")
+        from engine.port_registry import get_service_url
         if st.button("🏠 Hub",           use_container_width=True):
-            st.markdown("[Go to Hub](http://localhost:8500)")
+            st.markdown(f"[Go to Hub]({get_service_url('hub')})")
         if st.button("🎛️ Admin Panel",   use_container_width=True):
-            st.markdown("[Go to Admin](http://localhost:8502)")
+            st.markdown(f"[Go to Admin]({get_service_url('admin')})")
         if st.button("📱 Phone Scene",   use_container_width=True):
-            st.markdown("[Go to Phone](http://localhost:5555)")
+            st.markdown(f"[Go to Phone]({get_service_url('phone')})")
 
         st.markdown("---")
         st.markdown(f"**Time:** {datetime.now().strftime('%H:%M:%S')}")

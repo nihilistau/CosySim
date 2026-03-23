@@ -3,6 +3,7 @@ Voice Call Handler
 Real-time voice call system using CosyVoice TTS and Whisper STT
 """
 
+import logging
 import os
 import time
 import queue
@@ -16,6 +17,8 @@ from engine.paths import CONTENT_DIR as project_root
 sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceCallHandler:
@@ -125,8 +128,8 @@ class VoiceCallHandler:
                 scene=None,
                 data={"call_id": call_id, "call_type": call_type},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[VoiceCall] ActivityBus publish failed (operation=start_call): %s", e)
 
         return call_id
     
@@ -200,8 +203,8 @@ class VoiceCallHandler:
                 scene=None,
                 data={"call_id": self.active_call["id"], "duration": duration},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[VoiceCall] ActivityBus publish failed (operation=end_call): %s", e)
 
         # Clear state
         call_info = self.active_call

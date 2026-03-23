@@ -39,7 +39,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
+def _get_nexus_url() -> str:
+    env = os.environ.get("NEXUS_URL")
+    if env:
+        return env
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
 LOG_DIR = Path(__file__).resolve().parent.parent.parent / ".github" / "hooks" / "logs"
 SESSION_FILE = LOG_DIR / "current_session.json"
 SESSION_STORE_DB = Path.home() / ".copilot" / "session-store" / "store.sqlite"
@@ -100,7 +105,7 @@ def _post(path: str, data: dict, timeout: int = 5, method: str = "POST") -> dict
         logger.debug("Suppressed exception", exc_info=True)
 
     try:
-        url = f"{NEXUS_URL}{path}"
+        url = f"{_get_nexus_url()}{path}"
         body = json.dumps(payload).encode()
         req = urllib.request.Request(url, data=body, method=method,
                                      headers={"Content-Type": "application/json"})

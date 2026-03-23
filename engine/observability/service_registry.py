@@ -104,7 +104,7 @@ _BUILTIN_SERVICES: List[Dict[str, Any]] = [
         "service_type": ServiceType.LLM,
         "host": "localhost",
         "port": 1234,
-        "health_url": "http://localhost:1234/api/v1/models",
+        "health_url": "",  # resolved lazily via _resolve_health_url
         "metadata": {"description": "LMStudio local LLM inference server"},
         "tags": ["llm", "inference", "local"],
         "capabilities": ["inference", "embeddings", "vision"],
@@ -320,17 +320,22 @@ class ServiceRegistry:
 
     def _register_builtins(self) -> None:
         """Auto-register all built-in services if not already present."""
+        from engine.port_registry import get_service_url
+
         now = datetime.now()
         for svc in _BUILTIN_SERVICES:
             sid = svc["service_id"]
             if sid not in self._services:
+                health_url = svc["health_url"]
+                if not health_url and svc["name"] == "lmstudio":
+                    health_url = get_service_url("lmstudio", "/api/v1/models")
                 record = ServiceRecord(
                     service_id=sid,
                     name=svc["name"],
                     service_type=svc["service_type"],
                     host=svc["host"],
                     port=svc["port"],
-                    health_url=svc["health_url"],
+                    health_url=health_url,
                     metadata=svc["metadata"],
                     registered_at=now,
                     last_seen=now,

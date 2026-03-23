@@ -146,8 +146,8 @@ def place_arena_bet(
             from engine.economy.economy import get_economy_manager
             balance = get_economy_manager().get_balance("player")
             balance_str = f" | Remaining balance: ₵{balance}"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[ArenaSkills] Balance check failed (operation=place_arena_bet): %s", e)
         return (
             f"Bet placed! ID: {bet.id}\n"
             f"  Type: {bet.bet_type} | Target: {bet.target} | Amount: ₵{bet.amount}"

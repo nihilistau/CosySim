@@ -1,10 +1,13 @@
 """Deep HAR payload analyzer — extracts operation codes, model IDs, controllable params."""
 from __future__ import annotations
 import json
+import logging
 import os
 import sys
 from collections import defaultdict
 from urllib.parse import urlparse, parse_qs
+
+logger = logging.getLogger(__name__)
 
 HAR_DIR = r"C:\Files\Models\New-Hars"
 
@@ -98,8 +101,8 @@ def analyze_hars():
                         "request": json.loads(post_body) if post_body else None,
                         "response": json.loads(resp_body) if resp_body else None,
                     })
-                except:
-                    pass
+                except (ValueError, json.JSONDecodeError, KeyError) as e:
+                    logger.debug("[har_payload_analyzer] Failed to parse getSettings payload (operation=parse): %s", e)
 
             # listGems
             if "listGems" in path and method == "POST":
@@ -109,8 +112,8 @@ def analyze_hars():
                         "request": json.loads(post_body) if post_body else None,
                         "response": json.loads(resp_body) if resp_body else None,
                     })
-                except:
-                    pass
+                except (ValueError, json.JSONDecodeError, KeyError) as e:
+                    logger.debug("[har_payload_analyzer] Failed to parse listGems payload (operation=parse): %s", e)
 
             # quotaSummary
             if "quotaSummary" in path and method == "POST":
@@ -120,8 +123,8 @@ def analyze_hars():
                         "request": json.loads(post_body) if post_body else None,
                         "response": json.loads(resp_body) if resp_body else None,
                     })
-                except:
-                    pass
+                except (ValueError, json.JSONDecodeError, KeyError) as e:
+                    logger.debug("[har_payload_analyzer] Failed to parse quotaSummary payload (operation=parse): %s", e)
 
             # updateUserSettings
             if "updateUserSettings" in path and method == "POST":
@@ -131,8 +134,8 @@ def analyze_hars():
                         "request": json.loads(post_body) if post_body else None,
                         "response": json.loads(resp_body) if resp_body else None,
                     })
-                except:
-                    pass
+                except (ValueError, json.JSONDecodeError, KeyError) as e:
+                    logger.debug("[har_payload_analyzer] Failed to parse updateUserSettings payload (operation=parse): %s", e)
 
             # prewarm
             if "prewarm" in path and method == "POST":
@@ -142,8 +145,8 @@ def analyze_hars():
                         "request": json.loads(post_body) if post_body else None,
                         "response": json.loads(resp_body) if resp_body else None,
                     })
-                except:
-                    pass
+                except (ValueError, json.JSONDecodeError, KeyError) as e:
+                    logger.debug("[har_payload_analyzer] Failed to parse prewarm payload (operation=parse): %s", e)
 
             # FetchRecommendation(s)
             if "FetchRecommendation" in path and method == "POST":
@@ -154,8 +157,8 @@ def analyze_hars():
                         "request": json.loads(post_body) if post_body else None,
                         "response": json.loads(resp_body) if resp_body else None,
                     })
-                except:
-                    pass
+                except (ValueError, json.JSONDecodeError, KeyError) as e:
+                    logger.debug("[har_payload_analyzer] Failed to parse FetchRecommendation payload (operation=parse): %s", e)
 
             # udpConsent
             if "udpConsent" in path and method == "POST":
@@ -165,8 +168,8 @@ def analyze_hars():
                         "request": json.loads(post_body) if post_body else None,
                         "response": json.loads(resp_body) if resp_body else None,
                     })
-                except:
-                    pass
+                except (ValueError, json.JSONDecodeError, KeyError) as e:
+                    logger.debug("[har_payload_analyzer] Failed to parse udpConsent payload (operation=parse): %s", e)
 
             # Cloud Search
             if "cloudsearch" in host and method == "POST":
@@ -177,8 +180,8 @@ def analyze_hars():
                         "response_size": len(resp_body) if resp_body else 0,
                         "response": json.loads(resp_body) if resp_body else None,
                     })
-                except:
-                    pass
+                except (ValueError, json.JSONDecodeError, KeyError) as e:
+                    logger.debug("[har_payload_analyzer] Failed to parse Cloud Search payload (operation=parse): %s", e)
 
             # workspaceui batch
             if host and "workspaceui" in host and "batch" in path and method == "POST":

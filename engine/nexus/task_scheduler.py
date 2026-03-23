@@ -174,7 +174,7 @@ class TaskScheduler:
 
     def __init__(self, config: Optional[Any] = None) -> None:
         self._config = config or get_config()
-        self._nexus_url = self._config.get("nexus.url", "http://localhost:8700/api")
+        self._nexus_url = self._config.get("nexus.base_url", "http://localhost:8700")
         self._tasks: Dict[str, AgentTask] = {}
 
     # ── CRUD ────────────────────────────────────────────────────────

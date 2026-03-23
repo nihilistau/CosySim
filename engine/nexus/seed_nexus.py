@@ -24,19 +24,23 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-NEXUS_URL = "http://localhost:8700"
+
+
+def _get_nexus_url() -> str:
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
 
 
 def _post(path: str, data: dict) -> dict | None:
     try:
-        url = f"{NEXUS_URL}{path}"
+        url = f"{_get_nexus_url()}{path}"
         body = json.dumps(data).encode()
         req = urllib.request.Request(url, data=body, method="POST",
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
     except urllib.error.URLError as e:
-        logger.error("Nexus unavailable at %s: %s", NEXUS_URL, e)
+        logger.error("Nexus unavailable at %s: %s", _get_nexus_url(), e)
         return None
     except Exception as e:
         logger.error("Failed to post to %s: %s", path, e)
@@ -45,7 +49,7 @@ def _post(path: str, data: dict) -> dict | None:
 
 def _get(path: str) -> dict | None:
     try:
-        url = f"{NEXUS_URL}{path}"
+        url = f"{_get_nexus_url()}{path}"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
@@ -368,7 +372,7 @@ def seed_all():
     # Check Nexus is available
     health = _get("/api/health")
     if not health:
-        logger.error("Nexus is not available at %s. Start it first.", NEXUS_URL)
+        logger.error("Nexus is not available at %s. Start it first.", _get_nexus_url())
         return False
 
     logger.info("Nexus is healthy: %s", health.get("status", "unknown"))

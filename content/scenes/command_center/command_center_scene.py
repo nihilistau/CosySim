@@ -162,8 +162,8 @@ class CommandCenterScene(FlaskScene):
         if db:
             try:
                 return db.get_recent_alerts(limit=limit)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return []
 
     def _activity_snapshot(self) -> Dict[str, Any]:
@@ -172,8 +172,8 @@ class CommandCenterScene(FlaskScene):
         if bus:
             try:
                 return bus.snapshot()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return {"current": [], "history": []}
 
     def _pipeline_history(self, seconds: int = 60, limit: int = 100) -> List[Dict]:
@@ -183,8 +183,8 @@ class CommandCenterScene(FlaskScene):
             try:
                 since = time.time() - seconds
                 return db.get_pipeline_history(since=since, limit=limit)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return []
 
     def _system_history(self, seconds: int = 60) -> List[Dict]:
@@ -194,8 +194,8 @@ class CommandCenterScene(FlaskScene):
             try:
                 since = time.time() - seconds
                 return db.get_system_history(since=since)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return []
 
     def _training_stats(self) -> Dict[str, Any]:
@@ -205,15 +205,15 @@ class CommandCenterScene(FlaskScene):
             cap = TrainingCapture.__dict__.get("_instance")
             if cap and hasattr(cap, "get_stats"):
                 return cap.get_stats()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         db = self._get_metrics_db()
         if db:
             try:
                 candidates = db.get_training_candidates(limit=0)
                 return {"total": 0, "datasets": {}}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return {"total": 0, "datasets": {}}
 
     def _benchmark_stats(self) -> Dict[str, Any]:
@@ -374,8 +374,8 @@ class CommandCenterScene(FlaskScene):
                     for k in ("phase", "heat", "round", "turn", "score"):
                         if k in d and k not in state_snap:
                             state_snap[k] = d[k]
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         info["state"] = state_snap
 
         # Heat from framework
@@ -384,8 +384,8 @@ class CommandCenterScene(FlaskScene):
             heat_data = fw.get_state(scene_id, "conversation_heat")
             if heat_data:
                 info["heat"] = heat_data.get("level", 0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # Last activity
         info["last_activity"] = time.time()
@@ -404,8 +404,8 @@ class CommandCenterScene(FlaskScene):
                         "text": n.get("text", "")[:200],
                         "ts": n.get("ts", 0),
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # Try EventChain as fallback
         if not messages:
@@ -419,8 +419,8 @@ class CommandCenterScene(FlaskScene):
                         "text": e.get("description", "")[:200],
                         "ts": e.get("timestamp", 0),
                     })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         return messages
 
@@ -438,8 +438,8 @@ class CommandCenterScene(FlaskScene):
                 details["energy"] = char_state.get("energy", 100)
                 details["stats"] = char_state.get("stats", {})
                 details["flags"] = char_state.get("flags", [])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # From Database (persistent data)
         try:
@@ -451,8 +451,8 @@ class CommandCenterScene(FlaskScene):
                 details["age"] = char.get("age")
                 details["sex"] = char.get("sex")
                 details["personality_id"] = char.get("personality_id")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # From CharacterStateCoordinator
         try:
@@ -466,8 +466,8 @@ class CommandCenterScene(FlaskScene):
                     "arousal": state.get("arousal", 0),
                     "inhibition": state.get("inhibition", 50),
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # Relationships
         try:
@@ -480,8 +480,8 @@ class CommandCenterScene(FlaskScene):
                      "attraction": r.get("attraction", 0)}
                     for r in rels[:10]
                 ]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         return details
 
@@ -554,8 +554,8 @@ class CommandCenterScene(FlaskScene):
                         "content": c.get("content", "")[:300],
                         "ts": c.get("timestamp", 0),
                     })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
             return jsonify(conversations)
 
         @app.route("/api/scenes/<scene_id>/inject", methods=["POST"])
@@ -653,8 +653,8 @@ class CommandCenterScene(FlaskScene):
                             "ts": n.get("ts", 0),
                             "type": "narrative",
                         })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
             # Fallback: EventChain
             if not messages:
@@ -673,8 +673,8 @@ class CommandCenterScene(FlaskScene):
                                     "ts": e.get("timestamp", 0),
                                     "type": e.get("event_type", "event"),
                                 })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
             # Sort by timestamp, take last N
             messages.sort(key=lambda m: m.get("ts", 0))
@@ -724,8 +724,8 @@ class CommandCenterScene(FlaskScene):
                             for k in ("phase", "round", "turn", "score"):
                                 if k in d and k not in state_snap:
                                     state_snap[k] = d[k]
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
                 card["game_state"] = state_snap
 
                 # Conversation heat
@@ -735,8 +735,8 @@ class CommandCenterScene(FlaskScene):
                     heat_data = fw.get_state(sid, "conversation_heat")
                     if heat_data:
                         heat = heat_data.get("level", 0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
                 card["conversation_heat"] = heat
 
                 result.append(card)
@@ -849,8 +849,8 @@ class CommandCenterScene(FlaskScene):
                 from content.simulation.database.events import get_event_chain
                 ec = get_event_chain()
                 total_events = ec.get_event_count()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
             result["totals"] = {
                 "scenes": len([s for s in scenes if s != SCENE_ID]),
@@ -955,8 +955,8 @@ class CommandCenterScene(FlaskScene):
                         summary=f"Broadcast: {message[:80]}",
                         scene_id=scene_id,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
                 logger.info("[%s] Broadcast (operation=broadcast, target_scene=%s, sender=%s): %s", SCENE_ID, scene_id, sender, message[:80])
                 return jsonify({"ok": True, "scene_id": scene_id, "sender": sender})
@@ -1018,8 +1018,8 @@ class CommandCenterScene(FlaskScene):
                         scene_id=from_scene,
                         character_id=character_id,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
                 # Emit framework events to both scenes
                 fw = get_framework()
@@ -1156,8 +1156,8 @@ class CommandCenterScene(FlaskScene):
                     try:
                         snap = bus.snapshot()
                         self.socketio.emit("metric_activity", snap)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
                 # Broadcast scene summaries every 3 ticks
                 tick_count += 1
@@ -1173,8 +1173,8 @@ class CommandCenterScene(FlaskScene):
                             except Exception:
                                 summaries.append({"id": sid, "running": True})
                         self.socketio.emit("scene_updates", summaries)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
             except Exception as exc:
                 logger.debug("Command center tick error: %s", exc)

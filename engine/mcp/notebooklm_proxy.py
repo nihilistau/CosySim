@@ -45,7 +45,9 @@ from engine.config import get_config
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_BASE_URL = "http://localhost:8800"
+def _default_base_url() -> str:
+    from engine.port_registry import get_service_url
+    return get_service_url("nlm_proxy")
 _REQUEST_TIMEOUT = 30
 
 
@@ -56,7 +58,7 @@ class NotebookLMProxy:
 
     def __init__(self, config: dict) -> None:
         self._config = config
-        self._base_url: str = config.get("base_url", _DEFAULT_BASE_URL).rstrip("/")
+        self._base_url: str = config.get("base_url", _default_base_url()).rstrip("/")
 
     # ── lifecycle ──────────────────────────────────────────────────────
 
@@ -93,7 +95,8 @@ class NotebookLMProxy:
             ) as resp:
                 data = json.loads(resp.read().decode())
                 return bool(data.get("has_cookies", False))
-        except Exception:
+        except Exception as e:
+            logger.debug("[NotebookLMProxy] Auth check failed (operation=has_valid_auth): %s", e)
             return False
 
     # ── API methods ────────────────────────────────────────────────────
