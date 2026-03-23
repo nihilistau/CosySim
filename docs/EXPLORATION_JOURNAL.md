@@ -2,7 +2,7 @@
 
 **A technical narrative of how CosySim learned to talk to NotebookLM, Gemini, AI Studio, GitHub Copilot, and Google Workspace — without a single official API.**
 
-Version: v1.0 [2026-03-23]
+Version: v2.0 [2026-03-23]
 Author: Knack + Claude Code
 
 ---
@@ -390,7 +390,384 @@ The hybrid router (`nlm_hybrid.py`) tries batchexecute first, falls back to Node
 
 ---
 
-## Chapter 7: The HAR Watchfolder — Closing the Loop
+## Chapter 7: The Chrome-Free Client — Faking Everything
+
+### The Problem
+
+The CDP browser injection approach (Chapter 3) works, but it requires Chrome to be running for every API call. For a production system that runs 24/7, you don't want to depend on a browser being open. The goal: make server-side HTTP calls that Google's servers can't distinguish from a real Chrome browser.
+
+### What Needs Faking
+
+Through months of HAR analysis and trial-and-error, we identified exactly which headers Google validates and which it ignores. The complete header set for a Chrome-free batchexecute client:
+
+```python
+headers = {
+    # ── Standard HTTP ────────────────────────────────────────
+    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/145.0.0.0 Safari/537.36"),
+    "Referer": "https://notebooklm.google.com/",
+    "Origin": "https://notebooklm.google.com",
+
+    # ── CORS compliance (required — request rejected without these) ──
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+
+    # ── Chrome identity (faked — server validates these) ─────
+    "sec-ch-ua": '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "x-browser-channel": "stable",
+    "x-browser-year": "2026",
+
+    # ── Anti-XSRF (required) ─────────────────────────────────
+    "X-Same-Domain": "1",
+
+    # ── Privacy (optional but looks more real) ───────────────
+    "DNT": "1",
+
+    # ── Auth (from cookies, NOT SAPISIDHASH) ─────────────────
+    "Cookie": "SID=...; SSID=...; APISID=...; __Secure-3PSID=...; ...",
+}
+```
+
+### What We Learned NOT to Send
+
+**SAPISIDHASH — the biggest gotcha.** Other Google APIs (Maps, Docs, Colab, Sheets, Drive) require an `Authorization: SAPISIDHASH <timestamp>_<sha1>` header. We initially added it to NLM calls because every other Google API uses it. **It causes HTTP 400, error code 3.** NotebookLM batchexecute authenticates ONLY via Cookie + the `at` CSRF token in the POST body. This took days to figure out — the error response is opaque, and every instinct said "add more auth headers."
+
+The HAR comparison that cracked it: we recorded a real Chrome session, exported the HAR, and diff'd our request headers against the browser's. The browser never sends `Authorization` to the batchexecute endpoint. That was the moment.
+
+**Empty `at` token — causes 403.** If the CSRF token isn't available yet (first page load), you must **omit the `at` parameter entirely** from the POST body. Sending `at=` (empty string) triggers a 403 Forbidden. This is different from most CSRF implementations that accept empty tokens.
+
+### Headers the Real Browser Sends That We Can't Easily Fake
+
+The Chrome MCP capture (2026-03-23) revealed headers that only a real browser generates:
+
+```
+x-browser-validation: OsQr7VAWzRcWhg0pyQAkUi0ayRw=    ← cryptographic, changes per request
+x-browser-copyright: Copyright 2026 Google LLC          ← static but Chrome-binary-embedded
+x-client-data: CIe2yQEIpbbJAQipncoBCM7eygEI...         ← Chrome variation/experiment flags
+x-goog-ext-353267353-jspb: [null,null,null,282611]       ← Google internal extension data
+```
+
+**We fake `x-browser-channel` and `x-browser-year`** — these are static strings that don't change per-request, and Google accepts our fakes. The `x-browser-validation` is cryptographic and per-request — we don't send it, and Google still accepts the request. This means it's likely used for telemetry/analytics, not auth enforcement.
+
+**Bottom line:** The Chrome-free client works for all batchexecute operations. The only thing it can't do is `GenerateFreeFormStreamed` (gRPC chat) which requires the `x-browser-validation` header — for that, we use the Chrome MCP approach or the Node.js bridge.
+
+### The f.req Payload Format
+
+The POST body is URL-encoded with two parameters:
+
+```
+f.req=<url_encoded_triple_nested_json>&at=<csrf_token>
+```
+
+The `f.req` structure (this took MANY attempts to get right):
+
+```python
+# CORRECT (confirmed from HAR — triple-nested)
+f_req = [[[rpc_id, args_json, None, "generic"]]]     # Three levels of nesting
+
+# WRONG (causes HTTP 400)
+f_req = [[rpc_id, args_json, None, "generic"]]        # Two levels — REJECTED
+f_req = [rpc_id, args_json, None, "generic"]           # One level — REJECTED
+```
+
+The third element (`None`) and fourth element (`"generic"`) are required padding. We don't know what they mean, but omitting them causes rejection. Every HAR capture shows them.
+
+For multi-RPC batching (up to ~10 calls per request):
+
+```python
+f_req = [[[rpc_id_1, args_1, None, "generic"],
+          [rpc_id_2, args_2, None, "generic"],
+          [rpc_id_3, args_3, None, "generic"]]]
+```
+
+### The URL Parameters
+
+```
+https://notebooklm.google.com/_/LabsTailwindUi/data/batchexecute
+    ?rpcids=VfAZjd;CYK0Xb         # semicolon-separated rpcid list
+    &source-path=/notebook/<uuid>   # notebook context (critical!)
+    &bl=boq_labs-tailwind-frontend_20260319.10_p0  # build label
+    &f.sid=-6520081273601444256     # server session ID
+    &hl=en                          # language
+    &_reqid=357556                  # request counter
+    &rt=c                           # response type: chunked wrb.fr
+```
+
+**`source-path` is critical.** Without the correct notebook UUID here, source-scoped RPCs (LIST_SOURCES, CREATE_NOTE, SAVE_NOTE, etc.) silently return null. For account-level RPCs (LIST_NOTEBOOKS, USER_QUOTA), use `source-path=/`.
+
+### The GenerateFreeFormStreamed Payload (gRPC Chat)
+
+This is the 9-element array for real conversational chat, confirmed from HAR entry #68 (March 2026 deployment):
+
+```python
+inner = [
+    # [0] Source context — every source UUID triple-nested
+    [[[source_id_1]], [[source_id_2]], [[source_id_3]], ...],
+
+    # [1] The question text
+    "What are the key findings?",
+
+    # [2] Conversation history (previous turns)
+    #     Format: [[prev_answer, null, 2], [prev_question, null, 1], ...]
+    #     Empty list [] for first message
+    [[previous_answer_text, None, 2],
+     [previous_question_text, None, 1]],
+
+    # [3] Response config
+    [2, None, [1], [1]],    # tier=2 (Pro), include citations, include thinking
+
+    # [4] Thread UUID (for conversation continuity)
+    "thread-uuid-here",     # or None for new conversation
+
+    # [5] Reserved (always None)
+    None,
+
+    # [6] Reserved (always None)
+    None,
+
+    # [7] Notebook UUID
+    "c3165bf5-b1a1-40e8-8f1f-2008234987b3",
+
+    # [8] Request type flag (always 1)
+    1,
+]
+
+# Wrapped as: f.req=[null, json.dumps(inner)]
+# Plus: &at={csrf_token} in POST body
+```
+
+### The Response Format (5-Layer Decode)
+
+Every batchexecute response follows this structure:
+
+```
+Layer 1: XSSI prefix     )]}'              ← strip this first
+Layer 2: Size hint        1053              ← byte count for next block
+Layer 3: wrb.fr frame     [["wrb.fr", "rpcid", "<inner_json>", null, null, null, "generic"]]
+Layer 4: Inner JSON       [[answer_id, "markdown with [citation_uuid] markers"]]
+Layer 5: Citation UUIDs   Extract via regex: [a-f0-9]{8}-[a-f0-9]{4}-...-[a-f0-9]{12}
+```
+
+For streaming responses (GenerateFreeFormStreamed), each chunk contains the **FULL answer text so far** — not deltas. Use the last chunk's text as the complete answer.
+
+### Source Object Encoding Gotchas
+
+Different source types use different positions in the source object array — getting this wrong causes silent failures (empty source created, no error):
+
+```python
+# Regular URL → position [2] as a string
+source_obj = [None, None, "https://example.com", None, None, None, None, None, None, None, 1]
+#                         ↑ position 2
+
+# YouTube URL → position [7] as a LIST (not a string!)
+source_obj = [None, None, None, None, None, None, None, ["https://youtube.com/watch?v=xyz"], None, None, 1]
+#                                                        ↑ position 7, wrapped in list
+
+# Text source → position [1] as [title, content], position [3] = 3
+source_obj = [None, ["Title", "Content..."], None, 3, None, None, None, None, None, None, 1]
+#                   ↑ position 1                   ↑ format type 3 = text
+```
+
+Using position 2 for YouTube or position 7 for regular URLs creates an empty source with no error message. This took considerable debugging to discover.
+
+---
+
+## Chapter 8: The Chrome MCP Revolution
+
+### What Changed Everything
+
+On 2026-03-23, we discovered that Chrome DevTools has an **official MCP server** (`chrome-devtools-mcp`). This replaces the entire CDP WebSocket nightmare with clean, standard MCP tool calls.
+
+### The Old Way (CDP WebSocket)
+
+```python
+# Async websockets library (NOT the sync websocket library — CORS blocks it)
+async with websockets.connect(tab['webSocketDebuggerUrl'], max_size=50*1024*1024) as ws:
+    await ws.send(json.dumps({"id": 1, "method": "Network.enable", "params": {}}))
+    while True:
+        r = json.loads(await asyncio.wait_for(ws.recv(), 30))
+        if r.get("id") == 1: break
+    # ... fight with CORS, async, timeouts, port mismatches ...
+```
+
+Problems: CORS 403 errors with sync library, port confusion (9222 vs 9223), async-only, no response body access, custom event loop needed.
+
+### The New Way (Chrome MCP)
+
+```json
+{
+  "mcpServers": {
+    "chrome": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest", "--browserUrl", "http://127.0.0.1:9223", "--no-usage-statistics"]
+    }
+  }
+}
+```
+
+Then just call MCP tools:
+
+```
+take_snapshot          → Full accessibility tree with element UIDs
+fill(uid, value)       → Type into any input (Angular-safe)
+click(uid)             → Click any button
+evaluate_script(fn)    → Run JS in page context
+list_network_requests  → All network traffic with filtering
+get_network_request    → Full request/response with headers, cookies, body
+take_screenshot        → Visual capture to disk
+navigate_page          → Go to URL
+press_key              → Keyboard input
+```
+
+### What the MCP Capture Revealed
+
+In one `get_network_request` call on the NLM chat endpoint, we extracted:
+
+1. **Full request headers** — including `x-browser-validation` (cryptographic, per-request), `x-client-data` (Chrome experiment flags), and `x-goog-ext-353267353-jspb` (Google internal extension data)
+2. **Complete cookie string** — every Google auth cookie, fresh, with exact domain/path/expiry
+3. **The exact f.req payload** — all 39 source UUIDs, the question, full conversation history
+4. **Response headers** — including fresh `Set-Cookie` with rotated SIDCC tokens
+5. **794KB response body** — saved to disk, the complete gRPC streaming response
+
+All without a single line of WebSocket code.
+
+### Two Methods, Two Use Cases
+
+| Aspect | Chrome-Free Client | Chrome MCP |
+|--------|-------------------|------------|
+| **Requires Chrome** | No (only for auth refresh) | Yes (must be running) |
+| **Auth source** | Cookies from disk (`nlm_cookies.json`) | Live browser session |
+| **Speed** | Fast (~200ms per call) | Medium (~500ms, MCP overhead) |
+| **batchexecute** | Full support | Full support |
+| **GenerateFreeFormStreamed** | Works but missing `x-browser-validation` | Full support (browser sends it) |
+| **Auth refresh** | CDP recovery or HAR import | Automatic (browser manages) |
+| **Best for** | Production, scheduled tasks, batch ops | ARGUS discovery, live debugging, auth capture |
+| **Setup** | Zero — just needs cookies on disk | `npx chrome-devtools-mcp` + Chrome |
+
+**The production architecture uses BOTH:**
+- Chrome-free client for all batchexecute operations (fast, no browser dependency)
+- Chrome MCP or Node.js bridge for gRPC chat (needs browser headers)
+- CDP auth recovery refreshes cookies periodically (every 15 minutes via scheduler)
+
+---
+
+## Chapter 9: Beyond NotebookLM — The WIZ Pattern
+
+### The Shared Architecture
+
+Through ARGUS discovery, we found that Google uses the exact same `batchexecute` protocol across multiple services. We call this the **WIZ pattern** (after the `WIZ_global_data` JavaScript object that contains session tokens):
+
+| Service | Endpoint | Auth | Status |
+|---------|----------|------|--------|
+| **NotebookLM** | `notebooklm.google.com/_/LabsTailwindUi/data/batchexecute` | Cookie + `at` CSRF | Production |
+| **Gemini** | `gemini.google.com/_/BardChatUi/data/batchexecute` | Cookie + `at` CSRF | Production |
+| **Opal** | `opal.google.com/_/Opal/data/batchexecute` | Cookie + `at` CSRF | Experimental |
+| **Colab** | `colab.clients6.google.com/...` | Cookie + SAPISIDHASH | Production |
+| **Sheets/Drive** | `clients6.google.com/...` | Cookie + SAPISIDHASH | Production |
+
+The key difference: NLM, Gemini, and Opal do NOT use SAPISIDHASH. Colab, Sheets, and Drive DO. This is a per-service decision by Google's auth team, not a protocol-level difference.
+
+### Gemini Extended Client
+
+Discovered 5 new rpcids from `gemini.google.com-NEWEST.har`:
+
+| rpcid | Operation | Notes |
+|-------|-----------|-------|
+| `HcT8bb` | List Storybook Gems | Creative workspace |
+| `XqA3Ic` | Get Storybook Detail | Individual gem content |
+| `ZKcapf` | List Saved Info | Bookmarks/saved items |
+| `jGArJ` | List My Content | /mystuff page |
+| `sJBwce` | Get Subscription Tiers | Pro/Ultra plan details |
+
+Gemini's gRPC streaming uses `BardFrontendService/StreamGenerate` instead of NLM's `LabsTailwindOrchestrationService/GenerateFreeFormStreamed`.
+
+### Opal Client (Google Labs)
+
+A new experimental creative workspace at `opal.google.com`. Uses the same WIZ batchexecute pattern. Shares credentials with NLM via `data/nlm_meta.json` — once you authenticate with NLM, Opal works automatically.
+
+---
+
+## Chapter 10: The ARGUS Intelligence Platform — Deep Internals
+
+### Architecture
+
+ARGUS isn't a single script — it's a multi-layer intelligence platform:
+
+```
+Orchestrator (scripts/argus/orchestrator.py)
+    ├── NetworkMonitor — CDP-based traffic capture (all tabs)
+    ├── NLMCrawler — 13 UI flows for NotebookLM
+    ├── GeminiCrawler — 10 UI flows for Gemini
+    ├── AIStudioCrawler — 15 UI flows for AI Studio
+    ├── BatchExecuteDecoder — f.req/wrb.fr parsing
+    ├── GrpcWebDecoder — Binary proto + JSON frame parsing
+    ├── HeapDiffer — V8 heap snapshot string table diffing
+    ├── FeatureFlagProber — ID range scanning (300-1500)
+    ├── ProtoReconstructor — Build .proto files from wire data
+    ├── EndpointRegistry — Versioned discovery storage
+    ├── ApiDocGenerator — Auto-generate API reference docs
+    └── NexusSink — Store discoveries in Nexus knowledge base
+```
+
+### Endpoint Registry
+
+The registry (`data/argus/registry.json`) is a versioned, diffable store of all discovered API endpoints:
+
+```json
+{
+  "schema": "2.0",
+  "nlm_rpcids": {"AUrzMb": {"name": "Analytics", "seen": 3, "last": "2026-03-23"}},
+  "gemini_rpcids": {...},
+  "aistudio_methods": {...},
+  "nlm_grpc_methods": {...},
+  "heap_discovered": {...},
+  "unknown_endpoints": {...},
+  "runs": [{"ts": "2026-03-23", "new_rpcids": ["AUrzMb"], "duration_s": 529.7}]
+}
+```
+
+The baseline is YAML-driven (`config/nlm_rpcids.yaml`), not hardcoded. When Google rotates rpcids, update the YAML and the entire SDK, transport layer, and ARGUS baseline update automatically.
+
+### The Crawler Flows
+
+Each crawler systematically exercises every UI feature to trigger all possible API calls:
+
+**NLM Crawler (13 flows):**
+1. List notebooks → `ub2Bae`
+2. Open notebook → `rLM1Ne`, `wXbhsf`, `e3bVqc`, `gArtLc`, `hPTbtc`, `sqTeoe`
+3. Send chat → `GenerateFreeFormStreamed`
+4. Get history → `GzgSEd`
+5. Generate study guide → `xqEXEf`
+6. Generate FAQ → `xqEXEf` (variant payload)
+7. Generate briefing → `xqEXEf` (variant payload)
+8. Audio overview → `sqTeoe`
+9. Notebook analysis → `VfAZjd`
+10. Add text source → `izAoDd`
+11. List sources → `wXbhsf`
+12. Feature flags → `ozz5Z`
+13. Create/delete notebook → `CCqFvf`, `WWINqb`
+
+### Protocol Monitor JSON Importer
+
+Chrome DevTools has a Protocol Monitor (Settings > Experiments > Protocol Monitor) that captures all CDP messages. The Save button exports them as JSON. We built an importer (`scripts/argus/importers/protocol_monitor.py`) that:
+
+1. Parses the exported JSON (array of CDP messages)
+2. Extracts `Network.requestWillBeSent` events
+3. Filters for `LabsTailwind` / `batchexecute` URLs
+4. Decodes `f.req` payloads (URL-encoded → JSON → rpcid + args)
+5. Extracts cookies, session tokens, gRPC method names
+6. Merges discoveries into the ARGUS endpoint registry
+
+The HAR watchfolder (`scripts/har_watchfolder.py`) auto-detects `.json` files alongside `.har` files and routes them through this importer.
+
+---
+
+## Chapter 11: The HAR Watchfolder — Closing the Auth Loop
 
 ### The Auth Lifecycle
 
@@ -426,39 +803,53 @@ Combined with the CDP auth recovery (runs every 15 minutes via scheduler), the s
 
 ---
 
-## Chapter 8: What We Learned
+## Chapter 12: What We Learned
 
 ### Protocol Discoveries
 
-1. **batchexecute** is Google's universal internal RPC framework — same wire format across Docs, Sheets, Drive, Gemini, NotebookLM, Apps Script. Learn it once, access everything.
+1. **batchexecute** is Google's universal internal RPC framework — same wire format across Docs, Sheets, Drive, Gemini, NotebookLM, Apps Script, Opal. Learn it once, access everything. We call this the **WIZ pattern**.
 
-2. **SAPISIDHASH** is per-service — NotebookLM batchexecute doesn't use it (cookies + CSRF only), but Colab, Sheets, and Drive do. Adding it where it's not expected causes 400 errors.
+2. **SAPISIDHASH** is per-service — NotebookLM, Gemini, and Opal don't use it (cookies + CSRF only). Colab, Sheets, and Drive DO use it. Adding it where it's not expected causes 400 errors. This per-service auth decision took days to discover.
 
-3. **Build labels expire silently** — no error, just empty responses. This is the #1 cause of "everything was working yesterday" failures.
+3. **Build labels expire silently** — no error, just empty responses. This is the #1 cause of "everything was working yesterday" failures. No HTTP error code, no 401 — just null data in a 200 response.
 
-4. **Real chat uses gRPC streaming**, not batchexecute. The `GenerateFreeFormStreamed` endpoint returns progressive full text, not deltas.
+4. **Real chat uses gRPC streaming**, not batchexecute. The `GenerateFreeFormStreamed` endpoint returns progressive full text, not deltas. The rpcid for chat rotated from `tJHFsf` to `Bgzyjc` during the Gemini v2 migration (confirmed 2026-03-23).
 
 5. **Source IDs and session IDs are scoped** — after the Gemini v2 migration, IDs from one session don't work in another. You need fresh session context.
 
 6. **Angular textarea injection** requires the native property setter — `element.value = x` doesn't trigger Angular's change detection. Must use `Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(element, x)` followed by `InputEvent` dispatch.
 
+7. **f.req MUST be triple-nested** — `[[[rpc, args, null, "generic"]]]` with three levels. Two levels causes 400. This took many failed attempts to get right.
+
+8. **Empty `at=` causes 403** — unlike most CSRF implementations, NLM rejects blank tokens. Omit the parameter entirely if you don't have it.
+
+9. **Chrome's `x-browser-*` headers CAN be faked** — `x-browser-channel: stable` and `x-browser-year: 2026` are static strings that Google accepts from server-side HTTP calls. The `x-browser-validation` header is cryptographic and per-request, but Google doesn't enforce it for batchexecute. It IS checked for some gRPC endpoints.
+
+10. **Source object positions vary by type and are undocumented** — regular URLs go at position [2], YouTube at position [7] as a list, text at position [1] as [title, content]. Wrong position = silent empty source, no error.
+
 ### Architecture Discoveries
 
-7. **CDP browser injection** is more reliable than direct HTTP — the browser handles all anti-automation headers, cookie scoping, and CORS. Let the browser do the auth.
+11. **Two-method architecture is optimal** — Chrome-free HTTP client for fast production batchexecute calls (no browser needed), Chrome MCP for gRPC chat and ARGUS discovery (needs browser). CDP auth recovery refreshes cookies for both.
 
-8. **Dual-backend redundancy** is essential — when batchexecute rpcids rotate, the Node.js browser bridge keeps working. When the browser bridge is slow, batchexecute handles source management.
+12. **Chrome DevTools MCP server** (`chrome-devtools-mcp`) replaces all raw CDP WebSocket code. One `get_network_request` call extracts headers, cookies, full request/response body — everything we spent hours fighting CDP for.
 
-9. **Heap snapshot diffing** finds APIs that network capture misses — some rpcids are triggered internally but never sent over the wire. V8 heap analysis catches them.
+13. **Dual-backend redundancy** is essential — when batchexecute rpcids rotate, the Node.js browser bridge keeps working. When the bridge is slow, batchexecute handles source management.
 
-10. **Knowledge distillation** compounds — feeding ARGUS discoveries into NotebookLM, then extracting Q&A pairs into Nexus, creates a searchable knowledge layer that gets richer with every scan.
+14. **Heap snapshot diffing** finds APIs that network capture misses — some rpcids are triggered internally but never sent over the wire. V8 heap analysis catches them.
+
+15. **Knowledge distillation compounds** — feeding ARGUS discoveries into NotebookLM, then extracting Q&A pairs into Nexus, creates a searchable knowledge layer that gets richer with every scan.
+
+16. **Local agents need APIs** — the system is designed so local LMStudio models (Qwen, Gemma, etc.) can call the NotebookLM SDK, ARGUS, and all integrations via the Flask proxy and MCP skills. The system builds itself from the inside.
 
 ### Operational Discoveries
 
-11. **Google deploys weekly** — build labels, rpcids, and sometimes payload formats change. Automated discovery isn't optional, it's mandatory for production stability.
+17. **Google deploys weekly** — build labels, rpcids, and sometimes payload formats change. Automated discovery isn't optional, it's mandatory for production stability.
 
-12. **API keys rotate unpredictably** — the CDP recovery system that harvests fresh keys from AI Studio is the only reliable way to maintain access.
+18. **API keys rotate unpredictably** — the CDP recovery system that harvests fresh keys from AI Studio is the only reliable way to maintain access.
 
-13. **HAR files are gold** — a single HAR capture contains everything: cookies, session tokens, build labels, rpcid→payload mappings, response formats. The watchfolder automation makes this a one-drop operation.
+19. **HAR files are gold** — a single HAR capture contains everything: cookies, session tokens, build labels, rpcid→payload mappings, response formats. The watchfolder automation makes this a one-drop operation.
+
+20. **Protocol Monitor JSON exports** are the new HAR — drop a `.json` export from Chrome DevTools Protocol Monitor into `data/hars/` and the watchfolder auto-imports rpcids + payloads + cookies into the ARGUS registry.
 
 ---
 
@@ -471,64 +862,161 @@ Combined with the CDP auth recovery (runs every 15 minutes via scheduler), the s
 | `argus_live_chat.py` | Quick chat traffic capture | Chrome spawn, cookie injection, Angular bypass |
 | `argus_chat_capture.py` | Detailed capture after rpcid rotation | Two-stage cookie injection, DOM detection |
 | `argus_chat_probe.py` | Production chat probe with CLI + JSON output | CDPSession class, response body retrieval |
+| `argus_grpc_discovery.py` | CDP-based gRPC method discovery | Tab navigation, button clicking, traffic capture |
+| `argus_deep_crawl.py` | Systematic UI crawl + direct RPC verification | All buttons + direct fetch tests |
 | `har_payload_analyzer.py` | Deep HAR mining for rpcids and payloads | Multi-endpoint extraction, override detection |
 | `analyze_gemini_deep.py` | Gemini rpcid and service path analysis | batchexecute decode, gRPC path extraction |
 | `analyze_gemini_deep2.py` | Gemini model list and thinking signatures | Response structure analysis |
-| `har_watchfolder.py` | Background auto-import daemon for HAR files | Polling, health probes, Nexus audit |
+| `har_watchfolder.py` | Background auto-import for HAR + Protocol Monitor JSON | Polling, health probes, Nexus audit |
 | `nlm_ask.py` | Simple NLM query via CDP browser fetch | Tab attach, fetch injection, thinking skip |
 | `ask.py` | Unified CLI for all frontier models | Multi-backend routing (Copilot/NLM/LMStudio) |
 | `model_proxy.py` | OpenAI-compatible API server | Protocol translation, SSE streaming |
 | `oracle.py` | System diagnostics and observability | Error aggregation, health grid, trace waterfall |
 
+**ARGUS Platform** (`scripts/argus/`):
+
+| Module | Purpose |
+|--------|---------|
+| `orchestrator.py` | Master controller — runs all phases sequentially |
+| `crawlers/nlm_crawler.py` | 13 NLM UI flows (list/open/chat/generate/source/flags) |
+| `crawlers/gemini_crawler.py` | 10 Gemini UI flows |
+| `crawlers/aistudio_crawler.py` | 15 AI Studio UI flows |
+| `decoders/batchexecute.py` | f.req/wrb.fr parsing and payload extraction |
+| `decoders/grpc_web.py` | Binary proto + JSON gRPC-web frame parsing |
+| `decoders/heap_diffing.py` | V8 heap snapshot string table diffing |
+| `discovery/endpoint_registry.py` | Versioned discovery storage with baseline diffs |
+| `discovery/feature_flag_probe.py` | NLM feature flag ID scanning (300-1500) |
+| `discovery/proto_reconstructor.py` | Build .proto files from captured wire data |
+| `discovery/rpcid_detector.py` | Pattern detection for new rpcids |
+| `network_monitor.py` | Real-time CDP network traffic capture |
+| `cdp_bridge.py` | CDP WebSocket connection management |
+| `importers/protocol_monitor.py` | Chrome Protocol Monitor JSON import |
+| `reporting/api_doc_generator.py` | Auto-generate API reference docs from registry |
+| `nexus_sink.py` | Store discoveries in Nexus knowledge base |
+
 ---
 
-## Appendix: The RPC Catalog (as of 2026-03-22)
+## Appendix: The RPC Catalog (as of 2026-03-23)
 
-### NotebookLM batchexecute (49 rpcids, 67% observed)
+### NotebookLM batchexecute (42 rpcids mapped, 18 confirmed live)
 
 **Notebook Management:**
-`wIlBFe`/`ub2Bae` ListNotebooks · `bv7rAb` CreateNotebook · `mFtdI` GetNotebook · `sM6gLf` UpdateNotebook · `kVoZqc` DeleteNotebook · `s0tc2d` RenameNotebook
+`ub2Bae` ListNotebooks · `CCqFvf` CreateNotebook/ResumeSession · `mFtdI` GetNotebook · `e3bVqc` NotebookInfo · `s0tc2d` RenameNotebook · `WWINqb` DeleteNotebook · `dI5Y8` ShareNotebook · `jzEKsc` GetSharedNotebook
 
 **Source Management:**
-`PoHVkb`/`izAoDd` AddSource · `VSSXud`/`tGMBJ` DeleteSource · `wXbhsf` ListSources · `tr032e` GetSourceSummary
+`izAoDd` AddSource · `tGMBJ` DeleteSource · `wXbhsf` ListSources · `tr032e` ReadSource · `hizoJc` SourceDetail · `o4cbdc` RegisterFiles · `K4YCPe` SourceMetadata · `jtGGne` SourcesAdvanced · `bfEAsb` ProcessSource
 
 **Q&A & Chat:**
-`CYK0Xb` CreateNote (Q&A with citations) · `tJHFsf` SendChatMessage · `VfAZjd` AISummary · `xqEXEf` GenerateGuide
+`CYK0Xb` CreateNote (Q&A with citations) · `Bgzyjc` GenerateFreeFormStreamed (real chat — **rotated from `tJHFsf`**)
 
-**Audio & Artifacts:**
-`sqTeoe` GetAudioOverview · `gArtLc` GetArtifacts · `ciyUvf` GenerateDoc · `R7cb6c` SaveReport
+**Notes & Artifacts:**
+`cYAfTb` SaveNote · `R7cb6c` SaveReport · `gArtLc` ListArtifacts
 
-**System:**
-`ozz5Z` GetFeatureFlags · `JFMDGd` UserProfile · `CCqFvf` ResumeSession
+**Document Generation:**
+`VfAZjd` AISummary · `ciyUvf` GenerateDoc · `xqEXEf` GenerateGuide · `yyryJe` GenerateMindMap
 
-### NotebookLM gRPC (24 methods)
+**Audio:**
+`sqTeoe` ListAudioTypes
 
-`GenerateFreeFormStreamed` · `CreateArtifact` · `DeriveArtifact` · `GenerateArtifact` · `MutateSource` · `RefreshSource` · `DeleteSources` · `CheckSourceFreshness` · `DiscoverSourcesAsync` · `MutateProject` · `DeleteProjects` · `ListFeaturedProjects` · `DeleteChatTurns` · `ListChatSessions` · `GetOrCreateAccount` · `ReportContent` · `GeneratePromptSuggestions` · `GenerateReportSuggestions`
+**Research:**
+`Ljjv0c` FastResearch · `QA9ei` DeepResearch · `LBwxtb` AddResearchSource
 
-### Gemini batchexecute (36 rpcids, 47% observed)
+**Threads & History:**
+`hPTbtc` GetThreadIds · `khqZz` ReadThread · `GzgSEd` GetChatHistory · `GfmCOc` DeleteChatHistory · `cFji9` SyncNotes/MindMap
 
-`otAQ7b` GenerateContent · `aPya6c` SessionInit · `ESY5D` GetHistory · `L5adhe` DraftInit · `PCck7e` ShareConversation · `NXpLKc` GetLinkedNotebooks · `ku4Jyf` CodeExecution
+**User & Account:**
+`JFMDGd` UserProfile · `ozz5Z` FeatureFlags/AccountState · `ZwVcOc` UserPlan/SessionInit · `DYBcR` GetLocale · `AUrzMb` Analytics (**discovered 2026-03-23**)
+
+**Export:**
+`Krh3pd` ExportToSheets
+
+### NotebookLM gRPC (25 methods via LabsTailwindOrchestrationService)
+
+**Implemented:**
+`GenerateFreeFormStreamed` (real chat — streaming, progressive full text)
+
+**Discovered (heap analysis + ARGUS crawl):**
+`CreateArtifact` · `DeriveArtifact` · `GenerateArtifact` · `GetArtifactUserState` · `UpsertArtifactUserState` · `CheckSourceFreshness` · `DiscoverSourcesAsync` · `DiscoverSourcesManifold` · `CancelDiscoverSourcesJob` · `FinishDiscoverSourcesRun` · `MutateSource` · `RefreshSource` · `DeleteSources` · `MutateProject` · `DeleteProjects` · `ListFeaturedProjects` · `UpdateFeaturedNotebookStatus` · `DeleteChatTurns` · `ListChatSessions` · `MutateNote` · `GetOrCreateAccount` · `ReportContent` · `GeneratePromptSuggestions` · `GenerateReportSuggestions`
+
+### Gemini batchexecute (41 rpcids)
+
+**Core:** `otAQ7b` GenerateContent · `aPya6c` SessionInit · `ESY5D` GetHistory · `L5adhe` DraftInit · `PCck7e` ShareConversation · `NXpLKc` GetLinkedNotebooks · `ku4Jyf` CodeExecution
+
+**New (2026-03-23):** `HcT8bb` ListStorybookGems · `XqA3Ic` GetStorybookDetail · `ZKcapf` ListSavedInfo · `jGArJ` ListMyContent · `sJBwce` GetSubscriptionTiers
 
 ### AI Studio gRPC (150+ methods, growing)
 
 Services: `MakerSuiteService` · `MakersuiteAppletControlService`
 Key methods: `GenerateContent` · `StreamGenerateContent` · `CreatePrompt` · `GetModel` · `ListModels`
 
+### Opal (Google Labs — experimental)
+
+Endpoint: `opal.google.com/_/Opal/data/batchexecute`
+Key rpcid: `ug7pge` OpalGeminiInit
+Auth: Same Cookie + `at` CSRF as NLM
+
 ---
 
 ## Appendix: Authentication Quick Reference
 
-| Service | Auth Method | Tokens Needed |
-|---------|------------|---------------|
-| NotebookLM (batchexecute) | Cookies + CSRF | SID, SSID, APISID, __Secure-3PSID + `at` token + `bl` build label + `f.sid` |
-| NotebookLM (gRPC) | Browser fetch (CDP) | Cookies via `credentials: 'include'` |
-| Gemini | Cookies + SAPISIDHASH | Same cookies + `SHA1(ts + SAPISID + origin)` |
-| AI Studio | API Key or SAPISIDHASH | `AIza...` key or cookie-based |
-| GitHub Copilot | GitHub Bearer token | GitHub cookies → `/chat/token` → 1hr Bearer |
-| Google Colab | SAPISIDHASH | Same cookies + SHA1 hash |
-| Google Sheets/Drive | SAPISIDHASH | Same cookies + SHA1 hash |
-| LMStudio | Optional Bearer | Config-driven, local only |
+| Service | Auth Method | SAPISIDHASH? | Tokens Needed |
+|---------|------------|:---:|---------------|
+| NotebookLM (batchexecute) | Cookies + CSRF | **NO** | SID, SSID, APISID, __Secure-3PSID + `at` + `bl` + `f.sid` |
+| NotebookLM (gRPC chat) | Cookies + CSRF + browser headers | **NO** | Same + `x-browser-validation` (via Chrome MCP or faked) |
+| Gemini | Cookies + CSRF | **NO** | Same as NLM (different `bl` and `f.sid`) |
+| Opal | Cookies + CSRF | **NO** | Same as NLM (shared `nlm_meta.json`) |
+| AI Studio | API Key or SAPISIDHASH | **YES** | `AIza...` key or cookie-based |
+| GitHub Copilot | GitHub Bearer token | N/A | GitHub cookies → `/chat/token` → 1hr Bearer |
+| Google Colab | Cookies + SAPISIDHASH | **YES** | Same cookies + `SHA1(ts + SAPISID + origin)` |
+| Google Sheets/Drive | Cookies + SAPISIDHASH | **YES** | Same cookies + SHA1 hash |
+| LMStudio | Optional Bearer | N/A | Config-driven (`lmstudio.api_token`), local only |
+
+### SAPISIDHASH Computation (for services that need it)
+
+```python
+import hashlib, time
+ts = str(int(time.time()))
+raw = f"{ts} {cookies['SAPISID']} {origin_url}"
+hash_value = hashlib.sha1(raw.encode()).hexdigest()
+header = f"SAPISIDHASH {ts}_{hash_value}"
+# Add as: Authorization: SAPISIDHASH <timestamp>_<hash>
+```
+
+**Services that use it:** Colab, Sheets, Drive, AI Studio
+**Services that REJECT it:** NotebookLM, Gemini, Opal (causes HTTP 400)
 
 ---
 
-*This document is a living record. As Google continues to evolve their internal APIs, ARGUS continues to discover, and this journal continues to grow.*
+## Appendix: The Two-Method Architecture
+
+CosySim uses both a Chrome-free HTTP client and Chrome MCP, each for what they do best:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Chrome-Free HTTP Client (nlm_transport.py)     │
+│  ├── All batchexecute RPCs (42 operations)      │
+│  ├── Faked headers (x-browser-*, sec-ch-*, etc) │
+│  ├── Cookie auth from disk (nlm_cookies.json)   │
+│  ├── No browser needed at runtime               │
+│  └── Used by: SDK, agents, scheduled tasks      │
+├─────────────────────────────────────────────────┤
+│  Chrome MCP (chrome-devtools-mcp)               │
+│  ├── GenerateFreeFormStreamed (gRPC chat)        │
+│  ├── ARGUS discovery crawls                     │
+│  ├── Network traffic capture + analysis         │
+│  ├── Auth refresh (cookie + token extraction)    │
+│  └── Used by: ARGUS, live debugging, chat       │
+├─────────────────────────────────────────────────┤
+│  CDP Auth Recovery (cdp_auth_recovery.py)       │
+│  ├── Refreshes cookies for both methods         │
+│  ├── Harvests API keys from AI Studio           │
+│  ├── Runs every 15 minutes via scheduler        │
+│  └── Syncs to GoogleAccountPool for all clients │
+└─────────────────────────────────────────────────┘
+```
+
+Local agents (LMStudio models) access everything through the Flask proxy API and MCP skills — they don't need to know which method is used internally.
+
+---
+
+*This document is a living record. As Google continues to evolve their internal APIs, ARGUS continues to discover, and this journal continues to grow. v2.0 — 2026-03-23.*
