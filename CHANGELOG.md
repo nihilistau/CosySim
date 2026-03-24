@@ -4,6 +4,65 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.50.2] — "NEXUS SELF-IMPROVING PIPELINE" — 2026-03-24
+
+Major hardening sprint: NEXUS self-improving loop fully wired, tested, and verified
+running end-to-end (10/10 smoke test). Embedding pipeline fixed, vector search
+operational, scheduler auto-assignment live, flywheel execution tracking, bidirectional
+config sync.
+
+### Phase 1 — Fix the Plumbing
+- **Gemini embedding config fix** — code read `enable_gemini` (non-existent key, always `False`); now reads `nexus.embeddings.enabled` — Gemini Embedding 2 finally initializes
+- **LMStudio L2 normalization** — LMStudio vectors were unnormalized in cosine space; now L2-normalized matching Gemini provider behavior (norm=1.0000 verified)
+- **Vector store feature flag** — `nexus.vector_store.enabled` config now actually respected; `is_vector_store_enabled()` guard added to query router Tier 2
+- **Vector store health check** — `NexusVectorStore.health()` method for Oracle observability
+- **Query provenance logging** — every query resolution logged with tier, confidence, time for Oracle aggregation
+
+### Phase 2 — Close the Feedback Loop
+- **Distiller → task generation** — `NexusDistiller.distill()` now auto-creates verification tasks via TaskScheduler when fix patterns are found
+- **Session logger governance** — raw HTTP fallback now logs warnings; session_distillation.py rewritten to use governed `get_nexus_client()` instead of `urllib.request`
+- **Agent feedback entries** — `LocalAgentBridge.complete_task()` stores structured feedback (category=agent-feedback) for distiller pattern extraction
+
+### Phase 3 — Scheduler Observable
+- **Enhanced `status()`** — overdue count, error rate %, tasks sorted by urgency, `next_due_in_s` per task
+- **Oracle endpoint** — `/api/oracle/scheduler` already wired (confirmed working)
+
+### Phase 4 — Scheduler Auto-Assignment
+- **Fixed `auto_assign()` bug** — was calling `claim_task(agent_id)` which claims wrong task; now uses `claim_task_by_id(task.id, agent_id)`
+- **Stale task cleanup** — `cleanup_stale_tasks()` resets CLAIMED tasks stuck >24h to PENDING
+- **Agent capability registry** — `build_agent_registry()` discovers loaded LMStudio models, maps to capability dicts with model size parsing
+- **Daemon task registered** — `task-auto-assign` runs every 5m: discovers agents → cleans stale → auto-assigns
+
+### Phase 5 — Flywheel Execution Tracking
+- **`_poll_previous_tasks()`** — checks execution status of tasks from prior flywheel runs before creating new ones
+- **Failed task fingerprint clearing** — FAILED tasks get fingerprint removed so they can be re-created
+- **Stuck task reset** — PENDING >48h tasks get `fail_task(retry=True)` to re-enter the queue
+
+### Phase 6 — Bidirectional Copilot Config Sync
+- **Pull methods** — `pull_instructions_from_nexus()`, `pull_agents_from_nexus()`, `pull_hooks_from_nexus()`, `pull_all_from_nexus()` with conflict detection (disk newer → skip + warn)
+- **`bidirectional_sync()`** — push first, then pull
+- **Structured preferences** — `store_preference()` now uses `add_entry()` with structured tags instead of fragile `add_qa()` storage
+- **Session lifecycle** — pull at session start, push at session end (copilot_bridge.py)
+
+### Smoke Test & Verification
+- **`scripts/nexus_smoke_test.py`** — 10-check end-to-end verification: Nexus health, embedding service, vector store, query router, scheduler daemon, config consistency, self-improvement loop
+- **10/10 passing** with Nexus KMS running
+
+### Tests
+- 16 new auto-assign tests (test_auto_assign.py)
+- 5 new flywheel tracking tests (test_flywheel_tracking.py)
+- 8 new copilot sync tests (test_copilot_sync.py)
+- 4 new vector search tests added to test_query_router.py (was globally disabled, now properly mocked)
+- 197 NEXUS tests passing, zero regressions
+
+### Files
+- 15 files modified, 3 new test files, 1 new script
+- engine/nexus/: embedding_service, vector_store, query_router, nexus_distiller, session_logger, session_distillation, local_agent_bridge, scheduler_daemon, task_scheduler, notebooklm_flywheel, copilot_self_config, copilot_bridge
+- config/default.yaml: embeddings + vector_store + tasks.auto_assign config
+- scripts/nexus_smoke_test.py: end-to-end verification
+
+---
+
 ## [1.49] — "INTERACTIVE SYSTEMS + CREATION KIT + API-FIRST" — 2026-03-22
 
 Major sprint: 3 interactive game UIs, a complete visual scene editor,

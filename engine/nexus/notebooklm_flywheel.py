@@ -1,5 +1,10 @@
 """NotebookLM control flywheel for the Copilot/Nexus control plane.
 
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Add _poll_previous_tasks() for execution tracking, clear failed fingerprints
+
 This module turns the dedicated control notebook into a repeatable orchestration
 surface:
 
@@ -194,9 +199,14 @@ class NotebookLMFlywheel:
             return {"status": "skipped", "reason": "disabled"}
 
         state = self._load_state()
+
+        # v1.50.2 [2026-03-24] — Poll previous task execution before creating new ones
+        task_tracking = self._poll_previous_tasks(state)
+
         if not force:
             interval_skip = self._should_skip_for_interval(state)
             if interval_skip:
+                interval_skip["task_tracking"] = task_tracking
                 return interval_skip
 
         resolved_url = notebook_url.strip() or self._resolve_control_notebook_url()
@@ -313,6 +323,7 @@ class NotebookLMFlywheel:
             "task_skips": task_skips,
             "distilled_pairs": distilled_pairs,
             "training": training_stats,
+            "task_tracking": task_tracking,  # v1.50.2 — execution status of prior tasks
             "warnings": warnings,
             "reason": reason,
         }
@@ -323,6 +334,95 @@ class NotebookLMFlywheel:
             artifact_hash=artifact_hash,
         )
         return result
+
+    # v1.50.2 [2026-03-24] — Poll execution status of tasks from previous runs
+    # CONNECTS: TaskScheduler.get_task_statuses(), TaskScheduler.fail_task()
+    # CALLED BY: run() before creating new tasks
+    def _poll_previous_tasks(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Check execution status of tasks created in previous flywheel runs.
+
+        - Identifies stuck tasks (PENDING beyond timeout) and resets them
+        - Removes fingerprints for FAILED tasks so they can be re-created
+        - Returns a summary of task execution status
+
+        Args:
+            state: Flywheel state dict (mutated in place).
+
+        Returns:
+            Summary dict with counts by status.
+        """
+        fingerprints = state.get("task_fingerprints", {})
+        if not fingerprints:
+            return {"total": 0}
+
+        task_ids = [
+            fp["task_id"] for fp in fingerprints.values()
+            if isinstance(fp, dict) and "task_id" in fp
+        ]
+        if not task_ids:
+            return {"total": 0}
+
+        try:
+            scheduler = get_task_scheduler()
+            statuses = scheduler.get_task_statuses(task_ids)
+        except Exception as exc:
+            logger.debug("[Flywheel] Could not poll task statuses: %s", exc)
+            return {"total": len(task_ids), "error": str(exc)}
+
+        stuck_timeout_h = self._config.get(
+            "notebooklm.flywheel.stuck_task_timeout_hours", 48.0
+        )
+        import time as _time
+        cutoff = _time.time() - (stuck_timeout_h * 3600)
+
+        summary = {"total": len(task_ids), "completed": 0, "pending": 0,
+                    "stuck_reset": 0, "failed": 0, "claimed": 0, "unknown": 0}
+
+        fingerprints_to_remove: List[str] = []
+
+        for fp_key, fp_data in list(fingerprints.items()):
+            if not isinstance(fp_data, dict):
+                continue
+            tid = fp_data.get("task_id", "")
+            status = statuses.get(tid, "unknown")
+
+            if status == "completed":
+                summary["completed"] += 1
+            elif status == "failed":
+                summary["failed"] += 1
+                # Remove fingerprint so task can be re-created on next run
+                fingerprints_to_remove.append(fp_key)
+            elif status == "pending":
+                summary["pending"] += 1
+                # Check if stuck
+                created_at = fp_data.get("created_at", "")
+                if created_at:
+                    try:
+                        from datetime import datetime, timezone
+                        dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        if dt.timestamp() < cutoff:
+                            try:
+                                scheduler.fail_task(tid, "stuck_pending", retry=True)
+                                summary["stuck_reset"] += 1
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+            elif status == "claimed":
+                summary["claimed"] += 1
+            else:
+                summary["unknown"] += 1
+
+        # Remove fingerprints for failed tasks
+        for fp_key in fingerprints_to_remove:
+            fingerprints.pop(fp_key, None)
+
+        if summary["stuck_reset"] > 0 or summary["failed"] > 0:
+            logger.info(
+                "[Flywheel] Task poll (operation=poll_tasks): %s", summary,
+            )
+
+        return summary
 
     def _load_state(self) -> Dict[str, Any]:
         """Load flywheel state from disk."""

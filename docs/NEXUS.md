@@ -1,6 +1,6 @@
 # Nexus — Knowledge Pipeline
 
-> CosySim Documentation — v1.50 [2026-03-22]
+> CosySim Documentation — v1.50.2 [2026-03-24]
 >
 > Nexus KMS, NotebookLM integration, query routing, and the training flywheel.
 
@@ -76,22 +76,24 @@ Every agent and session follows this discipline:
 ┌──────────────────────────────────────────────────────────────┐
 │  Copilot CLI / Claude Code / GitHub Copilot                  │
 │  ├── CopilotBridge       session start/end, pre-plan, metrics│
-│  ├── CopilotSelfConfig   sync instructions/agents/hooks      │
+│  ├── CopilotSelfConfig   bidirectional config sync (v1.50.2) │
 │  ├── CopilotValidation   drift detection, hook integrity     │
 │  ├── SeedCopilotRules    mirror repo assets into Nexus       │
 │  └── SessionLogger       checkpoint/compact/end export       │
 ├──────────────────────────────────────────────────────────────┤
 │  CosySim Engine (Agents, Scenes, Skills)                     │
 │  ├── NexusClient          HTTP client for Nexus API          │
-│  ├── NexusQueryRouter     4-tier smart routing               │
+│  ├── NexusQueryRouter     6-tier smart routing (v1.50.2)     │
+│  ├── EmbeddingService     Gemini Embedding 2 + LMStudio      │
+│  ├── NexusVectorStore     ChromaDB semantic search            │
 │  ├── TrainingFlywheel     auto-collect training data         │
-│  ├── TaskScheduler        agent task ticketing               │
-│  ├── SchedulerDaemon      55 recurring tasks (cron-like)     │
+│  ├── TaskScheduler        agent task ticketing + auto-assign │
+│  ├── SchedulerDaemon      84 recurring tasks (cron-like)     │
 │  ├── OperatorInbox        off-turn directive intake          │
 │  ├── KnowledgeCapture     dual-write backfill helper         │
 │  ├── NLMChain             multi-step chain-prompting         │
 │  ├── NotebookLMFlywheel   control notebook → tasks → train   │
-│  └── 85 total modules in engine/nexus/                       │
+│  └── 103 total modules in engine/nexus/                      │
 ├──────────────────────────────────────────────────────────────┤
 │  Skills Layer (93 Nexus-aware skills)                        │
 │  ├── nexus_skills.py      17 skills (search, ask, store, NLM)│
@@ -107,10 +109,11 @@ Every agent and session follows this discipline:
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Query Router — 4-Tier Pipeline
+### Query Router — 6-Tier Pipeline (v1.50.2)
 
 The query router is the heart of the knowledge pipeline. Every information retrieval
-request passes through confidence-scored tiers, cheapest first:
+request passes through confidence-scored tiers, cheapest first. Provenance logging
+tracks which tier answered each query for Oracle observability:
 
 ```
 Question arrives
@@ -119,20 +122,30 @@ Question arrives
 1. Q&A Cache ──────── Direct lookup in Nexus Q&A pairs
     │ miss              Instant, high confidence, 0 compute
     ▼
-2. FTS Knowledge ──── Full-text search + vector semantic search
+2. Vector Search ──── Gemini Embedding 2 + ChromaDB cosine similarity
+    │ miss              Fast, high confidence (semantic match)
+    ▼
+3. FTS Knowledge ──── Full-text search across Nexus entries
     │ miss              Fast, medium confidence
     ▼
-3. NLM Ask ────────── NotebookLM unified ask (free Gemini)
+4. Nexus Smart Ask ── Server-side pipeline (FTS + NLM hybrid)
+    │ miss              Medium, variable confidence
+    ▼
+5. NLM Direct Ask ─── NotebookLM unified ask (free Gemini)
     │ miss              Slower, high confidence (grounded)
     ▼
-4. LLM Fallback ───── Local LMStudio inference
+6. LLM Fallback ───── Local LMStudio inference
                         Variable confidence, uses local GPU
 ```
 
-**Auto-store behavior:** Every answer from tiers 3 and 4 is automatically stored back
+**Auto-store behavior:** Every answer from tiers 3–6 is automatically stored back
 into Nexus as a Q&A pair. This promotes the answer to tier 1 for all future queries,
 creating a self-improving loop where cache hit rate climbs and expensive calls decrease
 over time.
+
+**Vector search (Tier 2):** Uses `EmbeddingService` (Gemini Embedding 2 primary,
+LMStudio fallback) with L2-normalized vectors stored in ChromaDB. Controlled by
+`nexus.vector_store.enabled` config flag. Health check: `get_vector_store().health()`.
 
 ### NotebookLM Data Flow
 

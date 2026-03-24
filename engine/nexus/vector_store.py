@@ -1,5 +1,10 @@
 """ChromaDB-backed vector store for Nexus semantic search.
 
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Add health() method, is_vector_store_enabled() feature flag guard
+
 Provides persistent vector storage and similarity search for all Nexus content
 using the unified EmbeddingService (Gemini Embedding 2 or local fallback).
 
@@ -454,6 +459,33 @@ class NexusVectorStore:
             "total_vectors": sum(collection_stats.values()),
         }
 
+    # v1.50.2 [2026-03-24] — Health check for Oracle observability
+    def health(self) -> Dict[str, Any]:
+        """Return vector store health status for Oracle monitoring.
+
+        Returns:
+            Dict with status, collection count, persist_dir, and stats.
+        """
+        try:
+            client = self._get_client()
+            collections = client.list_collections()
+            st = self.stats()
+            return {
+                "status": "healthy",
+                "chromadb_collections": len(collections),
+                "persist_dir": str(self._persist_dir),
+                "total_vectors": st.get("total_vectors", 0),
+                "total_adds": st.get("total_adds", 0),
+                "total_searches": st.get("total_searches", 0),
+                "collections": st.get("collections", {}),
+            }
+        except Exception as exc:
+            return {
+                "status": "unhealthy",
+                "error": str(exc),
+                "persist_dir": str(self._persist_dir),
+            }
+
     def list_collections(self) -> List[str]:
         """List available collection keys."""
         return list(COLLECTION_MAP.keys())
@@ -492,8 +524,26 @@ _store_instance: Optional[NexusVectorStore] = None
 _store_lock = threading.Lock()
 
 
+# v1.50.2 [2026-03-24] — Feature flag guard: respect nexus.vector_store.enabled config
+def is_vector_store_enabled() -> bool:
+    """Check if the vector store is enabled in config."""
+    try:
+        return bool(get_config().get("nexus.vector_store.enabled", True))
+    except Exception:
+        return True
+
+
 def get_vector_store(**kwargs: Any) -> NexusVectorStore:
-    """Get or create the singleton NexusVectorStore."""
+    """Get or create the singleton NexusVectorStore.
+
+    Raises:
+        RuntimeError: If vector store is disabled via config.
+    """
+    if not is_vector_store_enabled():
+        raise RuntimeError(
+            "Vector store is disabled (nexus.vector_store.enabled=false). "
+            "Enable it in config/default.yaml to use semantic search."
+        )
     global _store_instance
     if _store_instance is None:
         with _store_lock:

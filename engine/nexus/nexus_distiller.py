@@ -1,5 +1,9 @@
-"""
-nexus_distiller.py — Distills raw session data into reusable knowledge.
+"""nexus_distiller.py — Distills raw session data into reusable knowledge.
+
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Wire distill() to TaskScheduler for auto task generation from fix patterns
 
 Processes conversation logs, session histories, and checkpoint data stored
 in Nexus to extract:
@@ -248,6 +252,34 @@ class NexusDistiller:
                     })
                     if stored:
                         counts["conventions"] += 1
+
+        # v1.50.2 [2026-03-24] — Auto-generate tasks from distilled fix patterns
+        # CONNECTS: TaskScheduler — closes the distiller → task generation gap
+        if counts["fixes"] > 0:
+            try:
+                from engine.nexus.task_scheduler import (
+                    TaskScheduler, TaskPriority, TaskComplexity,
+                )
+                scheduler = TaskScheduler()
+                scheduler.create_task(
+                    title=f"Verify {counts['fixes']} distilled fix(es)",
+                    description=(
+                        f"The distiller extracted {counts['fixes']} bug-fix patterns "
+                        f"from session logs. Verify each fix is properly implemented "
+                        f"and tested. Decisions: {counts['decisions']}, "
+                        f"Conventions: {counts['conventions']}."
+                    ),
+                    priority=TaskPriority.LOW,
+                    complexity=TaskComplexity.LOW,
+                    tags=["auto-generated", "distiller", "verify-fix"],
+                )
+                counts["tasks_generated"] = 1
+                logger.info(
+                    "[NexusDistiller] Generated verification task "
+                    "(operation=task_gen, fixes=%d)", counts["fixes"],
+                )
+            except Exception as exc:
+                logger.debug("Could not generate tasks from distillation: %s", exc)
 
         return counts
 

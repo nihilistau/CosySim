@@ -1,5 +1,9 @@
-"""
-Agent Task Scheduler — Ticketing system for local and Copilot agents.
+"""Agent Task Scheduler — Ticketing system for local and Copilot agents.
+
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Fix auto_assign bug (wrong task claimed), add cleanup_stale_tasks(), get_task_statuses()
 
 Manages task queues with priorities, dependencies, and atomic sub-tasks.
 Tasks are stored in Nexus for persistence and cross-agent visibility.
@@ -830,43 +834,104 @@ class TaskScheduler:
 
         return max(0.0, min(1.0, score))
 
+    # v1.50.2 [2026-03-24] — Fixed: was calling claim_task(agent_id) which claims
+    # the wrong task. Now uses claim_task_by_id(task.id, agent_id) to claim the
+    # specific task being matched. Added config-driven min_match_score.
     def auto_assign(
         self,
         agents: List[Dict[str, Any]],
+        min_score: float = 0.3,
     ) -> List[Dict[str, Any]]:
         """Auto-assign pending tasks to available agents.
 
         Args:
             agents: List of agent capability dicts. Each must have
                 "id" (str) and capability fields for match_agent().
+            min_score: Minimum match score to assign (0.0-1.0).
 
         Returns:
             List of assignment dicts with "task_id", "agent_id", "score".
         """
         available = self._get_available_tasks()
-        assignments = []
+        assignments: List[Dict[str, Any]] = []
+        # Track which agents have been assigned this round to avoid double-booking
+        assigned_agents: set = set()
 
         for task in available:
             best_agent = None
             best_score = 0.0
 
             for agent in agents:
+                if agent["id"] in assigned_agents:
+                    continue
                 score = self.match_agent(task, agent)
                 if score > best_score:
                     best_score = score
                     best_agent = agent
 
-            if best_agent and best_score >= 0.3:
-                self.claim_task(best_agent["id"])
-                assignments.append({
-                    "task_id": task.id,
-                    "agent_id": best_agent["id"],
-                    "score": round(best_score, 2),
-                })
+            if best_agent and best_score >= min_score:
+                ok = self.claim_task_by_id(task.id, best_agent["id"])
+                if ok:
+                    assigned_agents.add(best_agent["id"])
+                    assignments.append({
+                        "task_id": task.id,
+                        "agent_id": best_agent["id"],
+                        "score": round(best_score, 2),
+                    })
 
         if assignments:
-            logger.info("Auto-assigned %d tasks", len(assignments))
+            logger.info(
+                "[TaskScheduler] Auto-assigned %d task(s) (operation=auto_assign)",
+                len(assignments),
+            )
         return assignments
+
+    # v1.50.2 [2026-03-24] — Stale task cleanup: reset CLAIMED tasks past timeout
+    def cleanup_stale_tasks(self, timeout_hours: float = 24.0) -> int:
+        """Reset CLAIMED tasks that have been idle past the timeout.
+
+        Args:
+            timeout_hours: Hours after claiming before a task is considered stale.
+
+        Returns:
+            Number of tasks reset to PENDING.
+        """
+        now = time.time()
+        cutoff = now - (timeout_hours * 3600)
+        reset_count = 0
+
+        for task in list(self._tasks.values()):
+            if task.status == TaskStatus.CLAIMED and task.claimed_at < cutoff:
+                old_agent = task.assigned_agent
+                hours_ago = (now - task.claimed_at) / 3600
+                task.status = TaskStatus.PENDING
+                task.assigned_agent = ""
+                task.claimed_at = 0.0
+                reset_count += 1
+                logger.warning(
+                    "[TaskScheduler] Stale task %s reset to PENDING "
+                    "(operation=stale_cleanup, agent=%s): claimed %.1fh ago",
+                    task.id, old_agent, hours_ago,
+                )
+
+        return reset_count
+
+    # v1.50.2 [2026-03-24] — Bulk status query for flywheel execution tracking
+    def get_task_statuses(self, task_ids: List[str]) -> Dict[str, str]:
+        """Get current status of multiple tasks by ID.
+
+        Args:
+            task_ids: List of task IDs to query.
+
+        Returns:
+            Dict mapping task_id to status string. Missing IDs omitted.
+        """
+        result: Dict[str, str] = {}
+        for tid in task_ids:
+            task = self._tasks.get(tid)
+            if task:
+                result[tid] = task.status
+        return result
 
 
 # ── Singleton ───────────────────────────────────────────────────────────

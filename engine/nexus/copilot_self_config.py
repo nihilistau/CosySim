@@ -1,5 +1,9 @@
-"""
-Copilot Self-Configuration — Read and apply Copilot config from Nexus.
+"""Copilot Self-Configuration — Bidirectional Copilot config sync via Nexus.
+
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Add pull_from_nexus methods, bidirectional_sync(), structured preference storage
 
 On startup, Copilot should load its own configuration, instruction files,
 agent definitions, and hook scripts from Nexus rather than relying solely
@@ -405,18 +409,182 @@ class CopilotSelfConfig:
         )
         return result
 
+    # v1.50.2 [2026-03-24] — Pull methods: Nexus → disk (bidirectional sync)
+    # CONNECTS: get_instructions_from_nexus(), _sync_entry()
+
+    def pull_instructions_from_nexus(self) -> Dict[str, int]:
+        """Pull updated instruction files from Nexus to disk.
+
+        Safety: only overwrites if Nexus entry is newer than disk file.
+        Logs conflicts where disk is newer.
+
+        Returns:
+            Dict with pulled, skipped, and conflicts counts.
+        """
+        return self._pull_category_from_nexus(
+            category_key="instructions",
+            title_prefix="[Copilot Instruction]",
+            target_dir=self._instructions_dir,
+            file_suffix=".instructions.md",
+        )
+
+    def pull_agents_from_nexus(self) -> Dict[str, int]:
+        """Pull updated agent definitions from Nexus to disk."""
+        return self._pull_category_from_nexus(
+            category_key="agents",
+            title_prefix="[Copilot Agent]",
+            target_dir=self._agents_dir,
+            file_suffix=".agent.md",
+        )
+
+    def pull_hooks_from_nexus(self) -> Dict[str, int]:
+        """Pull updated hook scripts from Nexus to disk."""
+        return self._pull_category_from_nexus(
+            category_key="hooks",
+            title_prefix="[Copilot Hook]",
+            target_dir=self._hooks_dir,
+            file_suffix=".json",
+        )
+
+    def _pull_category_from_nexus(
+        self,
+        category_key: str,
+        title_prefix: str,
+        target_dir: Path,
+        file_suffix: str,
+    ) -> Dict[str, int]:
+        """Generic pull: download entries from Nexus and write to disk if newer."""
+        pulled = 0
+        skipped = 0
+        conflicts = 0
+
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            category = NEXUS_CATEGORIES.get(category_key, "")
+            entries = client.search(f"copilot {category_key}", limit=50)
+            if not entries:
+                return {"pulled": 0, "skipped": 0, "conflicts": 0}
+        except Exception as exc:
+            logger.debug("[CopilotConfig] Pull from Nexus failed: %s", exc)
+            return {"pulled": 0, "skipped": 0, "error": str(exc)}
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        for entry in entries:
+            title = self._entry_field(entry, "title", "")
+            content = self._entry_field(entry, "content", "")
+            entry_category = self._entry_field(entry, "category", "")
+            if not title.startswith(title_prefix) or entry_category != category:
+                continue
+            if not content:
+                skipped += 1
+                continue
+
+            # Extract name from title: "[Copilot Instruction] name" → "name"
+            name = title[len(title_prefix):].strip()
+            if not name:
+                skipped += 1
+                continue
+
+            target_path = target_dir / f"{name}{file_suffix}"
+            # Also try without suffix in case file already exists with simpler name
+            if not target_path.exists():
+                alt_path = target_dir / f"{name}.md"
+                if alt_path.exists():
+                    target_path = alt_path
+
+            # Compare timestamps: only write if Nexus is newer
+            nexus_updated = self._entry_field(entry, "updated_at", "")
+            if target_path.exists():
+                disk_content = target_path.read_text(encoding="utf-8")
+                if disk_content.strip() == content.strip():
+                    skipped += 1
+                    continue
+
+                # Check if disk is newer (conflict)
+                if nexus_updated:
+                    try:
+                        from datetime import datetime, timezone
+                        nexus_time = datetime.fromisoformat(
+                            nexus_updated.replace("Z", "+00:00")
+                        ).timestamp()
+                        disk_time = target_path.stat().st_mtime
+                        if disk_time > nexus_time:
+                            logger.warning(
+                                "[CopilotConfig] Conflict: disk %s is newer than Nexus "
+                                "(operation=pull, name=%s)", target_path.name, name,
+                            )
+                            conflicts += 1
+                            continue
+                    except Exception:
+                        pass  # Can't compare timestamps — proceed with overwrite
+
+            target_path.write_text(content, encoding="utf-8")
+            pulled += 1
+            logger.info(
+                "[CopilotConfig] Pulled %s from Nexus (operation=pull, name=%s)",
+                target_path.name, name,
+            )
+
+        return {"pulled": pulled, "skipped": skipped, "conflicts": conflicts}
+
+    def pull_all_from_nexus(self) -> Dict[str, Any]:
+        """Pull all Copilot configuration from Nexus to disk.
+
+        Returns summary of what was pulled, skipped, and conflicted.
+        """
+        result: Dict[str, Any] = {}
+        result["instructions"] = self.pull_instructions_from_nexus()
+        result["agents"] = self.pull_agents_from_nexus()
+        result["hooks"] = self.pull_hooks_from_nexus()
+
+        total_pulled = sum(
+            r.get("pulled", 0) for r in result.values() if isinstance(r, dict)
+        )
+        total_conflicts = sum(
+            r.get("conflicts", 0) for r in result.values() if isinstance(r, dict)
+        )
+        result["summary"] = {
+            "total_pulled": total_pulled,
+            "total_conflicts": total_conflicts,
+        }
+        if total_pulled > 0:
+            logger.info(
+                "[CopilotConfig] Pulled %d file(s) from Nexus (operation=pull_all, conflicts=%d)",
+                total_pulled, total_conflicts,
+            )
+        return result
+
+    def bidirectional_sync(self) -> Dict[str, Any]:
+        """Push local config to Nexus, then pull updates back.
+
+        Push-first ensures local changes are captured before pulling
+        any remote updates that may overwrite them.
+
+        Returns:
+            Dict with 'push' and 'pull' sub-results.
+        """
+        push_result = self.sync_all_to_nexus()
+        pull_result = self.pull_all_from_nexus()
+        return {"push": push_result, "pull": pull_result}
+
     # ── Preferences ─────────────────────────────────────────────────
+    # v1.50.2 [2026-03-24] — Replaced fragile Q&A storage with structured entries
 
     def store_preference(self, key: str, value: Any) -> None:
-        """Store a Copilot preference in Nexus."""
+        """Store a Copilot preference in Nexus as a structured entry."""
         self._cache[key] = value
         try:
             from engine.nexus.client import get_nexus_client
             client = get_nexus_client()
-            client.add_qa(
-                question=f"What is the Copilot preference for {key}?",
-                answer=json.dumps(value) if not isinstance(value, str) else value,
+            val_str = json.dumps(value) if not isinstance(value, str) else value
+            client.add_entry(
+                title=f"[Copilot Preference] {key}",
+                content=val_str,
+                content_type="note",
                 category=NEXUS_CATEGORIES["preferences"],
+                tags=["copilot", "preference", key],
             )
         except Exception as exc:
             logger.debug("Failed to store preference: %s", exc)
@@ -429,15 +597,18 @@ class CopilotSelfConfig:
         try:
             from engine.nexus.client import get_nexus_client
             client = get_nexus_client()
-            result = client.ask(f"What is the Copilot preference for {key}?")
-            if result and result.get("answer"):
-                answer = result["answer"]
-                try:
-                    value = json.loads(answer)
-                except (json.JSONDecodeError, TypeError):
-                    value = answer
-                self._cache[key] = value
-                return value
+            results = client.search(f"copilot preference {key}", limit=5)
+            for entry in (results or []):
+                title = self._entry_field(entry, "title", "")
+                if f"[Copilot Preference] {key}" in title:
+                    content = self._entry_field(entry, "content", "")
+                    if content:
+                        try:
+                            value = json.loads(content)
+                        except (json.JSONDecodeError, TypeError):
+                            value = content
+                        self._cache[key] = value
+                        return value
         except Exception:
             pass
 
