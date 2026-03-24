@@ -164,20 +164,23 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
 
 def _start_in_thread(name: str, info: Dict[str, Any],
                      failed: List[str]) -> threading.Thread:
-    t = info["type"]
+    """Launch a target as a subprocess for memory isolation.
 
-    # Pre-import the module in main thread to avoid import lock contention
-    if t == "flask":
-        try:
-            _import_class(info["cls"])  # import only, don't construct
-        except Exception as exc:
-            print(f"\n  {info['label']} import failed: {exc}")
-            failed.append(name)
-            return threading.Thread(target=lambda: None, daemon=True)
-
+    v1.51.4 [2026-03-24] — Changed from daemon threads to subprocesses.
+    Each scene gets its own Python process so 17+ Flask apps don't share
+    one address space. The thread just monitors the subprocess.
+    """
     def _worker() -> None:
         try:
-            _run_single(name, info)
+            proc = subprocess.Popen(
+                [sys.executable, str(PROJECT_ROOT / "launcher.py"), name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=str(PROJECT_ROOT),
+            )
+            # Store proc for cleanup — attach to the thread object
+            _worker.proc = proc
+            proc.wait()  # block until scene exits
         except Exception as exc:
             print(f"\n  {info['label']} crashed: {exc}")
             failed.append(name)
@@ -308,6 +311,9 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     except (OSError, AttributeError):
         pass
 
+    # v1.51.3 [2026-03-24] — Staggered launch: wait for each scene to bind
+    # its port before starting the next one. Prevents import lock contention
+    # and port-binding races that caused --core to drop scenes silently.
     def _launch_group(names: List[str], group: str) -> None:
         if not names:
             return
@@ -324,11 +330,10 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                 if proc:
                     all_procs.append(proc)
                     print(f"    [OK] {info['label']} (PID {proc.pid})")
-            elif info["type"] == "external":  # v1.42.1 — external type handler
+            elif info["type"] == "external":
                 proc = _start_external_proc(info, failed)
                 if proc:
                     all_procs.append(proc)
-                    # Wait up to 15s for external service to come online
                     port = info["port"]
                     for _wait in range(15):
                         if _port_up(port):
@@ -338,8 +343,15 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                     print(f"    [OK] {info['label']} (PID {proc.pid}, {status})")
             else:
                 _start_in_thread(name, info, failed)
-                print(f"    [OK] {info['label']} -> :{info['port']}")
-            time.sleep(0.4)
+                # Wait for this scene to bind its port before launching next
+                port = info["port"]
+                for _wait in range(8):
+                    if _port_up(port):
+                        break
+                    time.sleep(0.5)
+                status = "UP" if _port_up(port) else "starting"
+                print(f"    [{status:>2s}] {info['label']:.<35s} :{port}")
+            time.sleep(0.3)
 
     # ── v1.51.2 [2026-03-22] — Launch everything, wait once ─────────
     # 1. External services (Nexus KMS — needs port wait before anything else)
