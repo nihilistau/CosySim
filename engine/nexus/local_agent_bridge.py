@@ -1,5 +1,10 @@
 """Local Agent Bridge — connects LMStudio local models to the CosySim task system.
 
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Add build_agent_registry(), agent feedback on task completion
+
 Provides a clean interface for local LMStudio agents to:
 - Discover and claim tasks appropriate for their model size
 - Retrieve full task context (instructions, examples, relevant Nexus knowledge)
@@ -31,6 +36,7 @@ Usage::
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -54,6 +60,31 @@ _MODEL_COMPLEXITY_MAP: Dict[str, List[str]] = {
 
 # Max tasks per model claim in one session
 _MAX_CLAIM_BATCH = 3
+
+# v1.50.2 [2026-03-24] — Model size parsing patterns
+import re
+_SIZE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*[bB]", re.IGNORECASE)
+
+
+def _parse_model_size(model: Any) -> float:
+    """Extract model size in billions from model metadata or ID string.
+
+    Tries: model.params, model.id, str(model) for patterns like '7B', '0.5b', '14B'.
+    Returns 0.0 if size cannot be determined.
+    """
+    # Try numeric attribute first
+    for attr in ("params", "parameters", "size"):
+        val = getattr(model, attr, None)
+        if isinstance(val, (int, float)) and val > 0:
+            return float(val) if val < 1000 else val / 1e9
+
+    # Try string parsing from id or str representation
+    for source in (getattr(model, "id", ""), str(model)):
+        match = _SIZE_PATTERN.search(source)
+        if match:
+            return float(match.group(1))
+
+    return 0.0
 
 # Nexus context chunks to include per task
 _NEXUS_CONTEXT_LIMIT = 5
@@ -262,6 +293,30 @@ class LocalAgentBridge:
                 except Exception as exc:
                     logger.debug("Could not store task result in Nexus: %s", exc)
 
+            # v1.50.2 [2026-03-24] — Store structured feedback for distiller loop
+            # CONNECTS: NexusDistiller — agent feedback entries are picked up
+            # by the distiller for pattern extraction and task generation
+            try:
+                nexus = self._get_nexus()
+                agent_id = task.assigned_agent if task else "unknown"
+                feedback_content = json.dumps({
+                    "task_id": task_id,
+                    "task_title": title,
+                    "agent_id": agent_id,
+                    "result_summary": result[:500],
+                    "files_changed": files_changed or [],
+                    "completed_at": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
+                })
+                nexus.add_entry(
+                    title=f"Agent Feedback: {title[:80]}",
+                    content=feedback_content,
+                    content_type="note",
+                    category="agent-feedback",
+                    tags=["agent-feedback", "auto-generated", "distiller-input"],
+                )
+            except Exception as exc:
+                logger.debug("Could not store agent feedback: %s", exc)
+
             logger.info("Task %s completed: %s", task_id, result[:80])
             return {"status": "completed", "task_id": task_id, "nexus_id": nexus_id}
         except Exception as exc:
@@ -296,6 +351,55 @@ class LocalAgentBridge:
         except Exception as exc:
             logger.warning("fail_task failed: %s", exc)
             return {"error": str(exc)}
+
+    # v1.50.2 [2026-03-24] — Agent registry for auto_assign: discovers loaded models
+    # CONNECTS: LMSClient.get_models(), TaskScheduler.auto_assign()
+    # CALLED BY: _auto_assign_callback in scheduler_daemon.py
+    def build_agent_registry(self) -> List[Dict[str, Any]]:
+        """Discover loaded LMStudio models and build agent capability dicts.
+
+        Returns:
+            List of agent capability dicts suitable for TaskScheduler.auto_assign().
+            Empty list if LMStudio is offline or no models loaded.
+        """
+        try:
+            from engine.lmstudio import get_lms_client
+            client = get_lms_client()
+            if not client.is_available():
+                logger.debug("[AgentBridge] LMStudio offline (operation=build_registry)")
+                return []
+
+            models = client.get_models(loaded_only=True)
+            if not models:
+                return []
+
+            agents: List[Dict[str, Any]] = []
+            for model in models:
+                # Parse model size from identifier or metadata
+                size_b = _parse_model_size(model)
+                if size_b <= 0:
+                    continue
+
+                agents.append({
+                    "id": getattr(model, "id", str(model)),
+                    "model_size_b": size_b,
+                    "can_edit": size_b >= 3.0,
+                    "can_test": size_b >= 3.0,
+                    "can_review": size_b >= 14.0,
+                    "tags": [
+                        getattr(model, "architecture", ""),
+                        getattr(model, "type", ""),
+                    ],
+                })
+
+            logger.info(
+                "[AgentBridge] Built registry with %d agent(s) (operation=build_registry)",
+                len(agents),
+            )
+            return agents
+        except Exception as exc:
+            logger.debug("[AgentBridge] Registry build failed (operation=build_registry): %s", exc)
+            return []
 
     def get_agent_manifest(self, model_size: str = "worker") -> str:
         """Return a formatted system prompt fragment for an agent of this size.

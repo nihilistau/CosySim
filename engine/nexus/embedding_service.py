@@ -1,5 +1,11 @@
 """Unified embedding service — Gemini Embedding 2 with MRL + local fallback.
 
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Fix Gemini config key (was enable_gemini, now reads enabled),
+                            add L2 normalization to LMStudio provider for cosine space
+
 Provides a single interface for generating text embeddings using:
   1. Gemini Embedding 2 (primary) — MRL support, 768/1536/3072 dimensions
   2. LMStudio SDK (local fallback) — offline capable, any loaded embedding model
@@ -321,6 +327,7 @@ class LMStudioEmbeddingProvider:
     """Local embedding via LMStudio REST API (OpenAI-compatible)."""
 
     # v1.44.0 [2026-03-21] — Reads api_token from config instead of constructor param
+    # v1.50.2 [2026-03-24] — L2-normalize vectors for cosine space consistency with Gemini
     def __init__(
         self,
         model_key: Optional[str] = None,
@@ -339,6 +346,12 @@ class LMStudioEmbeddingProvider:
                 self._api_token = get_config().get("lmstudio.api_token", "") or None
             except Exception:
                 self._api_token = None
+        # v1.50.2 [2026-03-24] — Read normalize flag from config (was ignored for LMStudio)
+        try:
+            from engine.config import get_config as _gc
+            self._normalize = _gc().get("nexus.embeddings.normalize", True)
+        except Exception:
+            self._normalize = True
         self._session = requests.Session()
         self._dimensions_cache: Optional[int] = None
         self._call_count = 0
@@ -436,7 +449,11 @@ class LMStudioEmbeddingProvider:
         if not vectors:
             raise RuntimeError("LMStudio embed returned no vectors")
         self._call_count += 1
-        return vectors[0]
+        # v1.50.2 [2026-03-24] — L2-normalize for cosine space (matches Gemini behavior)
+        vector = vectors[0]
+        if self._normalize:
+            vector = _l2_normalize(vector)
+        return vector
 
     def embed_batch(
         self, texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT"
@@ -455,6 +472,9 @@ class LMStudioEmbeddingProvider:
                 f"LMStudio embed_batch mismatch: expected {len(texts)}, got {len(vectors)}"
             )
         self._call_count += 1
+        # v1.50.2 [2026-03-24] — L2-normalize for cosine space (matches Gemini behavior)
+        if self._normalize:
+            vectors = [_l2_normalize(v) for v in vectors]
         return vectors
 
 
@@ -508,7 +528,8 @@ class EmbeddingService:
         )
         self._batch_size = batch_size
         self._api_key_index = api_key_index
-        self._enable_gemini = cfg.get("nexus.embeddings.enable_gemini", False)
+        # v1.50.2 [2026-03-24] — Fix: read correct config key (was enable_gemini, never existed)
+        self._enable_gemini = cfg.get("nexus.embeddings.enabled", True)
         self._lmstudio_host = cfg.get("lmstudio.host", "127.0.0.1")
         self._lmstudio_port = cfg.get("lmstudio.port", 1234)
         self._lmstudio_token = cfg.get("lmstudio.api_token", None)

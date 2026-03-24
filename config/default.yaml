@@ -802,7 +802,7 @@ nexus:
     auto_sync_schedule: "every_15m"
     plan_digest_limit: 10
   embeddings:
-    enabled: true
+    enabled: true                # v1.50.2 — Controls Gemini provider init (EmbeddingService reads this)
     provider: "auto"             # "gemini" (primary), "local" (LMStudio), "auto"
     model: "gemini-embedding-001"  # Gemini Embedding (v1beta)
     dimensions: 768              # MRL: 768 (fast), 1536 (balanced), 3072 (max quality)
@@ -826,6 +826,14 @@ nexus:
     search_low: 0.30             # Weak match
     min_answer_length: 20        # Minimum chars for valid answer
     local_cache_ttl: 300         # Session cache TTL in seconds
+
+  # v1.50.2 [2026-03-24] — Task auto-assignment config
+  tasks:
+    auto_assign:
+      enabled: true              # Enable automatic task→agent assignment
+      interval: "every_5m"       # How often the daemon runs auto-assign
+      stale_timeout_hours: 24    # Reset CLAIMED tasks to PENDING after this
+      min_match_score: 0.3       # Minimum agent-task match score (0.0-1.0)
 
 # GitHub Codespace remote execution
 codespace:

@@ -1,5 +1,10 @@
 """Nexus Query Router — Smart query routing through Nexus-first pipeline.
 
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Add vector store feature flag guard, provenance logging
+
 Routes all queries through a confidence-scored pipeline:
   1. Q&A Cache (instant, high confidence)
   2. Vector Semantic Search (Gemini Embedding 2 + ChromaDB, high confidence)
@@ -146,6 +151,22 @@ class NexusQueryRouter:
     def stats(self) -> RouterStats:
         return self._stats
 
+    # v1.50.2 [2026-03-24] — Provenance logging for Oracle observability
+    def _log_resolution(self, question: str, result: "QueryResult") -> None:
+        """Log which tier resolved the query, for Oracle aggregation."""
+        if result.source == "none":
+            logger.info(
+                "[QueryRouter] No answer (operation=query, time_ms=%.1f): %s",
+                result.query_time_ms, question[:80],
+            )
+        else:
+            logger.info(
+                "[QueryRouter] Resolved (operation=query, tier=%s, confidence=%.2f, "
+                "time_ms=%.1f, tokens_saved=%d): %s",
+                result.source, result.confidence, result.query_time_ms,
+                result.tokens_saved, question[:80],
+            )
+
     # ── Main Query Method ───────────────────────────────────────────
 
     def query(self, question: str, min_confidence: float = 0.3,
@@ -196,13 +217,21 @@ class NexusQueryRouter:
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
+            self._log_resolution(question, result)
             return result
 
         # Tier 2: Vector Semantic Search (Gemini Embedding 2 + ChromaDB)
-        result = self._try_vector_search(question)
+        # v1.50.2 [2026-03-24] — Respect vector_store.enabled feature flag
+        from engine.nexus.vector_store import is_vector_store_enabled
+        if not is_vector_store_enabled():
+            logger.debug("[QueryRouter] Vector search skipped (operation=query): disabled in config")
+            result = None
+        else:
+            result = self._try_vector_search(question)
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
+            self._log_resolution(question, result)
             return result
 
         # Tier 3: FTS Knowledge Search
@@ -246,11 +275,13 @@ class NexusQueryRouter:
         # No answer found
         with self._lock:
             self._stats.no_answer += 1
-        return QueryResult(
+        no_result = QueryResult(
             answer="",
             source="none",
             query_time_ms=(time.time() - start) * 1000,
         )
+        self._log_resolution(question, no_result)
+        return no_result
 
     # ── Pipeline Tiers ──────────────────────────────────────────────
 

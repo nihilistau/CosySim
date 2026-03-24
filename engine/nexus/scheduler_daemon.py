@@ -1,5 +1,9 @@
-"""
-Scheduled Task Runner — Lightweight cron-like daemon for CosySim autonomous operations.
+"""Scheduled Task Runner — Lightweight cron-like daemon for CosySim autonomous operations.
+
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Enhanced status() with overdue/error tracking, register task-auto-assign
 
 Manages recurring background tasks (Nexus maintenance, dedup, quality checks)
 with persistent state, schedule parsing, and CLI interface.
@@ -299,14 +303,18 @@ class TaskSchedulerDaemon:
 
     # ──── Status ────
 
+    # v1.50.2 [2026-03-24] — Enhanced status with overdue tracking and summary stats
     def status(self) -> Dict[str, Any]:
-        """Return status of all registered tasks.
+        """Return comprehensive daemon status for Oracle observability.
 
         Returns:
-            Dict with running flag and per-task status info.
+            Dict with running flag, summary stats, and per-task details.
         """
         now = time.time()
         tasks_status: List[Dict[str, Any]] = []
+        overdue_count = 0
+        total_runs = 0
+        total_errors = 0
 
         with self._lock:
             for task in self._tasks.values():
@@ -315,6 +323,12 @@ class TaskSchedulerDaemon:
                     next_due = task.last_run + interval
                 else:
                     next_due = now  # due immediately
+
+                is_overdue = task.enabled and now > next_due
+                if is_overdue:
+                    overdue_count += 1
+                total_runs += task.run_count
+                total_errors += task.error_count
 
                 tasks_status.append({
                     "id": task.id,
@@ -326,14 +340,27 @@ class TaskSchedulerDaemon:
                         if task.last_run else None
                     ),
                     "next_due": datetime.fromtimestamp(next_due, tz=timezone.utc).isoformat(),
+                    "next_due_in_s": max(0, int(next_due - now)),
+                    "overdue": is_overdue,
                     "run_count": task.run_count,
                     "error_count": task.error_count,
-                    "last_result": task.last_result,
+                    "last_result": (task.last_result or "")[:200],
                 })
+
+        # Sort: overdue first, then by next_due_in_s ascending
+        tasks_status.sort(key=lambda t: (not t["overdue"], t["next_due_in_s"]))
+
+        enabled_count = sum(1 for t in tasks_status if t["enabled"])
+        error_rate = (total_errors / total_runs * 100) if total_runs > 0 else 0.0
 
         return {
             "running": self._running,
             "task_count": len(tasks_status),
+            "enabled_count": enabled_count,
+            "overdue_count": overdue_count,
+            "total_runs": total_runs,
+            "total_errors": total_errors,
+            "error_rate_pct": round(error_rate, 1),
             "tasks": tasks_status,
         }
 
@@ -1437,6 +1464,16 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     # ──── ARGUS Periodic Crawl ────
     daemon.register("argus-periodic-crawl", "Periodic ARGUS API surface scan (NLM rpcid coverage)", "weekly", _argus_periodic_crawl_callback)
 
+    # v1.50.2 [2026-03-24] — Task auto-assignment: push tasks to available LMStudio agents
+    try:
+        from engine.config import get_config as _gc2
+        aa_enabled = _gc2().get("nexus.tasks.auto_assign.enabled", True)
+        aa_interval = _gc2().get("nexus.tasks.auto_assign.interval", "every_5m")
+        if aa_enabled:
+            daemon.register("task-auto-assign", "Task Auto-Assignment", aa_interval, _auto_assign_callback)
+    except Exception as exc:
+        logger.debug("Task auto-assign registration skipped: %s", exc)
+
 
 def _nlm_auto_distill_callback() -> Dict[str, Any]:
     try:
@@ -1472,6 +1509,51 @@ def _argus_periodic_crawl_callback() -> Dict[str, Any]:
         return {"nlm_rpcids_known": nlm_coverage, "registry_stats": stats if isinstance(stats, dict) else str(stats)}
     except Exception as exc:
         logger.warning("[SchedulerDaemon] ARGUS periodic crawl failed (operation=argus_crawl): %s", exc)
+        return {"error": str(exc)}
+
+
+# v1.50.2 [2026-03-24] — Auto-assign pending tasks to available LMStudio agents
+# CONNECTS: TaskScheduler.auto_assign(), LocalAgentBridge.build_agent_registry()
+# CALLED BY: scheduler daemon every 5m (configurable)
+def _auto_assign_callback() -> Dict[str, Any]:
+    """Discover available agents, clean stale tasks, and auto-assign pending work."""
+    try:
+        from engine.config import get_config
+        from engine.nexus.task_scheduler import get_task_scheduler
+        from engine.nexus.local_agent_bridge import get_local_agent_bridge
+
+        cfg = get_config()
+        timeout_hours = cfg.get("nexus.tasks.auto_assign.stale_timeout_hours", 24.0)
+        min_score = cfg.get("nexus.tasks.auto_assign.min_match_score", 0.3)
+
+        bridge = get_local_agent_bridge()
+        scheduler = get_task_scheduler()
+
+        # Step 1: Clean up stale claimed tasks
+        stale_count = scheduler.cleanup_stale_tasks(timeout_hours=timeout_hours)
+
+        # Step 2: Build agent registry from loaded LMStudio models
+        agents = bridge.build_agent_registry()
+        if not agents:
+            return {
+                "skipped": True,
+                "reason": "no loaded models",
+                "stale_cleaned": stale_count,
+            }
+
+        # Step 3: Auto-assign pending tasks to best-matching agents
+        assignments = scheduler.auto_assign(agents, min_score=min_score)
+
+        return {
+            "agents_available": len(agents),
+            "tasks_assigned": len(assignments),
+            "stale_cleaned": stale_count,
+            "assignments": assignments,
+        }
+    except Exception as exc:
+        logger.warning(
+            "[SchedulerDaemon] Task auto-assign failed (operation=auto_assign): %s", exc
+        )
         return {"error": str(exc)}
 
 

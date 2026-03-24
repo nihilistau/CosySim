@@ -1,5 +1,10 @@
 """Copilot Bridge — Makes Copilot CLI self-improving via NLM + Nexus.
 
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Wire config pull at session start, push at session end
+
 Provides functions that the Copilot CLI hooks can call to:
 - Pre-plan tasks using NLM (batch-ask before coding)
 - Analyze source files before editing
@@ -442,6 +447,14 @@ class CopilotBridge:
         except Exception as exc:
             logger.debug("Onboarding context failed: %s", exc)
 
+        # v1.50.2 [2026-03-24] — Pull updated config from Nexus at session start
+        try:
+            from engine.nexus.copilot_self_config import get_copilot_config
+            pull_result = get_copilot_config().pull_all_from_nexus()
+            context["config_sync"] = pull_result
+        except Exception as exc:
+            logger.debug("Config pull at session start failed: %s", exc)
+
         if not nexus or not task_description:
             return context
 
@@ -524,6 +537,13 @@ class CopilotBridge:
             )
         except Exception as e:
             logger.debug("Metrics storage failed: %s", e)
+
+        # v1.50.2 [2026-03-24] — Push updated config to Nexus at session end
+        try:
+            from engine.nexus.copilot_self_config import get_copilot_config
+            get_copilot_config().sync_all_to_nexus()
+        except Exception as exc:
+            logger.debug("Config push at session end failed: %s", exc)
 
         return result
 
