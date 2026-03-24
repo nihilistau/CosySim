@@ -23,6 +23,7 @@ Change Log:
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 
@@ -45,7 +46,7 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
         "auto_start": True,
         "pillar": "service",
         "cwd": "C:/Files/Nexus",
-        "cmd": ["python", "-m", "nexus", "api"],
+        "cmd": [sys.executable, "-m", "nexus", "api"],
         "start_priority": 0,  # must start before everything else
     },
     "hub": {
