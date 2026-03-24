@@ -39,6 +39,7 @@ def main() -> None:
     har_p = sub.add_parser("har", help="Analyze a single HAR file")
     har_p.add_argument("path", type=Path)
     har_p.add_argument("--json", action="store_true", help="Output as JSON")
+    har_p.add_argument("--report", action="store_true", help="Generate Markdown intelligence report")
 
     # heap
     heap_p = sub.add_parser("heap", help="Analyze a heap snapshot")
@@ -68,7 +69,7 @@ def main() -> None:
         return
 
     if args.command == "har":
-        _analyze_har(args.path, args.json)
+        _analyze_har(args.path, args.json, getattr(args, 'report', False))
     elif args.command == "heap":
         _analyze_heap(args.path, args.json)
     elif args.command == "dir":
@@ -81,7 +82,7 @@ def main() -> None:
 
 # ──── HAR Analysis ───────────────────────────────────────────────────────────
 
-def _analyze_har(path: Path, as_json: bool) -> None:
+def _analyze_har(path: Path, as_json: bool, as_report: bool = False) -> None:
     from scripts.argus.analyzers.har_analyzer import HARAnalyzer
 
     if not path.exists():
@@ -93,6 +94,10 @@ def _analyze_har(path: Path, as_json: bool) -> None:
 
     if as_json:
         print(json.dumps(report.to_dict(), indent=2))
+        return
+
+    if as_report:
+        _generate_report(path, report)
         return
 
     print()
@@ -295,6 +300,151 @@ def _diff_heaps(before: Path, after: Path) -> None:
         print("\n  New methods:")
         for m in diff.new_method_names[:10]:
             print(f"    + {m}")
+
+
+# ──── Report Generator ────────────────────────────────────────────────────
+
+def _generate_report(path: Path, report) -> None:
+    """Generate a Markdown intelligence report from a HAR analysis."""
+    import time as _time
+
+    target = report.service_groups[0].domain if report.service_groups else "unknown"
+    service = report.service_groups[0].service_name if report.service_groups else "unknown"
+    date = _time.strftime("%Y-%m-%d")
+    report_name = f"{service}_analysis_{date}.md"
+    report_path = _ROOT / "data" / "argus" / "reports" / report_name
+
+    lines = [
+        f"# ARGUS Intelligence Report: {service.title()}",
+        f"",
+        f"> Generated: {date} | Source: {path.name}",
+        f"> Target: {target}",
+        f"> Classification: Passive traffic analysis",
+        f"",
+        f"---",
+        f"",
+        f"## Summary",
+        f"",
+        f"- **File:** {path.name} ({report.file_size_mb:.1f} MB)",
+        f"- **Entries:** {report.total_entries:,}",
+        f"- **Unique endpoints:** {len(report.unique_endpoints)}",
+        f"- **Services discovered:** {len(report.service_groups)}",
+        f"- **Auth schemes:** {len(report.auth_schemes)}",
+        f"- **Analysis time:** {report.analysis_duration_ms:.0f} ms",
+        f"",
+        f"---",
+        f"",
+        f"## Protocol Breakdown",
+        f"",
+        f"| Protocol | Count | Percentage |",
+        f"|----------|-------|------------|",
+    ]
+
+    for proto, count in report.protocol_breakdown.items():
+        pct = count / max(report.total_entries, 1) * 100
+        lines.append(f"| {proto} | {count} | {pct:.1f}% |")
+
+    lines.extend([
+        f"",
+        f"---",
+        f"",
+        f"## Services Discovered",
+        f"",
+        f"| Domain | Endpoints | Protocols | Auth |",
+        f"|--------|-----------|-----------|------|",
+    ])
+
+    for sg in report.service_groups[:15]:
+        protos = ", ".join(p.value for p in sg.protocols)
+        auth = sg.auth_schemes[0].scheme_type if sg.auth_schemes else "none"
+        lines.append(f"| {sg.domain} | {len(sg.endpoints)} | {protos} | {auth} |")
+
+    lines.extend([
+        f"",
+        f"---",
+        f"",
+        f"## API Endpoints",
+        f"",
+        f"| Method | Path | Frequency | Protocol |",
+        f"|--------|------|-----------|----------|",
+    ])
+
+    for ep in report.unique_endpoints[:30]:
+        lines.append(f"| {ep.method} | `{ep.base_path[:60]}` | {ep.frequency} | {ep.protocol.value} |")
+
+    if report.auth_schemes:
+        lines.extend([
+            f"",
+            f"---",
+            f"",
+            f"## Authentication Schemes",
+            f"",
+            f"| Type | Header | Frequency | Pattern |",
+            f"|------|--------|-----------|---------|",
+        ])
+        for a in report.auth_schemes:
+            lines.append(f"| {a.scheme_type} | {a.header_name} | {a.frequency} | `{a.example_pattern}` |")
+
+    if report.tokens_found:
+        lines.extend([
+            f"",
+            f"---",
+            f"",
+            f"## Tokens Found (REDACTED)",
+            f"",
+            f"| Type | Location | Key | Value |",
+            f"|------|----------|-----|-------|",
+        ])
+        for t in report.tokens_found[:10]:
+            lines.append(f"| {t.token_type} | {t.location} | {t.key_name} | `{t.redacted_value}` |")
+
+    if report.graphql_operations:
+        lines.extend([
+            f"",
+            f"---",
+            f"",
+            f"## GraphQL Operations",
+            f"",
+            f"| Type | Name | Frequency |",
+            f"|------|------|-----------|",
+        ])
+        for g in report.graphql_operations:
+            lines.append(f"| {g.operation_type} | {g.operation_name or 'anonymous'} | {g.frequency} |")
+
+    if report.rate_limits:
+        lines.extend([
+            f"",
+            f"---",
+            f"",
+            f"## Rate Limits Detected",
+            f"",
+        ])
+        for rl in report.rate_limits:
+            lines.append(f"- **{rl.endpoint}**: {rl.status_429_count} x 429")
+
+    if report.websocket_urls:
+        lines.extend([
+            f"",
+            f"---",
+            f"",
+            f"## WebSocket Endpoints",
+            f"",
+        ])
+        for ws in report.websocket_urls:
+            lines.append(f"- `{ws[:100]}`")
+
+    lines.extend([
+        f"",
+        f"---",
+        f"",
+        f"*Report generated by ARGUS Generic API Discovery Engine v1.50.0*",
+    ])
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"Report saved: {report_path}")
+    print(f"  {len(report.unique_endpoints)} endpoints, {len(report.service_groups)} services, "
+          f"{len(report.auth_schemes)} auth schemes")
 
 
 if __name__ == "__main__":
