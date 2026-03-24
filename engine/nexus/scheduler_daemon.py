@@ -1474,6 +1474,42 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     except Exception as exc:
         logger.debug("Task auto-assign registration skipped: %s", exc)
 
+    # v1.51.0 [2026-03-24] — System maintenance: cleanup + conversation eviction
+    daemon.register(
+        "system-cleanup",
+        "System Cleanup — chrome caches, HAR files, WAL checkpoint, log retention, backup pruning",
+        "daily",
+        _system_cleanup_callback,
+    )
+    daemon.register(
+        "conversation-evict",
+        "Conversation Eviction — remove idle conversations to reclaim memory",
+        "every_1h",
+        _conversation_evict_callback,
+    )
+
+
+# v1.51.0 [2026-03-24] — System maintenance callbacks
+def _system_cleanup_callback() -> Dict[str, Any]:
+    """Daily: run full system cleanup — chrome caches, HAR files, WAL checkpoint, log retention."""
+    try:
+        from engine.maintenance.cleanup import run_full_cleanup
+        return run_full_cleanup()
+    except Exception as exc:
+        logger.warning("[SchedulerDaemon] System cleanup failed (operation=system_cleanup): %s", exc)
+        return {"error": str(exc)}
+
+
+def _conversation_evict_callback() -> Dict[str, Any]:
+    """Hourly: evict stale conversations from ConversationManager."""
+    try:
+        from engine.maintenance.cleanup import evict_stale_conversations
+        evicted = evict_stale_conversations()
+        return {"evicted": evicted}
+    except Exception as exc:
+        logger.warning("[SchedulerDaemon] Conversation eviction failed (operation=conv_evict): %s", exc)
+        return {"error": str(exc)}
+
 
 def _nlm_auto_distill_callback() -> Dict[str, Any]:
     try:

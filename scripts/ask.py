@@ -213,6 +213,9 @@ def main() -> None:
                   .replace("\u00e2\u0080\u009d", '"')
                   .replace("\u00e2\u0080\u0094", "—"))
 
+    # Windows cp1252 safe output
+    import sys
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     print(answer)
     print(f"\n--- {backend} | {elapsed:.1f}s ---")
 

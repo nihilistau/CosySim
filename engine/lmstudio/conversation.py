@@ -1,5 +1,5 @@
 """
-ConversationManager v2.7 — Client-side conversation state for LMStudio v1 stateful chats
+ConversationManager v2.8 — Client-side conversation state for LMStudio v1 stateful chats
 
 LMStudio's native v1 API supports stateful conversations where the server
 maintains KV cache and context via ``previous_response_id``.  Every response
@@ -545,6 +545,59 @@ class ConversationManager:
             "total_messages": sum(len(c.messages) for c in convs),
             "total_turns": sum(c.turn_count for c in convs),
         }
+
+    # v1.51.0 [2026-03-24] — Memory leak fix: conversation eviction
+    def evict_stale(self, max_idle_seconds: float = 3600) -> int:
+        """Remove conversations idle for longer than max_idle_seconds.
+
+        Args:
+            max_idle_seconds: Conversations inactive longer than this are evicted.
+
+        Returns:
+            Number of conversations evicted.
+        """
+        now = time.time()
+        with self._lock:
+            stale_ids = [
+                cid for cid, conv in self._conversations.items()
+                if (now - conv.last_active) > max_idle_seconds
+            ]
+            for cid in stale_ids:
+                del self._conversations[cid]
+        if stale_ids:
+            logger.info(
+                "[ConversationManager] Evicted %d stale conversations "
+                "(operation=evict, threshold=%.0fs)",
+                len(stale_ids), max_idle_seconds,
+            )
+        return len(stale_ids)
+
+    # v1.51.0 [2026-03-24] — Hard cap to prevent unbounded growth
+    def cap_conversations(self, max_count: int = 200) -> int:
+        """Evict oldest conversations if count exceeds max_count (LRU eviction).
+
+        Args:
+            max_count: Maximum number of conversations to retain.
+
+        Returns:
+            Number of conversations evicted.
+        """
+        with self._lock:
+            if len(self._conversations) <= max_count:
+                return 0
+            sorted_convs = sorted(
+                self._conversations.items(),
+                key=lambda item: item[1].last_active,
+            )
+            evict_count = len(self._conversations) - max_count
+            for cid, _ in sorted_convs[:evict_count]:
+                del self._conversations[cid]
+        logger.info(
+            "[ConversationManager] Capped: evicted %d conversations "
+            "(operation=cap, max=%d)",
+            evict_count, max_count,
+        )
+        return evict_count
 
 
 # ── Singleton ───────────────────────────────────────────────────────────
