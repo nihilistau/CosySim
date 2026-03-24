@@ -827,6 +827,9 @@ nexus:
     min_answer_length: 20        # Minimum chars for valid answer
     local_cache_ttl: 300         # Session cache TTL in seconds
 
+  # v1.51.0 [2026-03-24] — Backup count cap to prevent unbounded growth
+  backup_max_per_db: 3             # Keep N most recent backups per database name
+
   # v1.50.2 [2026-03-24] — Task auto-assignment config
   tasks:
     auto_assign:
@@ -906,4 +909,14 @@ testing:
       - "test_pipeline*"
       - "test_copilot*"
       - "test_nexus*"
+
+# ── v1.51.0 [2026-03-24] — System Maintenance ─────────────────────────────
+maintenance:
+  chrome_cache_cleanup: true         # Clear Chrome profile caches on daily cleanup
+  har_max_age_days: 7                # Delete HAR/heap files older than this
+  log_retention_days: 7              # Structured log retention (DB + JSONL)
+  conversation_idle_seconds: 3600    # Evict conversations idle longer than this (1h)
+  conversation_max_count: 200        # Hard cap on active ConversationManager entries
+  wal_checkpoint_on_startup: true    # Checkpoint all SQLite WAL files at scene startup
+  meta_metrics_retention_days: 30    # Prune meta_metrics data older than this
 

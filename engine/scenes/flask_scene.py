@@ -189,6 +189,15 @@ class FlaskScene(BaseScene, NexusSceneMixin):
         except Exception:
             pass  # Never block scene startup
 
+        # v1.51.0 [2026-03-24] — Startup WAL checkpoint to prevent WAL bloat
+        try:
+            from engine.config import get_config as _cfg
+            if _cfg().get("maintenance.wal_checkpoint_on_startup", True):
+                from engine.maintenance.cleanup import checkpoint_all_wal_files
+                checkpoint_all_wal_files()
+        except Exception:
+            pass  # Never block scene startup
+
         self._connect_mcp()
         self._connect_nexus()
         self._subscribe_world_events()
