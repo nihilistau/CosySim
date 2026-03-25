@@ -1,6 +1,6 @@
 # THE GRID
 
-> CosySim Documentation — v1.51.1 [2026-03-25]
+> CosySim Documentation — v1.52.0 [2026-03-26]
 >
 > THE GRID is Neon City's central hub — a four-zone underground marketplace for commerce,
 > travel, faction politics, and intelligence gathering.

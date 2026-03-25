@@ -1,6 +1,6 @@
 # API Reference
 
-> CosySim Documentation -- v1.51.1 [2026-03-25]
+> CosySim Documentation -- v1.52.0 [2026-03-26]
 >
 > REST endpoints, Socket.IO events, and MCP tools across all scenes and services.
 

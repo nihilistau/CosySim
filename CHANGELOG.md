@@ -4,6 +4,46 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.52.0] — "LIVE GAME + CO-OP HEISTS" — 2026-03-26
+
+HUD polish, browser test coverage, CSS responsiveness, and multiplayer co-op
+heist squad system.
+
+### HUD Narrative + Spectator Widgets
+- **Narrative progress bar** — purple mini-bar in HUD strip showing current story pack stage + title
+- **Spectator/danmaku counter** — cyan subscriber count with eye icon
+- Both auto-show/hide based on `/api/hud/state` data presence
+- DOM elements in `neon_hud.html`, rendering in `cosysim-neon-hud.js`
+
+### CSS Polish + Mobile Breakpoints
+- **HUD responsive** — hide narrative/spectator at <768px, hide rep/weather/time at <480px
+- **Footer responsive** — wraps at <640px, hides keyboard hints on mobile
+- **Danmaku entrance glow** — `.cosy-danmaku-msg--new` with brightness 1.4 pulse
+
+### Browser Test Extensions
+- Footer: `.cs-footer` existence, version text, keyboard hints, quick links
+- Navbar: `#cs-navbar` existence, 8+ scene links
+- Danmaku: F7 toggle creates/destroys overlay
+- HUD widgets: `#hud-narrative` and `#hud-spectator` DOM presence
+
+### Multiplayer Co-Op Heist Squad System
+- **engine/multiplayer/squad.py** (370 lines) — `Squad`, `SquadMember`, `SquadManager`
+- Full lifecycle: create → join → set roles → ready check → start heist → complete → loot split
+- Loot split: equal base + 10% bonus per obstacle cleared - 5% penalty per argument
+- 6 valid roles: hacker, muscle, talker, driver, demo, recon
+- `SquadStatus`: forming → ready → in_heist → completed/disbanded
+- Thread-safe singleton via `get_squad_manager()`
+- 3 new heist skills: `form_heist_squad`, `invite_to_squad`, `vote_phase_advance`
+
+### Bug Fixes
+- `update_docs.py` regex fix — comma in `~1,040` no longer causes doubling
+
+### Files
+- 1 new file: `engine/multiplayer/squad.py` (370 lines)
+- Modified: `cosysim-neon-hud.js`, `neon_hud.html`, `cosysim-neon-hud.css`, `neon_base.css`, `cosysim-danmaku.css`, `browser_test.py`, `heist_planning_skills.py`, `update_docs.py`
+
+---
+
 ## [1.51.1] — "FEATURE SPRINT" — 2026-03-25
 
 Hardening + feature sprint building on v1.51.0 OpenRoom features. Fixed all

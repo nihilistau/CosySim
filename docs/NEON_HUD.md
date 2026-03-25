@@ -1,6 +1,6 @@
 # CosySim Universal Neon HUD
 
-> CosySim Documentation — v1.51.1 [2026-03-25]
+> CosySim Documentation — v1.52.0 [2026-03-26]
 >
 > Universal player-state strip and glass slide panels injected into every scene.
 > `engine/world/player_state.py` · `content/shared/templates/neon_hud.html`

@@ -1,12 +1,12 @@
 # CosySim Documentation Index
 
-> v1.51 — OpenRoom-Inspired Features + Three-Pillar Architecture, 1,010+ Skills.
+> v1.52 — OpenRoom-Inspired Features + Three-Pillar Architecture, 1,010+ Skills.
 
 ## Quick Reference
 
 | Metric | Value |
 |--------|-------|
-| Version | v1.51.1 [2026-03-25] |
+| Version | v1.52.0 [2026-03-26] |
 | Targets | 33 (16 game + 11 service + 6 creation) |
 | Skills | ~1,040 across 99 packs via @skill decorator |
 | Interceptors | 30 pipeline hooks in the agent governance layer |

@@ -1,6 +1,6 @@
 # CosySim Configuration Guide
 
-> CosySim Documentation — v1.51.1 [2026-03-25]
+> CosySim Documentation — v1.52.0 [2026-03-26]
 >
 > Complete reference for all configuration files, YAML sections, environment variables,
 > and per-scene settings. Config version in default.yaml: v1.49.
