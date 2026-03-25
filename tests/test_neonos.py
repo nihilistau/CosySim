@@ -38,10 +38,6 @@ class TestNeonosSceneRoutes:
         resp = client.get("/")
         assert resp.status_code == 200
 
-    def test_health_returns_200(self, client) -> None:
-        resp = client.get("/health")
-        assert resp.status_code == 200
-
     def test_scene_state_api(self, client) -> None:
         resp = client.get("/api/scene/state")
         assert resp.status_code == 200

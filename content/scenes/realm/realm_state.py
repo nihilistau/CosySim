@@ -12,10 +12,12 @@ GameState store. Manages:
 * Memory echoes (past-run hints)
 * Time limits & win conditions
 * 12-quest library with branching narrative paths
+* Narrative mod integration for stage-based storytelling
 
-Version: v1.49.5 [2026-03-22]
+Version: v1.51.0 [2026-03-25]
 
 Change Log:
+    v1.51.0 [2026-03-25] — NarrativeModEngine integration for branching quests
     v1.49.5 [2026-03-22] — Character classes (4) + branching quest library (12 quests, 3 tiers)
     v1.49.3 [2026-03-22] — Structured logging context
 """
@@ -906,6 +908,44 @@ class RealmGameState:
         }
         with self._lock:
             self.active_quests.append(quest)
+
+        # v1.51.0 [2026-03-25] — Wire quest into NarrativeModEngine for stage context injection
+        # CONNECTS: NarrativeModEngine, NarrativeModInterceptor
+        try:
+            from engine.mcp.narrative_mod import (
+                ModStage, ModTarget, get_narrative_engine,
+            )
+            branches = template.get("branches", {})
+            targets = [
+                ModTarget(target_id=bk, description=bv["description"])
+                for bk, bv in branches.items()
+            ]
+            stage = ModStage(
+                stage_id=f"{quest_key}_main",
+                title=template["name"],
+                description=template["intro"],
+                prompt_injection=(
+                    f"Active quest: {template['name']} (Tier {template['tier']})\n"
+                    f"{template['intro']}\n"
+                    "The player must choose one of these paths:\n"
+                    + "\n".join(
+                        f"  - {bk}: {bv['description']}"
+                        for bk, bv in branches.items()
+                    )
+                ),
+                targets=targets,
+                on_complete_note=f"Quest '{template['name']}' resolved.",
+            )
+            get_narrative_engine().start_mod(
+                mod_id=f"realm_quest_{quest_key}",
+                mod_name=template["name"],
+                stages=[stage],
+                scene_id="realm",
+                character_id="director",
+            )
+        except Exception as exc:
+            logger.debug("[RealmState] Narrative mod start failed (non-fatal): %s", exc)
+
         return {"accepted": True, "quest": quest}
 
     def choose_quest_branch(self, quest_key: str, branch_key: str) -> Dict[str, Any]:
@@ -978,6 +1018,16 @@ class RealmGameState:
             # Complete the quest
             self.active_quests = [q for q in self.active_quests if q["key"] != quest_key]
             self.completed_quests.append(quest_key)
+
+        # v1.51.0 [2026-03-25] — Complete narrative mod target for this branch
+        # CONNECTS: NarrativeModEngine
+        try:
+            from engine.mcp.narrative_mod import get_narrative_engine
+            get_narrative_engine().complete_target(
+                f"realm_quest_{quest_key}", branch_key,
+            )
+        except Exception as exc:
+            logger.debug("[RealmState] Narrative mod complete failed (non-fatal): %s", exc)
 
         # Post to shared boards
         self._post_board_message(

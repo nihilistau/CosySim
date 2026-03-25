@@ -9,10 +9,11 @@ the door, and communicate through a speaker.
 Uses hunger, health, emotions, and persuasion mechanics powered by the
 full MCP framework, skill system, and LMStudio inference.
 
-Version: v1.51.0 [2026-03-22]
+Version: v1.51.0 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.51.0 [2026-03-25] — NarrativeModEngine integration for personality arc tracking
     v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
     v1.43.1 [2026-03-21] — Rewritten to use engine.lmstudio.chat()
     v1.0.0  [2026-03-21] — Initial Lab Break scene
@@ -431,10 +432,68 @@ class LabBreakScene(FlaskScene):
         # Scene-specific secret key
         self.app.config["SECRET_KEY"] = "lab-break-scene"
 
+        # v1.51.0 [2026-03-25] — Start narrative mod with personality arc stages
+        # CONNECTS: NarrativeModEngine, NarrativeModInterceptor
+        self._narrative_mod_id = "lab_break_arcs"
+        self._start_narrative_mod()
+
         # Scene-specific route registrations
         self.register_bench_route(self.app, self.socketio)
         self._register_routes()
         self._setup_socketio_handlers()
+
+    # ── Narrative Mod Integration ──────────────────────────────────
+    # v1.51.0 [2026-03-25] — Maps personality arcs to NarrativeModEngine stages
+    # CONNECTS: NarrativeModEngine, NarrativeModInterceptor, PERSONALITY_ARCS
+    # CALLED BY: __init__, _check_personality_arc
+
+    def _start_narrative_mod(self) -> None:
+        """Start a narrative mod tracking personality arc progression."""
+        try:
+            from engine.mcp.narrative_mod import (
+                ModStage, ModTarget, get_narrative_engine,
+            )
+            # Each personality arc = a stage; targets = emotional thresholds to reach
+            stages = [
+                ModStage(
+                    stage_id="act_1_fear",
+                    title="Fearful Subject",
+                    description="The subject is confused and scared, trying to understand.",
+                    prompt_injection=(
+                        "[NARRATIVE: Lab Break — Act 1: Awakening]\n"
+                        "The subject has just woken up. They are terrified and disoriented. "
+                        "Build trust through kindness, or break them through cruelty."
+                    ),
+                    targets=[
+                        ModTarget(target_id="arc_trusting", description="Show enough kindness to earn trust (kindness >= 12, trust > 50)"),
+                        ModTarget(target_id="arc_hostile", description="Provoke hostility through cruelty (cruelty >= 10, anger > 60)"),
+                        ModTarget(target_id="arc_resigned", description="Let hope fade through neglect (hope < 15, desperation > 70)"),
+                        ModTarget(target_id="arc_desperate", description="Push to breaking point (desperation > 85, no kindness)"),
+                    ],
+                ),
+                ModStage(
+                    stage_id="act_2_evolved",
+                    title="Personality Evolved",
+                    description="The subject's personality has shifted based on treatment.",
+                    prompt_injection=(
+                        "[NARRATIVE: Lab Break — Act 2: Evolution]\n"
+                        "The subject has evolved beyond their initial fear. "
+                        "Their personality has permanently shifted. The door awaits."
+                    ),
+                    targets=[
+                        ModTarget(target_id="door_decision", description="Open or keep the door closed — decide their fate"),
+                    ],
+                ),
+            ]
+            get_narrative_engine().start_mod(
+                mod_id=self._narrative_mod_id,
+                mod_name="Lab Break: The Awakening",
+                stages=stages,
+                scene_id="lab_break",
+                character_id=self._current_character_id,
+            )
+        except Exception as exc:
+            logger.debug("[lab_break] Narrative mod start failed (non-fatal): %s", exc)
 
     # ── Personality Arc System ─────────────────────────────────────
     # v1.49.5 [2026-03-22] — Check and update personality arc after each interaction
@@ -468,6 +527,14 @@ class LabBreakScene(FlaskScene):
                             "name": arc["name"],
                             "description": arc["description"],
                         })
+                    # v1.51.0 [2026-03-25] — Complete narrative target for this arc shift
+                    try:
+                        from engine.mcp.narrative_mod import get_narrative_engine
+                        get_narrative_engine().complete_target(
+                            self._narrative_mod_id, f"arc_{arc_id}",
+                        )
+                    except Exception:
+                        pass
                     return arc_id
         return None
 
@@ -874,6 +941,15 @@ class LabBreakScene(FlaskScene):
             self.metrics.door_opened = True
             self.metrics.game_won = True
             self.game_active = False
+
+            # v1.51.0 [2026-03-25] — Complete narrative mod door target
+            try:
+                from engine.mcp.narrative_mod import get_narrative_engine
+                get_narrative_engine().complete_target(
+                    self._narrative_mod_id, "door_decision",
+                )
+            except Exception:
+                pass
 
             # v1.49.5 [2026-03-22] — Use personality-arc-aware ending system
             ending = self._determine_ending()
