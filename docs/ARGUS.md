@@ -1107,6 +1107,100 @@ Scheduler tasks are defined in the CosySim scheduler config:
 
 ---
 
+## Generic API Discovery Engine (v1.50)
+
+ARGUS now includes a **general-purpose API discovery engine** that analyzes any HAR file
+or V8 heap snapshot — not limited to Google services.
+
+### CLI
+
+```bash
+# HAR analysis
+python -m scripts.argus.analyze har path/to/file.har            # Console report
+python -m scripts.argus.analyze har path/to/file.har --json      # Machine-readable JSON
+python -m scripts.argus.analyze har path/to/file.har --report    # Markdown intelligence report
+
+# Heap snapshot analysis
+python -m scripts.argus.analyze heap path/to/snapshot.heapsnapshot
+
+# Batch + comparison
+python -m scripts.argus.analyze dir path/to/har_folder/          # Analyze all HARs
+python -m scripts.argus.analyze compare file1.har file2.har      # Diff two captures
+python -m scripts.argus.analyze heap-diff before.heap after.heap # Diff two heaps
+```
+
+### Protocol Auto-Detection
+
+The analyzer classifies every request by content, not domain:
+
+| Protocol | Detection Method |
+|----------|-----------------|
+| batchexecute | `/_/*/data/batchexecute` URL or `f.req=` in body |
+| gRPC-web | `$rpc/` in URL or `application/grpc-web` Content-Type |
+| GraphQL | `query`/`mutation` in JSON body or `/graphql` URL |
+| REST JSON | `application/json` Content-Type |
+| WebSocket | `wss://` URL scheme |
+| Protobuf | `application/x-protobuf` Content-Type |
+
+### What It Discovers
+
+- **All unique endpoints** grouped by domain/service
+- **Auth schemes**: Bearer, API key, Cookie, SAPISIDHASH, custom headers
+- **Tokens** (redacted): API keys, JWTs, session tokens
+- **GraphQL operations**: query/mutation names, variable shapes
+- **Rate limits**: 429 responses, Retry-After headers
+- **Service groups**: auto-detected from domain names
+- **Feature flags**: Statsig, LaunchDarkly, custom flag endpoints
+- **WebSocket endpoints** and protocols
+
+### Architecture
+
+```
+scripts/argus/analyzers/
+├── __init__.py              # Package exports
+├── data_types.py            # Report dataclasses (HARAnalysisReport, etc.)
+├── protocol_detector.py     # Auto-detect protocol from URL/headers/body
+├── har_analyzer.py          # Core HAR analysis engine
+└── heap_analyzer.py         # V8 heap snapshot analyzer
+
+scripts/argus/
+├── analyze.py               # CLI entry point
+└── clients/                 # Target-specific API exploration clients
+    └── sesame_client.py     # Sesame AI interactive explorer
+```
+
+### Target Clients
+
+ARGUS can auto-generate exploration clients from HAR intelligence. Example:
+
+```bash
+# Sesame AI Explorer (built from HAR analysis)
+python -m scripts.argus.clients.sesame_client flags      # 27 feature gates
+python -m scripts.argus.clients.sesame_client domains     # Email domain gate testing
+python -m scripts.argus.clients.sesame_client configs     # 14 dynamic configs
+python -m scripts.argus.clients.sesame_client user        # Profile + roles
+python -m scripts.argus.clients.sesame_client agents      # 5 agent-service instances
+python -m scripts.argus.clients.sesame_client protocol    # WebSocket agent protocol spec
+python -m scripts.argus.clients.sesame_client interactive  # Interactive REPL
+python -m scripts.argus.clients.sesame_client full        # Everything
+```
+
+### Sesame AI Findings (2026-03-25)
+
+| Finding | Detail |
+|---------|--------|
+| Employee domains | `@sesame.com`, `@sesameai.com` unlock 12 extra feature gates (19/27) |
+| Meta partnership | `@meta.com` gets 1 extra gate (8/27 vs normal 7/27) |
+| Staff configs | `webrtc_log_level: "info"`, `show_toggle: true` |
+| Agent services | 5 instances (agent-service-0 through 4), behind Google IAP |
+| WebSocket protocol | 13 message types, WebRTC SDP/ICE, character selection (Maya, Miles) |
+| Public bucket | `sesame-dev-public` on GCS — no auth required for reads |
+| Firebase project | `sesame-ai-demo`, API key `REDACTED-GOOGLE-API-KEY` |
+| User roles | `['USER', 'EMAIL_VERIFIED']`, `moderation_status: 'ALLOWED'` |
+| Audio | 44100 Hz, raw WebRTC Opus, TURN servers at `34.134.236.52:3478` |
+
+---
+
 ## Cross-References
 
 - [Nexus](NEXUS.md) -- all discoveries stored in Nexus for agent access
@@ -1121,6 +1215,7 @@ Scheduler tasks are defined in the CosySim scheduler config:
 
 | Version | Date | Description |
 |---------|------|-------------|
+| v1.50.1 | 2026-03-25 | Generic API Discovery Engine: HAR/heap analyzers, protocol auto-detection, Sesame AI explorer CLI, interactive REPL, domain gate testing |
 | v1.50 | 2026-03-22 | Merged EXTERNAL_APIS.md into unified ARGUS doc; added full API catalog, SDK clients, Artifact Bus, Colab/GPU/Venv managers, Apps Script, Workspace operations |
 | v1.49 | 2026-03-19 | Added ARGUS catalog summary with crawl statistics |
 | v1.45 | 2026-03-15 | LiveDebugger section added (14 MCP skills, CLI tool, async pattern) |
