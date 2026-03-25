@@ -405,6 +405,151 @@ def explore_firebase_config() -> Dict:
     return result
 
 
+def explore_email_domains(tokens: TokenStore) -> Dict:
+    """Test which email domains unlock additional features."""
+    print("\n=== EMAIL DOMAIN GATE TESTING ===\n")
+
+    url = f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}&st=javascript-client&sv=3.2"
+
+    domains = [
+        "gmail.com", "sesame.com", "sesameai.com", "sesame.ai",
+        "google.com", "openai.com", "anthropic.com", "meta.com",
+        "microsoft.com", "apple.com", "amazon.com",
+    ]
+
+    results = {}
+    baseline = None
+
+    for domain in domains:
+        r = _post(url, {
+            "user": {"userID": f"test-{domain}", "email": f"test@{domain}",
+                     "custom": {"isStaff": True, "isAdmin": True}},
+            "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "3.2.0"},
+        })
+        if r.get("status") != 200:
+            continue
+
+        data = r.get("data", {})
+        gates = data.get("feature_gates", {})
+        enabled = sum(1 for v in gates.values() if v.get("value"))
+        total = len(gates)
+        results[domain] = enabled
+
+        if baseline is None:
+            baseline = enabled
+
+        marker = ""
+        if enabled > baseline:
+            marker = f" *** +{enabled - baseline} EXTRA GATES ***"
+        elif enabled == baseline:
+            marker = ""
+
+        print(f"  @{domain:20s} {enabled:2d}/{total} gates{marker}")
+
+    # Find the employee domains
+    employee_domains = [d for d, e in results.items() if e > baseline + 2]
+    if employee_domains:
+        print(f"\n  Employee domains: {', '.join(employee_domains)}")
+
+    return results
+
+
+def explore_dynamic_configs(tokens: TokenStore) -> Dict:
+    """Show all dynamic configs with their actual values."""
+    print("\n=== DYNAMIC CONFIGS (Live Values) ===\n")
+
+    url = f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}&st=javascript-client&sv=3.2"
+
+    # Get staff configs
+    r = _post(url, {
+        "user": {"userID": tokens.user_id or "anon", "email": "test@sesame.com",
+                 "custom": {"isStaff": True}},
+        "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "3.2.0"},
+    })
+    if r.get("status") != 200:
+        print(f"  [!] Statsig returned {r.get('status')}")
+        return {}
+
+    configs = r.get("data", {}).get("dynamic_configs", {})
+
+    # Also get normal user configs for comparison
+    r2 = _post(url, {
+        "user": {"userID": "normal-user", "email": "user@gmail.com"},
+        "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "3.2.0"},
+    })
+    normal_configs = r2.get("data", {}).get("dynamic_configs", {}) if r2.get("status") == 200 else {}
+
+    for name, cfg in sorted(configs.items()):
+        val = cfg.get("value", {})
+        rule = cfg.get("rule_id", "default")
+        normal_val = normal_configs.get(name, {}).get("value", {})
+        diff = " [STAFF-ONLY]" if val != normal_val else ""
+
+        if isinstance(val, dict) and val:
+            print(f"  Config: {name[:25]}...  rule={rule}{diff}")
+            for k, v in val.items():
+                nv = normal_val.get(k, v) if isinstance(normal_val, dict) else v
+                changed = " <-- DIFFERENT" if v != nv else ""
+                print(f"    {k:35s} = {json.dumps(v)[:50]}{changed}")
+            print()
+
+    return {"configs": len(configs)}
+
+
+def show_websocket_protocol() -> None:
+    """Show the discovered WebSocket agent protocol specification."""
+    print("\n=== SESAME AGENT WEBSOCKET PROTOCOL ===\n")
+
+    print("  Connection: wss://sesameai.app/agent-service-0/v1/connect?id_token=<JWT>")
+    print("  Auth: Firebase JWT in query string (RS256, 1hr expiry)")
+    print()
+    print("  -- Message Types (13) --")
+    print()
+    print("  CLIENT -> SERVER:")
+    print("    client_location_state    {latitude, longitude, address, timezone}")
+    print("    webrtc_sdp_offer         {sdp, sample_rate}")
+    print("    webrtc_ice_candidate     {sdp, sdp_mid, sdp_m_line_index}")
+    print("    call_connect             {sample_rate, audio_codec, reconnect,")
+    print("                              is_private, settings: {character: 'Maya'},")
+    print("                              client_name, client_metadata}")
+    print("    call_disconnect          {}")
+    print("    ping                     {} (keepalive, ~1788/session)")
+    print()
+    print("  SERVER -> CLIENT:")
+    print("    initialize               {session_id, webrtc_ice_servers}")
+    print("    webrtc_config            {ice_servers: [{urls, username, credential}]}")
+    print("    webrtc_sdp_answer        {sdp}")
+    print("    chat                     {messages: []}")
+    print("    call_connect_response    {call_id: number}")
+    print("    call_disconnect_response {}")
+    print("    ping_response            {}")
+    print()
+    print("  -- Connection Flow --")
+    print("    1. Client connects via WebSocket with JWT")
+    print("    2. Server sends 'initialize' with session_id")
+    print("    3. Client sends 'client_location_state' (timezone)")
+    print("    4. Server sends 'webrtc_config' with TURN/STUN servers")
+    print("    5. Client sends 'webrtc_sdp_offer' (44100Hz)")
+    print("    6. Client sends 'call_connect' with character selection")
+    print("    7. WebRTC ICE negotiation (9 candidates)")
+    print("    8. Server sends 'webrtc_sdp_answer'")
+    print("    9. Audio streaming via WebRTC data channel")
+    print("   10. Ping/pong keepalive every ~500ms")
+    print("   11. Client sends 'call_disconnect' to end")
+    print()
+    print("  -- Characters Available --")
+    print("    Maya, Miles (discovered from call_connect payloads)")
+    print()
+    print("  -- WebRTC Config --")
+    print("    STUN: stun:34.134.236.52:3478")
+    print("    TURN: turn:34.134.236.52:3478 (UDP + TCP)")
+    print("    Credentials: time-limited (1hr, tied to user+session)")
+    print()
+    print("  -- Audio --")
+    print("    Sample rate: 44100 Hz")
+    print("    Codec: 'none' (raw WebRTC Opus)")
+
+
 def list_endpoints() -> None:
     """List all discovered endpoints from ARGUS analysis."""
     print("\n=== DISCOVERED API ENDPOINTS ===\n")
@@ -451,7 +596,8 @@ def main() -> None:
     )
     parser.add_argument("command", nargs="?", default="menu",
                         choices=["menu", "flags", "user", "bucket", "endpoints",
-                                 "staff", "agents", "firebase", "full"])
+                                 "staff", "agents", "firebase", "domains", "configs",
+                                 "protocol", "full"])
     parser.add_argument("--har", type=Path, help="Path to Sesame HAR file for auth tokens")
     args = parser.parse_args()
 
@@ -479,11 +625,14 @@ def main() -> None:
     if args.command == "menu":
         print("  Commands:")
         print("    flags      Enumerate Statsig feature flags + test staff")
-        print("    user       Fetch user profile")
+        print("    domains    Test email domains for flag differences")
+        print("    configs    Show all dynamic configs with values")
+        print("    user       Fetch user profile (roles, moderation)")
         print("    bucket     Explore public GCS bucket")
         print("    endpoints  List all discovered endpoints")
-        print("    agents     Probe agent service instances")
+        print("    agents     Probe agent service instances (0-4)")
         print("    firebase   Firebase project config")
+        print("    protocol   Show WebSocket agent protocol spec")
         print("    full       Run everything")
         print()
         print("  Usage: python -m scripts.argus.clients.sesame_client <command>")
@@ -493,6 +642,10 @@ def main() -> None:
         list_endpoints()
     elif args.command == "flags" or args.command == "staff":
         explore_feature_flags(tokens)
+    elif args.command == "domains":
+        explore_email_domains(tokens)
+    elif args.command == "configs":
+        explore_dynamic_configs(tokens)
     elif args.command == "user":
         explore_user_profile(tokens)
     elif args.command == "bucket":
@@ -501,13 +654,18 @@ def main() -> None:
         explore_agent_services(tokens)
     elif args.command == "firebase":
         explore_firebase_config()
+    elif args.command == "protocol":
+        show_websocket_protocol()
     elif args.command == "full":
         list_endpoints()
         explore_firebase_config()
         explore_feature_flags(tokens)
+        explore_email_domains(tokens)
+        explore_dynamic_configs(tokens)
         explore_user_profile(tokens)
         explore_public_bucket()
         explore_agent_services(tokens)
+        show_websocket_protocol()
 
     print()
 
