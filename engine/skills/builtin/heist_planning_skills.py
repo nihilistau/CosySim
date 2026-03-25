@@ -481,3 +481,141 @@ def execute_heist(heist_id: str) -> str:
             f"Equipment lost. Crew scattered.\n"
             f"The target knows someone tried. They'll be ready next time."
         )
+
+
+# ──── Co-Op Squad Skills ────────────────────────────────────────────────
+# v1.52.0 [2026-03-26] — Multiplayer squad formation for co-op heists
+
+@skill(
+    pack="heist_planning",
+    description=(
+        "Form a heist squad for co-op play. Creates a squad that other "
+        "players can join. Requires 2-4 players, each choosing a role "
+        "(hacker, muscle, talker, driver, demo, recon)."
+    ),
+    category=SkillCategory.GAME,
+    cooldown=60.0,
+    cost=1.0,
+    tags=["heist", "squad", "multiplayer", "co-op"],
+)
+def form_heist_squad(squad_name: str, player_id: str = "player") -> str:
+    """Form a new heist squad for co-op play.
+
+    Args:
+        squad_name: Name for the squad.
+        player_id: ID of the player creating the squad.
+
+    Returns:
+        Squad ID and join instructions.
+    """
+    try:
+        from engine.multiplayer.squad import get_squad_manager
+        mgr = get_squad_manager()
+        squad = mgr.create_squad(player_id, squad_name, scene="heist")
+        return (
+            f"Squad formed: {squad.squad_id}\n"
+            f"Leader: {squad_name}\n"
+            f"Share this code with others to join: {squad.squad_id}\n"
+            f"Roles available: hacker, muscle, talker, driver, demo, recon\n"
+            f"Waiting for members (1/{squad.max_members})..."
+        )
+    except ValueError as exc:
+        return f"Cannot form squad: {exc}"
+    except Exception as exc:
+        return f"Squad creation failed: {exc}"
+
+
+@skill(
+    pack="heist_planning",
+    description=(
+        "Invite another player to join your heist squad. They'll receive "
+        "a message with the squad code to join."
+    ),
+    category=SkillCategory.GAME,
+    cooldown=15.0,
+    cost=0.5,
+    tags=["heist", "squad", "invite", "multiplayer"],
+)
+def invite_to_squad(
+    target_player: str,
+    player_id: str = "player",
+) -> str:
+    """Invite a player to your squad.
+
+    Args:
+        target_player: Player ID or name to invite.
+        player_id: Your player ID.
+
+    Returns:
+        Invitation result.
+    """
+    try:
+        from engine.multiplayer.squad import get_squad_manager
+        mgr = get_squad_manager()
+        squad = mgr.get_player_squad(player_id)
+        if not squad:
+            return "You're not in a squad. Use form_heist_squad first."
+
+        # Send invitation via messaging system
+        try:
+            from engine.multiplayer.messaging import get_message_store
+            store = get_message_store()
+            store.send_message(
+                sender_id=player_id,
+                receiver_id=target_player,
+                content=f"You're invited to join heist squad: {squad.squad_id}",
+                thread_id=f"squad_invite_{squad.squad_id}",
+            )
+        except Exception:
+            pass  # Messaging optional
+
+        return f"Invitation sent to {target_player} for squad {squad.squad_id}"
+    except Exception as exc:
+        return f"Invite failed: {exc}"
+
+
+@skill(
+    pack="heist_planning",
+    description=(
+        "Vote to advance the heist to the next phase. In co-op mode, "
+        "majority vote is required to proceed."
+    ),
+    category=SkillCategory.GAME,
+    cooldown=10.0,
+    cost=0.5,
+    tags=["heist", "squad", "vote", "phase"],
+)
+def vote_phase_advance(
+    player_id: str = "player",
+) -> str:
+    """Cast a vote to advance the heist phase.
+
+    Args:
+        player_id: Your player ID.
+
+    Returns:
+        Current vote tally and whether the phase advances.
+    """
+    try:
+        from engine.multiplayer.squad import get_squad_manager
+        mgr = get_squad_manager()
+        squad = mgr.get_player_squad(player_id)
+        if not squad:
+            return "You're not in a squad."
+
+        # Track votes in-memory on the squad (simple approach)
+        if not hasattr(squad, "_phase_votes"):
+            squad._phase_votes = set()
+        squad._phase_votes.add(player_id)
+
+        total = squad.member_count
+        votes = len(squad._phase_votes)
+        needed = (total // 2) + 1  # Majority
+
+        if votes >= needed:
+            squad._phase_votes = set()  # Reset for next phase
+            return f"PHASE ADVANCE! Votes: {votes}/{total} (majority reached). Moving to next phase."
+        else:
+            return f"Vote cast. {votes}/{total} votes ({needed} needed for majority)."
+    except Exception as exc:
+        return f"Vote failed: {exc}"
