@@ -8,15 +8,21 @@ ARGUS HAR analysis. Uses Firebase auth tokens from captured traffic.
 
 Usage:
     python -m scripts.argus.clients.sesame_client              # Interactive menu
+    python -m scripts.argus.clients.sesame_client interactive   # Interactive REPL
     python -m scripts.argus.clients.sesame_client flags         # List feature flags
     python -m scripts.argus.clients.sesame_client user          # User profile
     python -m scripts.argus.clients.sesame_client bucket        # Explore public bucket
     python -m scripts.argus.clients.sesame_client endpoints     # List all discovered endpoints
     python -m scripts.argus.clients.sesame_client staff         # Test staff flag
     python -m scripts.argus.clients.sesame_client agents        # Probe agent services
+    python -m scripts.argus.clients.sesame_client export        # Export API spec to JSON
     python -m scripts.argus.clients.sesame_client full          # Run everything
 
 Version: v1.50.0 [2026-03-25]
+
+Change Log:
+    v1.50.0 [2026-03-25] — Interactive REPL, gate trigger mapper, token refresh,
+                            API spec export, call-info upload URL generation
 Author:  CosySim Team
 
 CONNECTS: ARGUS HAR analyzer, Firebase Auth, Statsig, GCS
@@ -25,10 +31,14 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
+import itertools
 import json
 import re
+import shlex
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
@@ -37,6 +47,8 @@ import requests
 
 _ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_ROOT))
+
+FIREBASE_SECURETOKEN_URL = "https://securetoken.googleapis.com/v1/token"
 
 
 # ──── Constants from ARGUS Discovery ─────────────────────────────────────────
@@ -496,6 +508,869 @@ def explore_dynamic_configs(tokens: TokenStore) -> Dict:
     return {"configs": len(configs)}
 
 
+# ──── Token Refresh ─────────────────────────────────────────────────────────
+# v1.50.0 [2026-03-25] — Firebase token refresh from HAR refresh_token
+
+def extract_refresh_token(har_path: Path) -> Optional[str]:
+    """Extract refresh_token from a HAR file's securetoken.googleapis.com calls.
+
+    Scans HAR entries (newest first) for POST requests to the Firebase
+    securetoken endpoint and extracts the refresh_token from either the
+    request body (grant_type=refresh_token) or the response body.
+
+    Args:
+        har_path: Path to the HAR file.
+
+    Returns:
+        The refresh_token string if found, None otherwise.
+    """
+    try:
+        har = json.loads(har_path.read_text(errors="replace"))
+        entries = har.get("log", {}).get("entries", [])
+
+        for entry in reversed(entries):
+            url = entry.get("request", {}).get("url", "")
+
+            # Look for securetoken.googleapis.com/v1/token responses
+            if "securetoken.googleapis.com" in url and "/token" in url:
+                # Try response body first — it always contains refresh_token
+                resp_text = entry.get("response", {}).get("content", {}).get("text", "")
+                if resp_text:
+                    try:
+                        resp_data = json.loads(resp_text)
+                        rt = resp_data.get("refresh_token")
+                        if rt:
+                            return rt
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                # Try request body — grant_type=refresh_token&refresh_token=...
+                post_text = entry.get("request", {}).get("postData", {}).get("text", "")
+                if "refresh_token=" in post_text:
+                    for part in post_text.split("&"):
+                        if part.startswith("refresh_token=") and not part.startswith("refresh_token=refresh_token"):
+                            return part.split("=", 1)[1]
+
+            # Also check identitytoolkit signInWithIdp responses for refreshToken
+            if "identitytoolkit.googleapis.com" in url:
+                resp_text = entry.get("response", {}).get("content", {}).get("text", "")
+                if resp_text:
+                    try:
+                        resp_data = json.loads(resp_text)
+                        rt = resp_data.get("refreshToken")
+                        if rt:
+                            return rt
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+    except Exception as exc:
+        print(f"  [!] Failed to extract refresh token: {exc}")
+    return None
+
+
+def refresh_firebase_token(har_path: Path) -> Optional[str]:
+    """Extract refresh_token from HAR and exchange for a new Firebase JWT.
+
+    Uses the securetoken.googleapis.com/v1/token endpoint with
+    grant_type=refresh_token to obtain a fresh id_token (JWT).
+
+    Args:
+        har_path: Path to the HAR file containing a refresh_token.
+
+    Returns:
+        New id_token (JWT string) if successful, None otherwise.
+
+    CONNECTS: Firebase Auth, TokenStore
+    """
+    refresh_token = extract_refresh_token(har_path)
+    if not refresh_token:
+        print("  [!] No refresh_token found in HAR")
+        return None
+
+    print(f"  [+] Found refresh_token ({len(refresh_token)} chars)")
+    print(f"  [*] Exchanging for new id_token...")
+
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+    }
+    url = f"{FIREBASE_SECURETOKEN_URL}?key={FIREBASE_API_KEY}"
+
+    try:
+        r = requests.post(url, data=payload, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            new_token = data.get("id_token")
+            new_refresh = data.get("refresh_token")
+            expires_in = data.get("expires_in", "?")
+            print(f"  [+] New id_token obtained (expires in {expires_in}s)")
+            if new_refresh and new_refresh != refresh_token:
+                print(f"  [+] Refresh token also rotated")
+            return new_token
+        else:
+            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else r.text[:300]
+            print(f"  [!] Token refresh failed (HTTP {r.status_code}): {err}")
+    except Exception as exc:
+        print(f"  [!] Token refresh request failed: {exc}")
+    return None
+
+
+# ──── Gate Trigger Mapper ───────────────────────────────────────────────────
+# v1.50.0 [2026-03-25] — Systematic gate analysis with combinatorial property testing
+
+def _fetch_gates(user_props: Dict) -> Dict[str, bool]:
+    """Fetch feature gates for a given set of user properties.
+
+    Args:
+        user_props: Dict with keys like userID, email, custom.
+
+    Returns:
+        Dict mapping gate name -> enabled (True/False).
+    """
+    url = f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}&st=javascript-client&sv=3.2"
+    payload = {
+        "user": user_props,
+        "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "3.2.0"},
+    }
+    r = _post(url, payload)
+    if r.get("status") != 200:
+        return {}
+    gates = r.get("data", {}).get("feature_gates", {})
+    return {k: bool(v.get("value")) for k, v in gates.items()}
+
+
+def map_gate_triggers(gate_name: str) -> Dict:
+    """Test a specific gate against many user property combinations to find what triggers it.
+
+    Systematically varies email domain, isStaff, role, tier, and country to
+    determine which user properties control a gate's state.
+
+    Args:
+        gate_name: The Statsig gate name to analyze.
+
+    Returns:
+        Dict with keys: gate_name, triggers (list of enabling combos),
+        baseline (default state), tested (count), summary.
+
+    CONNECTS: Statsig feature flags
+    CALLED BY: run_interactive (toggle command), CLI
+    """
+    print(f"\n  Mapping triggers for gate: {gate_name}\n")
+
+    # Define test dimensions
+    # Each dimension is (property_path, [values_to_test])
+    email_domains = ["gmail.com", "sesame.com", "sesameai.com", "meta.com",
+                     "google.com", "anthropic.com"]
+    staff_values = [False, True]
+    role_values = ["user", "admin", "beta", "internal"]
+    tier_values = ["free", "pro", "enterprise"]
+    country_codes = ["US", "GB", "JP", "CN", "AU"]
+
+    # Baseline: anonymous gmail user, no custom props
+    baseline_props = {"userID": "mapper-baseline", "email": "test@gmail.com", "custom": {}}
+    baseline_gates = _fetch_gates(baseline_props)
+    baseline_val = baseline_gates.get(gate_name)
+
+    if baseline_val is None:
+        print(f"  [!] Gate '{gate_name}' not found in Statsig response")
+        available = sorted(baseline_gates.keys())[:20]
+        if available:
+            print(f"  Available gates (first 20): {', '.join(available)}")
+        return {"gate_name": gate_name, "error": "not_found"}
+
+    print(f"  Baseline (gmail, no custom): {'ON' if baseline_val else 'OFF'}")
+
+    triggers: List[Dict] = []
+    tested = 0
+
+    # Phase 1: Test email domains with no custom props
+    print(f"\n  -- Phase 1: Email Domains --")
+    for domain in email_domains:
+        props = {"userID": f"mapper-{domain}", "email": f"test@{domain}", "custom": {}}
+        gates = _fetch_gates(props)
+        val = gates.get(gate_name)
+        tested += 1
+        if val != baseline_val:
+            triggers.append({"email_domain": domain, "custom": {}})
+            print(f"    @{domain:20s} -> {'ON' if val else 'OFF'}  ** FLIPPED **")
+        else:
+            print(f"    @{domain:20s} -> {'ON' if val else 'OFF'}")
+
+    # Phase 2: Test isStaff with gmail (isolate staff effect)
+    print(f"\n  -- Phase 2: isStaff Flag --")
+    for staff in staff_values:
+        props = {"userID": "mapper-staff", "email": "test@gmail.com",
+                 "custom": {"isStaff": staff}}
+        gates = _fetch_gates(props)
+        val = gates.get(gate_name)
+        tested += 1
+        if val != baseline_val:
+            triggers.append({"email_domain": "gmail.com", "custom": {"isStaff": staff}})
+            print(f"    isStaff={str(staff):5s} -> {'ON' if val else 'OFF'}  ** FLIPPED **")
+        else:
+            print(f"    isStaff={str(staff):5s} -> {'ON' if val else 'OFF'}")
+
+    # Phase 3: Test role values
+    print(f"\n  -- Phase 3: Role Values --")
+    for role in role_values:
+        props = {"userID": "mapper-role", "email": "test@gmail.com",
+                 "custom": {"role": role}}
+        gates = _fetch_gates(props)
+        val = gates.get(gate_name)
+        tested += 1
+        if val != baseline_val:
+            triggers.append({"email_domain": "gmail.com", "custom": {"role": role}})
+            print(f"    role={role:12s} -> {'ON' if val else 'OFF'}  ** FLIPPED **")
+        else:
+            print(f"    role={role:12s} -> {'ON' if val else 'OFF'}")
+
+    # Phase 4: Test tier values
+    print(f"\n  -- Phase 4: Tier Values --")
+    for tier in tier_values:
+        props = {"userID": "mapper-tier", "email": "test@gmail.com",
+                 "custom": {"tier": tier}}
+        gates = _fetch_gates(props)
+        val = gates.get(gate_name)
+        tested += 1
+        if val != baseline_val:
+            triggers.append({"email_domain": "gmail.com", "custom": {"tier": tier}})
+            print(f"    tier={tier:12s} -> {'ON' if val else 'OFF'}  ** FLIPPED **")
+        else:
+            print(f"    tier={tier:12s} -> {'ON' if val else 'OFF'}")
+
+    # Phase 5: Test country codes
+    print(f"\n  -- Phase 5: Country Codes --")
+    for cc in country_codes:
+        props = {"userID": "mapper-country", "email": "test@gmail.com",
+                 "country": cc, "custom": {}}
+        gates = _fetch_gates(props)
+        val = gates.get(gate_name)
+        tested += 1
+        if val != baseline_val:
+            triggers.append({"email_domain": "gmail.com", "country": cc, "custom": {}})
+            print(f"    country={cc:5s} -> {'ON' if val else 'OFF'}  ** FLIPPED **")
+        else:
+            print(f"    country={cc:5s} -> {'ON' if val else 'OFF'}")
+
+    # Phase 6: Combination test — sesame.com + isStaff (strongest combo)
+    print(f"\n  -- Phase 6: Combination (sesame.com + isStaff + admin) --")
+    combo_props = {"userID": "mapper-combo", "email": "test@sesame.com",
+                   "custom": {"isStaff": True, "role": "admin", "tier": "enterprise"}}
+    combo_gates = _fetch_gates(combo_props)
+    combo_val = combo_gates.get(gate_name)
+    tested += 1
+    if combo_val != baseline_val:
+        triggers.append({"email_domain": "sesame.com",
+                         "custom": {"isStaff": True, "role": "admin", "tier": "enterprise"}})
+        print(f"    full combo -> {'ON' if combo_val else 'OFF'}  ** FLIPPED **")
+    else:
+        print(f"    full combo -> {'ON' if combo_val else 'OFF'}")
+
+    # Summary
+    print(f"\n  Summary: tested {tested} combinations, {len(triggers)} triggered a flip")
+    if triggers:
+        print(f"  Trigger conditions:")
+        for t in triggers:
+            parts = []
+            if t.get("email_domain"):
+                parts.append(f"email=@{t['email_domain']}")
+            if t.get("country"):
+                parts.append(f"country={t['country']}")
+            custom = t.get("custom", {})
+            for k, v in custom.items():
+                parts.append(f"{k}={v}")
+            print(f"    {' + '.join(parts) if parts else '(baseline change)'}")
+
+    return {
+        "gate_name": gate_name,
+        "baseline": baseline_val,
+        "triggers": triggers,
+        "tested": tested,
+        "summary": f"{len(triggers)}/{tested} combos flipped the gate",
+    }
+
+
+# ──── Call Info & Upload URL ────────────────────────────────────────────────
+# v1.50.0 [2026-03-25] — Generate presigned upload URLs for call assets
+
+def generate_call_upload_url(call_id: str, tokens: TokenStore) -> Dict:
+    """Generate a presigned upload URL for a given call ID.
+
+    Uses the Sesame API endpoint discovered via ARGUS to request an upload
+    URL for call assets (logs, recordings).
+
+    Args:
+        call_id: The numeric call ID (e.g. "23166670").
+        tokens: TokenStore with a valid Firebase JWT.
+
+    Returns:
+        Dict with upload_url, call_id, and status.
+
+    CONNECTS: Sesame API (generate-call-file-upload-url)
+    CALLED BY: run_interactive (call-info command)
+    """
+    print(f"\n  Call Info for ID: {call_id}\n")
+
+    if not tokens.token:
+        print("  [!] No auth token — cannot generate upload URL")
+        return {"error": "no_token"}
+
+    headers = {
+        "Authorization": f"Bearer {tokens.token}",
+        "Content-Type": "application/json",
+    }
+
+    # Request a presigned upload URL
+    url = f"{SESAME_API_URL}/api/generate-call-file-upload-url"
+    payload = {"call_id": int(call_id), "file_type": "client_logs.json"}
+    result = _post(url, payload, headers)
+
+    print(f"  Status: {result.get('status')}")
+    if result.get("status") == 200:
+        data = result.get("data", {})
+        upload_url = data.get("upload_url", data.get("url", ""))
+        if upload_url:
+            print(f"  Upload URL: {upload_url[:120]}...")
+            # Parse bucket/path from the upload URL
+            if "storage.googleapis.com" in upload_url:
+                parts = upload_url.split("storage.googleapis.com/")[1].split("?")[0] if "storage.googleapis.com/" in upload_url else ""
+                print(f"  Bucket path: {parts}")
+        else:
+            print(f"  Response: {json.dumps(data)[:200]}")
+        return {"call_id": call_id, "upload_url": upload_url, "status": "ok"}
+    else:
+        err = result.get("error", result.get("data", ""))
+        print(f"  Error: {str(err)[:200]}")
+        return {"call_id": call_id, "error": str(err)[:200], "status": "failed"}
+
+
+# ──── API Spec Export ───────────────────────────────────────────────────────
+# v1.50.0 [2026-03-25] — Export all discoveries as structured JSON API spec
+
+def export_api_spec(tokens: TokenStore) -> Dict:
+    """Export everything discovered as a structured API specification.
+
+    Aggregates all known endpoints, auth schemes, feature flags, dynamic
+    configs, WebSocket protocol, and bucket assets into a single JSON file
+    saved to data/argus/reports/sesame_api_spec.json.
+
+    Args:
+        tokens: TokenStore for fetching live flag/config data.
+
+    Returns:
+        The full API spec dict.
+
+    CONNECTS: All exploration modules
+    CALLED BY: run_interactive (export command), CLI
+    EMITS: data/argus/reports/sesame_api_spec.json
+    """
+    print("\n=== EXPORTING API SPECIFICATION ===\n")
+
+    # Fetch live feature flags and configs
+    url = f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}&st=javascript-client&sv=3.2"
+    payload = {
+        "user": {"userID": tokens.user_id or "anon", "email": tokens.email or "export@gmail.com",
+                 "custom": {"isStaff": True}},
+        "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "3.2.0"},
+    }
+    live = _post(url, payload)
+    live_data = live.get("data", {}) if live.get("status") == 200 else {}
+
+    gates_raw = live_data.get("feature_gates", {})
+    configs_raw = live_data.get("dynamic_configs", {})
+    layers_raw = live_data.get("layer_configs", {})
+
+    gates_spec = {}
+    for name, gate in gates_raw.items():
+        gates_spec[name] = {
+            "enabled": bool(gate.get("value")),
+            "rule_id": gate.get("rule_id", "default"),
+        }
+
+    configs_spec = {}
+    for name, cfg in configs_raw.items():
+        configs_spec[name] = {
+            "value": cfg.get("value", {}),
+            "rule_id": cfg.get("rule_id", "default"),
+        }
+
+    spec = {
+        "_meta": {
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "generator": "sesame_client.py v1.50.0",
+            "source": "ARGUS HAR analysis + live probing",
+        },
+        "base_urls": {
+            "app": SESAME_APP_URL,
+            "api": SESAME_API_URL,
+            "websocket": SESAME_WS_URL,
+            "firebase_auth": FIREBASE_AUTH_URL,
+            "statsig": STATSIG_URL,
+            "gcs_public": f"https://storage.googleapis.com/{GCS_PUBLIC_BUCKET}",
+            "gcs_prod": f"https://storage.googleapis.com/{GCS_PROD_BUCKET}",
+        },
+        "auth": {
+            "firebase": {
+                "project": FIREBASE_PROJECT,
+                "api_key": FIREBASE_API_KEY,
+                "token_type": "Bearer JWT (RS256, 1hr expiry)",
+                "refresh_endpoint": f"{FIREBASE_SECURETOKEN_URL}?key={FIREBASE_API_KEY}",
+                "sign_in_providers": ["google.com"],
+            },
+            "statsig": {
+                "client_key": STATSIG_CLIENT_KEY,
+                "sdk_type": "js-client",
+                "sdk_version": "3.2.0",
+            },
+        },
+        "endpoints": {
+            "user_profile": {
+                "method": "GET",
+                "url": f"{SESAME_APP_URL}/api/user",
+                "auth": "Bearer JWT",
+                "description": "Fetch authenticated user profile",
+            },
+            "generate_upload_url": {
+                "method": "POST",
+                "url": f"{SESAME_API_URL}/api/generate-call-file-upload-url",
+                "auth": "Bearer JWT",
+                "body": {"call_id": "int", "file_type": "string"},
+                "description": "Generate presigned GCS upload URL for call assets",
+            },
+            "agent_websocket": {
+                "method": "WSS",
+                "url": SESAME_WS_URL,
+                "auth": "JWT in query string (id_token=...)",
+                "description": "Voice agent WebSocket connection",
+            },
+            "firebase_sign_in": {
+                "method": "POST",
+                "url": f"{FIREBASE_AUTH_URL}/accounts:signInWithIdp?key={FIREBASE_API_KEY}",
+                "auth": "API key",
+                "description": "Google OAuth sign-in via Firebase",
+            },
+            "firebase_lookup": {
+                "method": "POST",
+                "url": f"{FIREBASE_AUTH_URL}/accounts:lookup?key={FIREBASE_API_KEY}",
+                "auth": "API key + idToken in body",
+                "description": "Look up account details",
+            },
+            "statsig_initialize": {
+                "method": "POST",
+                "url": f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}",
+                "auth": "Client key in query string",
+                "description": "Initialize feature flags and configs",
+            },
+        },
+        "feature_gates": gates_spec,
+        "dynamic_configs": configs_spec,
+        "layer_configs": {name: {"rule_id": lc.get("rule_id", "default")}
+                         for name, lc in layers_raw.items()},
+        "websocket_protocol": {
+            "connection": f"{SESAME_WS_URL}?id_token=<JWT>",
+            "client_messages": {
+                "client_location_state": {"fields": ["latitude", "longitude", "address", "timezone"]},
+                "webrtc_sdp_offer": {"fields": ["sdp", "sample_rate"]},
+                "webrtc_ice_candidate": {"fields": ["sdp", "sdp_mid", "sdp_m_line_index"]},
+                "call_connect": {"fields": ["sample_rate", "audio_codec", "reconnect",
+                                             "is_private", "settings", "client_name",
+                                             "client_metadata"]},
+                "call_disconnect": {"fields": []},
+                "ping": {"fields": [], "note": "keepalive ~500ms interval"},
+            },
+            "server_messages": {
+                "initialize": {"fields": ["session_id", "webrtc_ice_servers"]},
+                "webrtc_config": {"fields": ["ice_servers"]},
+                "webrtc_sdp_answer": {"fields": ["sdp"]},
+                "chat": {"fields": ["messages"]},
+                "call_connect_response": {"fields": ["call_id"]},
+                "call_disconnect_response": {"fields": []},
+                "ping_response": {"fields": []},
+            },
+            "characters": ["Maya", "Miles"],
+            "audio": {"sample_rate": 44100, "codec": "none (raw WebRTC Opus)"},
+            "webrtc": {
+                "stun": "stun:34.134.236.52:3478",
+                "turn": "turn:34.134.236.52:3478 (UDP + TCP)",
+                "credentials": "time-limited (1hr, tied to user+session)",
+            },
+        },
+        "public_assets": {
+            "bucket": GCS_PUBLIC_BUCKET,
+            "known_objects": [
+                "images/laptop_sesame_app_background.jpg",
+                "images/sesame_text.png",
+                "images/maya_text.png",
+                "images/miles_text.png",
+                "audio/set_14_12_connect_07.mp3",
+                "audio/set_14_12_disconnect.mp3",
+            ],
+        },
+        "analytics": {
+            "rudderstack_data_plane": "sesameaihzfjvw.dataplane.rudderstack.com",
+            "events": ["track", "identify"],
+        },
+    }
+
+    # Save to disk
+    out_path = _ROOT / "data" / "argus" / "reports" / "sesame_api_spec.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(spec, indent=2, default=str), encoding="utf-8")
+    print(f"  [+] Saved to {out_path}")
+    print(f"  [+] {len(gates_spec)} feature gates, {len(configs_spec)} configs, "
+          f"{len(spec['endpoints'])} endpoints")
+
+    return spec
+
+
+# ──── Interactive REPL ──────────────────────────────────────────────────────
+# v1.50.0 [2026-03-25] — Full interactive exploration shell with session state
+
+class _ReplState:
+    """Mutable session state for the interactive REPL.
+
+    Tracks the current email, user ID, custom properties, cached gate
+    values, and HAR path so commands can mutate state and observe diffs.
+    """
+
+    def __init__(self, tokens: TokenStore, har_path: Optional[Path] = None) -> None:
+        self.tokens = tokens
+        self.har_path = har_path
+        self.email: str = tokens.email or "user@gmail.com"
+        self.user_id: str = tokens.user_id or "repl-user"
+        self.custom: Dict[str, Any] = {}
+        self._cached_gates: Dict[str, bool] = {}
+
+    def user_props(self) -> Dict:
+        """Build Statsig user properties from current session state."""
+        return {
+            "userID": self.user_id,
+            "email": self.email,
+            "custom": copy.deepcopy(self.custom),
+        }
+
+    def fetch_gates(self) -> Dict[str, bool]:
+        """Fetch gates for current user props and cache them."""
+        return _fetch_gates(self.user_props())
+
+    def fetch_and_diff(self) -> tuple:
+        """Fetch gates and compute diff against cached values.
+
+        Returns:
+            (new_gates, flipped) where flipped is a dict of
+            gate_name -> (old_val, new_val) for gates that changed.
+        """
+        new_gates = self.fetch_gates()
+        flipped = {}
+        for name, val in new_gates.items():
+            old_val = self._cached_gates.get(name)
+            if old_val is not None and old_val != val:
+                flipped[name] = (old_val, val)
+        self._cached_gates = new_gates
+        return new_gates, flipped
+
+    def show_diff(self, flipped: Dict[str, tuple]) -> None:
+        """Print gate diff in a readable format."""
+        if not flipped:
+            print("  No gates changed.")
+        else:
+            print(f"  {len(flipped)} gate(s) flipped:")
+            for name, (old, new) in sorted(flipped.items()):
+                old_s = "ON " if old else "OFF"
+                new_s = "ON " if new else "OFF"
+                print(f"    {name}: {old_s} -> {new_s}")
+
+
+_REPL_HELP = """
+  Available commands:
+
+    help                   Show this help message
+    flags                  List all feature flags for current user props
+    toggle <gate_name>     Map what triggers a specific gate (combinatorial test)
+    set-email <email>      Change email (e.g. test@sesame.com) and show gate diff
+    set-user <user_id>     Change user ID
+    set <key> <value>      Set a custom user property (e.g. set isStaff true)
+    unset <key>            Remove a custom user property
+    props                  Show current user properties
+    configs                Show all dynamic configs
+    config <name> [value]  Show or filter dynamic configs by name
+    user                   Fetch user profile from Sesame API
+    call-info <call_id>    Generate upload URL for a call ID
+    refresh-token          Refresh Firebase JWT from HAR refresh_token
+    export                 Export full API spec to JSON
+    domains                Test email domains for flag differences
+    agents                 Probe agent service instances
+    bucket                 Explore public GCS bucket
+    endpoints              List all discovered endpoints
+    protocol               Show WebSocket agent protocol spec
+    exit / quit            Exit the REPL
+"""
+
+
+def run_interactive(tokens: TokenStore, har_path: Optional[Path] = None) -> None:
+    """Interactive REPL for exploring Sesame AI APIs.
+
+    Maintains session state (email, user_id, custom properties) and shows
+    diffs when properties change. Supports all exploration commands plus
+    gate toggle simulation and token refresh.
+
+    Args:
+        tokens: TokenStore with (optionally) loaded Firebase JWT.
+        har_path: Path to HAR file for token refresh.
+
+    CONNECTS: All exploration modules, _ReplState, TokenStore
+    CALLED BY: main() when command is "interactive" or no args
+    """
+    state = _ReplState(tokens, har_path)
+
+    print("\n" + "=" * 60)
+    print("  SESAME INTERACTIVE EXPLORER")
+    print("  Type 'help' for commands, 'exit' to quit")
+    print("=" * 60)
+    print(f"  Token:  {tokens.status()}")
+    print(f"  Email:  {state.email}")
+    print(f"  UserID: {state.user_id}")
+    print()
+
+    # Pre-cache gates so first diff is meaningful
+    print("  [*] Caching baseline gates...")
+    state._cached_gates = state.fetch_gates()
+    gate_count = len(state._cached_gates)
+    enabled_count = sum(1 for v in state._cached_gates.values() if v)
+    print(f"  [+] {enabled_count}/{gate_count} gates enabled\n")
+
+    while True:
+        try:
+            raw = input("sesame> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Goodbye.")
+            break
+
+        if not raw:
+            continue
+
+        # Parse command — handle quoted arguments
+        try:
+            parts = shlex.split(raw)
+        except ValueError:
+            parts = raw.split()
+
+        cmd = parts[0].lower()
+        args = parts[1:]
+
+        try:
+            # ── help ──
+            if cmd == "help":
+                print(_REPL_HELP)
+
+            # ── exit / quit ──
+            elif cmd in ("exit", "quit"):
+                print("  Goodbye.")
+                break
+
+            # ── flags ──
+            elif cmd == "flags":
+                gates, flipped = state.fetch_and_diff()
+                if flipped:
+                    state.show_diff(flipped)
+                    print()
+                enabled = {k: v for k, v in gates.items() if v}
+                disabled = {k: v for k, v in gates.items() if not v}
+                print(f"  Feature Gates: {len(gates)} total, {len(enabled)} enabled, {len(disabled)} disabled")
+                print()
+                for name in sorted(gates.keys()):
+                    val = "ON " if gates[name] else "OFF"
+                    print(f"    [{val}] {name}")
+
+            # ── toggle <gate_name> ──
+            elif cmd == "toggle":
+                if not args:
+                    print("  Usage: toggle <gate_name>")
+                    print("  Tip: use 'flags' first to see available gate names")
+                else:
+                    gate_name = args[0]
+                    result = map_gate_triggers(gate_name)
+                    if result.get("triggers"):
+                        print(f"\n  Result stored. {len(result['triggers'])} trigger(s) found.")
+
+            # ── set-email <email> ──
+            elif cmd == "set-email":
+                if not args:
+                    print("  Usage: set-email user@domain.com")
+                else:
+                    old_email = state.email
+                    state.email = args[0]
+                    print(f"  Email: {old_email} -> {state.email}")
+                    _, flipped = state.fetch_and_diff()
+                    state.show_diff(flipped)
+
+            # ── set-user <user_id> ──
+            elif cmd == "set-user":
+                if not args:
+                    print("  Usage: set-user <user_id>")
+                else:
+                    old_uid = state.user_id
+                    state.user_id = args[0]
+                    print(f"  UserID: {old_uid} -> {state.user_id}")
+                    _, flipped = state.fetch_and_diff()
+                    state.show_diff(flipped)
+
+            # ── set <key> <value> ──
+            elif cmd == "set":
+                if len(args) < 2:
+                    print("  Usage: set <key> <value>")
+                    print("  Examples: set isStaff true | set role admin | set tier pro")
+                else:
+                    key = args[0]
+                    raw_val = " ".join(args[1:])
+                    # Parse booleans and numbers
+                    if raw_val.lower() == "true":
+                        val: Any = True
+                    elif raw_val.lower() == "false":
+                        val = False
+                    elif raw_val.isdigit():
+                        val = int(raw_val)
+                    else:
+                        val = raw_val
+
+                    old_val = state.custom.get(key, "<unset>")
+                    state.custom[key] = val
+                    print(f"  custom.{key}: {old_val} -> {val}")
+                    _, flipped = state.fetch_and_diff()
+                    state.show_diff(flipped)
+
+            # ── unset <key> ──
+            elif cmd == "unset":
+                if not args:
+                    print("  Usage: unset <key>")
+                else:
+                    key = args[0]
+                    if key in state.custom:
+                        old_val = state.custom.pop(key)
+                        print(f"  Removed custom.{key} (was {old_val})")
+                        _, flipped = state.fetch_and_diff()
+                        state.show_diff(flipped)
+                    else:
+                        print(f"  custom.{key} not set")
+
+            # ── props ──
+            elif cmd == "props":
+                print(f"  Email:  {state.email}")
+                print(f"  UserID: {state.user_id}")
+                print(f"  Custom properties:")
+                if state.custom:
+                    for k, v in sorted(state.custom.items()):
+                        print(f"    {k} = {v}")
+                else:
+                    print("    (none)")
+
+            # ── configs ──
+            elif cmd == "configs":
+                explore_dynamic_configs(tokens)
+
+            # ── config <name> [value] ──
+            elif cmd == "config":
+                if not args:
+                    print("  Usage: config <name_filter> [value_filter]")
+                    print("  Shows dynamic configs matching the name filter")
+                else:
+                    name_filter = args[0].lower()
+                    value_filter = args[1].lower() if len(args) > 1 else None
+
+                    statsig_url = f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}&st=javascript-client&sv=3.2"
+                    r = _post(statsig_url, {
+                        "user": state.user_props(),
+                        "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "3.2.0"},
+                    })
+                    if r.get("status") != 200:
+                        print(f"  [!] Statsig returned {r.get('status')}")
+                    else:
+                        configs = r.get("data", {}).get("dynamic_configs", {})
+                        matched = {k: v for k, v in configs.items()
+                                   if name_filter in k.lower()}
+                        if not matched:
+                            print(f"  No configs matching '{name_filter}'")
+                        else:
+                            for name, cfg in sorted(matched.items()):
+                                val = cfg.get("value", {})
+                                rule = cfg.get("rule_id", "default")
+                                print(f"  Config: {name}  (rule={rule})")
+                                if isinstance(val, dict):
+                                    for k, v in val.items():
+                                        v_str = json.dumps(v)
+                                        if value_filter and value_filter not in v_str.lower() and value_filter not in k.lower():
+                                            continue
+                                        print(f"    {k:35s} = {v_str[:80]}")
+                                else:
+                                    print(f"    value = {json.dumps(val)[:120]}")
+                                print()
+
+            # ── user ──
+            elif cmd == "user":
+                explore_user_profile(tokens)
+
+            # ── call-info <call_id> ──
+            elif cmd == "call-info":
+                if not args:
+                    print("  Usage: call-info <call_id>")
+                    print("  Example: call-info 23166670")
+                else:
+                    generate_call_upload_url(args[0], tokens)
+
+            # ── refresh-token ──
+            elif cmd == "refresh-token":
+                if not state.har_path:
+                    print("  [!] No HAR file loaded — cannot refresh token")
+                    print("  Start with: python -m scripts.argus.clients.sesame_client interactive --har <path>")
+                else:
+                    new_token = refresh_firebase_token(state.har_path)
+                    if new_token:
+                        tokens._set_token(new_token)
+                        state.email = tokens.email
+                        state.user_id = tokens.user_id
+                        print(f"  [+] Token refreshed: {tokens.status()}")
+                        _, flipped = state.fetch_and_diff()
+                        if flipped:
+                            print(f"  [!] Gate changes after token refresh:")
+                            state.show_diff(flipped)
+                    else:
+                        print("  [!] Token refresh failed")
+
+            # ── export ──
+            elif cmd == "export":
+                export_api_spec(tokens)
+
+            # ── domains ──
+            elif cmd == "domains":
+                explore_email_domains(tokens)
+
+            # ── agents ──
+            elif cmd == "agents":
+                explore_agent_services(tokens)
+
+            # ── bucket ──
+            elif cmd == "bucket":
+                explore_public_bucket()
+
+            # ── endpoints ──
+            elif cmd == "endpoints":
+                list_endpoints()
+
+            # ── protocol ──
+            elif cmd == "protocol":
+                show_websocket_protocol()
+
+            # ── unknown ──
+            else:
+                print(f"  Unknown command: {cmd}")
+                print("  Type 'help' for available commands")
+
+        except Exception as exc:
+            print(f"  [!] Error: {exc}")
+            traceback.print_exc()
+
+        print()  # blank line between commands
+
+
 def show_websocket_protocol() -> None:
     """Show the discovered WebSocket agent protocol specification."""
     print("\n=== SESAME AGENT WEBSOCKET PROTOCOL ===\n")
@@ -595,9 +1470,9 @@ def main() -> None:
         description="Sesame AI Explorer — built from ARGUS intelligence",
     )
     parser.add_argument("command", nargs="?", default="menu",
-                        choices=["menu", "flags", "user", "bucket", "endpoints",
-                                 "staff", "agents", "firebase", "domains", "configs",
-                                 "protocol", "full"])
+                        choices=["menu", "interactive", "flags", "user", "bucket",
+                                 "endpoints", "staff", "agents", "firebase", "domains",
+                                 "configs", "protocol", "export", "full"])
     parser.add_argument("--har", type=Path, help="Path to Sesame HAR file for auth tokens")
     args = parser.parse_args()
 
@@ -624,18 +1499,24 @@ def main() -> None:
 
     if args.command == "menu":
         print("  Commands:")
-        print("    flags      Enumerate Statsig feature flags + test staff")
-        print("    domains    Test email domains for flag differences")
-        print("    configs    Show all dynamic configs with values")
-        print("    user       Fetch user profile (roles, moderation)")
-        print("    bucket     Explore public GCS bucket")
-        print("    endpoints  List all discovered endpoints")
-        print("    agents     Probe agent service instances (0-4)")
-        print("    firebase   Firebase project config")
-        print("    protocol   Show WebSocket agent protocol spec")
-        print("    full       Run everything")
+        print("    interactive  Interactive REPL with session state + diffs")
+        print("    flags        Enumerate Statsig feature flags + test staff")
+        print("    domains      Test email domains for flag differences")
+        print("    configs      Show all dynamic configs with values")
+        print("    user         Fetch user profile (roles, moderation)")
+        print("    bucket       Explore public GCS bucket")
+        print("    endpoints    List all discovered endpoints")
+        print("    agents       Probe agent service instances (0-4)")
+        print("    firebase     Firebase project config")
+        print("    protocol     Show WebSocket agent protocol spec")
+        print("    export       Export full API spec to JSON")
+        print("    full         Run everything")
         print()
         print("  Usage: python -m scripts.argus.clients.sesame_client <command>")
+        return
+
+    if args.command == "interactive":
+        run_interactive(tokens, har_path)
         return
 
     if args.command == "endpoints":
@@ -656,6 +1537,8 @@ def main() -> None:
         explore_firebase_config()
     elif args.command == "protocol":
         show_websocket_protocol()
+    elif args.command == "export":
+        export_api_spec(tokens)
     elif args.command == "full":
         list_endpoints()
         explore_firebase_config()

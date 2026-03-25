@@ -55,6 +55,12 @@ python scripts/oracle.py --health                 # Service health only
 python scripts/oracle.py --errors                 # Top errors by count
 python scripts/oracle.py --perf                   # LLM latency, benchmarks
 
+# ARGUS — API discovery from any HAR or heap snapshot
+python -m scripts.argus.analyze har path/to/file.har     # Analyze any HAR
+python -m scripts.argus.analyze har file.har --report    # Generate Markdown report
+python -m scripts.argus.analyze heap file.heapsnapshot   # Analyze heap snapshot
+python -m scripts.argus.analyze compare a.har b.har      # Diff two captures
+
 # Training
 python3 training/auto_train.py --status
 ```
