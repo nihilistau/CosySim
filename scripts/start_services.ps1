@@ -52,7 +52,7 @@ Write-Host "  Starting Nexus KMS..." -ForegroundColor Yellow
 Start-Process -FilePath $VenvPython `
     -ArgumentList "-m", "nexus", "api" `
     -WorkingDirectory $NexusRoot `
-    -WindowStyle Hidden
+    -WindowStyle Minimized
 Wait-ForPort -Port 8700 -Name "Nexus KMS" -TimeoutSec 20
 
 # ── Hub ───────────────────────────────────────────────────
@@ -60,7 +60,7 @@ Write-Host "  Starting Hub..." -ForegroundColor Yellow
 Start-Process -FilePath $VenvPython `
     -ArgumentList "launcher.py", "hub" `
     -WorkingDirectory $Root `
-    -WindowStyle Hidden
+    -WindowStyle Minimized
 Wait-ForPort -Port 8500 -Name "Hub" -TimeoutSec 30
 
 # ── Canvas (optional) ─────────────────────────────────────
@@ -71,7 +71,7 @@ if (-not $NoCanvas) {
         Start-Process -FilePath "node" `
             -ArgumentList "server.js" `
             -WorkingDirectory $canvasDir `
-            -WindowStyle Hidden -ErrorAction SilentlyContinue
+            -WindowStyle Minimized -ErrorAction SilentlyContinue
     }
 } else {
     Write-Host "  [--] Canvas skipped" -ForegroundColor DarkGray
