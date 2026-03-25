@@ -1,4 +1,6 @@
 scenes:
+  neonos:
+    auto_start: false
   auction:
     auto_start: false
   cyberspace:

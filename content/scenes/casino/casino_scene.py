@@ -1,6 +1,7 @@
 """
-CLUB NOIR — Scene  (v0.68 Dark Renaissance)
-=============================================
+CLUB NOIR — Casino Scene
+=========================
+
 A high-stakes underground casino revamped from The Midnight Casino.
 Accent: neon orange #f97316.  Port: 5559.
 
@@ -26,6 +27,12 @@ Characters
 ----------
 • Dealer Jack — the house dealer.  Calm, precise, slightly ominous.
 • Hustler Mira — a fellow player.  Charming, unpredictable, reads people.
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 from __future__ import annotations
 

@@ -139,7 +139,7 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
 # Interactive game scenes and content scenes.  Each scene is a Flask app with
 # Socket.IO, served on its own port (resolved by port_registry at runtime).
 
-# v1.42.1 [2026-03-21] â€” 17 scene targets (15 game, 1 service, 1 creation)
+# v1.52.0 [2026-03-25] â€” 22 scene targets (18 game, 2 service, 2 creation)
 SCENE_DEFS: Dict[str, Dict[str, Any]] = {
     "phone": {
         "type": "flask",
@@ -273,6 +273,29 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "type": "flask",
         "cls": "content.scenes.oracle.oracle_scene.OracleScene",
         "label": "THE ORACLE",
+        "auto_start": False,
+        "pillar": "game",
+    },
+    # v1.52.0 — Auto-registered by Creation Kit
+    "neonos": {
+        "type": "flask",
+        "cls": "content.scenes.neonos.neonos_scene.NeonosScene",
+        "label": "NEON OS",
+        "auto_start": False,
+        "pillar": "game",
+    },
+    # v1.52.0 [2026-03-25] — New game scenes (audit remediation)
+    "auction": {
+        "type": "flask",
+        "cls": "content.scenes.auction.auction_scene.AuctionScene",
+        "label": "THE AUCTION HOUSE",
+        "auto_start": False,
+        "pillar": "game",
+    },
+    "cyberspace": {
+        "type": "flask",
+        "cls": "content.scenes.cyberspace.cyberspace_scene.CyberspaceScene",
+        "label": "CYBERSPACE",
         "auto_start": False,
         "pillar": "game",
     },

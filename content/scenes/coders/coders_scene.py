@@ -1,11 +1,19 @@
 """
-The Coders Room — AI Agent Idle Code Simulation
-================================================
+The Coders Room
+================
+
+AI Agent Idle Code Simulation.
 
 A 2D office where AI agents write, review, and test real Python code.
 Showcases the v3.x pipeline with multi-agent collaboration through
 stateful and stateless LMS calls, sandboxed code execution, and
 live terminal output.
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 from __future__ import annotations
 

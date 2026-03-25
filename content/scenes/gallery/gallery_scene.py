@@ -1,6 +1,7 @@
 """
-THE OBSCURA — Gallery Scene v0.68 "Dark Renaissance"
-=====================================================
+THE OBSCURA — Gallery Scene
+=============================
+
 Dark art gallery with disturbing and adult exhibits.  Characters inhabit the
 roles of curator, critic, and private collector in a space where art confronts
 the viewer across every comfort boundary.
@@ -14,6 +15,12 @@ the viewer across every comfort boundary.
 • **MCP framework** — rules, state management, consequence chains
 
 Port: 5560 (configurable)
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 from __future__ import annotations
 

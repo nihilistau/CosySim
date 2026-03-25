@@ -23,10 +23,11 @@ Keyboard shortcuts:
     L              — show log panel
     Q / Ctrl+C     — quit (stops launched subprocesses)
 
-Version: v1.49.1 [2026-03-22]
+Version: v1.52.0 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.52.0 [2026-03-25] — Version stamp sync with audit remediation
     v1.49.1 [2026-03-22] — Version stamp sync, HAR_REAL_ROOT via env var
     v1.42.1 [2026-03-21] — External type handler in _start_one, priority-sorted
                             autostart via start_priority field

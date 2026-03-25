@@ -12,10 +12,13 @@ These rules override all defaults. Follow them exactly — no exceptions.
 4. **Verify before editing.** Before modifying any file, confirm it actually needs changes for the current task. Do not make unnecessary edits to files outside scope. Run `git diff` before committing to catch accidental reverts.
 5. **Windows-aware.** This project runs on Windows. Use Python scripts instead of shell scripts. Be aware of path separators (`\` vs `/`), encoding issues, and port conflicts. LMStudio API base is `http://localhost:1234/v1` — do not deviate.
 6. **Always verify UI changes.** After ANY JS/CSS/HTML change, run `python scripts/browser_test.py` before declaring done. Never skip browser testing.
+7. **When a tool fails, switch tools immediately.** Do NOT retry the same broken command. `taskkill` hangs in Git Bash — use `pkill` or PowerShell `Stop-Process` instead. If processes are piling up on ports, that IS the bug — fix it first, not later.
+8. **Fix the obvious problem first.** If the output shows something clearly wrong (zombie processes, stack traces, port conflicts), fix THAT before investigating secondary issues. Do not tunnel-vision.
+9. **Python venv.** This project uses `uv` with `.venv/`. Subprocesses MUST use `.venv/Scripts/python.exe`, not `sys.executable` (which may be system Python). The quick launcher is `python start.py`.
 
 ## What This Project Is
 
-CosySim is a local-first multi-scene AI simulation framework. 33 launch targets (16 game + 11 service + 7 creation) run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline with ~1,040 skills across 99 packs governs all agent behavior.
+CosySim is a local-first multi-scene AI simulation framework. 35 launch targets (18 game + 11 service + 6 creation) run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline with ~1,040 skills across 99 packs governs all agent behavior.
 
 ## Commands
 
@@ -80,7 +83,7 @@ Health check endpoints: `GET http://localhost:{port}/health`
 ```
 Browser (Neon HUD v2 — vanilla JS, Jinja2, Socket.IO)
     ↓ Socket.IO / REST
-33 targets (15 game + 11 service + 7 creation)  ports 5555–8800
+35 targets (18 game + 11 service + 6 creation)  ports 5555–8800
     ↓
 Skills (engine/skills/builtin/)     ←→    MCP Pipeline (engine/mcp/)
 @skill decorator · 99 packs · ~1,040     30 interceptors · AgentGovernor

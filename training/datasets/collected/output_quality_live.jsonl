@@ -1,2 +1,0 @@
-{"model_type": "output_quality", "input": "Hello!", "output": "Hey there!", "quality": 0.8, "metadata": {}, "source": "runtime", "id": "b09d2c3e-a19b-4dd2-94f6-8e1a6a087016", "collected_at": 1774062006.8205118}
-{"model_type": "output_quality", "input": "Help me", "output": "Sure!", "quality": 0.6, "metadata": {}, "source": "runtime", "id": "388420bd-a500-49f9-b511-9915a160c372", "collected_at": 1774062006.8359532}
