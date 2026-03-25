@@ -32,6 +32,9 @@ Version: v1.50.1 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.51.1 [2026-03-25] — Config-driven modular rewrite: all endpoints from YAML,
+                            new storage/write/mod commands, 8-app registry, query_credits,
+                            Guance RUM telemetry discovery, complete API reference
     v1.50.1 [2026-03-25] — Comprehensive expansion: danmaku viewer, credits/wallet,
                             hidden conversation API, character-from-template, room viewer,
                             interactive REPL, API spec export, livestream feature constants
@@ -57,36 +60,45 @@ import requests
 _ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(_ROOT))
 
-# ──── Constants from ARGUS Discovery ─────────────────────────────────────────
+# ──── Config-Driven Constants (v1.51.1) ──────────────────────────────────────
+# All endpoints, apps, models loaded from config/argus_openroom.yaml
+# Edit the YAML to add/remove endpoints without touching this code.
+from scripts.argus.clients.openroom_config import (
+    get_config as _get_or_cfg,
+    get_base_url, get_cdn_url, get_ws_url,
+    get_weaver_url, get_storage_url, get_ugc_url,
+    get_endpoint, get_apps, get_models, get_characters,
+    get_known_paths, get_playlists, get_har_directory,
+    get_default_room_id, get_default_character_id,
+    list_all_endpoints,
+)
 
-OPENROOM_URL = "https://www.openroom.ai"
-OPENROOM_CDN = "https://cdn.openroom.ai"
-OPENROOM_WS = "wss://connection.openroom.ai/connection/ws"
-
-WEAVER_API = f"{OPENROOM_URL}/weaver/api/v1"
-UGC_API = f"{OPENROOM_URL}/ugc/api"
-STORAGE_API = f"{OPENROOM_URL}/weaver_storage/api/v1/storage"
-
-# Known LLM models from HAR
-KNOWN_MODELS = ["Modern", "MiniMax-M2.5"]
-
-# Known character IDs
+# Backward-compat aliases (used throughout the file)
+OPENROOM_URL = get_base_url()
+OPENROOM_CDN = get_cdn_url()
+OPENROOM_WS = get_ws_url()
+WEAVER_API = get_weaver_url()
+UGC_API = get_ugc_url()
+STORAGE_API = get_storage_url()
+KNOWN_MODELS = get_models()
 KNOWN_CHARACTERS = {
-    6: "Aoi — Silver-haired bounty hunter, cryo survivor, dangerous smile",
+    k: f"{v['name']} — {v.get('description', '')}"
+    for k, v in get_characters().items()
 }
 
-# v1.50.1 [2026-03-25] — Hidden API endpoints discovered via heap analysis
+# Hidden API endpoints (now in config under conversation + account)
 HIDDEN_APIS = {
-    "poll_message": "/weaver/api/v1/connection/poll_message",
-    "query_conversations": "/weaver/api/v1/conversation/page_query_sorted_conversation",
-    "query_messages": "/weaver/api/v1/conversation/page_query_all_message",
-    "restart_conversation": "/weaver/api/v1/conversation/restart_conversation",
-    "accept_msg": "/weaver/api/v1/conversation/accept_msg",
-    "delete_conversation": "/weaver/api/v1/conversation/delete_conversation",
+    "poll_message": get_endpoint("conversation", "poll_message"),
+    "query_conversations": get_endpoint("conversation", "query_sorted"),
+    "query_messages": get_endpoint("conversation", "query_all_messages"),
+    "restart_conversation": get_endpoint("conversation", "restart"),
+    "accept_msg": get_endpoint("conversation", "accept_msg"),
+    "delete_conversation": get_endpoint("conversation", "delete"),
 }
 
-# v1.50.1 [2026-03-25] — Credits/wallet endpoints discovered via heap analysis
+# Credits — confirmed endpoint from HAR analysis (2026-03-25)
 CREDITS_APIS = {
+    "query_credits": get_endpoint("character", "query_credits"),
     "balance": "credits/fetchBalance",
     "products": "credits/fetchProductList",
     "history": "credits/fetchHistory",
@@ -94,7 +106,7 @@ CREDITS_APIS = {
     "order_status": "credits/fetchOrderStatus",
 }
 
-# v1.50.1 [2026-03-25] — Livestream features discovered via heap analysis
+# Livestream features
 LIVESTREAM_FEATURES = [
     "os_livestream_add_agent",
     "os_livestream_gift_send",
@@ -106,11 +118,11 @@ LIVESTREAM_FEATURES = [
     "receive_agent_message",
 ]
 
-# v1.50.1 [2026-03-25] — Live room stats snapshot (room 5050)
+# Live room stats snapshot (room 5050, last captured)
 ROOM_5050_STATS = {
-    "viewers": 9970,
-    "likes": 3600608,
-    "comments": 284110,
+    "viewers": 9974,
+    "likes": 3598534,
+    "comments": 283995,
 }
 
 
