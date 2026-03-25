@@ -4,6 +4,69 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.51.1] — "FEATURE SPRINT" — 2026-03-25
+
+Hardening + feature sprint building on v1.51.0 OpenRoom features. Fixed all
+test failures, added faction/heat interceptors, expanded story packs, new
+skill packs, and group chat for Phone scene.
+
+### Bug Fixes
+- **FastMCP v2 → v3 upgrade** — pydantic 2.12.5 compatibility. `get_tools()` → `list_tools()`, `_tool_manager` → async re-export. All 28 test_mcp_server + 24 test_nexus_bridge tests pass.
+- **Starlette pinned < 1.0** — FastAPI Router compat fix for TTS + canvas tests
+- **496 tests passing** (was 493 with 3 failures — now 0 failures)
+
+### Faction-Aware NPC Responses (Interceptor, priority 40)
+- **FactionContextInterceptor** — reads player's faction_standings from PlayerState, injects context so NPCs naturally adjust tone: allied members are warm, hostile ones are threatening
+- Standing labels: allied (50+), friendly (20+), neutral, unfriendly (-20), hostile (-50)
+- Character→faction mapping for NeonCity factions (OmniCorp, Ghost_Net, Iron Collective, Neon Syndicate, Free Radicals, Chrome Saints)
+
+### Heat/Wanted System in Agent Responses (Interceptor, priority 75)
+- **HeatAwarenessInterceptor** — injects heat level context into NPC prompts
+- 4 heat tiers: LOW (20+), MODERATE (40+), HIGH (60+), CRITICAL (80+)
+- Type-specific reactions: authorities confront, criminals demand you cool off, merchants refuse service
+- Character type detection: authority, criminal, merchant, civilian
+
+### 2 New Narrative Story Packs (5 total)
+- **tavern_intrigue** — "The Stranger's Bargain" — 4 stages: stranger arrives → secret revealed → trust decision → fallout
+- **grid_data_heist** — "The Phantom Download" — 3 stages: find mark → infiltrate node → extraction under pressure
+- Auto-load wired in: Realm (dragonfire), Tavern (intrigue), Grid (heist) — now 5 scenes auto-load packs
+
+### Faction Politics Skill Pack (10 skills)
+- `charm_npc`, `blackmail`, `negotiate_alliance`, `spread_rumor`, `bribe_official`, `request_favor`, `betray_faction`, `defect_to_faction`, `call_in_debt`, `political_speech`
+- All interact with PlayerState (credits, heat, faction_standings)
+- Risk/reward mechanics: blackmail (50% success, +credits or +heat), betrayal (-40 standing +15 heat)
+
+### Heist Planning Skill Pack (8 skills)
+- `case_target`, `find_weaknesses`, `recruit_specialist`, `plan_entry`, `plan_escape`, `acquire_tools`, `set_distraction`, `execute_heist`
+- Full heist lifecycle: recon → plan → equip → execute with risk roll
+- 6 specialist types (hacker, muscle, driver, insider, demolitions, face)
+- Risk system: each preparation step reduces risk %, final roll determines success
+- Heist plans persist to virtual filesystem
+
+### Group Chat for Phone Scene (4 new routes)
+- `POST /api/threads/create_group` — create group with 2+ characters
+- `POST /api/threads/<id>/group_message` — send message, all characters reply with staggered delays
+- `GET /api/threads/<id>/group_messages` — paginated group history with sender names
+- `POST /api/threads/<id>/group_reply` — trigger single character reply
+- Characters see full group context (last 30 messages) and react to each other
+- SocketIO real-time broadcast for group messages + typing indicators
+
+### Infrastructure
+- Interceptors: 28 → **30** (faction_context + heat_awareness)
+- Story packs: 3 → **5** (tavern_intrigue + grid_data_heist)
+- Skills: ~1,010 → **~1,030** (18 new: 10 faction_politics + 8 heist_planning)
+- Tests: 493 → **496** passing (0 failures, was 3)
+
+### Files
+- 5 new files, 8 modified files
+- `engine/agents/interceptors/faction_context.py` (140 lines)
+- `engine/agents/interceptors/heat_awareness.py` (130 lines)
+- `engine/skills/builtin/faction_politics_skills.py` (350 lines)
+- `engine/skills/builtin/heist_planning_skills.py` (400 lines)
+- `content/scenes/phone/phone_scene_v2.py` (+607 lines)
+
+---
+
 ## [1.51.0] — "OPENROOM FEATURES" — 2026-03-25
 
 6 features inspired by OpenRoom/VibeApps that transform AI characters from reactive

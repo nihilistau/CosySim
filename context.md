@@ -1,6 +1,6 @@
 # CosySim — Complete System Context
 
-> v1.51.0 [2026-03-25] — Everything an agent needs to understand and work with CosySim.
+> v1.51.1 [2026-03-25] — Everything an agent needs to understand and work with CosySim.
 >
 > Read this file to gain full context on architecture, conventions, systems, tools,
 > protocols, and workflows. After reading, you should be able to modify any part of
@@ -10,7 +10,7 @@
 
 ## 1. What CosySim Is
 
-CosySim is a **local-first multi-scene AI simulation framework**. 33 launch targets (15 game scenes, 11 services, 7 creation tools) run as Flask/Socket.IO servers on localhost. AI characters are LLM-powered agents governed by a 28-interceptor pipeline, ~1,010 skills across 98 packs, and a persistent knowledge layer (Nexus KMS). Local inference via LMStudio — no cloud dependency for core gameplay.
+CosySim is a **local-first multi-scene AI simulation framework**. 33 launch targets (15 game scenes, 11 services, 7 creation tools) run as Flask/Socket.IO servers on localhost. AI characters are LLM-powered agents governed by a 30-interceptor pipeline, ~1,030 skills across 100 packs, and a persistent knowledge layer (Nexus KMS). Local inference via LMStudio — no cloud dependency for core gameplay.
 
 **Design Principles:**
 - **Engine is reusable framework. Content is swappable. Config tunes without code.**
@@ -205,8 +205,10 @@ Pri  6 → NexusPrompt (knowledge hydration)
 Pri  7–12 → Identity, scene injection, routing, dialog
 Pri 15 → NarrativeModInterceptor (stage context)
 Pri 20–70 → Skills, games, guardrails, personality, policy
-Pri 80–93 → Response shaping, TTS, mood sync, relationships
-Pri 92 → SpectatorBroadcastInterceptor (danmaku)
+  Pri 40 → FactionContextInterceptor (faction standing injection)
+Pri 71–93 → Response shaping, TTS, mood sync, relationships
+  Pri 75 → HeatAwarenessInterceptor (wanted level awareness)
+  Pri 92 → SpectatorBroadcastInterceptor (danmaku)
 ```
 
 Register in `engine/agents/interceptors/__init__.py` `_REGISTRY` list.

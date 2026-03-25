@@ -1,6 +1,6 @@
 # Character System
 
-> CosySim Documentation — v1.51.0 [2026-03-25]
+> CosySim Documentation — v1.51.1 [2026-03-25]
 >
 > Consolidated reference for character identity, stats, memory, reputation, player profile,
 > relationships, and the interceptor pipeline. Covers ~1,000 skills across 95 packs,

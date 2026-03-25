@@ -1,6 +1,6 @@
 # Architecture
 
-> CosySim Documentation — v1.51.0 [2026-03-25]
+> CosySim Documentation — v1.51.1 [2026-03-25]
 >
 > System design, data flow, layers, and the three-pillar architecture.
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-CosySim is a local-first multi-scene AI simulation framework. Every NPC is an LLM-powered agent governed by a 28-interceptor pipeline, ~1,010 skills across 98 packs, and a persistent knowledge layer (Nexus KMS). The system runs 33 launch targets as Flask, FastAPI, Streamlit, and Node servers, all orchestrated by a unified launcher and TUI.
+CosySim is a local-first multi-scene AI simulation framework. Every NPC is an LLM-powered agent governed by a 30-interceptor pipeline, ~1,030 skills across 100 packs, and a persistent knowledge layer (Nexus KMS). The system runs 33 launch targets as Flask, FastAPI, Streamlit, and Node servers, all orchestrated by a unified launcher and TUI.
 
 **Design principles:**
 

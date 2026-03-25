@@ -1,8 +1,8 @@
 # Interceptor Pipeline
 
-> CosySim Documentation — v1.51.0 [2026-03-25]
+> CosySim Documentation — v1.51.1 [2026-03-25]
 >
-> 28 pre/post-call hooks governing every agent LLM call.
+> 30 pre/post-call hooks governing every agent LLM call.
 
 The interceptor pipeline modifies prompts **before** the LLM runs (`pre_call`) and processes
 replies **after** it returns (`post_call`). This gives CosySim fine-grained

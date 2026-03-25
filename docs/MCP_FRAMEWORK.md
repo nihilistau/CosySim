@@ -1,6 +1,6 @@
 # MCP Framework
 
-> CosySim Documentation -- v1.51.0 [2026-03-25]
+> CosySim Documentation -- v1.51.1 [2026-03-25]
 >
 > Skill dispatch, agent governance, state coordination, and the dialog system.
 

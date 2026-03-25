@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-> CosySim Documentation — v1.51.0 [2026-03-25]
+> CosySim Documentation — v1.51.1 [2026-03-25]
 >
 > Key design decisions and their rationale. New decisions go at the top.
 
