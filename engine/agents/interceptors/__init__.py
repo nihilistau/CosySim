@@ -42,6 +42,10 @@ from engine.agents.interceptors.natural_mood_drift import NaturalMoodDriftInterc
 from engine.agents.interceptors.conversation_recap import ConversationRecapInterceptor
 from engine.agents.interceptors.relationship_event import RelationshipEventInterceptor
 from engine.agents.interceptors.nexus_prompt import NexusPromptInterceptor
+# v1.51.0 [2026-03-25] — Spectator/danmaku broadcast interceptor
+from engine.agents.interceptors.spectator_broadcast import SpectatorBroadcastInterceptor
+# v1.51.0 [2026-03-25] — Narrative mod stage injection interceptor
+from engine.agents.interceptors.narrative_mod import NarrativeModInterceptor
 from engine.characters.neurochemistry import NeurochemistryInterceptor
 # v1.49.1 [2026-03-22] — Use the real RelationshipContextInterceptor (not the split stub)
 from engine.agents.relationship_interceptor import RelationshipContextInterceptor  # noqa: F401
@@ -77,6 +81,8 @@ _REGISTRY: list[Type] = [
     RelationshipEventInterceptor,
     RelationshipContextInterceptor,
     NexusPromptInterceptor,
+    NarrativeModInterceptor,        # v1.51.0 — stage context injection (pri 15)
+    SpectatorBroadcastInterceptor,  # v1.51.0 — danmaku spectator broadcast (pri 92)
 ]
 
 
@@ -132,4 +138,5 @@ __all__ = [
     "RelationshipEventInterceptor",
     "RelationshipContextInterceptor",
     "NexusPromptInterceptor",
+    "SpectatorBroadcastInterceptor",
 ]
