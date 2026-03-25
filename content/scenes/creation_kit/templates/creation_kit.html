@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <!--
-  Creation Kit — Visual Scene Editor v1.49.5
+  Creation Kit — Visual Scene Editor v1.51.0
   =========================================
   Drag-and-drop scene construction from the CosySim component library.
   Left: Component palette. Center: Layout canvas + live preview.
   Right: Property inspector. Supports nested layouts.
 
-  Version: v1.49.5 [2026-03-22]
+  Version: v1.51.0 [2026-03-25]
   Change Log:
+    v1.51.0 [2026-03-25] — Character Wizard overlay (6-stage character creation)
     v1.49.5 [2026-03-22] — Visual drop indicator, breadcrumb navigation,
                             component duplication (Ctrl+D), canvas minimap
     v1.48.0 [2026-03-21] — v2: nested slot drop zones, 28 components,
@@ -23,6 +24,8 @@
 <title>Creation Kit — CosySim</title>
 <link rel="stylesheet" href="/shared/css/design_tokens.css">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- v1.51.0 [2026-03-25] — Character Wizard overlay styles -->
+<link rel="stylesheet" href="/creation_kit/static/character_wizard.css">
 <style>
 /* ══════════════════════════════════════════════════════════════
    CREATION KIT — v1.47.0 [2026-03-21]
@@ -947,6 +950,8 @@ body {
       <button class="ck-btn" id="ck-redo-btn" onclick="CK.redo()" disabled title="Redo (Ctrl+Y)">&#8618; Redo</button>
       <button class="ck-btn" onclick="CK.toggleLivePreview()" id="btn-live-preview">&#9654; Live Preview</button>
       <button class="ck-btn" onclick="CK.preview()">&#9635; Full Preview</button>
+      <!-- v1.51.0 [2026-03-25] — Character Wizard button -->
+      <button class="ck-btn" onclick="CharacterWizard.open()">&#9823; Character</button>
       <button class="ck-btn primary" onclick="CK.exportScene()">&#10548; Export Scene</button>
     </div>
   </div>
@@ -1065,6 +1070,12 @@ body {
     <iframe class="ck-preview-iframe" id="ck-preview-iframe" sandbox="allow-same-origin"></iframe>
   </div>
 </div>
+
+<!-- v1.51.0 [2026-03-25] — Character Wizard overlay (populated by JS) -->
+<div id="cw-overlay" class="cw-overlay" style="display:none"></div>
+
+<!-- v1.51.0 [2026-03-25] — Character Wizard JS controller -->
+<script src="/creation_kit/static/character_wizard.js"></script>
 
 <script>
 /**

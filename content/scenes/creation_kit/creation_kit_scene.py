@@ -8,11 +8,12 @@ scenes from the shared component library without hand-coding HTML/JS/CSS.
 Components are defined in ``engine.creation.component_registry``.
 Layouts are saved as JSON and exported to working scene directories.
 
-Version: v1.51.0 [2026-03-22]
+Version: v1.51.0 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
-    v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
+    v1.51.0 [2026-03-25] — Character Wizard routes (6-stage creation API),
+                            migrated to FlaskScene base class
     v1.50.0 [2026-03-22] — Asset browser API, 8 new component export helpers
                             (dice_roller, action_menu, combat_log, leaderboard,
                             resource_bar, dialogue_choice, poker_table, mini_map),
@@ -1968,6 +1969,110 @@ class CreationKitScene(FlaskScene):
         self._setup_layout_routes()
         self._setup_asset_routes()
         self._setup_export_routes()
+        self._setup_wizard_routes()
+
+    # v1.51.0 [2026-03-25] — Character creation wizard API
+    # CONNECTS: CharacterWizard, CharacterRegistry, RAGMemory
+    # CALLED BY: Character Wizard overlay in creation_kit.html
+    # EMITS: REST responses for wizard state management
+    def _setup_wizard_routes(self) -> None:
+        """Register character wizard routes."""
+
+        # ── Character Wizard ───────────────────────────────────────
+
+        @self.app.route("/api/wizard/start", methods=["POST"])
+        def wizard_start():
+            from engine.creation.character_wizard import get_character_wizard
+            data = request.get_json(silent=True) or {}
+            wizard = get_character_wizard()
+            state = wizard.start(data.get("name", ""))
+            return jsonify({"wizard_id": state.wizard_id, "state": state.to_dict()})
+
+        @self.app.route("/api/wizard/archetype", methods=["POST"])
+        def wizard_archetype():
+            from engine.creation.character_wizard import get_character_wizard
+            data = request.get_json(silent=True) or {}
+            wizard = get_character_wizard()
+            try:
+                state = wizard.set_archetype(data["wizard_id"], data["archetype"])
+                return jsonify({"state": state.to_dict()})
+            except (KeyError, ValueError) as e:
+                return jsonify({"error": str(e)}), 400
+
+        @self.app.route("/api/wizard/appearance", methods=["POST"])
+        def wizard_appearance():
+            from engine.creation.character_wizard import get_character_wizard
+            data = request.get_json(silent=True) or {}
+            wizard = get_character_wizard()
+            try:
+                state = wizard.set_appearance(data["wizard_id"], data.get("appearance", {}))
+                return jsonify({"state": state.to_dict()})
+            except (KeyError, ValueError) as e:
+                return jsonify({"error": str(e)}), 400
+
+        @self.app.route("/api/wizard/voice", methods=["POST"])
+        def wizard_voice():
+            from engine.creation.character_wizard import get_character_wizard
+            data = request.get_json(silent=True) or {}
+            wizard = get_character_wizard()
+            try:
+                state = wizard.set_voice(
+                    data["wizard_id"],
+                    data.get("voice_style", ""),
+                    data.get("voice_id", ""),
+                )
+                return jsonify({"state": state.to_dict()})
+            except (KeyError, ValueError) as e:
+                return jsonify({"error": str(e)}), 400
+
+        @self.app.route("/api/wizard/stats", methods=["POST"])
+        def wizard_stats():
+            from engine.creation.character_wizard import get_character_wizard
+            data = request.get_json(silent=True) or {}
+            wizard = get_character_wizard()
+            try:
+                state = wizard.set_stats(data["wizard_id"], data.get("personality", {}))
+                return jsonify({"state": state.to_dict()})
+            except (KeyError, ValueError) as e:
+                return jsonify({"error": str(e)}), 400
+
+        @self.app.route("/api/wizard/backstory", methods=["POST"])
+        def wizard_backstory():
+            from engine.creation.character_wizard import get_character_wizard
+            data = request.get_json(silent=True) or {}
+            wizard = get_character_wizard()
+            try:
+                state = wizard.set_backstory(data["wizard_id"], data.get("backstory", ""))
+                return jsonify({"state": state.to_dict()})
+            except (KeyError, ValueError) as e:
+                return jsonify({"error": str(e)}), 400
+
+        @self.app.route("/api/wizard/memories", methods=["POST"])
+        def wizard_memories():
+            from engine.creation.character_wizard import get_character_wizard
+            data = request.get_json(silent=True) or {}
+            wizard = get_character_wizard()
+            try:
+                state = wizard.set_seed_memories(data["wizard_id"], data.get("memories", []))
+                return jsonify({"state": state.to_dict()})
+            except (KeyError, ValueError) as e:
+                return jsonify({"error": str(e)}), 400
+
+        @self.app.route("/api/wizard/finalize", methods=["POST"])
+        def wizard_finalize():
+            from engine.creation.character_wizard import get_character_wizard
+            data = request.get_json(silent=True) or {}
+            wizard = get_character_wizard()
+            try:
+                char_id = wizard.finalize(data["wizard_id"])
+                return jsonify({"character_id": char_id, "success": True})
+            except (KeyError, ValueError) as e:
+                return jsonify({"error": str(e)}), 400
+
+        @self.app.route("/api/wizard/archetypes")
+        def wizard_archetypes():
+            from engine.creation.character_wizard import get_character_wizard
+            return jsonify(get_character_wizard().list_archetypes())
 
     def _setup_component_routes(self) -> None:
         """Register component catalogue routes."""
