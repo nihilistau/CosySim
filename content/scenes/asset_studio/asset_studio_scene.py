@@ -1,4 +1,8 @@
-"""Asset Studio scene — standalone and CosySim-integrated asset generation hub.
+"""
+Asset Studio Scene
+===================
+
+Asset Studio scene — standalone and CosySim-integrated asset generation hub.
 
 A full asset creation system with 9 tabs:
     LIBRARY | IMAGES | PORTRAITS | VOICE | VIDEO | ITEMS | SVG | AUDIO | SETTINGS
@@ -6,6 +10,12 @@ A full asset creation system with 9 tabs:
 Can run standalone (``python launcher.py --scene asset_studio``) or be accessed
 from the CosySim hub.  Feeds PortraitCache, emits ``asset_generated`` socket
 events, and registers with MCPFramework for full system integration.
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 from __future__ import annotations
 

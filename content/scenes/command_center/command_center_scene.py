@@ -1,5 +1,8 @@
 """
-Command Center Scene — War-room dashboard for real-time CosySim monitoring.
+Command Center Scene
+=====================
+
+War-room dashboard for real-time CosySim monitoring.
 
 Displays:
 - System metrics (CPU, RAM, GPU) with live charts
@@ -10,6 +13,12 @@ Displays:
 - Live event feed
 - **Live scene monitor** — cycle through all scenes, see chats/state/turns
 - **Scene controls** — pause, resume, inject events, broadcast directives
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 
 from __future__ import annotations

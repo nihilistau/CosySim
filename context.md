@@ -10,7 +10,7 @@
 
 ## 1. What CosySim Is
 
-CosySim is a **local-first multi-scene AI simulation framework**. 33 launch targets (16 game scenes, 11 services, 7 creation tools) run as Flask/Socket.IO servers on localhost. AI characters are LLM-powered agents governed by a 30-interceptor pipeline, ~1,040 skills across 99 packs, and a persistent knowledge layer (Nexus KMS). Local inference via LMStudio — no cloud dependency for core gameplay.
+CosySim is a **local-first multi-scene AI simulation framework**. 35 launch targets (18 game scenes, 11 services, 6 creation tools) run as Flask/Socket.IO servers on localhost. AI characters are LLM-powered agents governed by a 30-interceptor pipeline, ~1,040 skills across 99 packs, and a persistent knowledge layer (Nexus KMS). Local inference via LMStudio — no cloud dependency for core gameplay.
 
 **Design Principles:**
 - **Engine is reusable framework. Content is swappable. Config tunes without code.**
@@ -25,18 +25,19 @@ CosySim is a **local-first multi-scene AI simulation framework**. 33 launch targ
 All targets defined in `engine/control_plane_registry.py`, ports in `engine/port_registry.py`.
 
 ```
-┌─ GAME (15) ────────────────────────────────────────────────┐
+┌─ GAME (18) ────────────────────────────────────────────────┐
 │ phone:5555 · penthouse:5556 · lounge:5557 · tavern:5558    │
 │ casino:5559 · gallery:5560 · arena:5561 · realm:5562       │
 │ neoncity:5563 · coders:5564 · heist:5565 · games:5567      │
-│ grid:5569 · lab_break:5571 · oracle:5572                    │
+│ grid:5569 · lab_break:5571 · oracle:5572 · neonos:5593     │
+│ cyberspace:5573 · auction:5574                              │
 ├─ SERVICE (11) ──────────────────────────────────────────────┤
 │ nexus_kms:8700 · hub:8500 · nexus_panel:5570 · bridge:8601 │
 │ nlm_proxy:8800 · system_control:5575 · command_center:5566  │
 │ intel_hub:5580 · dashboard:8501 · admin:8502 · tts:8600     │
-├─ CREATION (7) ──────────────────────────────────────────────┤
+├─ CREATION (6) ──────────────────────────────────────────────┤
 │ canvas:5590 · canvas_api:5595 · assets:8503 · creator:8504  │
-│ asset_studio:5568 · creation_kit:5592 · neonos:5593         │
+│ asset_studio:5568 · creation_kit:5592                       │
 └─────────────────────────────────────────────────────────────┘
 
 External (manual start):

@@ -57,6 +57,8 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "games": 5567,
     "asset_studio": 5568,
     "grid": 5569,
+    "cyberspace": 5573,    # v1.52.0 — Hacking minigame
+    "auction": 5574,       # v1.52.0 — Underground black market auctions
     "lab_break": 5571,
     "creation_kit": 5592,  # v1.47.0 — Creation Kit visual editor
     "oracle": 5572,        # v1.52.0 — THE ORACLE (Claude's signature scene)

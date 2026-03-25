@@ -14,7 +14,8 @@
       "Bash(find /c/Files/Models/CosySim/engine/api -name *.py)",
       "Bash(grep -r \"visual.*editor\\\\|scene.*editor\\\\|visual.*creation\\\\|visual.*builder\" /c/Files/Models/CosySim/content/scenes --include=*.py --include=*.js --include=*.html)",
       "Bash(find /c/Files/Models/CosySim -name *notebook* -o -name *editor* -o -name *visual*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(npm install:*)"
     ]
   },
   "hooks": {
@@ -31,19 +32,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -er '.tool_input.file_path // .tool_response.filePath' | grep -qE '\\.(py|js|html|css)$' && cd /c/Files/Models/CosySim && python -m pytest tests/ --affected -x -q --tb=line 2>&1 | tail -10 || true",
-            "timeout": 120,
-            "async": true,
-            "statusMessage": "Running affected tests..."
-          }
-        ]
-      }
-    ]
+    "PostToolUse": []
   }
 }

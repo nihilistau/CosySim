@@ -27,10 +27,12 @@ Usage:
 Auto-start flags live in config/launcher.yaml — edit that file to control
 which targets launch with --core / --services / --scenes.
 
-Version: v1.49.1 [2026-03-22]
+Version: v1.52.0 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.52.1 [2026-03-25] — Fix venv Python resolution for subprocess launches
+    v1.52.0 [2026-03-25] — Version stamp sync with audit remediation
     v1.49.1 [2026-03-22] — Version stamp sync with project version
     v1.42.1 [2026-03-21] — Managed Nexus KMS via external type, priority-sorted
                             service launch, _start_external_proc helper
@@ -62,6 +64,20 @@ for _stream in (sys.stdout, sys.stderr):
 
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# v1.52.1 [2026-03-25] — Resolve venv Python so subprocesses use the correct interpreter
+def _resolve_python() -> str:
+    """Return the venv Python path if a .venv exists, else sys.executable."""
+    venv_python = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    if venv_python.exists():
+        return str(venv_python)
+    venv_python_unix = PROJECT_ROOT / ".venv" / "bin" / "python"
+    if venv_python_unix.exists():
+        return str(venv_python_unix)
+    return sys.executable
+
+
+PYTHON = _resolve_python()
 
 try:
     from importlib.metadata import version as _pkg_version
@@ -95,6 +111,34 @@ _load_config()
 
 # ──── Low-Level Helpers ───────────────────────────────────────────────────
 
+# v1.52.1 [2026-03-25] — Kill zombie processes on a port before launching
+def _kill_port(port: int) -> None:
+    """Kill any process listening on *port*. Windows-only."""
+    import re
+    try:
+        out = subprocess.check_output(
+            ["netstat", "-ano"], stderr=subprocess.DEVNULL, text=True,
+        )
+        pids = set()
+        for line in out.splitlines():
+            if f":{port} " in line and "LISTENING" in line:
+                parts = line.split()
+                if parts:
+                    pid = parts[-1]
+                    if pid.isdigit() and int(pid) > 0:
+                        pids.add(pid)
+        for pid in pids:
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", pid, "/F"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def _port_up(port: int) -> bool:
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -123,14 +167,20 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
     """Start one target in the foreground. Blocks until it exits."""
     t = info["type"]
     if t == "flask":
-        _import_class(info["cls"])(host=info.get("host", "0.0.0.0")).start()
+        # v1.52.1 [2026-03-25] — Scenes that override __init__(config=) don't accept host=
+        # Try host= first (FlaskScene default), fall back to no-arg construction
+        cls = _import_class(info["cls"])
+        try:
+            cls(host=info.get("host", "0.0.0.0")).start()
+        except TypeError:
+            cls().start()
     elif t == "streamlit":
         script = PROJECT_ROOT / info["script"]
         if not script.exists():
             print(f"Script not found: {script}")
             sys.exit(1)
         subprocess.run([
-            sys.executable, "-m", "streamlit", "run", str(script),
+            PYTHON, "-m", "streamlit", "run", str(script),
             f"--server.port={info['port']}",
             f"--server.address={info.get('host', '0.0.0.0')}",
             "--server.headless=true",
@@ -172,10 +222,13 @@ def _start_in_thread(name: str, info: Dict[str, Any],
     """
     def _worker() -> None:
         try:
+            # v1.52.1 [2026-03-25] — Log subprocess stderr to data/ for debugging
+            log_path = PROJECT_ROOT / "data" / f"scene_{name}.log"
+            log_file = open(log_path, "w", encoding="utf-8")
             proc = subprocess.Popen(
-                [sys.executable, str(PROJECT_ROOT / "launcher.py"), name],
+                [PYTHON, str(PROJECT_ROOT / "launcher.py"), name],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=log_file,
                 cwd=str(PROJECT_ROOT),
             )
             # Store proc for cleanup — attach to the thread object
@@ -199,7 +252,7 @@ def _start_streamlit_proc(info: Dict[str, Any],
         return None
     try:
         return subprocess.Popen(
-            [sys.executable, "-m", "streamlit", "run", str(script),
+            [PYTHON, "-m", "streamlit", "run", str(script),
              f"--server.port={info['port']}",
              "--server.headless=true",
              f"--server.address={info.get('host', '0.0.0.0')}",
@@ -274,6 +327,17 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     if total == 0:
         print("Nothing to launch. Check auto_start flags in config/launcher.yaml.")
         return
+
+    # v1.52.1 [2026-03-25] — Kill zombie processes on all target ports before launch
+    all_ports = {ALL_TARGETS[n]["port"] for n in service_names + scene_names}
+    zombies_killed = 0
+    for port in sorted(all_ports):
+        if _port_up(port):
+            _kill_port(port)
+            zombies_killed += 1
+    if zombies_killed:
+        print(f"  Cleared {zombies_killed} occupied ports from previous run.")
+        time.sleep(1)  # Let OS release sockets
 
     box_w = 62
     print(f"\n{'=' * (box_w + 2)}")
