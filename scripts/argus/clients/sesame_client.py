@@ -416,6 +416,274 @@ class SesameClient:
         return result
 
 
+# ──── Browser Launch with Statsig Override ───────────────────────────────────
+# v1.52.0 [2026-03-26] — Launch Sesame in Chrome with employee gates injected
+
+def _build_statsig_override_script(email: str = "staff@sesame.com",
+                                    env_tier: str = "",
+                                    extra_props: Optional[Dict] = None) -> str:
+    """Build a JavaScript snippet that overrides Statsig's user object.
+
+    The Statsig JS SDK evaluates gates client-side. By intercepting the
+    SDK's initialize() call and replacing the user email, we can make
+    the app behave as if we're an employee.
+
+    This script:
+    1. Hooks into the Statsig SDK's initialize method
+    2. Overrides the user.email before the SDK sends it to Statsig
+    3. Optionally sets statsigEnvironment.tier for env override
+    """
+    props_json = json.dumps(extra_props or {})
+    env_block = f'user.statsigEnvironment = {{ tier: "{env_tier}" }};' if env_tier else ""
+
+    return f"""
+    // ARGUS Statsig Override — Inject before app.js loads
+    (function() {{
+        const OVERRIDE_EMAIL = "{email}";
+        const EXTRA_PROPS = {props_json};
+
+        // Method 1: Intercept fetch to featureassets.org and modify the user object
+        const _origFetch = window.fetch;
+        window.fetch = function(url, opts) {{
+            if (typeof url === 'string' && url.includes('featureassets.org')) {{
+                try {{
+                    const body = JSON.parse(opts.body);
+                    if (body.user) {{
+                        body.user.email = OVERRIDE_EMAIL;
+                        Object.assign(body.user, EXTRA_PROPS);
+                        {env_block}
+                        opts.body = JSON.stringify(body);
+                        console.log('[ARGUS] Statsig user overridden:', body.user.email);
+                    }}
+                }} catch(e) {{}}
+            }}
+            return _origFetch.call(this, url, opts);
+        }};
+
+        // Method 2: Override XMLHttpRequest for older SDK versions
+        const _origOpen = XMLHttpRequest.prototype.open;
+        const _origSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function(method, url) {{
+            this._argusUrl = url;
+            return _origOpen.apply(this, arguments);
+        }};
+        XMLHttpRequest.prototype.send = function(body) {{
+            if (this._argusUrl && this._argusUrl.includes('featureassets.org') && body) {{
+                try {{
+                    const data = JSON.parse(body);
+                    if (data.user) {{
+                        data.user.email = OVERRIDE_EMAIL;
+                        Object.assign(data.user, EXTRA_PROPS);
+                        body = JSON.stringify(data);
+                        console.log('[ARGUS] Statsig XHR overridden:', data.user.email);
+                    }}
+                }} catch(e) {{}}
+            }}
+            return _origSend.call(this, body);
+        }};
+
+        // Visual indicator
+        const style = document.createElement('style');
+        style.textContent = `
+            body::after {{
+                content: 'ARGUS: {email}';
+                position: fixed;
+                bottom: 4px;
+                right: 4px;
+                background: rgba(168, 85, 247, 0.9);
+                color: white;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 10px;
+                font-family: monospace;
+                z-index: 99999;
+                pointer-events: none;
+            }}
+        `;
+        document.documentElement.appendChild(style);
+
+        console.log('[ARGUS] Statsig override active for ' + OVERRIDE_EMAIL);
+    }})();
+    """
+
+
+def _launch_sesame_browser(tokens: TokenStore, mode: str = "--employee",
+                            state: Any = None) -> None:
+    """Launch Sesame in Chrome with Statsig overrides applied.
+
+    Uses Chrome CDP (port 9223) to create a new tab with an init script
+    that intercepts Statsig SDK calls and overrides the user email.
+    """
+    import subprocess
+
+    if mode in ("--employee", "--staff"):
+        email = "staff@sesame.com"
+        env_tier = ""
+        label = "Employee mode (@sesame.com — 19/27 gates)"
+    elif mode == "--dev":
+        email = "staff@sesame.com"
+        env_tier = "development"
+        label = "Development mode (@sesame.com + dev env — 21/27 gates)"
+    elif mode == "--prod":
+        email = "staff@sesame.com"
+        env_tier = "production"
+        label = "Production mode (@sesame.com + prod env — 20/27 gates)"
+    elif mode == "--meta":
+        email = "eng@meta.com"
+        env_tier = ""
+        label = "Meta mode (@meta.com — 8/27 gates)"
+    elif mode == "--normal":
+        email = ""
+        env_tier = ""
+        label = "Normal mode (no override)"
+    else:
+        email = mode.lstrip("-")  # Allow --email@domain.com
+        env_tier = ""
+        label = f"Custom mode ({email})"
+
+    print(f"  Launching Sesame: {label}")
+
+    # Build the override script
+    if email:
+        script = _build_statsig_override_script(email=email, env_tier=env_tier)
+    else:
+        script = ""
+
+    # Try CDP first (if Chrome is running with --remote-debugging-port=9223)
+    try:
+        import websockets
+        import asyncio
+
+        async def _launch_via_cdp():
+            # Connect to Chrome CDP
+            ws_url = None
+            try:
+                r = requests.get("http://localhost:9223/json/version", timeout=2)
+                ws_url = r.json().get("webSocketDebuggerUrl")
+            except Exception:
+                pass
+
+            if not ws_url:
+                print("  [!] Chrome CDP not available on port 9223")
+                print("  Falling back to direct launch...")
+                return False
+
+            async with websockets.connect(ws_url) as ws:
+                # Create new tab
+                import uuid
+                msg_id = 1
+
+                # Create target
+                await ws.send(json.dumps({
+                    "id": msg_id, "method": "Target.createTarget",
+                    "params": {"url": "about:blank"},
+                }))
+                resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+                target_id = resp.get("result", {}).get("targetId")
+
+                if not target_id:
+                    print("  [!] Failed to create tab")
+                    return False
+
+                print(f"  [OK] New tab created: {target_id[:12]}...")
+
+                # Get the tab's WS URL
+                r = requests.get("http://localhost:9223/json", timeout=2)
+                tabs = r.json()
+                tab_ws = None
+                for tab in tabs:
+                    if tab.get("id") == target_id:
+                        tab_ws = tab.get("webSocketDebuggerUrl")
+                        break
+
+                if not tab_ws:
+                    print("  [!] Can't find tab's debugger URL")
+                    return False
+
+                # Connect to the tab and inject script before navigation
+                async with websockets.connect(tab_ws) as tab:
+                    if script:
+                        msg_id += 1
+                        await tab.send(json.dumps({
+                            "id": msg_id,
+                            "method": "Page.addScriptToEvaluateOnNewDocument",
+                            "params": {"source": script},
+                        }))
+                        resp = json.loads(await asyncio.wait_for(tab.recv(), timeout=5))
+                        print(f"  [OK] Override script injected")
+
+                    # Navigate to Sesame
+                    msg_id += 1
+                    await tab.send(json.dumps({
+                        "id": msg_id,
+                        "method": "Page.navigate",
+                        "params": {"url": "https://app.sesame.com"},
+                    }))
+                    await asyncio.wait_for(tab.recv(), timeout=10)
+                    print(f"  [OK] Navigating to https://app.sesame.com")
+                    print(f"  [OK] Look for purple 'ARGUS: {email}' badge in bottom-right")
+
+                return True
+
+        if asyncio.run(_launch_via_cdp()):
+            return
+
+    except ImportError:
+        pass
+    except Exception as exc:
+        print(f"  [!] CDP failed: {exc}")
+
+    # Fallback: launch Chrome with --user-data-dir for isolation
+    # and use the script as a Chrome extension content script
+    print("  Launching Chrome directly...")
+
+    # Write the override script to a temp file
+    script_dir = Path(_ROOT) / "data" / "argus" / "sesame_override"
+    script_dir.mkdir(parents=True, exist_ok=True)
+
+    if script:
+        # Create a minimal Chrome extension that injects the script
+        manifest = {
+            "manifest_version": 3,
+            "name": "ARGUS Sesame Override",
+            "version": "1.0",
+            "content_scripts": [{
+                "matches": ["https://app.sesame.com/*", "https://sesameai.app/*"],
+                "js": ["override.js"],
+                "run_at": "document_start",
+            }],
+        }
+        (script_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+        (script_dir / "override.js").write_text(script)
+
+        # Launch Chrome with the extension loaded
+        chrome_cmd = [
+            "chrome",
+            f"--load-extension={script_dir}",
+            "--no-first-run",
+            "--disable-default-apps",
+            "https://app.sesame.com",
+        ]
+    else:
+        chrome_cmd = ["chrome", "https://app.sesame.com"]
+
+    try:
+        subprocess.Popen(chrome_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if email:
+            print(f"  [OK] Chrome launched with ARGUS override extension")
+            print(f"  [OK] Email override: {email}")
+            print(f"  [OK] Extension at: {script_dir}")
+            print(f"  [!] NOTE: Chrome may ask to enable the extension in developer mode")
+        else:
+            print(f"  [OK] Chrome launched (no override)")
+    except FileNotFoundError:
+        print("  [!] Chrome not found in PATH. Open manually:")
+        print(f"       https://app.sesame.com")
+        if email:
+            print(f"  Then paste this in DevTools console:")
+            print(f"       {script[:100]}...")
+
+
 # ──── API Clients ────────────────────────────────────────────────────────────
 
 def _get(url: str, headers: Dict = None, timeout: int = 10) -> Dict:
@@ -1376,6 +1644,11 @@ _REPL_HELP = """
     call-info <call_id>    Generate upload URL for a call ID
     export                 Export full API spec to JSON
 
+  BROWSER:
+    launch                 Open Sesame in Chrome with employee gates enabled
+    launch --dev           Open with development environment gates
+    launch --normal        Open with normal user gates (no override)
+
   META:
     help                   Show this help message
     exit / quit            Exit the REPL
@@ -1756,6 +2029,11 @@ def run_interactive(tokens: TokenStore, har_path: Optional[Path] = None) -> None
                     print(f"\n  Employee-only gates ({len(extras)}):")
                     for g in extras:
                         print(f"    [+] {g[:55]}")
+
+            # ── launch ──
+            elif cmd == "launch":
+                mode = args[0] if args else "--employee"
+                _launch_sesame_browser(tokens, mode, state)
 
             # ── sig-env ──
             elif cmd == "sig-env":
