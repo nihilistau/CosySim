@@ -73,6 +73,7 @@ All targets defined in `engine/control_plane_registry.py`:
 | [Nexus](NEXUS.md) | Nexus KMS, NLM integration, smart query router, training flywheel |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, ServerController, LMLink federation, SSE streaming |
 | [ARGUS](ARGUS.md) | Browser automation, CDP, API surface discovery, RPC registry |
+| [ARGUS Methodology](ARGUS_METHODOLOGY.md) | 10 reusable recon techniques: bundle decompilation, flag injection, CDP scripting, WebSocket interception |
 
 ## Infrastructure
 
