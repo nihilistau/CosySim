@@ -8,7 +8,7 @@ All notable changes to CosySim are documented here.
 
 Hardening + feature sprint building on v1.51.0 OpenRoom features. Fixed all
 test failures, added faction/heat interceptors, expanded story packs, new
-skill packs, and group chat for Phone scene.
+skill packs, group chat, Signal Desktop App, and Oracle Persistent Companion.
 
 ### Bug Fixes
 - **FastMCP v2 → v3 upgrade** — pydantic 2.12.5 compatibility. `get_tools()` → `list_tools()`, `_tool_manager` → async re-export. All 28 test_mcp_server + 24 test_nexus_bridge tests pass.
@@ -57,13 +57,48 @@ skill packs, and group chat for Phone scene.
 - Skills: ~1,010 → **~1,030** (18 new: 10 faction_politics + 8 heist_planning)
 - Tests: 493 → **496** passing (0 failures, was 3)
 
+### Signal Desktop App (4 tabs, 11 new routes)
+- **Desktop mode** — tab bar toggle from dock replaces app grid with Messages | Email | Files | Music
+- **Email tab** — inbox from NexusFilesystem `/home/player/inbox/`, read/star/delete with unread badges
+- **Files tab** — virtual filesystem browser with breadcrumbs, directory navigation, file viewer, file type icons
+- **Music tab** — playlist browser from `/home/{char}/playlists/`, song listing, play/next/stop, now-playing bar
+- 3 new backend modules: `email_app.py`, `files_app.py`, `music_app.py`
+- 11 new API routes: `/api/email/*`, `/api/files/*`, `/api/music/*`
+- 240 lines new CSS, 421 lines new JS (3 registerApp calls + tab switching system)
+
+### Oracle Persistent Companion (autonomous agent)
+- **OracleCompanion** class — background agent loop (5-min interval, weighted random actions)
+- **5 autonomous actions:** diary (30%), Signal message (25%), observation (20%), playlist (15%), email (10%)
+- Generates content via LMStudio with Oracle personality prompt (mystery: 0.99)
+- Writes diary entries to `/home/oracle/journal/`
+- Sends cryptic Signal messages to player's phone (real-time via SocketIO)
+- Curates mood playlists (midnight_meditation, neon_pulse, ghost_frequencies, chrome_dreams)
+- Composes intel/prediction emails to player's inbox
+- Writes field observations to `/home/oracle/notes/`
+- Auto-registers Oracle in CharacterRegistry with full personality stats
+- Started from `oracle_scene.py` `on_before_serve()`
+
+### ARGUS Modular Rewrite
+- **config/argus_openroom.yaml** — config-driven endpoint registry (146 lines), 8-app catalog, playlists, known FS paths
+- **openroom_config.py** — config loader with YAML + Python defaults, 15+ convenience accessors
+- OpenRoom client refactored from hardcoded constants to config-driven
+- New HAR findings: complete app registry, storage API, music system, email system, UGC mod gen, Guance RUM
+
 ### Files
-- 5 new files, 8 modified files
+- 14 new files, 12 modified files
+- `engine/agents/oracle_companion.py` (369 lines)
+- `content/scenes/phone/apps/email_app.py` (209 lines)
+- `content/scenes/phone/apps/files_app.py` (129 lines)
+- `content/scenes/phone/apps/music_app.py` (207 lines)
+- `config/argus_openroom.yaml` (146 lines)
+- `scripts/argus/clients/openroom_config.py` (263 lines)
 - `engine/agents/interceptors/faction_context.py` (140 lines)
 - `engine/agents/interceptors/heat_awareness.py` (130 lines)
 - `engine/skills/builtin/faction_politics_skills.py` (350 lines)
 - `engine/skills/builtin/heist_planning_skills.py` (400 lines)
-- `content/scenes/phone/phone_scene_v2.py` (+607 lines)
+- `content/scenes/phone/phone_scene_v2.py` (+722 lines)
+- `content/scenes/phone/static/js/phone_v2.js` (+421 lines)
+- `content/scenes/phone/static/css/phone.css` (+242 lines)
 
 ---
 
