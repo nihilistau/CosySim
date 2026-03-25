@@ -746,6 +746,169 @@ def _launch_sesame_browser(tokens: TokenStore, mode: str = "--employee",
             print(f"       {script[:100]}...")
 
 
+# ──── CDP Injection Commands ──────────────────────────────────────────────────
+# v1.52.0 [2026-03-26] — Direct gate injection + Maya-Alpha via Chrome CDP
+
+def _cdp_eval(js_code: str) -> Optional[str]:
+    """Execute JavaScript in the active Chrome tab via CDP (port 9223)."""
+    try:
+        import websockets, asyncio
+
+        async def _run():
+            # Get active tab
+            r = requests.get("http://localhost:9223/json", timeout=3)
+            tabs = r.json()
+            sesame_tab = next((t for t in tabs if "sesame" in t.get("url", "")), None)
+            if not sesame_tab:
+                return "No Sesame tab found in Chrome"
+
+            ws_url = sesame_tab.get("webSocketDebuggerUrl")
+            if not ws_url:
+                return "No debugger URL for Sesame tab"
+
+            async with websockets.connect(ws_url) as ws:
+                await ws.send(json.dumps({
+                    "id": 1,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": js_code, "returnByValue": True},
+                }))
+                resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+                result = resp.get("result", {}).get("result", {})
+                return result.get("value", str(result))
+
+        return asyncio.run(_run())
+    except Exception as exc:
+        return f"CDP error: {exc}"
+
+
+def _inject_gates_cdp(mode: str = "all") -> str:
+    """Inject Statsig gates into localStorage via CDP.
+
+    Modes: all (27/27), employee (19/27), normal (8/27)
+    """
+    if mode == "all":
+        js = """
+        (function() {
+            const keys = Object.keys(localStorage).filter(k => k.includes('statsig.cached.evaluations'));
+            let total = 0;
+            for (const k of keys) {
+                const outer = JSON.parse(localStorage.getItem(k));
+                const inner = JSON.parse(outer.data);
+                for (const gate of Object.values(inner.feature_gates || {})) {
+                    if (!gate.value) { gate.value = true; gate.rule_id = 'argus'; total++; }
+                }
+                for (const cfg of Object.values(inner.dynamic_configs || {})) {
+                    if (cfg.value && typeof cfg.value === 'object') {
+                        if ('show_toggle' in cfg.value) cfg.value.show_toggle = true;
+                        if ('webrtc_log_level' in cfg.value) cfg.value.webrtc_log_level = 'verbose';
+                    }
+                }
+                outer.data = JSON.stringify(inner);
+                localStorage.setItem(k, JSON.stringify(outer));
+            }
+            return 'Flipped ' + total + ' gates across ' + keys.length + ' caches. Reload page.';
+        })()
+        """
+    elif mode == "normal":
+        js = """
+        (function() {
+            const keys = Object.keys(localStorage).filter(k => k.includes('statsig.cached.evaluations'));
+            for (const k of keys) { localStorage.removeItem(k); }
+            return 'Cleared ' + keys.length + ' Statsig caches. Reload for fresh evaluation.';
+        })()
+        """
+    else:
+        return f"Unknown mode: {mode}. Use: all, employee, normal"
+
+    return _cdp_eval(js) or "No response"
+
+
+def _inject_maya_alpha_cdp() -> str:
+    """Inject WebSocket intercept to switch Maya → Maya-Alpha via CDP."""
+    js = """
+    (function() {
+        const _orig = WebSocket.prototype.send;
+        WebSocket.prototype.send = function(data) {
+            if (typeof data === 'string' && data.includes('call_connect')) {
+                try {
+                    const p = JSON.parse(data);
+                    if (p.type === 'call_connect' && p.settings) {
+                        const orig = p.settings.character;
+                        p.settings.character = 'Maya-Alpha';
+                        data = JSON.stringify(p);
+                        console.log('[ARGUS] Character: ' + orig + ' -> Maya-Alpha');
+                    }
+                } catch(e) {}
+            }
+            return _orig.call(this, data);
+        };
+        return 'WebSocket intercept active. Click Maya to connect as Maya-Alpha.';
+    })()
+    """
+    return _cdp_eval(js) or "No response"
+
+
+def _show_decompiled_info() -> None:
+    """Show decompiled bundle intelligence."""
+    print("\n  === SESAME BUNDLE DECOMPILATION ===")
+    print(f"  Bundle: index-E-c2zfaB.js (2.06 MB)")
+    print()
+    print("  Feature Gates (9 named → 27 numeric IDs):")
+    for enum_name, gate_name in GATE_NAMES.items():
+        print(f"    {enum_name:35s} = \"{gate_name}\"")
+    print()
+    print("  Dynamic Configs (9):")
+    for enum_name, cfg_name in CONFIG_NAMES.items():
+        print(f"    {enum_name:35s} = \"{cfg_name}\"")
+    print()
+    print("  Characters:")
+    for name, info in CHARACTERS.items():
+        note = f" — {info.get('note', '')}" if info.get("note") else ""
+        print(f"    {name:20s} variant={info['variant']}{note}")
+    print()
+    print(f"  Internal Endpoints: {len(INTERNAL_ENDPOINTS)} (behind Google IAP)")
+    print(f"  Upcoming: Spotify, Notion, Google OAuth, Video Download, iOS")
+    print()
+    print("  Monitoring: Sentry + Datadog + RudderStack + GA4")
+    print(f"  Sentry DSN: {SENTRY_CONFIG['dsn_key'][:20]}...")
+    print(f"  GA4: {GA4_ID}")
+    print()
+    print("  Build: Vite 6.2.5 + pnpm 9.15.3 + Node 18.18.2 + uv 0.11.1")
+    print("  Deploy: Vercel + Kubernetes")
+    print("  Repo: sesame/sesame (monorepo) → sesame/web/consumer-app")
+
+
+def _show_env_vars() -> None:
+    """Show discovered environment variables from bundle."""
+    env_vars = [
+        ("VITE_SESAME_API_URL", "API base URL"),
+        ("VITE_SESAME_ENV", "Environment (production/staging/dev)"),
+        ("VITE_ENVIRONMENT", "Environment (duplicate)"),
+        ("VITE_LOGIN_MODE", "Login mode switching"),
+        ("VITE_AUTH_DESTINATION", "Auth redirect target"),
+        ("VITE_FIREBASE_API_KEY", "Firebase API key"),
+        ("VITE_FIREBASE_PROJECT_ID", "Firebase project"),
+        ("VITE_FIREBASE_AUTH_DOMAIN", "Firebase auth domain"),
+        ("VITE_FIREBASE_APP_ID", "Firebase app ID"),
+        ("VITE_FIREBASE_STORAGE_BUCKET", "Firebase storage"),
+        ("VITE_FIREBASE_MESSAGING_SENDER_ID", "FCM sender"),
+        ("VITE_FIREBASE_MEASUREMENT_ID", "Firebase analytics"),
+        ("VITE_STATSIG_CLIENT_KEY", "Statsig client SDK key"),
+        ("VITE_SENTRY_AUTH_TOKEN", "Sentry auth (build-time)"),
+        ("VITE_DATADOG_CLIENT_TOKEN", "Datadog client token"),
+        ("VITE_DATADOG_RUM_APPLICATION_ID", "Datadog RUM app ID"),
+        ("VITE_DATADOG_RUM_CLIENT_TOKEN", "Datadog RUM token"),
+        ("VITE_RUDDERSTACK_WRITE_KEY", "RudderStack analytics"),
+        ("VITE_GOOGLE_ANALYTICS_TRACKING_ID", "GA4 tracking ID"),
+        ("VITE_RECAPTCHA_SITE_KEY", "reCAPTCHA key"),
+        ("VITE_CLIENT_BUILD_NUMBER", "Build version number"),
+    ]
+    print(f"\n  === ENVIRONMENT VARIABLES ({len(env_vars)}) ===")
+    print(f"  Discovered from Vite build in bundle\n")
+    for var, desc in env_vars:
+        print(f"    {var:45s} {desc}")
+
+
 # ──── API Clients ────────────────────────────────────────────────────────────
 
 def _get(url: str, headers: Dict = None, timeout: int = 10) -> Dict:
@@ -1706,10 +1869,17 @@ _REPL_HELP = """
     call-info <call_id>    Generate upload URL for a call ID
     export                 Export full API spec to JSON
 
-  BROWSER:
+  BROWSER (requires Chrome CDP on :9223):
     launch                 Open Sesame in Chrome with employee gates enabled
     launch --dev           Open with development environment gates
     launch --normal        Open with normal user gates (no override)
+    inject [all|normal]    Inject gates into localStorage (all=27/27, normal=clear)
+    alpha                  Set WebSocket intercept to use Maya-Alpha model
+
+  INTEL:
+    decompile              Show decompiled bundle intelligence (gates, configs, chars)
+    internal-endpoints     List all 32 internal API endpoints (behind IAP)
+    env-vars               Show all 21 discovered Vite environment variables
 
   META:
     help                   Show this help message
@@ -2096,6 +2266,34 @@ def run_interactive(tokens: TokenStore, har_path: Optional[Path] = None) -> None
             elif cmd == "launch":
                 mode = args[0] if args else "--employee"
                 _launch_sesame_browser(tokens, mode, state)
+
+            # ── inject ──
+            elif cmd == "inject":
+                print("  Injecting gates into localStorage via CDP...")
+                result = _inject_gates_cdp(args[0] if args else "all")
+                print(f"  {result}")
+
+            # ── alpha ──
+            elif cmd == "alpha":
+                print("  Setting up Maya-Alpha WebSocket intercept via CDP...")
+                result = _inject_maya_alpha_cdp()
+                print(f"  {result}")
+
+            # ── decompile ──
+            elif cmd == "decompile":
+                _show_decompiled_info()
+
+            # ── endpoints ──
+            elif cmd == "internal-endpoints":
+                print(f"  === Internal Endpoints ({len(INTERNAL_ENDPOINTS)}) ===")
+                print(f"  All behind Google IAP (401 without employee token)")
+                print()
+                for ep in INTERNAL_ENDPOINTS:
+                    print(f"    {ep}")
+
+            # ── env-vars ──
+            elif cmd == "env-vars":
+                _show_env_vars()
 
             # ── sig-env ──
             elif cmd == "sig-env":
