@@ -766,6 +766,13 @@ class GridScene(FlaskScene):
         # Import skills so they register with SKILL_REGISTRY
         import content.scenes.grid.grid_skills  # noqa: F401
 
+        # v1.51.1 [2026-03-25] — Auto-load Grid data heist story pack
+        try:
+            from engine.mcp.narrative_packs import load_pack
+            load_pack("grid_data_heist", scene_id="grid", character_id="broker")
+        except Exception:
+            pass
+
     def on_shutdown(self) -> None:
         """Scene-specific cleanup on shutdown."""
         try:
