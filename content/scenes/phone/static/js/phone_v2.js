@@ -3,6 +3,11 @@
  * ============================================
  * Modular app system with home screen, dock, lock screen, and 10+ apps.
  * Each app is a self-contained module registered via CosyPhone.registerApp().
+ *
+ * Version: v1.51.1 [2026-03-25]
+ *
+ * Change Log:
+ *   v1.51.1 [2026-03-25] — Desktop mode: tab bar system + Email, Files, Music apps
  */
 
 (function () {
@@ -159,7 +164,9 @@
       dock.innerHTML = '';
 
       const dockApps = ['messages', 'contacts', 'arcade', 'settings'];
-      const gridApps = Object.keys(this.apps).filter(id => !dockApps.includes(id));
+      // v1.51.1 [2026-03-25] — Hide desktop-only tab apps from home grid
+      const tabOnlyApps = ['email', 'files', 'music'];
+      const gridApps = Object.keys(this.apps).filter(id => !dockApps.includes(id) && !tabOnlyApps.includes(id));
 
       gridApps.forEach(id => {
         const app = this.apps[id];
@@ -170,6 +177,17 @@
         const app = this.apps[id];
         if (app) dock.appendChild(this._makeIcon(id, app));
       });
+
+      // v1.51.1 [2026-03-25] — Desktop mode button in dock
+      const deskIcon = el('div', 'app-icon');
+      deskIcon.dataset.appId = 'desktop';
+      const deskBox = el('div', 'icon-box');
+      deskBox.style.background = 'linear-gradient(135deg, #06b6d4, #10b981)';
+      deskBox.innerHTML = '🖥️';
+      deskIcon.appendChild(deskBox);
+      deskIcon.appendChild(el('span', 'app-name', 'Desktop'));
+      deskIcon.onclick = () => this.enterDesktopMode();
+      dock.appendChild(deskIcon);
     },
 
     _makeIcon(id, app) {
@@ -208,6 +226,8 @@
       const app = this.apps[id];
       if (!app) return;
       this.activeApp = id;
+      this.desktopMode = false; // v1.51.1 — ensure desktop mode is off when opening single app
+      qs('#app-tabbar').style.display = 'none';
       qs('#home-screen').classList.add('hidden');
       const container = qs('#app-container');
       container.classList.add('open');
@@ -224,6 +244,11 @@
     },
 
     closeApp() {
+      // v1.51.1 [2026-03-25] — Desktop mode: back button exits desktop mode
+      if (this.desktopMode) {
+        this.exitDesktopMode();
+        return;
+      }
       const id = this.activeApp;
       if (id && this.apps[id] && this.apps[id].onClose) this.apps[id].onClose();
       this.activeApp = null;
@@ -2128,6 +2153,400 @@
       } catch (e) {
         el.innerHTML = `<div style="color:var(--red)">Failed: ${e.message}</div>`;
       }
+    },
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     DESKTOP MODE — Tab System + Email / Files / Music Apps
+     v1.51.1 [2026-03-25] — Desktop mode transforms Signal into
+     a multi-tab workspace with Messages, Email, Files, and Music.
+     CONNECTS: CosyPhone.apps (messages, email, files, music)
+     CALLED BY: dock Desktop button, tab bar onclick handlers
+     EMITS: tab switch rendering into #app-body
+  ══════════════════════════════════════════════════════════ */
+
+  // v1.51.1 [2026-03-25] — Desktop mode tab system
+  CosyPhone.desktopMode = false;
+  CosyPhone._activeTab = 'messages';
+  CosyPhone._tabApps = ['messages', 'email', 'files', 'music'];
+
+  CosyPhone.enterDesktopMode = function() {
+    this.desktopMode = true;
+    qs('#home-screen').classList.add('hidden');
+    const container = qs('#app-container');
+    container.classList.add('open');
+    qs('#app-tabbar').style.display = 'flex';
+    // Show back button but relabel for desktop exit
+    const backBtn = qs('#app-back-btn');
+    if (backBtn) {
+      backBtn.style.display = '';
+      backBtn.innerHTML = '<span>‹</span>Home';
+    }
+    // Set title
+    qs('#app-title-bar').textContent = 'SIGNAL';
+    qs('#app-header-right').innerHTML = '';
+    this.switchTab('messages');
+  };
+
+  CosyPhone.exitDesktopMode = function() {
+    this.desktopMode = false;
+    qs('#app-tabbar').style.display = 'none';
+    this.activeApp = null;
+    qs('#app-container').classList.remove('open');
+    qs('#home-screen').classList.remove('hidden');
+    this._updateBadges();
+  };
+
+  CosyPhone.switchTab = function(tabId) {
+    this._activeTab = tabId;
+    // Update tab button active states
+    qsa('.tab-btn').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+    // Render the selected tab's app content into the body
+    const body = qs('#app-body');
+    const app = this.apps[tabId];
+    if (app && app.render) {
+      body.innerHTML = '';
+      app.render(body);
+    }
+  };
+
+  /* ── APP: Email ─────────────────────────────────────────
+     v1.51.1 [2026-03-25] — In-world email client for desktop mode.
+     Fetches emails from /api/email, supports read/star/detail view.
+     CONNECTS: /api/email, /api/email/:id, /api/email/:id/star
+     CALLED BY: Desktop mode tab bar (email tab)
+     EMITS: tab-badge-email updates
+  ──────────────────────────────────────────────────────── */
+
+  CosyPhone.registerApp('email', {
+    name: 'Email', icon: '📧', color: '#06b6d4',
+    _emails: [],
+    _viewing: null,
+
+    badge() {
+      // Synchronous badge count from cached data
+      return this._emails.filter(function(e) { return !e.read; }).length;
+    },
+
+    render(body) {
+      this._viewing = null;
+      body.innerHTML = '<div class="thread-list" id="email-list"><div class="empty-state">Loading emails...</div></div>';
+      const self = this;
+      fetch('/api/email').then(function(r) { return r.json(); }).then(function(data) {
+        self._emails = data.emails || [];
+        self._renderList(body);
+        self._updateTabBadge();
+      }).catch(function() {
+        body.innerHTML = '<div class="empty-state">📧 No emails yet<br><small>The Oracle will send you intel soon...</small></div>';
+      });
+    },
+
+    _renderList(body) {
+      const list = qs('#email-list') || body;
+      if (!this._emails.length) {
+        list.innerHTML = '<div class="empty-state">📧 Inbox empty<br><small>Check back later for messages</small></div>';
+        return;
+      }
+      list.innerHTML = this._emails.map(function(e) {
+        return '<div class="email-item ' + (e.read ? '' : 'unread') + ' ' + (e.starred ? 'starred' : '') + '"'
+          + ' onclick="CosyPhone.apps.email._openEmail(\'' + e.id + '\')">'
+          + '<div style="flex:1;min-width:0">'
+          +   '<div class="email-sender">' + esc(e.sender || 'Unknown') + '</div>'
+          +   '<div class="email-subject">' + esc(e.subject || '(no subject)') + '</div>'
+          + '</div>'
+          + '<div class="email-date">' + (e.timestamp ? e.timestamp.split(' ')[0] : '') + '</div>'
+          + '<div class="email-star" onclick="event.stopPropagation();CosyPhone.apps.email._toggleStar(\'' + e.id + '\')">'
+          +   (e.starred ? '★' : '☆')
+          + '</div>'
+          + '</div>';
+      }).join('');
+    },
+
+    _openEmail(id) {
+      const self = this;
+      fetch('/api/email/' + id).then(function(r) { return r.json(); }).then(function(email) {
+        if (!email) return;
+        self._viewing = email;
+        // Mark as read in local cache
+        const cached = self._emails.find(function(e) { return e.id === id; });
+        if (cached) cached.read = true;
+        self._updateTabBadge();
+        const body = qs('#app-body');
+        body.innerHTML = '<div class="email-detail">'
+          + '<div style="margin-bottom:12px">'
+          +   '<button class="pill-btn pill-secondary" onclick="CosyPhone.apps.email.render(document.getElementById(\'app-body\'))">← Back</button>'
+          + '</div>'
+          + '<div class="email-detail-header">'
+          +   '<div class="email-detail-from">From: ' + esc(email.sender || '') + '</div>'
+          +   '<div class="email-detail-subject">' + esc(email.subject || '(no subject)') + '</div>'
+          +   '<div class="email-detail-date">' + esc(email.timestamp || '') + '</div>'
+          + '</div>'
+          + '<div class="email-detail-body">' + esc(email.body || '') + '</div>'
+          + '</div>';
+      });
+    },
+
+    _toggleStar(id) {
+      const self = this;
+      fetch('/api/email/' + id + '/star', { method: 'POST' }).then(function() {
+        // Toggle in local cache
+        const cached = self._emails.find(function(e) { return e.id === id; });
+        if (cached) cached.starred = !cached.starred;
+        self.render(qs('#app-body'));
+      });
+    },
+
+    _updateTabBadge() {
+      const badge = qs('#tab-badge-email');
+      if (badge) {
+        const unread = this._emails.filter(function(e) { return !e.read; }).length;
+        badge.textContent = unread || '';
+      }
+    },
+  });
+
+  /* ── APP: Files ─────────────────────────────────────────
+     v1.51.1 [2026-03-25] — In-world virtual file browser.
+     Navigates a virtual filesystem via /api/files with breadcrumbs,
+     directory listing, and text file viewer.
+     CONNECTS: /api/files, /api/files/read
+     CALLED BY: Desktop mode tab bar (files tab)
+  ──────────────────────────────────────────────────────── */
+
+  CosyPhone.registerApp('files', {
+    name: 'Files', icon: '📁', color: '#f59e0b',
+    _currentPath: '/home/player/',
+    _viewing: null,
+
+    render(body) {
+      this._viewing = null;
+      this._browse(body, this._currentPath);
+    },
+
+    _browse(body, path) {
+      this._currentPath = path;
+      body.innerHTML = '<div class="empty-state">Loading...</div>';
+      const self = this;
+      fetch('/api/files?path=' + encodeURIComponent(path)).then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.exists) {
+          body.innerHTML = '<div class="empty-state">📁 Path not found</div>';
+          return;
+        }
+        var html = self._renderBreadcrumb(path);
+        html += '<div class="thread-list">';
+        if (path !== '/') {
+          html += '<div class="file-item file-type-dir" onclick="CosyPhone.apps.files._browse(document.getElementById(\'app-body\'), \'' + esc(data.parent || '/') + '\')">'
+            + '<div class="file-icon">⬆️</div><div class="file-name">..</div>'
+            + '</div>';
+        }
+        var entries = data.entries || [];
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          var icon = entry.type === 'directory' ? '📁' : self._fileIcon(entry.name);
+          var cls = entry.type === 'directory' ? 'file-type-dir' : '';
+          var size = entry.type === 'file' ? '<div class="file-size">' + self._fmtSize(entry.size) + '</div>' : '';
+          var click = entry.type === 'directory'
+            ? 'CosyPhone.apps.files._browse(document.getElementById(\'app-body\'), \'' + esc(entry.path) + '\')'
+            : 'CosyPhone.apps.files._openFile(document.getElementById(\'app-body\'), \'' + esc(entry.path) + '\')';
+          html += '<div class="file-item ' + cls + '" onclick="' + click + '">'
+            + '<div class="file-icon">' + icon + '</div>'
+            + '<div class="file-name">' + esc(entry.name) + '</div>'
+            + size
+            + '</div>';
+        }
+        if (!entries.length) {
+          html += '<div class="empty-state">Empty directory</div>';
+        }
+        html += '</div>';
+        body.innerHTML = html;
+      }).catch(function() {
+        body.innerHTML = '<div class="empty-state">📁 Could not load directory</div>';
+      });
+    },
+
+    _openFile(body, path) {
+      var self = this;
+      fetch('/api/files/read?path=' + encodeURIComponent(path)).then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.exists) {
+          body.innerHTML = '<div class="empty-state">File not found</div>';
+          return;
+        }
+        body.innerHTML = '<div class="file-content">'
+          + '<div style="margin-bottom:8px">'
+          +   '<button class="pill-btn pill-secondary" onclick="CosyPhone.apps.files._browse(document.getElementById(\'app-body\'), \'' + esc(self._currentPath) + '\')">← Back</button>'
+          + '</div>'
+          + '<div class="file-content-header">' + esc(data.path || '') + ' (' + self._fmtSize(data.size) + ')</div>'
+          + '<div class="file-content-body">' + self._escapeHtml(data.content || '(empty)') + '</div>'
+          + '</div>';
+      }).catch(function() {
+        body.innerHTML = '<div class="empty-state">Could not read file</div>';
+      });
+    },
+
+    _renderBreadcrumb(path) {
+      var parts = path.split('/').filter(Boolean);
+      var html = '<div class="file-breadcrumb">';
+      var accumulated = '/';
+      html += '<span class="file-breadcrumb-part" onclick="CosyPhone.apps.files._browse(document.getElementById(\'app-body\'), \'/\')">/</span>';
+      for (var i = 0; i < parts.length; i++) {
+        accumulated += parts[i] + '/';
+        html += '<span class="file-breadcrumb-sep">/</span>';
+        html += '<span class="file-breadcrumb-part" onclick="CosyPhone.apps.files._browse(document.getElementById(\'app-body\'), \'' + accumulated + '\')">' + esc(parts[i]) + '</span>';
+      }
+      html += '</div>';
+      return html;
+    },
+
+    _fileIcon(name) {
+      if (!name) return '📄';
+      if (name.endsWith('.json')) return '📋';
+      if (name.endsWith('.md')) return '📝';
+      if (name.endsWith('.txt')) return '📄';
+      if (name.endsWith('.py')) return '🐍';
+      if (name.endsWith('.js')) return '⚡';
+      if (name.endsWith('.css')) return '🎨';
+      if (name.endsWith('.html')) return '🌐';
+      if (name.endsWith('.yaml') || name.endsWith('.yml')) return '⚙️';
+      if (name.endsWith('.log')) return '📜';
+      return '📄';
+    },
+
+    _fmtSize(bytes) {
+      if (!bytes) return '';
+      if (bytes < 1024) return bytes + 'B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + 'KB';
+      return (bytes / 1048576).toFixed(1) + 'MB';
+    },
+
+    _escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    },
+  });
+
+  /* ── APP: Music ─────────────────────────────────────────
+     v1.51.1 [2026-03-25] — In-world music player with playlists.
+     Characters curate playlists; player can browse and control playback.
+     CONNECTS: /api/music/playlists, /api/music/playlist/:name,
+               /api/music/play, /api/music/now-playing, /api/music/next, /api/music/stop
+     CALLED BY: Desktop mode tab bar (music tab)
+  ──────────────────────────────────────────────────────── */
+
+  CosyPhone.registerApp('music', {
+    name: 'Music', icon: '🎵', color: '#a855f7',
+    _playlists: [],
+    _viewingPlaylist: null,
+
+    render(body) {
+      this._viewingPlaylist = null;
+      body.innerHTML = '<div class="empty-state">Loading playlists...</div>';
+      var self = this;
+      fetch('/api/music/playlists').then(function(r) { return r.json(); }).then(function(data) {
+        self._playlists = data.playlists || [];
+        self._renderPlaylists(body);
+      }).catch(function() {
+        body.innerHTML = '<div class="empty-state">🎵 No playlists yet<br><small>The Oracle will curate music for you...</small></div>';
+      });
+    },
+
+    _renderPlaylists(body) {
+      if (!this._playlists.length) {
+        body.innerHTML = '<div class="empty-state">🎵 No playlists yet<br><small>Characters will create playlists as they interact</small></div>';
+        return;
+      }
+      var moodIcons = { ambient: '🌙', horror: '👻', lyrical: '🎶', playful: '🎪', suspense: '🔥', tension: '⚡', 'urban chill': '🌃' };
+      var html = '<div class="thread-list">';
+      for (var i = 0; i < this._playlists.length; i++) {
+        var p = this._playlists[i];
+        html += '<div class="playlist-item" onclick="CosyPhone.apps.music._openPlaylist(\'' + esc(p.name) + '\')">'
+          + '<div class="playlist-icon">' + (moodIcons[p.mood] || '🎵') + '</div>'
+          + '<div class="playlist-info">'
+          +   '<div class="playlist-name">' + esc(p.name) + '</div>'
+          +   '<div class="playlist-meta">' + (p.song_count || 0) + ' songs'
+          +     (p.mood ? ' · ' + esc(p.mood) : '')
+          +     (p.created_by ? ' · by ' + esc(p.created_by) : '')
+          +   '</div>'
+          + '</div>'
+          + '</div>';
+      }
+      html += '</div><div id="now-playing-bar" class="now-playing-bar"></div>';
+      body.innerHTML = html;
+      this._updateNowPlaying();
+    },
+
+    _openPlaylist(name) {
+      var body = qs('#app-body');
+      var self = this;
+      fetch('/api/music/playlist/' + encodeURIComponent(name)).then(function(r) { return r.json(); }).then(function(data) {
+        if (!data) return;
+        self._viewingPlaylist = data;
+        var html = '<div style="padding:16px;border-bottom:1px solid var(--sep)">'
+          + '<button class="pill-btn pill-secondary" onclick="CosyPhone.apps.music.render(document.getElementById(\'app-body\'))">← Back</button>'
+          + '<div style="margin-top:12px">'
+          +   '<div style="font-size:18px;font-weight:700;color:var(--label)">' + esc(data.name || '') + '</div>'
+          +   '<div style="font-size:12px;color:var(--label2);margin-top:4px">' + esc(data.description || data.mood || '') + ' · ' + (data.song_count || 0) + ' songs</div>'
+          + '</div>'
+          + '<button class="pill-btn pill-primary" style="margin-top:8px" onclick="CosyPhone.apps.music._play(\'' + esc(name) + '\', 0)">▶ Play All</button>'
+          + '</div>'
+          + '<div class="thread-list">';
+        var songs = data.songs || [];
+        for (var i = 0; i < songs.length; i++) {
+          var song = songs[i];
+          html += '<div class="song-item" onclick="CosyPhone.apps.music._play(\'' + esc(name) + '\', ' + i + ')">'
+            + '<div class="song-index">' + (i + 1) + '</div>'
+            + '<div class="song-title">' + esc(song.title || 'Track ' + (i + 1)) + '</div>'
+            + '<div class="song-artist">' + esc(song.artist || '') + '</div>'
+            + '</div>';
+        }
+        html += '</div><div id="now-playing-bar" class="now-playing-bar"></div>';
+        body.innerHTML = html;
+        self._updateNowPlaying();
+      });
+    },
+
+    _play(playlist, index) {
+      var self = this;
+      fetch('/api/music/play', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlist: playlist, index: index }),
+      }).then(function(r) { return r.json(); }).then(function() {
+        self._updateNowPlaying();
+      });
+    },
+
+    _updateNowPlaying() {
+      var self = this;
+      fetch('/api/music/now-playing').then(function(r) { return r.json(); }).then(function(data) {
+        var bar = qs('#now-playing-bar');
+        if (!bar) return;
+        if (!data.playing || !data.song) {
+          bar.innerHTML = '';
+          return;
+        }
+        bar.innerHTML = '<div style="font-size:16px">🎵</div>'
+          + '<div class="now-playing-info">'
+          +   '<div class="now-playing-title">' + esc(data.song.title || 'Unknown') + '</div>'
+          +   '<div class="now-playing-artist">' + esc(data.song.artist || '') + '</div>'
+          + '</div>'
+          + '<div class="now-playing-controls">'
+          +   '<button class="now-playing-btn" onclick="CosyPhone.apps.music._next()">⏭</button>'
+          +   '<button class="now-playing-btn" onclick="CosyPhone.apps.music._stop()">⏹</button>'
+          + '</div>';
+      }).catch(function() {
+        // Now-playing endpoint not available yet — silently ignore
+      });
+    },
+
+    _next() {
+      var self = this;
+      fetch('/api/music/next', { method: 'POST' }).then(function() { self._updateNowPlaying(); });
+    },
+
+    _stop() {
+      var self = this;
+      fetch('/api/music/stop', { method: 'POST' }).then(function() { self._updateNowPlaying(); });
     },
   });
 
