@@ -1361,6 +1361,8 @@ _REPL_HELP = """
     sig-configs [filter]   List all dynamic configs with values
     sig-config <key>       Search config values by key name
     sig-diff [email]       Compare gates across email domains
+    sig-env                Compare gates across environments (staging/prod/dev)
+    sig-map                Full gate matrix: domains x gates
     sig-set                Show how to influence gate evaluation
 
   EXPLORE:
@@ -1754,6 +1756,62 @@ def run_interactive(tokens: TokenStore, har_path: Optional[Path] = None) -> None
                     print(f"\n  Employee-only gates ({len(extras)}):")
                     for g in extras:
                         print(f"    [+] {g[:55]}")
+
+            # ── sig-env ──
+            elif cmd == "sig-env":
+                client = SesameClient(tokens)
+                print(f"  {'Environment':15s} {'Gates':10s} {'Config Diffs':15s}")
+                print(f"  {'-'*40}")
+                baseline = client.get_flags(email_override="staff@sesame.com")
+                bc = baseline.get("dynamic_configs", {})
+                for env in ["staging", "production", "development", "test"]:
+                    flags = client.get_flags.__wrapped__(client, email_override="staff@sesame.com") if hasattr(client.get_flags, '__wrapped__') else None
+                    # Fetch with environment override
+                    r = requests.post(
+                        f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}",
+                        json={
+                            "user": {"email": "staff@sesame.com", "userID": "recon",
+                                     "statsigEnvironment": {"tier": env}},
+                            "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "5.4.0"},
+                        }, timeout=10,
+                    )
+                    data = r.json()
+                    gates = data.get("feature_gates", {})
+                    configs = data.get("dynamic_configs", {})
+                    on = sum(1 for g in gates.values() if g.get("value"))
+                    diffs = sum(1 for n in configs if configs[n].get("value") != bc.get(n, {}).get("value"))
+                    print(f"  {env:15s} {on}/27       {diffs} diff(s)")
+
+            # ── sig-map ──
+            elif cmd == "sig-map":
+                print("  Mapping all gates across email domains + environments...")
+                client = SesameClient(tokens)
+                domains = ["user@gmail.com", "staff@sesame.com", "dev@sesameai.com", "eng@meta.com"]
+                envs_list = ["staging", "production", "development"]
+
+                header = f"  {'Gate'[:40]:40s}"
+                for d in domains:
+                    header += f" {d.split('@')[1][:8]:>8s}"
+                print(header)
+                print(f"  {'-'*80}")
+
+                # Fetch all combinations
+                results = {}
+                for d in domains:
+                    r = requests.post(f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}", json={
+                        "user": {"email": d, "userID": "recon"},
+                        "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "5.4.0"},
+                    }, timeout=10)
+                    results[d] = {n: g.get("value", False) for n, g in r.json().get("feature_gates", {}).items()}
+
+                # Display matrix
+                all_gates = sorted(set().union(*(r.keys() for r in results.values())))
+                for gate in all_gates:
+                    row = f"  {gate[:40]:40s}"
+                    for d in domains:
+                        val = results[d].get(gate, False)
+                        row += f" {'  ON':>8s}" if val else f" {'  --':>8s}"
+                    print(row)
 
             # v1.52.0 — New session/profile/connect commands
 
