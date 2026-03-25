@@ -129,7 +129,7 @@ REPLACEMENT_RULES: List[Tuple[str, str, List[str]]] = [
     (r"\*\*~[\d,]+\*\* across \*\*(\d+) packs\*\*", "**~{skill_count_approx}** across **{pack_count} packs**", ["skill_count", "pack_count"]),
     (r"~[\d,]+ across (\d+) packs via @skill", "~{skill_count_approx} across {pack_count} packs via @skill", ["skill_count", "pack_count"]),
     (r"~[\d,]+ skills across (\d+) packs", "~{skill_count_approx} skills across {pack_count} packs", ["skill_count", "pack_count"]),
-    (r"@skill decorator \· (\d+) packs \· ~(\d+)", "@skill decorator \u00b7 {pack_count} packs \u00b7 ~{skill_count_approx}", ["pack_count", "skill_count"]),
+    (r"@skill decorator \· (\d+) packs \· ~[\d,]+", "@skill decorator \u00b7 {pack_count} packs \u00b7 ~{skill_count_approx}", ["pack_count", "skill_count"]),
     # Target counts
     (r"\*\*(\d+)\*\* \((\d+) game \+ (\d+) service \+ (\d+) creation\)",
      "**{target_count}** ({game_count} game + {service_count} service + {creation_count} creation)",
