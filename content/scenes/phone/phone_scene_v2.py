@@ -218,6 +218,7 @@ class PhoneSceneV2(FlaskScene):
         mount_overlay(self.app, self.socketio)
 
         self._register_routes()
+        self._register_desktop_routes()  # v1.51.1 — Email, Files, Music
         self._register_socketio()
 
         # Framework integration
@@ -894,6 +895,120 @@ class PhoneSceneV2(FlaskScene):
             )
         except Exception as exc:
             logger.debug("News feedback recording failed: %s", exc)
+
+    # ── Email / Files / Music Routes ─────────────────────────────────────
+    # v1.51.1 [2026-03-25] — Signal Desktop: email inbox, file browser, music player
+    # CONNECTS: EmailApp, FilesApp, MusicApp, NexusFilesystem
+    # CALLED BY: Signal Desktop tab UI
+
+    def _register_desktop_routes(self) -> None:
+        """Register email, files, and music API routes for Signal Desktop."""
+        app = self.app
+
+        # Lazy-load app backends
+        from content.scenes.phone.apps.email_app import EmailApp
+        from content.scenes.phone.apps.files_app import FilesApp
+        from content.scenes.phone.apps.music_app import MusicApp
+
+        self._email_app = EmailApp("player")
+        self._files_app = FilesApp("player")
+        self._music_app = MusicApp("player")
+
+        # ── Email Routes ─────────────────────────────────────────────
+
+        @app.route("/api/email")
+        def email_list():
+            """List all emails in player's inbox."""
+            emails = self._email_app.list_emails()
+            return jsonify({"emails": emails, "unread": self._email_app.unread_count()})
+
+        @app.route("/api/email/<email_id>")
+        def email_get(email_id: str):
+            """Read a single email (marks as read)."""
+            email = self._email_app.get_email(email_id)
+            if not email:
+                return jsonify({"error": "Email not found"}), 404
+            return jsonify(email)
+
+        @app.route("/api/email/<email_id>/star", methods=["POST"])
+        def email_star(email_id: str):
+            """Toggle star on an email."""
+            starred = self._email_app.star_email(email_id)
+            return jsonify({"starred": starred})
+
+        @app.route("/api/email/<email_id>/delete", methods=["POST"])
+        def email_delete(email_id: str):
+            """Delete an email."""
+            self._email_app.delete_email(email_id)
+            return jsonify({"deleted": True})
+
+        # ── Files Routes ─────────────────────────────────────────────
+
+        @app.route("/api/files")
+        def files_list():
+            """List directory contents."""
+            path = request.args.get("path", "/home/player/")
+            return jsonify(self._files_app.list_directory(path))
+
+        @app.route("/api/files/read")
+        def files_read():
+            """Read a file's content."""
+            path = request.args.get("path", "")
+            if not path:
+                return jsonify({"error": "path required"}), 400
+            return jsonify(self._files_app.read_file(path))
+
+        @app.route("/api/files/tree")
+        def files_tree():
+            """Get filesystem tree."""
+            path = request.args.get("path", "/home/player/")
+            depth = request.args.get("depth", 3, type=int)
+            return jsonify({"tree": self._files_app.get_tree(path, depth)})
+
+        @app.route("/api/files/home-paths")
+        def files_home():
+            """Get quick-access home paths."""
+            return jsonify({"paths": self._files_app.get_home_paths()})
+
+        # ── Music Routes ─────────────────────────────────────────────
+
+        @app.route("/api/music/playlists")
+        def music_playlists():
+            """List all available playlists."""
+            return jsonify({"playlists": self._music_app._scan_all_playlists()})
+
+        @app.route("/api/music/playlist/<name>")
+        def music_playlist(name: str):
+            """Get a specific playlist with songs."""
+            playlist = self._music_app.get_playlist(name)
+            if not playlist:
+                return jsonify({"error": "Playlist not found"}), 404
+            return jsonify(playlist)
+
+        @app.route("/api/music/now-playing")
+        def music_now_playing():
+            """Get current playback state."""
+            return jsonify(self._music_app.get_now_playing())
+
+        @app.route("/api/music/play", methods=["POST"])
+        def music_play():
+            """Start playing a playlist."""
+            data = request.get_json(silent=True) or {}
+            name = data.get("playlist", "")
+            index = data.get("index", 0)
+            if not name:
+                return jsonify({"error": "playlist name required"}), 400
+            return jsonify(self._music_app.play_playlist(name, index))
+
+        @app.route("/api/music/next", methods=["POST"])
+        def music_next():
+            """Skip to next song."""
+            return jsonify(self._music_app.next_song())
+
+        @app.route("/api/music/stop", methods=["POST"])
+        def music_stop():
+            """Stop playback."""
+            return jsonify(self._music_app.stop())
 
     def _register_socketio(self) -> None:
         sio = self.socketio

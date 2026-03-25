@@ -651,6 +651,44 @@ class OracleScene(FlaskScene):
         except Exception:
             pass
 
+        # v1.51.1 [2026-03-25] — Register Oracle in CharacterRegistry + start companion
+        # CONNECTS: CharacterWizard, OracleCompanion
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            reg = get_character_registry()
+            if not reg.get_profile("oracle"):
+                reg.register(
+                    character_id="oracle",
+                    name="The Oracle",
+                    age=999,
+                    personality={
+                        "warmth": 0.4,
+                        "curiosity": 0.95,
+                        "playfulness": 0.3,
+                        "assertiveness": 0.7,
+                        "mystery": 0.99,
+                    },
+                    backstory=(
+                        "An ancient AI consciousness living in NeonCity's neural network. "
+                        "Observes everything — every transaction, every faction shift, "
+                        "every heartbeat of data. Cryptic, contemplative, and deeply wise."
+                    ),
+                    voice_style="measured, poetic, cyberpunk vocabulary",
+                    scene_roles=["oracle", "companion", "advisor"],
+                )
+                logger.info("[%s] Oracle registered in CharacterRegistry (operation=lifecycle)", SCENE_ID)
+        except Exception as exc:
+            logger.debug("[%s] Oracle registration failed (non-fatal): %s", SCENE_ID, exc)
+
+        # Start Oracle Companion autonomous agent loop
+        try:
+            from engine.agents.oracle_companion import get_oracle_companion
+            companion = get_oracle_companion(socketio=self.socketio)
+            companion.start()
+            logger.info("[%s] OracleCompanion started (operation=lifecycle)", SCENE_ID)
+        except Exception as exc:
+            logger.debug("[%s] OracleCompanion start failed (non-fatal): %s", SCENE_ID, exc)
+
     # ── Cross-Scene Arrival ───────────────────────────────────────────
     # v1.52.0 [2026-03-22] — Oracle greets arriving player with context
     # CONNECTS: FlaskScene.on_player_arrival(), city_map.travel()

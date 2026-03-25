@@ -8,6 +8,7 @@
     /* ══════════════════════════════════════════════════════════
        SIGNAL OS — v1.52 NeonCity Cyberdeck
        Cyberpunk overhaul: neon green/cyan/magenta on deep void
+       v1.51.1 [2026-03-25] — Desktop mode tab bar + 5-col dock
     ══════════════════════════════════════════════════════════ */
     :root {
       --bg:        #050710;
@@ -91,8 +92,8 @@
     .icon-box .notif-badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:flex;align-items:center;justify-content:center;border:2px solid #000}
     .app-name{font-size:11px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);text-align:center;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-    /* Dock */
-    .dock{background:rgba(8,14,20,.85);border:1px solid rgba(16,185,129,.12);border-radius:4px;margin:8px 16px;padding:12px 8px;display:grid;grid-template-columns:repeat(4,1fr);gap:0;box-shadow:0 -2px 12px rgba(16,185,129,.06)}
+    /* Dock — v1.51.1 [2026-03-25] expanded to 5 cols for Desktop mode */
+    .dock{background:rgba(8,14,20,.85);border:1px solid rgba(16,185,129,.12);border-radius:4px;margin:8px 16px;padding:12px 8px;display:grid;grid-template-columns:repeat(5,1fr);gap:0;box-shadow:0 -2px 12px rgba(16,185,129,.06)}
     .dock .app-icon .app-name{display:none}
 
     /* ── App Container ───────────────────────── */
@@ -450,6 +451,21 @@
       <div class="app-title" id="app-title-bar">App</div>
       <div class="app-header-right" id="app-header-right"></div>
     </div>
+    <!-- v1.51.1 [2026-03-25] — Desktop mode tab bar -->
+    <div id="app-tabbar" class="app-tabbar" style="display:none">
+      <button class="tab-btn active" data-tab="messages" onclick="CosyPhone.switchTab('messages')">
+        <span class="tab-icon">💬</span> Messages <span id="tab-badge-messages" class="tab-badge"></span>
+      </button>
+      <button class="tab-btn" data-tab="email" onclick="CosyPhone.switchTab('email')">
+        <span class="tab-icon">📧</span> Email <span id="tab-badge-email" class="tab-badge"></span>
+      </button>
+      <button class="tab-btn" data-tab="files" onclick="CosyPhone.switchTab('files')">
+        <span class="tab-icon">📁</span> Files
+      </button>
+      <button class="tab-btn" data-tab="music" onclick="CosyPhone.switchTab('music')">
+        <span class="tab-icon">🎵</span> Music
+      </button>
+    </div>
     <div class="app-body" id="app-body"></div>
   </div>
 
@@ -457,7 +473,7 @@
 </div>
 
 <script src="/shared/js/socket.io.min.js"></script>
-<script src="/static/js/phone_v2.js?v=3.2.1"></script>
+<script src="/static/js/phone_v2.js?v=3.3.0"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
 <script>
 /* ── World / Ghost Integration ─────────────────────────────────── */
