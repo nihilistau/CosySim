@@ -6,8 +6,8 @@ All notable changes to CosySim are documented here.
 
 ## [1.52.0] — "LIVE GAME + CO-OP HEISTS" — 2026-03-26
 
-HUD polish, browser test coverage, CSS responsiveness, and multiplayer co-op
-heist squad system.
+HUD polish, browser test coverage, CSS responsiveness, multiplayer co-op
+heist squad system, launch scripts, and live visual verification.
 
 ### HUD Narrative + Spectator Widgets
 - **Narrative progress bar** — purple mini-bar in HUD strip showing current story pack stage + title
@@ -35,12 +35,31 @@ heist squad system.
 - Thread-safe singleton via `get_squad_manager()`
 - 3 new heist skills: `form_heist_squad`, `invite_to_squad`, `vote_phase_advance`
 
+### Launch Scripts
+- **start_services.ps1** — starts Nexus KMS + Hub with health checks
+- **start_scenes.ps1** — launches scenes with zombie port cleanup (Clear-Port)
+- Both use `-WindowStyle Minimized` so errors are visible
+- Zombie port killer prevents stale processes from blocking new launches
+
 ### Bug Fixes
 - `update_docs.py` regex fix — comma in `~1,040` no longer causes doubling
+- Footer version: v1.51 → v1.52
+- Zombie port cleanup in start_scenes.ps1
+- `127.0.0.1 localhost` added to hosts file (was commented out, causing IPv6 resolution)
+
+### Known Issues
+- `Start-Process` launched Flask-SocketIO scenes may timeout on some Windows configs
+- Workaround: use TUI (`python tui.py`) or run `python launcher.py <scene>` directly in foreground
+- Root cause: werkzeug dev server + SocketIO polling transport; fix: switch to waitress/gunicorn
+
+### Live Verification
+- Oracle scene verified fully loaded via Chrome MCP screenshot (port 7777)
+- All CSS, HUD, navbar, footer, meditation panel, fortune, city pulse, whispers rendering correctly
+- 496 pytest smoke tests passing
 
 ### Files
-- 1 new file: `engine/multiplayer/squad.py` (370 lines)
-- Modified: `cosysim-neon-hud.js`, `neon_hud.html`, `cosysim-neon-hud.css`, `neon_base.css`, `cosysim-danmaku.css`, `browser_test.py`, `heist_planning_skills.py`, `update_docs.py`
+- 2 new files: `engine/multiplayer/squad.py` (370 lines), `scripts/start_scenes.ps1`
+- Modified: `cosysim-neon-hud.js`, `neon_hud.html`, `cosysim-neon-hud.css`, `neon_base.css`, `cosysim-danmaku.css`, `browser_test.py`, `heist_planning_skills.py`, `update_docs.py`, `start_services.ps1`, `flask_scene.py`, `oracle_scene.py`
 
 ---
 

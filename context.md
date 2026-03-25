@@ -55,7 +55,17 @@ python launcher.py --all          # Everything
 python launcher.py --list         # Show targets with port status
 ```
 
+**PowerShell scripts (alternative):**
+```powershell
+.\scripts\start_services.ps1 -NoCanvas   # Nexus + Hub (services first)
+.\scripts\start_scenes.ps1 -Scene oracle # Then individual scenes
+.\scripts\start_scenes.ps1               # Or all auto-start scenes
+.\scripts\start_scenes.ps1 -List         # Show available scenes
+```
+
 **Start order:** Nexus KMS auto-starts first (priority 0, external type). LMStudio must be running manually on :1234.
+
+**Known issue:** `Start-Process` launched Flask-SocketIO scenes may timeout on some Windows configs. Use `python launcher.py <scene>` in foreground or the TUI as workaround.
 
 ---
 
