@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from flask import render_template, jsonify, request as flask_request
-from flask_socketio import emit
+from flask_socketio import emit, join_room, leave_room
 
 from engine.scenes.flask_scene import FlaskScene
 from content.scenes.heist.heist_game import (
@@ -274,6 +274,10 @@ class HeistScene(FlaskScene):
         self.register_bench_route(self.app, self.socketio)
         self._register_routes()
         self._register_socketio()
+        self._register_squad_socketio()  # v1.52.0 — co-op squad rooms
+
+        # v1.52.0 [2026-03-26] — Co-op squad system
+        self._squad_manager = None  # Lazy-load on first squad operation
 
         # Framework integration
         self._state_mgr = get_scene_state_manager()
@@ -571,6 +575,210 @@ class HeistScene(FlaskScene):
                     "events": self.game.events[-5:] if self.game.events else [],
                 }
             emit("investigation_state", {"board": board_state})
+
+    # ── Co-Op Squad SocketIO Handlers ────────────────────────────────────
+    # v1.52.0 [2026-03-26] — Room-based multiplayer for co-op heists
+    # CONNECTS: SquadManager (engine.multiplayer.squad)
+    # CALLED BY: SocketIO events from heist frontend
+    # EMITS: squad_state, squad_member_joined, squad_member_left,
+    #        squad_roles_updated, squad_ready_state, heist_launched
+
+    def _get_squad_mgr(self):
+        """Lazy-load squad manager."""
+        if self._squad_manager is None:
+            from engine.multiplayer.squad import get_squad_manager
+            self._squad_manager = get_squad_manager()
+        return self._squad_manager
+
+    def _register_squad_socketio(self) -> None:
+        """Register co-op squad SocketIO handlers."""
+
+        @self.socketio.on("squad_create")
+        def on_squad_create(data):
+            """Create a new heist squad."""
+            player_id = data.get("player_id", "player")
+            player_name = data.get("player_name", "Mastermind")
+            try:
+                mgr = self._get_squad_mgr()
+                squad = mgr.create_squad(player_id, player_name, scene="heist")
+                join_room(f"squad_{squad.squad_id}")
+                emit("squad_state", squad.to_dict())
+                logger.info("[%s] Squad created: %s (operation=squad)", SCENE_ID, squad.squad_id)
+            except ValueError as exc:
+                emit("squad_error", {"error": str(exc)})
+
+        @self.socketio.on("squad_join")
+        def on_squad_join(data):
+            """Join an existing squad."""
+            squad_id = data.get("squad_id", "")
+            player_id = data.get("player_id", "")
+            player_name = data.get("player_name", "")
+            try:
+                mgr = self._get_squad_mgr()
+                mgr.join_squad(squad_id, player_id, player_name)
+                join_room(f"squad_{squad_id}")
+                squad = mgr.get_squad(squad_id)
+                self.socketio.emit("squad_member_joined", {
+                    "player_id": player_id,
+                    "player_name": player_name,
+                    "squad": squad.to_dict() if squad else {},
+                }, to=f"squad_{squad_id}")
+                logger.info("[%s] Player %s joined squad %s (operation=squad)", SCENE_ID, player_id, squad_id)
+            except ValueError as exc:
+                emit("squad_error", {"error": str(exc)})
+
+        @self.socketio.on("squad_leave")
+        def on_squad_leave(data):
+            """Leave a squad."""
+            squad_id = data.get("squad_id", "")
+            player_id = data.get("player_id", "")
+            try:
+                mgr = self._get_squad_mgr()
+                mgr.leave_squad(squad_id, player_id)
+                leave_room(f"squad_{squad_id}")
+                self.socketio.emit("squad_member_left", {
+                    "player_id": player_id,
+                }, to=f"squad_{squad_id}")
+            except ValueError as exc:
+                emit("squad_error", {"error": str(exc)})
+
+        @self.socketio.on("squad_set_role")
+        def on_squad_set_role(data):
+            """Set a player's role in the squad."""
+            squad_id = data.get("squad_id", "")
+            player_id = data.get("player_id", "")
+            role = data.get("role", "")
+            try:
+                mgr = self._get_squad_mgr()
+                mgr.set_role(squad_id, player_id, role)
+                squad = mgr.get_squad(squad_id)
+                self.socketio.emit("squad_roles_updated", {
+                    "squad": squad.to_dict() if squad else {},
+                }, to=f"squad_{squad_id}")
+            except ValueError as exc:
+                emit("squad_error", {"error": str(exc)})
+
+        @self.socketio.on("squad_set_ready")
+        def on_squad_set_ready(data):
+            """Toggle ready state. Auto-starts if all ready."""
+            squad_id = data.get("squad_id", "")
+            player_id = data.get("player_id", "")
+            ready = data.get("ready", True)
+            try:
+                mgr = self._get_squad_mgr()
+                mgr.set_ready(squad_id, player_id, ready)
+                squad = mgr.get_squad(squad_id)
+                self.socketio.emit("squad_ready_state", {
+                    "squad": squad.to_dict() if squad else {},
+                }, to=f"squad_{squad_id}")
+            except ValueError as exc:
+                emit("squad_error", {"error": str(exc)})
+
+        @self.socketio.on("squad_launch_heist")
+        def on_squad_launch_heist(data):
+            """Launch the heist if all squad members are ready."""
+            squad_id = data.get("squad_id", "")
+            try:
+                mgr = self._get_squad_mgr()
+                heist_id = mgr.start_heist(squad_id)
+                if not heist_id:
+                    emit("squad_error", {"error": "Not all members are ready"})
+                    return
+
+                # Create the actual HeistState for this squad
+                squad = mgr.get_squad(squad_id)
+                self._create_squad_heist(squad)
+
+                self.socketio.emit("heist_launched", {
+                    "heist_id": heist_id,
+                    "squad": squad.to_dict() if squad else {},
+                }, to=f"squad_{squad_id}")
+                self._broadcast_state()
+                logger.info(
+                    "[%s] Squad heist launched (operation=squad_heist, squad=%s, heist=%s, members=%d)",
+                    SCENE_ID, squad_id, heist_id, squad.member_count if squad else 0,
+                )
+            except ValueError as exc:
+                emit("squad_error", {"error": str(exc)})
+
+        @self.socketio.on("squad_chat")
+        def on_squad_chat(data):
+            """Send a message to squad members only."""
+            squad_id = data.get("squad_id", "")
+            player_id = data.get("player_id", "")
+            content = data.get("content", "")
+            if squad_id and content:
+                self.socketio.emit("squad_message", {
+                    "player_id": player_id,
+                    "content": content,
+                }, to=f"squad_{squad_id}")
+
+        @self.socketio.on("squad_list_open")
+        def on_squad_list_open():
+            """List open squads available to join."""
+            mgr = self._get_squad_mgr()
+            emit("squad_list", {"squads": mgr.list_open_squads()})
+
+        @self.socketio.on("squad_vote_phase")
+        def on_squad_vote_phase(data):
+            """Vote to advance the heist phase (majority required)."""
+            squad_id = data.get("squad_id", "")
+            player_id = data.get("player_id", "")
+            mgr = self._get_squad_mgr()
+            squad = mgr.get_squad(squad_id)
+            if not squad:
+                emit("squad_error", {"error": "Squad not found"})
+                return
+
+            # Track votes on squad object
+            if not hasattr(squad, "_phase_votes"):
+                squad._phase_votes = set()
+            squad._phase_votes.add(player_id)
+
+            total = squad.member_count
+            votes = len(squad._phase_votes)
+            needed = (total // 2) + 1
+
+            if votes >= needed:
+                squad._phase_votes = set()
+                # Actually advance the phase
+                if self.game:
+                    self.game.advance_phase()
+                    self._broadcast_state()
+                self.socketio.emit("squad_phase_advanced", {
+                    "votes": votes,
+                    "total": total,
+                    "new_phase": self.game.phase.value if self.game else "unknown",
+                }, to=f"squad_{squad_id}")
+            else:
+                self.socketio.emit("squad_vote_cast", {
+                    "player_id": player_id,
+                    "votes": votes,
+                    "needed": needed,
+                    "total": total,
+                }, to=f"squad_{squad_id}")
+
+    def _create_squad_heist(self, squad) -> None:
+        """Create a HeistState populated with squad members as crew."""
+        if not squad:
+            return
+        try:
+            from content.scenes.heist.heist_game import HeistState
+            self.game = HeistState()
+            # Add squad members as crew (alongside NPC crew)
+            for pid, member in squad.members.items():
+                specialty = member.role or "wildcard"
+                self.game.add_crew(pid, member.display_name, specialty)
+            logger.info(
+                "[%s] Squad heist state created with %d players (operation=squad_heist)",
+                SCENE_ID, squad.member_count,
+            )
+        except Exception as exc:
+            logger.error("[%s] Squad heist creation failed: %s (operation=squad_heist)", SCENE_ID, exc)
+
+    def _broadcast_to_squad(self, squad_id: str, event: str, data: dict) -> None:
+        """Broadcast an event to a specific squad room only."""
+        self.socketio.emit(event, data, to=f"squad_{squad_id}")
 
     # ── Affinity & Betrayal System ───────────────────────────────────────
     # v1.49.5 [2026-03-22] — Crew synergy, argument risk, and betrayal mechanics
