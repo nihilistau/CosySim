@@ -295,6 +295,21 @@ class OracleScene(FlaskScene):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
+        # ── v1.51.0 [2026-03-25] — Spectator/danmaku feed endpoint ──
+        # CONNECTS: SpectatorBus.get_recent()
+        # CALLED BY: Oracle dashboard frontend, external consumers
+        # EMITS: JSON array of recent spectator messages
+        @self.app.route("/api/oracle/spectator")
+        def oracle_spectator():
+            """Recent spectator/danmaku messages from the SpectatorBus."""
+            limit = request.args.get("limit", 50, type=int)
+            try:
+                from engine.services.spectator_bus import get_spectator_bus
+                messages = get_spectator_bus().get_recent(limit)
+                return jsonify({"ok": True, "messages": messages, "count": len(messages)})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc), "messages": []}), 500
+
         # ── v1.50.1 [2026-03-22] — Engine room observability endpoints ──
 
         @self.app.route("/api/oracle/router-stats")
@@ -506,6 +521,18 @@ class OracleScene(FlaskScene):
             logger.info("[%s] Oracle alert feed wired to AlertRouter (operation=init)", SCENE_ID)
         except Exception as exc:
             logger.debug("[%s] AlertRouter feed not available: %s", SCENE_ID, exc)
+
+        # v1.51.0 [2026-03-25] — Wire SpectatorBus → danmaku_msg SocketIO event
+        # CONNECTS: SpectatorBus.subscribe(), Oracle dashboard + all connected clients
+        # EMITS: danmaku_msg SocketIO event with SpectatorMessage payload
+        try:
+            from engine.services.spectator_bus import get_spectator_bus
+            get_spectator_bus().subscribe(
+                lambda msg: self.socketio.emit("danmaku_msg", msg)
+            )
+            logger.info("[%s] Spectator/danmaku feed wired (operation=init)", SCENE_ID)
+        except Exception as exc:
+            logger.debug("[%s] SpectatorBus feed not available: %s", SCENE_ID, exc)
 
     def _on_error_event(self, event: Dict[str, Any]) -> None:
         """Emit error to connected Oracle dashboard clients via SocketIO."""
