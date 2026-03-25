@@ -156,8 +156,26 @@
 
   </div>{# /.neon-layout #}
 
-  {# ── Footer area (optional) ─────────────────────────────────────── #}
-  {% block scene_footer %}{% endblock %}
+  {# ── Footer area ────────────────────────────────────────────────── #}
+  {# v1.51.1 [2026-03-25] — Default footer with version, shortcuts, quick links #}
+  {% block scene_footer %}
+  <footer class="cs-footer" id="cs-footer">
+    <span class="cs-footer-version">CosySim v1.51</span>
+    <span class="cs-footer-sep">|</span>
+    <span class="cs-footer-scene">{{ scene_display_name | default('') }}</span>
+    <span class="cs-footer-sep">|</span>
+    <span class="cs-footer-keys">
+      <kbd>F7</kbd> Danmaku
+      <kbd>H</kbd> HUD
+      <kbd>I</kbd> Inventory
+    </span>
+    <span class="cs-footer-links">
+      <a href="http://localhost:8500" class="cs-footer-link">Hub</a>
+      <a href="http://localhost:5572" class="cs-footer-link">Oracle</a>
+      <a href="http://localhost:5593" class="cs-footer-link">NeonOS</a>
+    </span>
+  </footer>
+  {% endblock %}
 
   {# ── Overlays (modals, drawers, etc.) ───────────────────────────── #}
   {% block scene_overlays %}{% endblock %}

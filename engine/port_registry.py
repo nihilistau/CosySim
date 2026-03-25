@@ -60,6 +60,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "lab_break": 5571,
     "creation_kit": 5592,  # v1.47.0 — Creation Kit visual editor
     "oracle": 5572,        # v1.52.0 — THE ORACLE (Claude's signature scene)
+    "neonos": 5593,        # v1.51.0 — NEON OS virtual desktop shell
     "intel_hub": 5580,
     # ── Launcher-managed services (8500–8800) ──
     "hub": 8500,
@@ -178,6 +179,9 @@ HUB_CATALOGUE_TARGETS: Tuple[str, ...] = (
     "canvas",
     "intel_hub",
     "system_control",
+    "oracle",          # v1.51.1 — AI consciousness terminal
+    "neonos",          # v1.51.1 — Virtual desktop shell
+    "creation_kit",    # v1.51.1 — Visual scene editor + character wizard
 )
 
 HUB_HEALTH_TARGETS: Tuple[str, ...] = (

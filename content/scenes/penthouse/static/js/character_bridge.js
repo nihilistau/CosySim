@@ -95,7 +95,18 @@ window.CharacterBridge = (function () {
 
     console.info('[CharBridge] Initialised — scene acquired, %d locations mapped',
       Object.keys(_locationPositions).length);
+
+    // v1.51.1 [2026-03-25] — Replay any queued character syncs that arrived before init
+    if (_pendingSync) {
+      console.info('[CharBridge] Replaying queued character sync (%d chars)',
+        Object.keys(_pendingSync.chars || {}).length);
+      syncCharacters(_pendingSync.chars, _pendingSync.locs);
+      _pendingSync = null;
+    }
   }
+
+  // v1.51.1 [2026-03-25] — Queue for characters that arrive before 3D scene is ready
+  let _pendingSync = null;
 
   // ─── Sync characters from scene_state ────────────────────────────
 
@@ -106,8 +117,10 @@ window.CharacterBridge = (function () {
    */
   function syncCharacters(stateChars, stateLocations) {
     if (!_scene) {
+      // v1.51.1 — Queue sync instead of dropping it; init will replay when ready
+      _pendingSync = { chars: stateChars, locs: stateLocations };
       init();
-      if (!_scene) return;
+      return;
     }
 
     const chars = stateChars || {};

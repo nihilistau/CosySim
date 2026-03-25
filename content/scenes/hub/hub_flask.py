@@ -187,6 +187,28 @@ _SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
         "accent": "#22c55e",
         "desc": "Live service truth, config editing, proxy control, and health visibility",
     },
+    # v1.51.1 [2026-03-25] — New scenes added to hub catalogue
+    "oracle": {
+        "subtitle": "Neural Consciousness",
+        "icon": "👁️",
+        "group": "neon_world",
+        "accent": "#a855f7",
+        "desc": "AI consciousness terminal — predictions, meditation, and machine intelligence",
+    },
+    "neonos": {
+        "subtitle": "Virtual Desktop",
+        "icon": "🖥️",
+        "group": "system",
+        "accent": "#06b6d4",
+        "desc": "All scenes as desktop apps — draggable windows, taskbar, app launcher",
+    },
+    "creation_kit": {
+        "subtitle": "Scene Editor",
+        "icon": "🔧",
+        "group": "system",
+        "accent": "#f59e0b",
+        "desc": "Visual scene builder + character wizard — drag-and-drop components",
+    },
 }
 
 
