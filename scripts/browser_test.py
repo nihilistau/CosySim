@@ -269,6 +269,42 @@ def run_tests() -> dict:
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
 
+        # ── v1.52.0 — Footer ─────────────────────────────────────
+        print("\n=== FOOTER ===")
+        footer = page.query_selector(".cs-footer")
+        test("Footer exists", footer is not None)
+        if footer:
+            version_el = page.query_selector(".cs-footer-version")
+            test("Footer version shown", version_el is not None and "CosySim" in (version_el.inner_text() or ""))
+            keys_el = page.query_selector(".cs-footer-keys")
+            test("Footer keyboard hints", keys_el is not None)
+            links = page.query_selector_all(".cs-footer-link")
+            test("Footer quick links (2+)", len(links) >= 2, f"{len(links)} links")
+
+        # ── v1.52.0 — Navbar ─────────────────────────────────────
+        print("\n=== NAVBAR ===")
+        navbar = page.query_selector("#cs-navbar") or page.query_selector(".cs-navbar")
+        test("Navbar exists", navbar is not None)
+        if navbar:
+            nav_items = page.query_selector_all("[class*=navbar] a") or page.query_selector_all(".cs-navbar__nav-item")
+            test("Navbar scene links (8+)", len(nav_items) >= 8, f"{len(nav_items)} items")
+
+        # ── v1.52.0 — Danmaku (F7) ───────────────────────────────
+        print("\n=== DANMAKU (F7) ===")
+        page.keyboard.press("F7")
+        page.wait_for_timeout(600)
+        overlay = page.query_selector("#cosy-danmaku-overlay") or page.query_selector("[class*=danmaku-overlay]")
+        test("F7 creates danmaku overlay", overlay is not None)
+        page.keyboard.press("F7")
+        page.wait_for_timeout(300)
+
+        # ── v1.52.0 — HUD Narrative + Spectator Widgets ──────────
+        print("\n=== HUD WIDGETS ===")
+        narrative_el = page.query_selector("#hud-narrative")
+        test("Narrative widget in DOM", narrative_el is not None)
+        spectator_el = page.query_selector("#hud-spectator")
+        test("Spectator widget in DOM", spectator_el is not None)
+
         # ── JS Errors ──────────────────────────────────────────────
         print(f"\n=== JS ERRORS: {len(js_errors)} ===")
         # Filter out expected connection refused errors
