@@ -4,6 +4,76 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.51.0] — "OPENROOM FEATURES" — 2026-03-25
+
+6 features inspired by OpenRoom/VibeApps that transform AI characters from reactive
+chat agents into autonomous beings with memory, agency, and a virtual world. Identified
+through ARGUS deep analysis (HAR traffic, V8 heap snapshots, open source code review).
+
+### Feature 1 — save_memory + recall_about Skills
+- **save_memory** — Agents proactively save important info to long-term memory with 5 categories: fact, preference, event, emotion, observation
+- **recall_about** — Subject-based memory retrieval with optional category filter
+- Extended `search_memory` with subject/category filtering
+- **Modified:** `engine/skills/builtin/memory_skills.py`, `content/simulation/database/rag.py`
+
+### Feature 2 — Danmaku/Spectator Mode
+- **SpectatorBus** singleton — thread-safe broadcast/subscribe with 200-entry ring buffer
+- **SpectatorBroadcastInterceptor** (priority 92) — extracts reply text, mood, agent from post-call context
+- **cosysim-danmaku.js + CSS** — floating right-to-left bullet comments with neon glow, 5-lane layout, F7 toggle, mood-mapped colors
+- **Oracle spectator API** — `/api/oracle/spectator` endpoint + `danmaku_msg` SocketIO event
+- **New:** `engine/services/spectator_bus.py`, `engine/agents/interceptors/spectator_broadcast.py`, `content/shared/static/js/cosysim-danmaku.js`, `content/shared/static/css/cosysim-danmaku.css`
+
+### Feature 3 — NeonOS Virtual Desktop Shell
+- **NeonOS scene** (port 5593) — virtual desktop rendering every CosySim scene as a draggable/resizable window
+- **cosysim-desktop.js** — `NeonDesktop` class (app launcher grid, taskbar, z-index management) + `NeonWindow` class (drag, resize, minimize, maximize, close)
+- **/api/apps** endpoint — reads control_plane_registry, TCP-probes ports for online/offline status
+- Glass-morphism windows with neon-glow borders matching each app's accent color
+- **New:** `content/scenes/neonos/` (5 files), `content/shared/static/js/cosysim-desktop.js`, `content/shared/static/css/cosysim-desktop.css`
+
+### Feature 4 — Virtual Filesystem over Nexus
+- **NexusFilesystem** — path-based CRUD mapping virtual paths to Nexus KMS entries
+- Auto-seeds `/home/player/`, `/home/player/notes/`, `/home/player/journal/`, `/shared/`, `/system/`
+- 6 filesystem skills: `read_file`, `write_file`, `list_files`, `make_directory`, `delete_file`, `find_files`
+- **New:** `engine/nexus/filesystem.py`, `engine/skills/builtin/fs_skills.py`
+
+### Feature 5 — Stage+Target Narrative System
+- **NarrativeModEngine** singleton — manages narrative mods with stages and completion targets
+- **ModStage** + **ModTarget** data model — stages have prompt injections, targets track completion
+- **NarrativeModInterceptor** (priority 15) — injects current stage context into agent system prompts
+- 4 narrative skills: `start_narrative`, `complete_target`, `get_narrative_progress`, `advance_narrative_stage`
+- Auto-advances stage when all targets in current stage complete
+- **Wired into Realm** — branching quest acceptance → start_mod, branch choice → complete_target
+- **Wired into Lab Break** — personality arcs as stages, arc shifts → target completion
+- **New:** `engine/mcp/narrative_mod.py`, `engine/agents/interceptors/narrative_mod.py`, `engine/skills/builtin/narrative_skills.py`
+
+### Feature 6 — Character Creation Pipeline
+- **CharacterWizard** — 6-stage pipeline: Archetype → Appearance → Voice → Stats → Story → Memory Seed
+- 5 archetypes: companion, rival, mentor, trickster, guardian (each with default personality, tone, traits)
+- `finalize()` registers in CharacterRegistry, seeds memories in RAGMemory, auto-seeds backstory
+- **New:** `engine/creation/character_wizard.py`
+
+### Infrastructure
+- Interceptor pipeline expanded from 26 to **28** interceptors
+- Skills expanded from ~1,000 to **~1,010** (10 new skills across 3 packs)
+- Targets expanded from 32 to **33** (NeonOS added)
+- **New ARGUS clients:** `scripts/argus/clients/sesame_client.py` (Sesame AI explorer), `scripts/argus/clients/openroom_client.py` (OpenRoom explorer)
+- **ARGUS generic analyzers:** protocol auto-detection, HAR analysis, heap analysis, deep automated pipeline
+
+### Tests
+- 493 smoke tests passing, 0 regressions
+- `test_neonos.py` — NeonOS scene routes
+- Pre-existing failures in `test_nexus_bridge.py` (tool count assertions) and `test_mcp_server.py` (pydantic compat) unchanged
+
+### Documentation
+- **New:** `docs/OPENROOM_FEATURES.md` — comprehensive guide to all 6 features with inspiration, architecture, usage, and code examples
+- Updated: README.md, CHANGELOG.md, INDEX.md, ARCHITECTURE.md, INTERCEPTORS.md, SKILLS.md, SCENES.md, CLAUDE.md
+
+### Files
+- **18 new files**, **5 modified files**, **~3,800 new lines**
+- Full file listing in [docs/OPENROOM_FEATURES.md](docs/OPENROOM_FEATURES.md)
+
+---
+
 ## [1.50.2] — "NEXUS SELF-IMPROVING PIPELINE" — 2026-03-24
 
 Major hardening sprint: NEXUS self-improving loop fully wired, tested, and verified

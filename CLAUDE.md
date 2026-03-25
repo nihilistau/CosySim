@@ -15,7 +15,7 @@ These rules override all defaults. Follow them exactly — no exceptions.
 
 ## What This Project Is
 
-CosySim is a local-first multi-scene AI simulation framework. 32 launch targets (15 game + 11 service + 6 creation) run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline with ~1,000 skills across 95 packs governs all agent behavior.
+CosySim is a local-first multi-scene AI simulation framework. 33 launch targets (15 game + 11 service + 7 creation) run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline with ~1,010 skills across 98 packs governs all agent behavior.
 
 ## Commands
 
@@ -80,10 +80,10 @@ Health check endpoints: `GET http://localhost:{port}/health`
 ```
 Browser (Neon HUD v2 — vanilla JS, Jinja2, Socket.IO)
     ↓ Socket.IO / REST
-32 targets (15 game + 11 service + 6 creation)  ports 5555–8800
+33 targets (15 game + 11 service + 7 creation)  ports 5555–8800
     ↓
 Skills (engine/skills/builtin/)     ←→    MCP Pipeline (engine/mcp/)
-@skill decorator · 95 packs · ~1000      24 interceptors · AgentGovernor
+@skill decorator · 98 packs · ~1010      28 interceptors · AgentGovernor
                     ↓
 Engine Layer (engine/)
   lmstudio/   — ServerController, LMLink federation, TaskQueue
@@ -113,8 +113,10 @@ get_router()              # AgentRouter
 Pri 5  → NaturalMoodDrift (neurochemistry tagging)
 Pri 6  → NexusPrompt (context hydration)
 Pri 7–16 → Identity, scene injection, routing
+  Pri 15 → NarrativeModInterceptor (stage context injection)
 Pri 20–70 → Skills, games, guardrails
 Pri 80–93 → Post-call sync (shaping, TTS, mood parsing, relationships)
+  Pri 92 → SpectatorBroadcastInterceptor (danmaku broadcast)
 ```
 All agent replies pass through this pipeline. Register interceptors in `config/default.yaml` under `comms.interceptors`.
 
@@ -310,7 +312,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.50** (Three-Pillar Architecture + Documentation Overhaul)
+- Current: **v1.51** (OpenRoom-Inspired Features — Narrative, Danmaku, NeonOS, Virtual FS, Character Creator)
 
 ### Navigational Comments
 

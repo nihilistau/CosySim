@@ -1,6 +1,6 @@
 # CosySim Arena Guide — THE COLOSSEUM
 
-> CosySim Documentation — v1.50 [2026-03-22]
+> CosySim Documentation — v1.51.0 [2026-03-25]
 >
 > THE COLOSSEUM is a tactical card-game arena where AI fighters powered by
 > LMStudio battle in real-time. Players spectate, place bets, and watch each
