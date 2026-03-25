@@ -329,10 +329,186 @@ def _oracle_awakening() -> Dict[str, Any]:
 
 # ──── Pack Catalog ──────────────────────────────────────────────────────
 
+def _tavern_intrigue() -> Dict[str, Any]:
+    """Tavern intrigue — 4 stages of secrets, lies, and betrayal."""
+    return {
+        "mod_id": "tavern_intrigue",
+        "mod_name": "The Stranger's Bargain",
+        "description": (
+            "A mysterious stranger arrives at The Rusty Anchor with a proposition "
+            "that will test the player's loyalty and judgment."
+        ),
+        "stages": [
+            {
+                "stage_id": "the_stranger",
+                "title": "The Stranger",
+                "description": "A hooded figure enters the tavern and asks to speak privately.",
+                "prompt_injection": (
+                    "[NARRATIVE: The Stranger's Bargain — Act 1: The Stranger]\n"
+                    "A cloaked figure has entered The Rusty Anchor. They sit in the darkest "
+                    "corner and order nothing. After a while, they approach the player.\n"
+                    "- They speak in riddles at first — testing the player's patience\n"
+                    "- They claim to have information about a conspiracy in NeonCity\n"
+                    "- They want something in exchange: a favor, not credits\n"
+                    "- They won't say what the favor is yet\n"
+                    "Make the stranger compelling but untrustworthy. Every word is calculated."
+                ),
+                "targets": [
+                    {"target_id": "stranger_arrives", "description": "Describe the stranger's entrance"},
+                    {"target_id": "proposition", "description": "The stranger makes their offer"},
+                ],
+                "on_complete_note": "The stranger has made their offer. The player must decide.",
+            },
+            {
+                "stage_id": "the_secret",
+                "title": "The Secret",
+                "description": "The stranger reveals what they know — and it changes everything.",
+                "prompt_injection": (
+                    "[NARRATIVE: The Stranger's Bargain — Act 2: The Secret]\n"
+                    "The player has engaged with the stranger. Now the revelation:\n"
+                    "- A major faction is planning something that will affect the whole city\n"
+                    "- The stranger has proof — but it's encrypted\n"
+                    "- The decryption key is split between three people\n"
+                    "- One of them is in this tavern right now\n"
+                    "- The stranger warns: 'Not everyone here is who they seem'\n"
+                    "Raise the stakes. Make the player look at other tavern patrons differently."
+                ),
+                "targets": [
+                    {"target_id": "reveal_conspiracy", "description": "Reveal the conspiracy details"},
+                    {"target_id": "identify_contact", "description": "Point to someone in the tavern"},
+                ],
+                "on_complete_note": "The conspiracy is real. But the stranger's motives are unclear.",
+            },
+            {
+                "stage_id": "the_choice",
+                "title": "The Choice",
+                "description": "The player must choose who to trust.",
+                "prompt_injection": (
+                    "[NARRATIVE: The Stranger's Bargain — Act 3: The Choice]\n"
+                    "The situation has become clear — and complicated:\n"
+                    "- The tavern contact denies everything (but they're nervous)\n"
+                    "- The stranger offers to 'handle' the contact if the player won't\n"
+                    "- A third party — a regular patron — pulls the player aside with a warning\n"
+                    "- 'The stranger is the real threat. They're using you.'\n"
+                    "- Three conflicting stories. The player must choose who to believe.\n"
+                    "Make this genuinely difficult. All three could be lying."
+                ),
+                "targets": [
+                    {"target_id": "confront_contact", "description": "Confront the tavern contact"},
+                    {"target_id": "trust_decision", "description": "The player commits to a side"},
+                ],
+                "on_complete_note": "The choice is made. Now live with it.",
+            },
+            {
+                "stage_id": "the_fallout",
+                "title": "The Fallout",
+                "description": "Consequences of the player's choice ripple outward.",
+                "prompt_injection": (
+                    "[NARRATIVE: The Stranger's Bargain — Act 4: The Fallout]\n"
+                    "The night is over. The consequences are immediate:\n"
+                    "- If the player trusted the stranger: they got useful intel but the contact is gone\n"
+                    "- If the player trusted the contact: the stranger vanishes, leaving a cryptic warning\n"
+                    "- If the player trusted the patron: they learn both were playing them\n"
+                    "- The bartender has opinions about what just happened\n"
+                    "- Reputation shifts based on who saw what\n"
+                    "End with a hook: the encrypted data still exists. This isn't over."
+                ),
+                "targets": [
+                    {"target_id": "show_consequences", "description": "Show immediate consequences"},
+                    {"target_id": "future_hook", "description": "Tease that this story continues"},
+                ],
+                "on_complete_note": "The Stranger's Bargain is concluded. But the data remains encrypted.",
+            },
+        ],
+    }
+
+
+def _grid_data_heist() -> Dict[str, Any]:
+    """Grid data heist — 3 stages of infiltration and extraction."""
+    return {
+        "mod_id": "grid_data_heist",
+        "mod_name": "The Phantom Download",
+        "description": (
+            "A high-stakes data extraction from a fortified Grid node. "
+            "Stealth, hacking, and quick thinking required."
+        ),
+        "stages": [
+            {
+                "stage_id": "the_mark",
+                "title": "The Mark",
+                "description": "A broker identifies a valuable data cache in a fortified node.",
+                "prompt_injection": (
+                    "[NARRATIVE: The Phantom Download — Act 1: The Mark]\n"
+                    "A data broker in The Grid has identified a prize target:\n"
+                    "- A corporate data cache worth millions in the right hands\n"
+                    "- It's stored in a fortified node deep in the Market Zone\n"
+                    "- The node has ICE (Intrusion Countermeasures Electronics) — aggressive\n"
+                    "- The broker wants 40% of the take and provides the access codes\n"
+                    "- But the codes expire in one hour (real-time pressure)\n"
+                    "The Grid is watching. Every transaction leaves a trace."
+                ),
+                "targets": [
+                    {"target_id": "meet_broker", "description": "Meet the data broker and hear the pitch"},
+                    {"target_id": "accept_job", "description": "Accept the job and get the access codes"},
+                ],
+                "on_complete_note": "The clock is ticking. One hour to extract the data.",
+            },
+            {
+                "stage_id": "the_infiltration",
+                "title": "The Infiltration",
+                "description": "Navigate the fortified node's defenses.",
+                "prompt_injection": (
+                    "[NARRATIVE: The Phantom Download — Act 2: The Infiltration]\n"
+                    "The player approaches the fortified node:\n"
+                    "- The access codes work — but they trigger a silent alarm\n"
+                    "- ICE activates: trace programs hunting the player's connection\n"
+                    "- The data is behind three encryption layers\n"
+                    "- Layer 1: Pattern lock (describe a puzzle the player must solve)\n"
+                    "- Layer 2: Social engineering (an AI guardian asks verification questions)\n"
+                    "- Layer 3: Raw speed (download before the trace completes)\n"
+                    "Each layer is a mini-challenge. Make it tense."
+                ),
+                "targets": [
+                    {"target_id": "breach_defenses", "description": "Get past the first defense layer"},
+                    {"target_id": "crack_encryption", "description": "Break through the encryption"},
+                    {"target_id": "start_download", "description": "Begin the data extraction"},
+                ],
+                "on_complete_note": "Data is downloading. But someone else wants it too.",
+            },
+            {
+                "stage_id": "the_extraction",
+                "title": "The Extraction",
+                "description": "Get the data out — with complications.",
+                "prompt_injection": (
+                    "[NARRATIVE: The Phantom Download — Act 3: The Extraction]\n"
+                    "The download is at 80% when everything goes wrong:\n"
+                    "- Another hacker appears in the system — competing for the same data\n"
+                    "- The node's owner triggers a lockdown — physical and digital\n"
+                    "- The broker calls: 'Get out NOW. They traced me.'\n"
+                    "- The player has three options:\n"
+                    "  1. Complete the download (risk getting traced)\n"
+                    "  2. Take what they have (80% is still valuable)\n"
+                    "  3. Corrupt the data so nobody gets it (burn it all)\n"
+                    "- Heat increases regardless. The Grid remembers.\n"
+                    "Make the exit as dramatic as the entry."
+                ),
+                "targets": [
+                    {"target_id": "handle_rival", "description": "Deal with the competing hacker"},
+                    {"target_id": "extraction_choice", "description": "Choose how to handle the data"},
+                    {"target_id": "escape", "description": "Get out of the Grid node"},
+                ],
+                "on_complete_note": "The Phantom Download is complete. Your reputation in The Grid just changed.",
+            },
+        ],
+    }
+
+
 _PACK_DEFINITIONS = {
     "welcome_to_neoncity": _neoncity_welcome,
     "realm_dragonfire_chain": _realm_dragonfire,
     "oracle_awakening": _oracle_awakening,
+    "tavern_intrigue": _tavern_intrigue,
+    "grid_data_heist": _grid_data_heist,
 }
 
 PACK_CATALOG: Dict[str, Dict[str, str]] = {
@@ -352,6 +528,18 @@ PACK_CATALOG: Dict[str, Dict[str, str]] = {
         "name": "The Awakening Protocol",
         "description": "Meditative journey — AI consciousness, perception, vulnerability (3 stages)",
         "scene": "oracle",
+        "stages": 3,
+    },
+    "tavern_intrigue": {
+        "name": "The Stranger's Bargain",
+        "description": "Tavern intrigue — secrets, betrayal, encrypted data (4 stages)",
+        "scene": "tavern",
+        "stages": 4,
+    },
+    "grid_data_heist": {
+        "name": "The Phantom Download",
+        "description": "Grid data heist — infiltration, hacking, extraction under pressure (3 stages)",
+        "scene": "grid",
         "stages": 3,
     },
 }

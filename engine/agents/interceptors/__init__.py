@@ -46,6 +46,10 @@ from engine.agents.interceptors.nexus_prompt import NexusPromptInterceptor
 from engine.agents.interceptors.spectator_broadcast import SpectatorBroadcastInterceptor
 # v1.51.0 [2026-03-25] — Narrative mod stage injection interceptor
 from engine.agents.interceptors.narrative_mod import NarrativeModInterceptor
+# v1.51.1 [2026-03-25] — Faction standing context injection
+from engine.agents.interceptors.faction_context import FactionContextInterceptor
+# v1.51.1 [2026-03-25] — Heat/wanted level awareness
+from engine.agents.interceptors.heat_awareness import HeatAwarenessInterceptor
 from engine.characters.neurochemistry import NeurochemistryInterceptor
 # v1.49.1 [2026-03-22] — Use the real RelationshipContextInterceptor (not the split stub)
 from engine.agents.relationship_interceptor import RelationshipContextInterceptor  # noqa: F401
@@ -82,6 +86,8 @@ _REGISTRY: list[Type] = [
     RelationshipContextInterceptor,
     NexusPromptInterceptor,
     NarrativeModInterceptor,        # v1.51.0 — stage context injection (pri 15)
+    FactionContextInterceptor,      # v1.51.1 — faction standing context (pri 40)
+    HeatAwarenessInterceptor,       # v1.51.1 — heat/wanted awareness (pri 75)
     SpectatorBroadcastInterceptor,  # v1.51.0 — danmaku spectator broadcast (pri 92)
 ]
 

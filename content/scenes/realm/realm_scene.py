@@ -195,7 +195,14 @@ class RealmScene(FlaskScene):
         # MCP rules
         register_realm_rules()
 
-        # v1.51.0 — FlaskScene handles Nexus connection
+    # v1.51.1 [2026-03-25] — Auto-load Dragonfire Chain story pack
+    def on_before_serve(self) -> None:
+        """Hook: load narrative story pack before serving."""
+        try:
+            from engine.mcp.narrative_packs import load_pack
+            load_pack("realm_dragonfire_chain", scene_id="realm", character_id="director")
+        except Exception:
+            pass
 
     # ── Agent helpers──
 

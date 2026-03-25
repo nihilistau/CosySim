@@ -543,6 +543,13 @@ class TavernScene(FlaskScene):
             self._event_bus_ref.subscribe("world.tick", self._on_world_tick)
             self._event_bus_ref.subscribe("world.time_change", self._on_time_change)
 
+        # v1.51.1 [2026-03-25] — Auto-load tavern intrigue story pack
+        try:
+            from engine.mcp.narrative_packs import load_pack
+            load_pack("tavern_intrigue", scene_id="tavern", character_id="bartender")
+        except Exception:
+            pass
+
     def on_shutdown(self) -> None:
         """Hook: unsubscribe from world events during shutdown."""
         if hasattr(self, "_event_bus_ref") and self._event_bus_ref:
