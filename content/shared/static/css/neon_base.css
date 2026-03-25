@@ -828,3 +828,15 @@
 .cs-footer-link:hover {
   color: var(--cs-scene-accent, rgba(255, 255, 255, 0.7));
 }
+
+/* v1.52.0 [2026-03-26] — Footer mobile breakpoint */
+@media (max-width: 640px) {
+  .cs-footer {
+    flex-wrap: wrap;
+    justify-content: center;
+    height: auto;
+    padding: 4px 8px;
+  }
+  .cs-footer-keys { display: none; }
+  .cs-footer-links { margin-left: 0; }
+}

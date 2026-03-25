@@ -231,6 +231,85 @@
 .cs-hud__heat--high     { color: #f97316; }
 .cs-hud__heat--critical { color: #f87171; font-weight: 700; }
 
+/* ── Narrative Progress Widget ───────────────────────────────────────── */
+/* v1.52.0 [2026-03-26] — Stage progress mini-bar in HUD strip */
+
+.cs-hud__narrative {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.cs-hud__narrative-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(168, 85, 247, 0.7);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.cs-hud__narrative-bar-wrap {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cs-hud__narrative-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #a855f7, #c084fc);
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+.cs-hud__narrative-text {
+  font-size: 9px;
+  color: rgba(168, 85, 247, 0.8);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Spectator/Danmaku Widget ────────────────────────────────────────── */
+
+.cs-hud__spectator {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+}
+
+.cs-hud__spectator-icon {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.cs-hud__spectator-count {
+  font-size: 10px;
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  color: rgba(6, 182, 212, 0.8);
+  font-weight: 600;
+}
+
+/* ── Mobile Breakpoints ──────────────────────────────────────────────── */
+/* v1.52.0 [2026-03-26] — Hide non-essential HUD elements at narrow widths */
+
+@media (max-width: 768px) {
+  .cs-hud__narrative { display: none !important; }
+  .cs-hud__spectator { display: none !important; }
+  .cs-hud__rep-label { display: none; }
+  .cs-hud__rep-bar   { width: 32px; }
+}
+
+@media (max-width: 480px) {
+  .cs-hud__left .cs-hud__sep,
+  .cs-hud__right .cs-hud__sep { display: none; }
+  .cs-hud__weather { display: none; }
+  .cs-hud__time    { display: none; }
+}
+
 /* ── Event history panel ───────────────────────────────────────────────── */
 
 .cs-hud__backdrop {

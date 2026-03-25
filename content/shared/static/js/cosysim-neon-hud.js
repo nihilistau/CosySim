@@ -84,6 +84,12 @@
         repValue:    $('#hud-rep-value'),
         heatIcon:    $('#hud-heat-icon'),
         heat:        $('#hud-heat'),
+        // v1.52.0 — narrative + spectator widgets
+        narrative:       $('#hud-narrative'),
+        narrativeBar:    $('#hud-narrative-bar'),
+        narrativeText:   $('#hud-narrative-text'),
+        spectator:       $('#hud-spectator'),
+        spectatorCount:  $('#hud-spectator-count'),
         // panel
         panelCredits:  $('#panel-credits'),
         panelRep:      $('#panel-rep'),
@@ -317,6 +323,25 @@
 
       // Weather
       if (state.weather) this._setWeather(state.weather);
+
+      // v1.52.0 — Narrative stage progress
+      if (state.narrative && state.narrative.stage) {
+        const n = state.narrative;
+        const pct = n.total_stages > 0 ? Math.round((n.stage_index / n.total_stages) * 100) : 0;
+        if (this._els.narrativeBar) this._els.narrativeBar.style.width = pct + '%';
+        if (this._els.narrativeText) this._els.narrativeText.textContent = n.stage;
+        if (this._els.narrative) this._els.narrative.style.display = '';
+      } else {
+        if (this._els.narrative) this._els.narrative.style.display = 'none';
+      }
+
+      // v1.52.0 — Spectator/danmaku subscriber count
+      if (state.spectator && state.spectator.subscribers > 0) {
+        if (this._els.spectatorCount) this._els.spectatorCount.textContent = state.spectator.subscribers;
+        if (this._els.spectator) this._els.spectator.style.display = '';
+      } else {
+        if (this._els.spectator) this._els.spectator.style.display = 'none';
+      }
 
       // Faction standings
       if (state.faction_standings) this._renderFactions(state.faction_standings);
