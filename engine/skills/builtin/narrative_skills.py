@@ -212,3 +212,86 @@ def advance_narrative_stage(mod_id: str) -> str:
 
     except Exception as exc:
         return f"Failed to advance stage: {exc}"
+
+
+# ──── Story Packs ────────────────────────────────────────────────────────
+# v1.51.0 [2026-03-25] — Load pre-built narrative story packs
+
+@skill(
+    pack="narrative",
+    description=(
+        "Load a pre-built story pack to start a guided narrative experience. "
+        "Available packs: welcome_to_neoncity (4 stages), "
+        "realm_dragonfire_chain (5 stages), oracle_awakening (3 stages)."
+    ),
+    tags=["narrative", "story", "pack", "load", "start"],
+    category="NARRATIVE",
+    cooldown=10.0,
+)
+def load_story_pack(
+    pack_id: str,
+    scene_id: str = "",
+    character_id: str = "",
+) -> str:
+    """Load and start a pre-built narrative story pack.
+
+    Args:
+        pack_id: Pack to load. Options: welcome_to_neoncity,
+                 realm_dragonfire_chain, oracle_awakening.
+        scene_id: Override scene (default: from pack).
+        character_id: Character running the narrative.
+
+    Returns:
+        Pack start confirmation with stage count.
+    """
+    try:
+        from engine.mcp.narrative_packs import load_pack, PACK_CATALOG
+
+        if pack_id not in PACK_CATALOG:
+            available = ", ".join(PACK_CATALOG.keys())
+            return f"Unknown pack '{pack_id}'. Available: {available}"
+
+        mod = load_pack(pack_id, scene_id=scene_id, character_id=character_id)
+        if not mod:
+            return f"Failed to load pack '{pack_id}'"
+
+        info = PACK_CATALOG[pack_id]
+        stage = mod.current_stage
+        return (
+            f"Story pack '{info['name']}' started with {mod.total_stages} stages. "
+            f"Stage 1: {stage.title} — {len(stage.targets)} targets."
+        )
+
+    except Exception as exc:
+        return f"Failed to load story pack: {exc}"
+
+
+@skill(
+    pack="narrative",
+    description="List available narrative story packs that can be loaded.",
+    tags=["narrative", "story", "pack", "list"],
+    category="NARRATIVE",
+)
+def list_story_packs() -> str:
+    """List all available pre-built narrative story packs.
+
+    Returns:
+        Formatted list of available packs.
+    """
+    try:
+        from engine.mcp.narrative_packs import list_packs
+
+        packs = list_packs()
+        if not packs:
+            return "No story packs available."
+
+        lines = [f"Available story packs: {len(packs)}"]
+        for pack_id, info in packs.items():
+            lines.append(
+                f"  [{pack_id}] {info['name']} — "
+                f"{info['stages']} stages — {info['description']}"
+            )
+        return "\n".join(lines)
+
+    except Exception as exc:
+        return f"Failed to list packs: {exc}"

@@ -75,6 +75,9 @@
   <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
   <link rel="stylesheet" href="/shared/css/neon_base.css">
   <link rel="stylesheet" href="/shared/css/cosysim-news-ticker.css">
+  {% if not hide_danmaku %}
+  <link rel="stylesheet" href="/shared/css/cosysim-danmaku.css">
+  {% endif %}
 
   {# ── Scene accent injection ─────────────────────────────────────── #}
   <style>
@@ -181,6 +184,11 @@
 
   {# ── World news ticker (bottom-of-screen crawl) ─────────────────── #}
   <script src="/shared/js/cosysim-news-ticker.js" defer></script>
+
+  {# ── Danmaku spectator overlay (F7 toggle) ─────────────────────── #}
+  {% if not hide_danmaku %}
+  <script src="/shared/js/cosysim-danmaku.js" defer></script>
+  {% endif %}
 
   {# ── Scene-specific scripts from child template ─────────────────── #}
   {% block body_scripts %}{% endblock %}
