@@ -1,28 +1,44 @@
 #!/usr/bin/env python3
 """
-OpenRoom.ai Explorer — API Client built from ARGUS intelligence
-=================================================================
+OpenRoom.ai Explorer — Comprehensive Interactive Exploration Tool
+==================================================================
 
-Interactive CLI for exploring OpenRoom.ai's Weaver API, character system,
-chatrooms, UGC creation, and storage filesystem.
+Interactive CLI and REPL for exploring OpenRoom.ai's Weaver API, character
+system, chatrooms, UGC creation, storage filesystem, credits/wallet, hidden
+conversation APIs, live danmaku viewer, and full API spec export.
 
-Usage:
+Usage (argparse):
     python -m scripts.argus.clients.openroom_client              # Menu
     python -m scripts.argus.clients.openroom_client sessions     # List chat sessions
     python -m scripts.argus.clients.openroom_client characters   # List available characters
     python -m scripts.argus.clients.openroom_client chat <sid>   # Chat in a session
     python -m scripts.argus.clients.openroom_client rooms        # List chatrooms
+    python -m scripts.argus.clients.openroom_client messages <rid> # Get room messages
+    python -m scripts.argus.clients.openroom_client danmaku <rid>  # Watch live danmaku
+    python -m scripts.argus.clients.openroom_client credits      # Check credits/wallet
+    python -m scripts.argus.clients.openroom_client conversations  # Hidden conversation API
+    python -m scripts.argus.clients.openroom_client view <rid>   # Full room viewer
     python -m scripts.argus.clients.openroom_client apps <sid>   # List available apps
     python -m scripts.argus.clients.openroom_client files <sid>  # Browse storage filesystem
     python -m scripts.argus.clients.openroom_client create       # Create a new AI character
     python -m scripts.argus.clients.openroom_client generate     # AI-generate a character
+    python -m scripts.argus.clients.openroom_client template     # Create character from template
     python -m scripts.argus.clients.openroom_client models       # Test available LLM models
+    python -m scripts.argus.clients.openroom_client export       # Export API spec as JSON
+    python -m scripts.argus.clients.openroom_client repl         # Interactive REPL
     python -m scripts.argus.clients.openroom_client full         # Run everything
 
-Version: v1.50.0 [2026-03-25]
+Version: v1.50.1 [2026-03-25]
 Author:  CosySim Team
 
-CONNECTS: ARGUS HAR analyzer, OpenRoom Weaver API
+Change Log:
+    v1.50.1 [2026-03-25] — Comprehensive expansion: danmaku viewer, credits/wallet,
+                            hidden conversation API, character-from-template, room viewer,
+                            interactive REPL, API spec export, livestream feature constants
+    v1.50.0 [2026-03-25] — Initial explorer: sessions, characters, chat, rooms, apps,
+                            files, create, generate, models, endpoints
+
+CONNECTS: ARGUS HAR analyzer, OpenRoom Weaver API, heap analysis discoveries
 """
 from __future__ import annotations
 
@@ -32,6 +48,9 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import datetime
+import traceback
 
 import requests
 
@@ -54,6 +73,44 @@ KNOWN_MODELS = ["Modern", "MiniMax-M2.5"]
 # Known character IDs
 KNOWN_CHARACTERS = {
     6: "Aoi — Silver-haired bounty hunter, cryo survivor, dangerous smile",
+}
+
+# v1.50.1 [2026-03-25] — Hidden API endpoints discovered via heap analysis
+HIDDEN_APIS = {
+    "poll_message": "/weaver/api/v1/connection/poll_message",
+    "query_conversations": "/weaver/api/v1/conversation/page_query_sorted_conversation",
+    "query_messages": "/weaver/api/v1/conversation/page_query_all_message",
+    "restart_conversation": "/weaver/api/v1/conversation/restart_conversation",
+    "accept_msg": "/weaver/api/v1/conversation/accept_msg",
+    "delete_conversation": "/weaver/api/v1/conversation/delete_conversation",
+}
+
+# v1.50.1 [2026-03-25] — Credits/wallet endpoints discovered via heap analysis
+CREDITS_APIS = {
+    "balance": "credits/fetchBalance",
+    "products": "credits/fetchProductList",
+    "history": "credits/fetchHistory",
+    "create_order": "credits/createPreOrder",
+    "order_status": "credits/fetchOrderStatus",
+}
+
+# v1.50.1 [2026-03-25] — Livestream features discovered via heap analysis
+LIVESTREAM_FEATURES = [
+    "os_livestream_add_agent",
+    "os_livestream_gift_send",
+    "os_livestream_stage_index",
+    "os_livestream_next_stage",
+    "os_livestream_play_voice",
+    "os_livestream_task_completed",
+    "send_agent_message",
+    "receive_agent_message",
+]
+
+# v1.50.1 [2026-03-25] — Live room stats snapshot (room 5050)
+ROOM_5050_STATS = {
+    "viewers": 9970,
+    "likes": 3600608,
+    "comments": 284110,
 }
 
 
@@ -299,6 +356,799 @@ def browse_files(auth: OpenRoomAuth, session_id: int, path: str = "") -> None:
         print(f"  [{ftype}] {fpath:60s} {size}")
 
 
+# ──── Danmaku / Live Comments ─────────────────────────────────────────────
+# v1.50.1 [2026-03-25] — Live danmaku viewer polling room bullet comments
+
+def get_room_messages(auth: OpenRoomAuth, room_id: int = 5050,
+                      msg_type: int = 0, limit: int = 30) -> List[Dict]:
+    """Fetch recent messages/comments from a chatroom.
+
+    Args:
+        auth: Authenticated session.
+        room_id: Chatroom ID to query.
+        msg_type: Message type filter (0=all).
+        limit: Max messages to return.
+
+    Returns:
+        List of message dicts from the API.
+
+    CONNECTS: list_rooms, watch_danmaku, view_room
+    """
+    result = _post(f"{WEAVER_API}/chatroom/message/list", {
+        "room_id": room_id,
+        "type": msg_type,
+        "limit": limit,
+    }, auth)
+    if result.get("status") != 200:
+        return []
+    return result.get("data", {}).get("messages", [])
+
+
+def get_room_comments(auth: OpenRoomAuth, room_id: int = 5050,
+                      sort: str = "newest", limit: int = 30) -> List[Dict]:
+    """Fetch comments (danmaku) from a chatroom.
+
+    Args:
+        auth: Authenticated session.
+        room_id: Chatroom ID.
+        sort: Sort order — "newest" or "popular".
+        limit: Max comments to return.
+
+    Returns:
+        List of comment dicts.
+
+    CONNECTS: watch_danmaku, view_room
+    """
+    result = _post(f"{WEAVER_API}/chatroom/comment/list", {
+        "room_id": room_id,
+        "sort": sort,
+        "limit": limit,
+    }, auth)
+    if result.get("status") != 200:
+        return []
+    return result.get("data", {}).get("comments", [])
+
+
+def watch_danmaku(auth: OpenRoomAuth, room_id: int = 5050, interval: int = 5) -> None:
+    """Poll danmaku every N seconds and display new ones.
+
+    Continuously polls the chatroom comment/message endpoints and prints
+    any new bullet comments as they appear. Press Ctrl+C to stop.
+
+    Args:
+        auth: Authenticated session.
+        room_id: Chatroom ID to watch (default 5050).
+        interval: Seconds between polls (default 5).
+
+    CONNECTS: get_room_messages, get_room_comments
+    CALLED BY: main dispatch, REPL danmaku command
+    """
+    print(f"\n=== LIVE DANMAKU — Room {room_id} (poll every {interval}s) ===")
+    print("  Press Ctrl+C to stop\n")
+
+    # Track seen message IDs to only show new ones
+    seen_ids: set = set()
+    poll_count = 0
+
+    try:
+        while True:
+            poll_count += 1
+            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+
+            # Fetch both messages and comments
+            messages = get_room_messages(auth, room_id, limit=50)
+            comments = get_room_comments(auth, room_id, limit=50)
+
+            # Merge into a single feed, dedup by ID
+            new_count = 0
+            for msg in messages:
+                mid = msg.get("message_id") or msg.get("id") or id(msg)
+                if mid not in seen_ids:
+                    seen_ids.add(mid)
+                    user = msg.get("user_name") or msg.get("nickname") or "anon"
+                    text = msg.get("content") or msg.get("text") or ""
+                    mtype = msg.get("type", "")
+                    if text:
+                        print(f"  [{timestamp}] [{mtype}] {user}: {text[:120]}")
+                        new_count += 1
+
+            for cmt in comments:
+                cid = cmt.get("comment_id") or cmt.get("id") or id(cmt)
+                if cid not in seen_ids:
+                    seen_ids.add(cid)
+                    user = cmt.get("user_name") or cmt.get("nickname") or "anon"
+                    text = cmt.get("content") or cmt.get("text") or ""
+                    likes = cmt.get("like_count", 0)
+                    if text:
+                        print(f"  [{timestamp}] [CMT] {user} ({likes} likes): {text[:120]}")
+                        new_count += 1
+
+            if new_count == 0 and poll_count % 6 == 0:
+                # Every 30s (6 polls at 5s), show heartbeat so user knows it's alive
+                print(f"  [{timestamp}] ... watching (seen {len(seen_ids)} total)")
+
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        print(f"\n  Stopped. Saw {len(seen_ids)} unique items across {poll_count} polls.")
+
+
+def show_room_messages(auth: OpenRoomAuth, room_id: int = 5050) -> None:
+    """Display recent messages from a chatroom.
+
+    Args:
+        auth: Authenticated session.
+        room_id: Chatroom to query.
+
+    CALLED BY: main dispatch, REPL messages command
+    """
+    print(f"\n=== ROOM MESSAGES — Room {room_id} ===\n")
+    messages = get_room_messages(auth, room_id, limit=30)
+    if not messages:
+        print("  No messages found (or API returned empty)")
+        return
+
+    print(f"  {len(messages)} messages:\n")
+    for msg in messages:
+        user = msg.get("user_name") or msg.get("nickname") or "anon"
+        text = msg.get("content") or msg.get("text") or ""
+        mtype = msg.get("type", "?")
+        ts = msg.get("created_at") or msg.get("timestamp") or ""
+        print(f"  [{mtype}] {user}: {text[:150]}")
+        if ts:
+            print(f"         @ {ts}")
+
+
+# ──── Credits / Wallet System ────────────────────────────────────────────
+# v1.50.1 [2026-03-25] — Credits endpoints discovered via heap analysis
+
+def explore_credits(auth: OpenRoomAuth) -> None:
+    """Probe credits/wallet endpoints discovered in heap.
+
+    Tests balance, product list, and transaction history endpoints.
+
+    CONNECTS: CREDITS_APIS constant
+    CALLED BY: main dispatch, REPL credits command
+    """
+    print("\n=== CREDITS / WALLET ===\n")
+
+    # The credits endpoints may be under a different API prefix — try multiple
+    # base paths since the heap showed them as RPC-style names
+    prefixes = [
+        f"{OPENROOM_URL}/weaver/api/v1/",
+        f"{OPENROOM_URL}/api/v1/",
+        f"{OPENROOM_URL}/",
+    ]
+
+    for name, endpoint in CREDITS_APIS.items():
+        print(f"  --- {name} ({endpoint}) ---")
+        found = False
+        for prefix in prefixes:
+            url = f"{prefix}{endpoint}"
+            result = _post(url, {}, auth)
+            status = result.get("status", 0)
+            if status == 200:
+                data = result.get("data", {})
+                print(f"    [OK]  {url}")
+                # Pretty-print the response, truncated
+                pretty = json.dumps(data, indent=2, ensure_ascii=False)
+                for line in pretty.split("\n")[:15]:
+                    print(f"    {line}")
+                if len(pretty.split("\n")) > 15:
+                    print(f"    ... ({len(pretty)} chars total)")
+                found = True
+                break
+            elif status == 404:
+                continue  # Try next prefix
+            else:
+                # Non-404 error is informative — show it
+                print(f"    [{status}] {url} -> {str(result.get('data', ''))[:100]}")
+                found = True
+                break
+        if not found:
+            print(f"    [404] Not found under any known prefix")
+        print()
+
+
+# ──── Hidden Conversation API ─────────────────────────────────────────────
+# v1.50.1 [2026-03-25] — Conversation endpoints from heap analysis
+
+def explore_conversations(auth: OpenRoomAuth) -> None:
+    """Test hidden conversation endpoints from heap analysis.
+
+    Probes the conversation management API that isn't exposed in the
+    public UI — includes sorted query, all messages, and restart.
+
+    CONNECTS: HIDDEN_APIS constant
+    CALLED BY: main dispatch, REPL conversations command
+    """
+    print("\n=== HIDDEN CONVERSATION API ===\n")
+
+    # Query sorted conversations — paginated list
+    print("  --- Sorted Conversations ---")
+    result = _post(f"{OPENROOM_URL}{HIDDEN_APIS['query_conversations']}", {
+        "page": 1,
+        "page_size": 20,
+        "sort_by": "updated_at",
+    }, auth)
+    status = result.get("status", 0)
+    data = result.get("data", {})
+    print(f"    Status: {status}")
+    if status == 200:
+        convos = data.get("conversations", data.get("list", []))
+        if isinstance(convos, list):
+            print(f"    Found {len(convos)} conversations")
+            for c in convos[:10]:
+                cid = c.get("conversation_id") or c.get("id") or "?"
+                title = c.get("title") or c.get("name") or "untitled"
+                updated = c.get("updated_at") or ""
+                msg_count = c.get("message_count") or c.get("msg_count") or "?"
+                print(f"    [{cid}] {title} (msgs: {msg_count}) {updated}")
+        else:
+            pretty = json.dumps(data, indent=2, ensure_ascii=False)
+            for line in pretty.split("\n")[:12]:
+                print(f"    {line}")
+    else:
+        print(f"    Response: {json.dumps(data, indent=2, ensure_ascii=False)[:300]}")
+    print()
+
+    # Query all messages from first conversation found
+    print("  --- All Messages (first conversation) ---")
+    result = _post(f"{OPENROOM_URL}{HIDDEN_APIS['query_messages']}", {
+        "page": 1,
+        "page_size": 10,
+    }, auth)
+    status = result.get("status", 0)
+    data = result.get("data", {})
+    print(f"    Status: {status}")
+    if status == 200:
+        msgs = data.get("messages", data.get("list", []))
+        if isinstance(msgs, list):
+            print(f"    Found {len(msgs)} messages")
+            for m in msgs[:5]:
+                role = m.get("role") or m.get("sender") or "?"
+                text = (m.get("text") or m.get("content") or "")[:100]
+                print(f"    [{role}] {text}")
+        else:
+            pretty = json.dumps(data, indent=2, ensure_ascii=False)
+            for line in pretty.split("\n")[:10]:
+                print(f"    {line}")
+    else:
+        print(f"    Response: {json.dumps(data, indent=2, ensure_ascii=False)[:300]}")
+    print()
+
+    # Poll message endpoint — may reveal real-time message queue
+    print("  --- Poll Message ---")
+    result = _post(f"{OPENROOM_URL}{HIDDEN_APIS['poll_message']}", {}, auth)
+    status = result.get("status", 0)
+    data = result.get("data", {})
+    print(f"    Status: {status}")
+    pretty = json.dumps(data, indent=2, ensure_ascii=False)
+    for line in pretty.split("\n")[:8]:
+        print(f"    {line}")
+    print()
+
+    # Show remaining hidden endpoints for reference
+    print("  --- Other Hidden Endpoints (not probed to avoid side-effects) ---")
+    for name, path in HIDDEN_APIS.items():
+        if name in ("query_conversations", "query_messages", "poll_message"):
+            continue
+        print(f"    {name:25s} {path}")
+
+
+# ──── Character Creation from Template ────────────────────────────────────
+# v1.50.1 [2026-03-25] — Template-based character creation using extracted master prompt
+
+def create_character_from_template(auth: OpenRoomAuth, description: str = "") -> None:
+    """Use OpenRoom's AI to generate a full character mod from description.
+
+    Two-step process:
+    1. POST /ugc/api/mod/generate — AI generates character spec from description
+    2. POST /ugc/api/mod/create — creates the character mod from the spec
+
+    Args:
+        auth: Authenticated session.
+        description: Character description (prompted interactively if empty).
+
+    CONNECTS: generate_character, create_character, UGC_API
+    CALLED BY: main dispatch, REPL create command
+    """
+    print("\n=== CHARACTER FROM TEMPLATE ===\n")
+
+    if not description:
+        description = input("  Describe your character: ").strip()
+    if not description:
+        print("  [!] Description required")
+        return
+
+    # Step 1: Get the default system prompt template
+    print("  [1/3] Fetching default system prompt template...")
+    result = _post(f"{UGC_API}/mod/default-system-prompt", {}, auth)
+    default_prompt = ""
+    if result.get("status") == 200:
+        default_prompt = result.get("data", {}).get("system_prompt", "")
+        print(f"    Template loaded ({len(default_prompt)} chars)")
+    else:
+        print(f"    [!] Could not fetch template: {result.get('status')}")
+        print("    Continuing without template...")
+
+    # Step 2: AI-generate the character from description + template
+    print(f"  [2/3] AI-generating character from: '{description[:60]}...'")
+    gen_result = _post(f"{UGC_API}/mod/generate", {
+        "description": description,
+        "system_prompt": default_prompt,
+    }, auth, timeout=30)
+
+    if gen_result.get("status") != 200:
+        print(f"    [!] Generation failed: {gen_result}")
+        return
+
+    gen_data = gen_result.get("data", {})
+    print(f"    Generated data keys: {list(gen_data.keys()) if isinstance(gen_data, dict) else type(gen_data)}")
+    pretty = json.dumps(gen_data, indent=2, ensure_ascii=False)
+    for line in pretty.split("\n")[:20]:
+        print(f"    {line}")
+    if len(pretty.split("\n")) > 20:
+        print(f"    ... ({len(pretty)} chars total)")
+
+    # Step 3: Create the mod from generated data
+    confirm = input("\n  Create this character? (y/N): ").strip().lower()
+    if confirm != "y":
+        print("  Cancelled.")
+        return
+
+    print("  [3/3] Creating character mod...")
+    # Build the create payload from the generation output
+    mod_payload = gen_data.get("mod", gen_data)
+    if isinstance(mod_payload, dict):
+        # Ensure required fields exist
+        mod_payload.setdefault("name", description[:30])
+        mod_payload.setdefault("identifier", description[:20].lower().replace(" ", "_"))
+        mod_payload.setdefault("description", description)
+
+    create_result = _post(f"{UGC_API}/mod/create", {
+        "mod": mod_payload,
+        "author_id": auth.user_id,
+        "published": False,
+    }, auth)
+
+    print(f"    Status: {create_result.get('status')}")
+    print(f"    Response: {json.dumps(create_result.get('data', {}), indent=2, ensure_ascii=False)[:400]}")
+
+
+# ──── Room Viewer ─────────────────────────────────────────────────────────
+# v1.50.1 [2026-03-25] — Combined room info + messages + danmaku + stats
+
+def view_room(auth: OpenRoomAuth, room_id: int = 5050) -> None:
+    """Full room view: info, messages, danmaku, stats.
+
+    Combines chatroom info, recent messages, recent comments, and
+    known stats into a single comprehensive view.
+
+    Args:
+        auth: Authenticated session.
+        room_id: Room to view (default 5050).
+
+    CONNECTS: get_room_messages, get_room_comments, list_rooms
+    CALLED BY: main dispatch, REPL view command
+    """
+    print(f"\n{'=' * 60}")
+    print(f"  ROOM VIEWER — Room {room_id}")
+    print(f"{'=' * 60}\n")
+
+    # Room info
+    print("  --- Room Info ---")
+    info_result = _post(f"{WEAVER_API}/chatroom/get_chatroom_info", {
+        "room_id": room_id,
+    }, auth)
+    if info_result.get("status") == 200:
+        info = info_result.get("data", {})
+        room_name = info.get("room_name") or info.get("name") or "?"
+        desc = info.get("description") or ""
+        online = info.get("online_count", "?")
+        host = info.get("host_name") or info.get("host", {}).get("name", "?")
+        print(f"    Name:    {room_name}")
+        print(f"    Host:    {host}")
+        print(f"    Online:  {online}")
+        if desc:
+            print(f"    Desc:    {desc[:120]}")
+        # Dump extra fields
+        for k, v in info.items():
+            if k not in ("room_name", "name", "description", "online_count",
+                         "host_name", "host") and v:
+                print(f"    {k}: {str(v)[:80]}")
+    else:
+        print(f"    [!] Could not fetch info: {info_result.get('status')}")
+    print()
+
+    # Known stats for room 5050
+    if room_id == 5050:
+        print("  --- Known Stats (snapshot) ---")
+        for k, v in ROOM_5050_STATS.items():
+            print(f"    {k:12s}: {v:>12,}")
+        print()
+
+    # Recent messages
+    print("  --- Recent Messages ---")
+    messages = get_room_messages(auth, room_id, limit=10)
+    if messages:
+        for msg in messages:
+            user = msg.get("user_name") or msg.get("nickname") or "anon"
+            text = msg.get("content") or msg.get("text") or ""
+            print(f"    {user}: {text[:100]}")
+    else:
+        print("    (no messages)")
+    print()
+
+    # Recent comments/danmaku
+    print("  --- Recent Comments (Danmaku) ---")
+    comments = get_room_comments(auth, room_id, limit=10)
+    if comments:
+        for cmt in comments:
+            user = cmt.get("user_name") or cmt.get("nickname") or "anon"
+            text = cmt.get("content") or cmt.get("text") or ""
+            likes = cmt.get("like_count", 0)
+            print(f"    {user} ({likes} likes): {text[:100]}")
+    else:
+        print("    (no comments)")
+    print()
+
+    # Livestream features reference
+    print("  --- Known Livestream Features ---")
+    for feat in LIVESTREAM_FEATURES:
+        print(f"    {feat}")
+
+
+# ──── API Spec Export ─────────────────────────────────────────────────────
+# v1.50.1 [2026-03-25] — Export full discovered API spec as structured JSON
+
+def export_api_spec(auth: OpenRoomAuth) -> None:
+    """Export everything discovered as structured JSON spec.
+
+    Writes a comprehensive API specification file including all known
+    endpoints, hidden APIs, credits system, livestream features, and
+    connection details.
+
+    Args:
+        auth: Authenticated session (used for user context in export).
+
+    CALLED BY: main dispatch, REPL export command
+    EMITS: openroom_api_spec.json file
+    """
+    print("\n=== EXPORT API SPEC ===\n")
+
+    spec = {
+        "meta": {
+            "title": "OpenRoom.ai API Specification",
+            "source": "ARGUS HAR analysis + heap analysis + live probing",
+            "exported_at": datetime.datetime.now().isoformat(),
+            "version": "v1.50.1",
+            "user_id": auth.user_id or "unknown",
+        },
+        "base_urls": {
+            "web": OPENROOM_URL,
+            "cdn": OPENROOM_CDN,
+            "websocket": OPENROOM_WS,
+            "weaver_api": WEAVER_API,
+            "ugc_api": UGC_API,
+            "storage_api": STORAGE_API,
+        },
+        "models": KNOWN_MODELS,
+        "characters": {str(k): v for k, v in KNOWN_CHARACTERS.items()},
+        "endpoints": {
+            "character_chat": {
+                "list_sessions": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/character/list_sessions",
+                    "body": {"size": "int"},
+                },
+                "start_session": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/character/start_session",
+                    "body": {"mod_id": "int", "character_id": "int"},
+                },
+                "send_msg": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/character/send_msg",
+                    "body": {"text": "str", "session_id": "int", "model": "str"},
+                },
+                "get_chat_history": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/character/get_chat_history",
+                    "body": {"session_id": "int", "cursor": "int", "size": "int",
+                             "is_asc": "bool", "start_time": "int", "end_time": "int"},
+                },
+                "get_app_list": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/character/get_app_list",
+                    "body": {"mod_id": "int", "session_id": "int"},
+                },
+                "get_mod_list": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/character/get_mod_list",
+                    "body": {},
+                },
+                "report_os_event": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/character/report_os_event",
+                    "body": {"session_id": "int", "model": "str", "os_events": "list"},
+                },
+            },
+            "chatrooms": {
+                "list": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/chatroom/room/list",
+                    "body": {"limit": "int"},
+                },
+                "message_list": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/chatroom/message/list",
+                    "body": {"room_id": "int", "type": "int", "limit": "int"},
+                },
+                "comment_list": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/chatroom/comment/list",
+                    "body": {"room_id": "int", "sort": "str", "limit": "int"},
+                },
+                "get_info": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/chatroom/get_chatroom_info",
+                    "body": {"room_id": "int"},
+                },
+            },
+            "ugc_creation": {
+                "create_mod": {
+                    "method": "POST",
+                    "path": "/ugc/api/mod/create",
+                    "body": {"mod": "object", "author_id": "str", "published": "bool"},
+                },
+                "generate_mod": {
+                    "method": "POST",
+                    "path": "/ugc/api/mod/generate",
+                    "body": {"description": "str", "system_prompt": "str"},
+                },
+                "default_system_prompt": {
+                    "method": "POST",
+                    "path": "/ugc/api/mod/default-system-prompt",
+                    "body": {},
+                },
+            },
+            "storage": {
+                "list_files": {
+                    "method": "POST",
+                    "path": "/weaver_storage/api/v1/storage/list_files",
+                    "body": {"path": "str", "session_id": "int"},
+                    "query": {"user_id": "str", "device_id": "str"},
+                },
+                "get_file": {
+                    "method": "POST",
+                    "path": "/weaver_storage/api/v1/storage/get_file",
+                    "body": {"session_id": "int", "file_path": "str"},
+                },
+                "put_text_files": {
+                    "method": "POST",
+                    "path": "/weaver_storage/api/v1/storage/put_text_files_by_json",
+                    "body": {"files": "list", "session_id": "int"},
+                },
+                "delete_files": {
+                    "method": "POST",
+                    "path": "/weaver_storage/api/v1/storage/delete_files_by_paths",
+                    "body": {"file_paths": "list", "session_id": "int"},
+                },
+            },
+            "account": {
+                "get_user_status": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/account/get_user_status",
+                    "body": {},
+                },
+                "report_events": {
+                    "method": "POST",
+                    "path": "/weaver/api/v1/event/report",
+                    "body": {"events": "list"},
+                },
+            },
+            "hidden_conversation": {
+                name: {
+                    "method": "POST",
+                    "path": path,
+                    "source": "heap_analysis",
+                }
+                for name, path in HIDDEN_APIS.items()
+            },
+            "credits": {
+                name: {
+                    "rpc_name": endpoint,
+                    "source": "heap_analysis",
+                }
+                for name, endpoint in CREDITS_APIS.items()
+            },
+        },
+        "websocket": {
+            "url": OPENROOM_WS,
+            "auth": "HS256 JWT in query param ?token=",
+            "os_param": "?os=3 (web client)",
+        },
+        "livestream_features": LIVESTREAM_FEATURES,
+        "known_room_stats": {
+            "room_5050": ROOM_5050_STATS,
+        },
+    }
+
+    # Write to file
+    out_dir = _ROOT / "data"
+    out_dir.mkdir(exist_ok=True)
+    out_path = out_dir / "openroom_api_spec.json"
+    out_path.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"  Exported to: {out_path}")
+    print(f"  Size: {out_path.stat().st_size:,} bytes")
+    print(f"  Endpoints: {sum(len(v) for v in spec['endpoints'].values())} total")
+
+
+# ──── Interactive REPL ────────────────────────────────────────────────────
+# v1.50.1 [2026-03-25] — Full interactive exploration shell
+
+REPL_HELP = """
+  OpenRoom.ai Interactive Explorer
+  ================================
+
+  rooms                     List chatrooms
+  sessions                  List chat sessions
+  characters                List character mods
+  messages <room_id>        Get messages from room (default 5050)
+  danmaku [room_id]         Watch live danmaku (default 5050, Ctrl+C to stop)
+  chat <session_id>         Get chat history for session
+  credits                   Check credits/wallet endpoints
+  conversations             List conversations (hidden API)
+  create "description"      Create character from template
+  apps <session_id>         List apps for session
+  files <session_id> [path] Browse session filesystem
+  view [room_id]            Full room viewer (default 5050)
+  models                    Test available LLM models
+  start                     Start a new chat session
+  endpoints                 Show all API endpoints
+  export                    Export full API spec as JSON
+  status                    Show auth status
+  help                      Show this help
+  exit / quit               Exit REPL
+"""
+
+
+def run_repl(auth: OpenRoomAuth) -> None:
+    """Interactive REPL for exploring OpenRoom.ai APIs.
+
+    Provides a command loop with all exploration commands available
+    as simple typed commands.
+
+    Args:
+        auth: Authenticated session.
+
+    CONNECTS: All exploration functions
+    CALLED BY: main dispatch
+    """
+    print("\n" + "=" * 60)
+    print("  OPENROOM.AI INTERACTIVE EXPLORER")
+    print("  Type 'help' for commands, 'exit' to quit")
+    print("=" * 60)
+    print(f"  Auth: {auth.status()}")
+    print()
+
+    while True:
+        try:
+            raw = input("openroom> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Goodbye.")
+            break
+
+        if not raw:
+            continue
+
+        # Parse command and arguments
+        parts = raw.split(None, 1)
+        cmd = parts[0].lower()
+        arg_str = parts[1] if len(parts) > 1 else ""
+
+        try:
+            if cmd in ("exit", "quit", "q"):
+                print("  Goodbye.")
+                break
+
+            elif cmd == "help":
+                print(REPL_HELP)
+
+            elif cmd == "status":
+                print(f"  Auth: {auth.status()}")
+
+            elif cmd == "rooms":
+                list_rooms(auth)
+
+            elif cmd == "sessions":
+                list_sessions(auth)
+
+            elif cmd == "characters":
+                list_characters(auth)
+
+            elif cmd == "messages":
+                rid = int(arg_str) if arg_str else 5050
+                show_room_messages(auth, rid)
+
+            elif cmd == "danmaku":
+                rid = int(arg_str) if arg_str else 5050
+                watch_danmaku(auth, rid)
+
+            elif cmd == "chat":
+                if not arg_str:
+                    print("  Usage: chat <session_id>")
+                else:
+                    get_chat_history(auth, int(arg_str))
+
+            elif cmd == "credits":
+                explore_credits(auth)
+
+            elif cmd == "conversations":
+                explore_conversations(auth)
+
+            elif cmd == "create":
+                # Accept quoted or unquoted description
+                desc = arg_str.strip("\"'")
+                create_character_from_template(auth, desc)
+
+            elif cmd == "apps":
+                if not arg_str:
+                    print("  Usage: apps <session_id>")
+                else:
+                    list_apps(auth, int(arg_str))
+
+            elif cmd == "files":
+                file_parts = arg_str.split(None, 1)
+                if not file_parts:
+                    print("  Usage: files <session_id> [path]")
+                else:
+                    sid = int(file_parts[0])
+                    path = file_parts[1] if len(file_parts) > 1 else ""
+                    browse_files(auth, sid, path)
+
+            elif cmd == "view":
+                rid = int(arg_str) if arg_str else 5050
+                view_room(auth, rid)
+
+            elif cmd == "models":
+                test_models(auth)
+
+            elif cmd == "start":
+                start_session(auth)
+
+            elif cmd == "endpoints":
+                show_endpoints()
+
+            elif cmd == "export":
+                export_api_spec(auth)
+
+            elif cmd == "generate":
+                generate_character(auth)
+
+            elif cmd == "full":
+                show_endpoints()
+                list_sessions(auth)
+                list_rooms(auth)
+                list_characters(auth)
+                explore_credits(auth)
+                explore_conversations(auth)
+
+            else:
+                print(f"  Unknown command: {cmd}")
+                print("  Type 'help' for available commands")
+
+        except ValueError as exc:
+            print(f"  [!] Invalid argument: {exc}")
+        except KeyboardInterrupt:
+            print()  # Clean line after Ctrl+C in danmaku etc.
+        except Exception as exc:
+            print(f"  [!] Error: {exc}")
+            traceback.print_exc()
+
+
+# ──── Character Creation (Original) ──────────────────────────────────────
+
 def create_character(auth: OpenRoomAuth) -> None:
     """Create a new AI character (interactive)."""
     print("\n=== CREATE CHARACTER ===\n")
@@ -435,6 +1285,19 @@ def show_endpoints() -> None:
         "WebSocket": [
             ("WSS", "connection.openroom.ai/connection/ws?os=3&token=<JWT>", "Real-time connection", "HS256 JWT"),
         ],
+        # v1.50.1 [2026-03-25] — Hidden endpoints from heap analysis
+        "Hidden — Conversations (heap)": [
+            ("POST", path, name.replace("_", " ").title(), "heap_analysis")
+            for name, path in HIDDEN_APIS.items()
+        ],
+        "Hidden — Credits (heap)": [
+            ("RPC", endpoint, name.replace("_", " ").title(), "heap_analysis")
+            for name, endpoint in CREDITS_APIS.items()
+        ],
+        "Hidden — Livestream Features (heap)": [
+            ("EVT", feat, "Livestream event", "heap_analysis")
+            for feat in LIVESTREAM_FEATURES
+        ],
     }
 
     for group, eps in endpoints.items():
@@ -446,16 +1309,24 @@ def show_endpoints() -> None:
 
 # ──── Main ───────────────────────────────────────────────────────────────────
 
+# v1.50.1 [2026-03-25] — Expanded main with all new commands + REPL
 def main() -> None:
-    parser = argparse.ArgumentParser(description="OpenRoom.ai Explorer")
+    parser = argparse.ArgumentParser(description="OpenRoom.ai Explorer v1.50.1")
     parser.add_argument("command", nargs="?", default="menu",
                         choices=["menu", "sessions", "characters", "chat", "rooms",
-                                 "apps", "files", "create", "generate", "models",
-                                 "start", "endpoints", "full"])
-    parser.add_argument("session_id", nargs="?", type=int, help="Session ID for chat/apps/files")
+                                 "messages", "danmaku", "credits", "conversations",
+                                 "view", "template", "apps", "files", "create",
+                                 "generate", "models", "start", "endpoints",
+                                 "export", "repl", "full"])
+    parser.add_argument("session_id", nargs="?", type=int,
+                        help="Session/Room ID for chat/apps/files/messages/danmaku/view")
     parser.add_argument("--har", type=Path, help="HAR file for auth tokens")
     parser.add_argument("--model", default="Modern", help="LLM model name")
     parser.add_argument("--path", default="", help="File path for browse")
+    parser.add_argument("--interval", type=int, default=5,
+                        help="Poll interval for danmaku (seconds)")
+    parser.add_argument("--description", default="",
+                        help="Character description for template command")
     args = parser.parse_args()
 
     # Auto-find HAR
@@ -474,8 +1345,8 @@ def main() -> None:
 
     print()
     print("=" * 60)
-    print("  OPENROOM.AI EXPLORER")
-    print("  Built from ARGUS HAR Intelligence")
+    print("  OPENROOM.AI EXPLORER v1.50.1")
+    print("  Built from ARGUS HAR + Heap Intelligence")
     print("=" * 60)
     print(f"  Auth: {auth.status()}")
     print(f"  HAR:  {har_path}")
@@ -483,18 +1354,26 @@ def main() -> None:
 
     if args.command == "menu":
         print("  Commands:")
-        print("    sessions     List all chat sessions")
-        print("    characters   List character mods")
-        print("    chat <sid>   Get chat history for a session")
-        print("    rooms        List chatrooms")
-        print("    apps <sid>   List apps for a session")
-        print("    files <sid>  Browse session filesystem")
-        print("    create       Create a new AI character (interactive)")
-        print("    generate     AI-generate a character")
-        print("    models       Test available LLM models")
-        print("    start        Start a new session")
-        print("    endpoints    Show all API endpoints")
-        print("    full         Run everything")
+        print("    sessions          List all chat sessions")
+        print("    characters        List character mods")
+        print("    chat <sid>        Get chat history for a session")
+        print("    rooms             List chatrooms")
+        print("    messages [rid]    Get messages from room (default 5050)")
+        print("    danmaku [rid]     Watch live danmaku (default 5050)")
+        print("    view [rid]        Full room viewer (default 5050)")
+        print("    credits           Check credits/wallet endpoints")
+        print("    conversations     Explore hidden conversation API")
+        print("    template          Create character from AI template")
+        print("    apps <sid>        List apps for a session")
+        print("    files <sid>       Browse session filesystem")
+        print("    create            Create a new AI character (interactive)")
+        print("    generate          AI-generate a character")
+        print("    models            Test available LLM models")
+        print("    start             Start a new session")
+        print("    endpoints         Show all API endpoints")
+        print("    export            Export full API spec as JSON")
+        print("    repl              Interactive exploration shell")
+        print("    full              Run everything")
         return
 
     if args.command == "sessions":
@@ -508,6 +1387,22 @@ def main() -> None:
             print("  Usage: openroom_client chat <session_id>")
     elif args.command == "rooms":
         list_rooms(auth)
+    # v1.50.1 [2026-03-25] — New command dispatch entries
+    elif args.command == "messages":
+        rid = args.session_id if args.session_id else 5050
+        show_room_messages(auth, rid)
+    elif args.command == "danmaku":
+        rid = args.session_id if args.session_id else 5050
+        watch_danmaku(auth, rid, interval=args.interval)
+    elif args.command == "view":
+        rid = args.session_id if args.session_id else 5050
+        view_room(auth, rid)
+    elif args.command == "credits":
+        explore_credits(auth)
+    elif args.command == "conversations":
+        explore_conversations(auth)
+    elif args.command == "template":
+        create_character_from_template(auth, args.description)
     elif args.command == "apps":
         if args.session_id:
             list_apps(auth, args.session_id)
@@ -528,11 +1423,17 @@ def main() -> None:
         start_session(auth)
     elif args.command == "endpoints":
         show_endpoints()
+    elif args.command == "export":
+        export_api_spec(auth)
+    elif args.command == "repl":
+        run_repl(auth)
     elif args.command == "full":
         show_endpoints()
         list_sessions(auth)
         list_rooms(auth)
         list_characters(auth)
+        explore_credits(auth)
+        explore_conversations(auth)
 
 
 if __name__ == "__main__":
