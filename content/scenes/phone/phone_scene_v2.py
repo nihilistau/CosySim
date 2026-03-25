@@ -6,6 +6,7 @@ Multi-contact iOS-style messaging scene backed by PhoneDB.
 Features
 --------
 * Thread-based messaging:  DMs + group chats
+* Group chat: multi-character group conversations with context-aware replies
 * MCP governor pipeline on every AI reply
 * MCPTimer-driven autonomous agent texting (per character)
 * Background ticker thread (10 s interval)
@@ -13,6 +14,14 @@ Features
 * Voice / photo / video message cards
 * Real-time Socket.IO events to the browser
 * Data-wipe admin route (messages + media, keeps characters)
+
+Version: v1.51.1 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.51.1 [2026-03-25] — Group chat: multi-character group conversations
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene
+    v1.52.0 [2026-03-22] — 0xGH0ST investigation arc, world events, news feed
 """
 from __future__ import annotations
 
@@ -186,6 +195,10 @@ class PhoneSceneV2(FlaskScene):
 
         # Per-character governor adapters  {char_id: _PhoneCharacterAgent}
         self._agents: Dict[str, _PhoneCharacterAgent] = {}
+
+        # v1.51.1 [2026-03-25] — Group chat thread cache
+        # Structure: {thread_id: {"name": "...", "character_ids": [...], "messages": [...]}}
+        self._group_threads: Dict[str, Dict] = {}
 
         # Autonomous-texting timer state  {char_id: deadline_epoch}
         self._autotxt_deadlines: Dict[str, float] = {}
@@ -614,6 +627,141 @@ class PhoneSceneV2(FlaskScene):
             result["text"] = "(I'm having trouble replying right now. Try again in a moment.)"
             return result
 
+    # ── Group Chat Reply ──────────────────────────────────────────────────
+
+    # v1.51.1 [2026-03-25] — Group chat: context-aware multi-character replies
+    # CONNECTS: _PhoneCharacterAgent, _generate_reply, phone_db
+    # CALLED BY: group_message route, group_reply route
+    # EMITS: group_message Socket.IO event
+    def _generate_group_reply(self, char_id: str, thread_id: str,
+                              group_name: str, member_ids: List[str]) -> Dict[str, Any]:
+        """Generate a group-context-aware reply from a character.
+
+        Builds a group chat system prompt that includes the group name,
+        other participants, and recent message history so the character
+        can respond naturally to the ongoing conversation.
+
+        Args:
+            char_id: The character producing the reply.
+            thread_id: The group thread ID.
+            group_name: Display name of the group chat.
+            member_ids: All character IDs in the group (including 'user').
+
+        Returns:
+            Rich reply dict with keys: text, mood, image_requests,
+            action_tags, voice_style, response_id.
+        """
+        from engine.agents.stream_processor import strip_token_artifacts
+
+        # Build the participant name list (excluding the replying character)
+        other_names: List[str] = []
+        for mid in member_ids:
+            if mid == char_id:
+                continue
+            if mid == "user":
+                other_names.append("Player")
+                continue
+            try:
+                char_row = self.db.get_character(mid)
+                other_names.append((char_row or {}).get("name", mid))
+            except Exception:
+                other_names.append(mid)
+
+        participant_str = ", ".join(other_names) if other_names else "others"
+
+        # Fetch recent messages for group context (last 30 for richer context)
+        recent_msgs: List[Dict[str, str]] = []
+        try:
+            raw_msgs = self.phone_db.get_messages(thread_id, limit=30)
+            for m in raw_msgs:
+                sender = m.get("sender_id", "")
+                if sender == "user":
+                    display = "Player"
+                elif sender == "system":
+                    continue  # Skip system messages in context
+                else:
+                    try:
+                        sr = self.db.get_character(sender)
+                        display = (sr or {}).get("name", sender)
+                    except Exception:
+                        display = sender
+                recent_msgs.append({
+                    "display": display,
+                    "content": m.get("content", ""),
+                    "role": "user" if sender == "user" else "assistant",
+                })
+        except Exception as exc:
+            logger.debug("Could not load group history for %s: %s", thread_id, exc)
+
+        # Build the group context block for the system prompt
+        recent_lines = []
+        for rm in recent_msgs[-20:]:  # Show last 20 messages in context window
+            recent_lines.append(f"  {rm['display']}: \"{rm['content']}\"")
+        recent_block = "\n".join(recent_lines) if recent_lines else "  (No messages yet)"
+
+        group_context = (
+            f"[GROUP CHAT: \"{group_name}\"]\n"
+            f"You are in a group conversation with: {participant_str}.\n"
+            f"Recent messages:\n{recent_block}\n\n"
+            f"Respond naturally as yourself. React to what others said. Don't repeat yourself.\n"
+            f"Address specific people by name when relevant."
+        )
+
+        # Build conversation history for the governor pipeline
+        history: List[Dict[str, str]] = []
+        for rm in recent_msgs:
+            history.append({"role": rm["role"], "content": rm["content"]})
+        # Remove the last entry if it would be a duplicate of the prompt
+        if history and history[-1].get("role") == "user":
+            last_content = history[-1].get("content", "")
+        else:
+            last_content = ""
+
+        # The "user message" to the character is the group context + last user message
+        prompt = last_content if last_content else "(Continue the group conversation naturally.)"
+
+        result = {
+            "text": "", "mood": None, "image_requests": [],
+            "action_tags": [], "voice_style": None, "response_id": None,
+        }
+        try:
+            from engine.mcp.comms_framework import get_governor
+            agent = self._agents.get(char_id)
+            if agent is None:
+                agent = _PhoneCharacterAgent(char_id, self)
+                self._agents[char_id] = agent
+            agent._refresh()
+            agent._last_processed = None
+
+            gov = get_governor(agent, scene=SCENE_ID)
+            # Inject the group context as system_override by prepending to history
+            group_history = [{"role": "system", "content": group_context}] + history
+            text = gov.reply(prompt, chain_id=None, history=group_history or None)
+            text = strip_token_artifacts(text or "")
+            result["text"] = text
+
+            # Extract rich metadata from processed response
+            proc = getattr(agent, "_last_processed", None)
+            if proc:
+                result["mood"] = proc.mood_tags[0] if proc.mood_tags else None
+                result["image_requests"] = list(proc.image_requests)
+                result["action_tags"] = list(proc.action_tags)
+                result["voice_style"] = proc.voice_style
+                result["response_id"] = proc.response_id or None
+                if result["mood"]:
+                    try:
+                        fw = get_framework()
+                        char_node = fw.get_character(char_id)
+                        if char_node:
+                            char_node.update_state({"mood": result["mood"]})
+                    except Exception:
+                        pass
+            return result
+        except Exception as exc:
+            logger.error("[%s] Group reply failed (operation=group_chat, agent=%s): %s", SCENE_ID, char_id, exc)
+            result["text"] = "(I'm having trouble replying right now. Try again in a moment.)"
+            return result
+
     # ── Socket.IO ────────────────────────────────────────────────────────────
 
     # v1.52.0 [2026-03-22] — Room-targeted Socket.IO emission
@@ -761,6 +909,13 @@ class PhoneSceneV2(FlaskScene):
             tid = data.get("thread_id", "")
             emit("typing", data, to=f"thread_{tid}", include_self=False)
 
+        # v1.51.1 [2026-03-25] — Group chat: forward group_typing events to room
+        @sio.on("group_typing")
+        def _group_typing(data):
+            tid = data.get("thread_id", "")
+            if tid:
+                emit("group_typing", data, to=f"thread_{tid}", include_self=False)
+
     # ── HTTP routes ──────────────────────────────────────────────────────────
 
     def _register_routes(self) -> None:
@@ -843,6 +998,458 @@ class PhoneSceneV2(FlaskScene):
                 return jsonify({"ok": True, "thread_id": tid})
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
+
+        # ── Group Chat ───────────────────────────────────────────────────────
+        # v1.51.1 [2026-03-25] — Group chat: multi-character group conversations
+        # CONNECTS: PhoneDB.create_group, _generate_group_reply, _PhoneCharacterAgent
+        # CALLED BY: Frontend group chat UI
+        # EMITS: group_message, group_typing, thread_updated Socket.IO events
+
+        @app.route("/api/threads/create_group", methods=["POST"])
+        def create_group_chat():
+            """Create a group chat thread with multiple characters.
+
+            Body: {"name": "Group Name", "character_ids": ["lola", "viktor", "aria"]}
+            Returns: {"thread_id": "...", "name": "...", "characters": [...]}
+            """
+            body = request.get_json(force=True, silent=True) or {}
+            name = str(body.get("name", "Group Chat")).strip()
+            character_ids = list(body.get("character_ids", []))
+
+            if not character_ids:
+                return jsonify({"ok": False, "error": "character_ids required"}), 400
+            if len(character_ids) < 2:
+                return jsonify({"ok": False, "error": "Group chat requires at least 2 characters"}), 400
+
+            try:
+                # Create the group thread in the DB (always includes "user" as member)
+                thread_id = self.phone_db.create_group(name, character_ids)
+
+                # Ensure all characters have agent adapters
+                for cid in character_ids:
+                    if cid not in self._agents:
+                        self._agents[cid] = _PhoneCharacterAgent(cid, self)
+
+                # Cache group thread metadata for fast lookup
+                self._group_threads[thread_id] = {
+                    "name": name,
+                    "character_ids": character_ids,
+                    "messages": [],
+                }
+
+                # Build character info for response
+                characters = []
+                for cid in character_ids:
+                    char_row = self.db.get_character(cid)
+                    characters.append({
+                        "id": cid,
+                        "name": (char_row or {}).get("name", cid),
+                        "avatar": (char_row or {}).get("avatar_url")
+                                  or (char_row or {}).get("image_url") or "",
+                    })
+
+                logger.info(
+                    "[%s] Group chat created: '%s' with %d characters (operation=group_create, thread=%s)",
+                    SCENE_ID, name, len(character_ids), thread_id,
+                )
+
+                # Emit a system message announcing the group creation
+                self.phone_db.save_message(
+                    thread_id=thread_id,
+                    sender_id="system",
+                    content=f"Group chat \"{name}\" created with {', '.join(c['name'] for c in characters)}.",
+                    msg_type="system",
+                )
+
+                return jsonify({
+                    "ok": True,
+                    "thread_id": thread_id,
+                    "name": name,
+                    "characters": characters,
+                })
+            except Exception as exc:
+                logger.error("[%s] create_group_chat failed (operation=group_create): %s", SCENE_ID, exc)
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/threads/<thread_id>/group_message", methods=["POST"])
+        def send_group_message(thread_id: str):
+            """Send a message in a group thread — broadcasts to all characters.
+
+            Body: {"content": "Hello everyone!"}
+            Saves the player's message, then spawns a background worker that
+            iterates through every character member and generates a group-
+            context-aware reply from each. Replies are emitted via Socket.IO
+            as they arrive (staggered with random typing delays).
+
+            Returns: {"sent": true, "thread_id": "..."}
+            """
+            body = request.get_json(force=True, silent=True) or {}
+            content = str(body.get("content", "")).strip()
+
+            if not content:
+                return jsonify({"ok": False, "error": "content required"}), 400
+
+            # Verify the thread exists and is a group thread
+            thread_info = self.phone_db.get_thread(thread_id)
+            if not thread_info:
+                return jsonify({"ok": False, "error": "Thread not found"}), 404
+            if thread_info.get("type") != "group":
+                return jsonify({"ok": False, "error": "Not a group thread — use /api/thread/<id>/send for DMs"}), 400
+
+            # Save the player's message
+            try:
+                user_msg = self.phone_db.save_message(
+                    thread_id=thread_id,
+                    sender_id="user",
+                    content=content,
+                    msg_type="text",
+                )
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+            # Emit the player's message to the group room
+            _room = f"thread_{thread_id}"
+            self._emit("group_message", {
+                "thread_id": thread_id,
+                "message": user_msg,
+                "sender": "Player",
+                "sender_id": "user",
+            }, room=_room)
+            self._emit("message_new", {"thread_id": thread_id, "message": user_msg}, room=_room)
+
+            # Gather group info
+            group_name = thread_info.get("name") or "Group Chat"
+            member_ids = thread_info.get("members", [])
+            char_members = [m for m in member_ids if m != "user"]
+
+            logger.info(
+                "[%s] Group message sent to '%s' (%d chars) (operation=group_message, thread=%s)",
+                SCENE_ID, group_name, len(char_members), thread_id,
+            )
+
+            # Background worker: generate replies from each character
+            def _group_reply_worker():
+                with self._tick_lock:
+                    # Randomize reply order for natural feel
+                    reply_order = list(char_members)
+                    random.shuffle(reply_order)
+
+                    for char_id in reply_order:
+                        try:
+                            # Emit typing indicator
+                            self._emit("group_typing", {
+                                "thread_id": thread_id,
+                                "char_id": char_id,
+                                "active": True,
+                            }, room=_room)
+                            self._emit("typing", {
+                                "thread_id": thread_id,
+                                "char_id": char_id,
+                                "active": True,
+                            }, room=_room)
+
+                            # Staggered delay for natural conversation flow
+                            time.sleep(random.uniform(1.0, 4.0))
+
+                            # Generate context-aware group reply
+                            reply = self._generate_group_reply(
+                                char_id, thread_id, group_name, member_ids,
+                            )
+                            reply_text = reply.get("text", "").strip()
+                            if not reply_text:
+                                self._emit("group_typing", {
+                                    "thread_id": thread_id,
+                                    "char_id": char_id,
+                                    "active": False,
+                                }, room=_room)
+                                continue
+
+                            # Look up character display name
+                            char_row = self.db.get_character(char_id)
+                            char_name = (char_row or {}).get("name", char_id)
+
+                            # Build metadata from rich reply
+                            metadata = {}
+                            if reply.get("mood"):
+                                metadata["mood"] = reply["mood"]
+
+                            # Save the AI message to DB
+                            ai_msg = self.phone_db.save_message(
+                                thread_id=thread_id,
+                                sender_id=char_id,
+                                content=reply_text,
+                                msg_type="text",
+                                metadata=metadata if metadata else None,
+                                response_id=reply.get("response_id"),
+                                conversation_id=f"phone_{char_id}_group_{thread_id}",
+                            )
+
+                            # Stop typing indicator
+                            self._emit("group_typing", {
+                                "thread_id": thread_id,
+                                "char_id": char_id,
+                                "active": False,
+                            }, room=_room)
+                            self._emit("typing", {
+                                "thread_id": thread_id,
+                                "char_id": char_id,
+                                "active": False,
+                            }, room=_room)
+
+                            # Emit the group message
+                            self._emit("group_message", {
+                                "thread_id": thread_id,
+                                "message": ai_msg,
+                                "sender": char_name,
+                                "sender_id": char_id,
+                                "mood": reply.get("mood"),
+                            }, room=_room)
+                            self._emit("message_new", {
+                                "thread_id": thread_id,
+                                "message": ai_msg,
+                                "char_name": char_name,
+                                "mood": reply.get("mood"),
+                            }, room=_room)
+
+                            # Handle image requests from the reply
+                            for img_prompt in reply.get("image_requests", []):
+                                try:
+                                    from content.simulation.services.comfyui_client import get_comfyui_client
+                                    comfy = get_comfyui_client()
+                                    image_path = comfy.generate_image(
+                                        prompt=f"{char_name} selfie: {img_prompt}",
+                                        character_name=char_name,
+                                    )
+                                    if image_path:
+                                        img_msg = self.phone_db.save_message(
+                                            thread_id=thread_id,
+                                            sender_id=char_id,
+                                            content=img_prompt,
+                                            msg_type="photo",
+                                            metadata={"image_path": str(image_path), "generated": True},
+                                        )
+                                        self._emit("group_message", {
+                                            "thread_id": thread_id,
+                                            "message": img_msg,
+                                            "sender": char_name,
+                                            "sender_id": char_id,
+                                        }, room=_room)
+                                except Exception as img_exc:
+                                    logger.debug("Group image generation failed: %s", img_exc)
+
+                            # Emit framework event
+                            try:
+                                get_framework().emit_event("message_sent", {
+                                    "scene_id": SCENE_ID, "char_id": char_id,
+                                    "type": "group_reply", "thread_id": thread_id,
+                                    "mood": reply.get("mood"),
+                                }, source=SCENE_ID)
+                            except Exception:
+                                pass
+
+                            self._emit("thread_updated", {"thread_id": thread_id}, room=_room)
+
+                            # Small gap between character replies for readability
+                            time.sleep(random.uniform(0.5, 1.5))
+
+                        except Exception as exc:
+                            logger.error(
+                                "[%s] Group reply worker error (operation=group_chat, agent=%s): %s",
+                                SCENE_ID, char_id, exc,
+                            )
+                            self._emit("group_typing", {
+                                "thread_id": thread_id,
+                                "char_id": char_id,
+                                "active": False,
+                            }, room=_room)
+
+            threading.Thread(target=_group_reply_worker, daemon=True, name="group-reply-worker").start()
+            return jsonify({"ok": True, "sent": True, "thread_id": thread_id, "message": user_msg})
+
+        @app.route("/api/threads/<thread_id>/group_messages")
+        def get_group_messages(thread_id: str):
+            """Get all messages in a group thread.
+
+            Returns: {"messages": [{"sender": "...", "content": "...", "timestamp": "..."}]}
+            """
+            # Verify the thread exists
+            thread_info = self.phone_db.get_thread(thread_id)
+            if not thread_info:
+                return jsonify({"ok": False, "error": "Thread not found"}), 404
+
+            limit = int(request.args.get("limit", 100))
+            before = request.args.get("before")
+            try:
+                raw_msgs = self.phone_db.get_messages(thread_id, limit=limit, before=before)
+                self.phone_db.mark_read(thread_id)
+
+                # Enrich messages with sender display names
+                messages = []
+                for m in raw_msgs:
+                    sender_id = m.get("sender_id", "")
+                    if sender_id == "user":
+                        sender_name = "Player"
+                    elif sender_id == "system":
+                        sender_name = "System"
+                    else:
+                        try:
+                            char_row = self.db.get_character(sender_id)
+                            sender_name = (char_row or {}).get("name", sender_id)
+                        except Exception:
+                            sender_name = sender_id
+
+                    messages.append({
+                        "id": m.get("id", ""),
+                        "sender": sender_name,
+                        "sender_id": sender_id,
+                        "content": m.get("content", ""),
+                        "timestamp": m.get("created_at", ""),
+                        "msg_type": m.get("msg_type", "text"),
+                        "metadata": m.get("metadata", {}),
+                    })
+
+                return jsonify({
+                    "ok": True,
+                    "thread_id": thread_id,
+                    "group_name": thread_info.get("name", "Group Chat"),
+                    "members": thread_info.get("members", []),
+                    "messages": messages,
+                })
+            except Exception as exc:
+                logger.error("[%s] get_group_messages failed (operation=group_messages): %s", SCENE_ID, exc)
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/threads/<thread_id>/group_reply", methods=["POST"])
+        def trigger_group_reply(thread_id: str):
+            """Trigger a specific character's reply in the group.
+
+            Body: {"character_id": "lola"}
+            The character sees all recent group messages and responds using
+            the full MCP governor pipeline with group context.
+
+            Returns: The AI message dict on success.
+            """
+            body = request.get_json(force=True, silent=True) or {}
+            char_id = str(body.get("character_id", "")).strip()
+
+            if not char_id:
+                return jsonify({"ok": False, "error": "character_id required"}), 400
+
+            # Verify the thread exists and is a group
+            thread_info = self.phone_db.get_thread(thread_id)
+            if not thread_info:
+                return jsonify({"ok": False, "error": "Thread not found"}), 404
+            if thread_info.get("type") != "group":
+                return jsonify({"ok": False, "error": "Not a group thread"}), 400
+
+            # Verify the character is a member of this group
+            members = thread_info.get("members", [])
+            if char_id not in members:
+                return jsonify({"ok": False, "error": f"Character '{char_id}' is not a member of this group"}), 400
+
+            group_name = thread_info.get("name") or "Group Chat"
+            _room = f"thread_{thread_id}"
+
+            logger.info(
+                "[%s] Group reply triggered for %s in '%s' (operation=group_reply, thread=%s)",
+                SCENE_ID, char_id, group_name, thread_id,
+            )
+
+            # Generate reply in a background thread so we can return fast
+            def _single_reply_worker():
+                with self._tick_lock:
+                    try:
+                        # Typing indicator
+                        self._emit("group_typing", {
+                            "thread_id": thread_id,
+                            "char_id": char_id,
+                            "active": True,
+                        }, room=_room)
+                        self._emit("typing", {
+                            "thread_id": thread_id,
+                            "char_id": char_id,
+                            "active": True,
+                        }, room=_room)
+
+                        time.sleep(random.uniform(0.5, 2.5))
+
+                        # Generate the reply
+                        reply = self._generate_group_reply(
+                            char_id, thread_id, group_name, members,
+                        )
+                        reply_text = reply.get("text", "").strip()
+
+                        # Stop typing
+                        self._emit("group_typing", {
+                            "thread_id": thread_id,
+                            "char_id": char_id,
+                            "active": False,
+                        }, room=_room)
+                        self._emit("typing", {
+                            "thread_id": thread_id,
+                            "char_id": char_id,
+                            "active": False,
+                        }, room=_room)
+
+                        if not reply_text:
+                            return
+
+                        char_row = self.db.get_character(char_id)
+                        char_name = (char_row or {}).get("name", char_id)
+
+                        metadata = {}
+                        if reply.get("mood"):
+                            metadata["mood"] = reply["mood"]
+
+                        ai_msg = self.phone_db.save_message(
+                            thread_id=thread_id,
+                            sender_id=char_id,
+                            content=reply_text,
+                            msg_type="text",
+                            metadata=metadata if metadata else None,
+                            response_id=reply.get("response_id"),
+                            conversation_id=f"phone_{char_id}_group_{thread_id}",
+                        )
+
+                        # Emit to group
+                        self._emit("group_message", {
+                            "thread_id": thread_id,
+                            "message": ai_msg,
+                            "sender": char_name,
+                            "sender_id": char_id,
+                            "mood": reply.get("mood"),
+                        }, room=_room)
+                        self._emit("message_new", {
+                            "thread_id": thread_id,
+                            "message": ai_msg,
+                            "char_name": char_name,
+                            "mood": reply.get("mood"),
+                        }, room=_room)
+                        self._emit("thread_updated", {"thread_id": thread_id}, room=_room)
+
+                        # Framework event
+                        try:
+                            get_framework().emit_event("message_sent", {
+                                "scene_id": SCENE_ID, "char_id": char_id,
+                                "type": "group_reply", "thread_id": thread_id,
+                                "mood": reply.get("mood"),
+                            }, source=SCENE_ID)
+                        except Exception:
+                            pass
+
+                    except Exception as exc:
+                        logger.error(
+                            "[%s] Group single reply failed (operation=group_reply, agent=%s): %s",
+                            SCENE_ID, char_id, exc,
+                        )
+                        self._emit("group_typing", {
+                            "thread_id": thread_id,
+                            "char_id": char_id,
+                            "active": False,
+                        }, room=_room)
+
+            threading.Thread(target=_single_reply_worker, daemon=True, name=f"group-reply-{char_id}").start()
+            return jsonify({"ok": True, "thread_id": thread_id, "character_id": char_id, "triggered": True})
 
         # ── Messages ─────────────────────────────────────────────────────────
         @app.route("/api/thread/<thread_id>/messages")
