@@ -1,0 +1,44 @@
+{%- extends "neon_base.html" -%}
+{%- set scene_key = "neonos" -%}
+{%- set scene_display_name = "NEON OS" -%}
+{%- set scene_accent = "#00e5ff" -%}
+{%- set scene_accent_rgb = "0 229 255" -%}
+{%- set hide_particles = true -%}
+
+{#
+  NEON OS — NeonCity Virtual Desktop Shell
+  =========================================
+  All CosySim scenes as apps in a desktop-like browser UI with
+  draggable windows, taskbar, and an app launcher grid.
+
+  v1.51.0 [2026-03-25] — Full desktop shell with window manager
+  v1.0.0  [2026-03-25] — Initial scaffold via Creation Kit
+#}
+
+{% block head_css %}
+  <link rel="stylesheet" href="/shared/css/cosysim-desktop.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='neonos.css') }}">
+{% endblock %}
+
+{% block scene_content %}
+<div id="neon-desktop" class="neon-desktop">
+
+  <!-- ── App Launcher Grid ──────────────────────────────────────── -->
+  <div id="neon-app-launcher" class="neon-app-launcher"></div>
+
+  <!-- ── Taskbar ────────────────────────────────────────────────── -->
+  <div id="neon-taskbar" class="neon-taskbar">
+    <div class="neon-taskbar__apps" id="taskbar-apps"></div>
+    <div class="neon-taskbar__clock" id="taskbar-clock"></div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="/shared/js/cosysim-desktop.js"></script>
+  <script>
+    const desktop = new NeonDesktop();
+    desktop.loadApps();
+  </script>
+{% endblock %}
