@@ -1,0 +1,444 @@
+"""
+ARGUS Toolkit — Reusable techniques for web application analysis
+================================================================
+
+Generic tools for analyzing any web application:
+- Bundle decompilation (download, extract enums, routes, env vars)
+- Feature flag manipulation (Statsig/LaunchDarkly localStorage injection)
+- CDP scripting (Chrome DevTools Protocol JS execution)
+- WebSocket interception (message modification via CDP)
+- Token management (Firebase JWT refresh)
+
+These tools are application-agnostic. Use them from any ARGUS client.
+
+Version: v1.52.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-26] — Initial: bundle analysis, statsig injection,
+                            CDP eval, WebSocket intercept, Firebase refresh
+
+Usage:
+    from scripts.argus.toolkit import (
+        download_bundle, decompile_bundle,
+        inject_statsig_gates, inject_websocket_intercept,
+        cdp_eval, cdp_find_tab, refresh_firebase_token,
+    )
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+
+# ──── Bundle Decompilation ───────────────────────────────────────────────────
+
+def download_bundle(url: str, output_dir: str = "data/argus/bundles") -> Path:
+    """Download a JS bundle for analysis.
+
+    Args:
+        url: Full URL to the JS bundle.
+        output_dir: Directory to save the bundle.
+
+    Returns:
+        Path to the downloaded file.
+    """
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    filename = url.split("/")[-1].split("?")[0]
+    filepath = out / filename
+
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    filepath.write_bytes(r.content)
+
+    logger.info("[Toolkit] Downloaded %s (%d KB)", filename, len(r.content) // 1024)
+    return filepath
+
+
+def decompile_bundle(filepath: Path) -> Dict[str, Any]:
+    """Extract intelligence from a minified JS bundle.
+
+    Searches for: feature gate enums, dynamic config enums, API routes,
+    environment variables, CI/CD paths, package references, model/character
+    names, monitoring DSNs.
+
+    Args:
+        filepath: Path to the JS bundle file.
+
+    Returns:
+        Dict with extracted intelligence.
+    """
+    code = filepath.read_text(encoding="utf-8", errors="replace")
+    result: Dict[str, Any] = {
+        "file": str(filepath),
+        "size_bytes": len(code),
+    }
+
+    # Feature gate enums: t.SOMETHING="something_value"
+    gate_enums = re.findall(r't\.([A-Z_]{3,})="([a-z_]+)"', code)
+    if gate_enums:
+        result["gate_enums"] = {name: val for name, val in gate_enums}
+
+    # API routes
+    routes = re.findall(r'["\'`](/[a-z][a-zA-Z0-9_\-/]+)["\'`]', code)
+    api_routes = sorted(set(r for r in routes if len(r) > 3 and not r.startswith("/node")))
+    result["routes"] = api_routes
+    result["route_count"] = len(api_routes)
+
+    # Environment variables (Vite, Next.js, React)
+    env_vars = re.findall(
+        r'((?:VITE_|NEXT_PUBLIC_|REACT_APP_|process\.env\.)[A-Z_]+)', code
+    )
+    result["env_vars"] = sorted(set(env_vars))
+
+    # CI/CD paths
+    runner_paths = re.findall(r'/home/runner[^\s"\'`\]]+', code)
+    if runner_paths:
+        result["cicd_paths"] = sorted(set(runner_paths))
+
+    # Sentry DSN
+    sentry = re.findall(r'["\'](https://[a-f0-9]+@[^"\']+sentry[^"\']+)["\']', code)
+    if sentry:
+        result["sentry_dsn"] = list(set(sentry))
+
+    # Google Analytics
+    ga_ids = re.findall(r'G-[A-Z0-9]{8,}', code)
+    if ga_ids:
+        result["ga_ids"] = list(set(ga_ids))
+
+    # Feature-like strings
+    features = re.findall(
+        r'["\'`]((?:enable|disable|show|hide|allow|block|is_|has_|can_|use_|'
+        r'gate_|flag_|feature_|exp_)[a-z_]+)["\'`]',
+        code, re.IGNORECASE,
+    )
+    result["feature_strings"] = sorted(set(features))
+
+    # WebSocket URLs
+    ws_urls = re.findall(r'["\'`](wss?://[^"\'`\s]+)["\'`]', code)
+    if ws_urls:
+        result["websocket_urls"] = list(set(ws_urls))
+
+    # Character/model names (customize per app)
+    models = re.findall(
+        r'["\'`]([A-Z][a-z]+(?:-[A-Z][a-z]+)*(?:-(?:Alpha|Beta|Preview|Dev))?)["\'`]',
+        code,
+    )
+    if models:
+        result["model_names"] = sorted(set(m for m in models if len(m) > 2))
+
+    # Package manager
+    if "pnpm" in code:
+        result["pkg_manager"] = "pnpm"
+    elif "yarn" in code:
+        result["pkg_manager"] = "yarn"
+    elif "npm" in code:
+        result["pkg_manager"] = "npm"
+
+    # Build tool
+    if "vite" in code.lower():
+        vite_ver = re.findall(r'vite@([\d.]+)', code)
+        result["build_tool"] = f"vite {vite_ver[0]}" if vite_ver else "vite"
+    elif "webpack" in code.lower():
+        result["build_tool"] = "webpack"
+
+    return result
+
+
+def find_bundle_urls_in_page(page_html: str) -> List[str]:
+    """Extract JS bundle URLs from HTML page source."""
+    scripts = re.findall(r'<script[^>]+src="([^"]+)"', page_html)
+    return [s for s in scripts if any(x in s for x in ["index-", "chunk-", "app.", "main."])]
+
+
+# ──── Feature Flag Manipulation ──────────────────────────────────────────────
+
+def inject_statsig_gates(
+    mode: str = "all",
+    cdp_port: int = 9223,
+    tab_filter: str = "",
+) -> str:
+    """Inject Statsig gate overrides into localStorage via CDP.
+
+    Args:
+        mode: "all" (flip everything ON), "normal" (clear caches)
+        cdp_port: Chrome CDP port.
+        tab_filter: Substring to match in tab URL.
+
+    Returns:
+        Result message.
+    """
+    if mode == "all":
+        js = """
+        (function() {
+            const keys = Object.keys(localStorage).filter(k => k.includes('statsig.cached.evaluations'));
+            let total = 0;
+            for (const k of keys) {
+                const outer = JSON.parse(localStorage.getItem(k));
+                const inner = JSON.parse(outer.data);
+                for (const gate of Object.values(inner.feature_gates || {})) {
+                    if (!gate.value) { gate.value = true; gate.rule_id = 'argus'; total++; }
+                }
+                outer.data = JSON.stringify(inner);
+                localStorage.setItem(k, JSON.stringify(outer));
+            }
+            return 'Flipped ' + total + ' gates across ' + keys.length + ' caches';
+        })()
+        """
+    elif mode == "normal":
+        js = """
+        (function() {
+            const keys = Object.keys(localStorage).filter(k => k.includes('statsig.cached.evaluations'));
+            for (const k of keys) { localStorage.removeItem(k); }
+            return 'Cleared ' + keys.length + ' Statsig caches';
+        })()
+        """
+    else:
+        return f"Unknown mode: {mode}"
+
+    return cdp_eval(js, cdp_port=cdp_port, tab_filter=tab_filter) or "No response"
+
+
+# ──── CDP Scripting ──────────────────────────────────────────────────────────
+
+def cdp_eval(
+    js_code: str,
+    cdp_port: int = 9223,
+    tab_filter: str = "",
+) -> Optional[str]:
+    """Execute JavaScript in a Chrome tab via CDP.
+
+    Args:
+        js_code: JavaScript expression to evaluate.
+        cdp_port: Chrome DevTools Protocol port.
+        tab_filter: Substring to match in tab URL. Empty = first tab.
+
+    Returns:
+        The result value as string, or None on error.
+    """
+    try:
+        import websockets
+        import asyncio
+
+        async def _run():
+            r = requests.get(f"http://localhost:{cdp_port}/json", timeout=3)
+            tabs = r.json()
+
+            if tab_filter:
+                tab = next((t for t in tabs if tab_filter in t.get("url", "")), None)
+            else:
+                tab = tabs[0] if tabs else None
+
+            if not tab:
+                return f"No tab found (filter: {tab_filter})"
+
+            ws_url = tab.get("webSocketDebuggerUrl")
+            if not ws_url:
+                return "No debugger URL"
+
+            async with websockets.connect(ws_url) as ws:
+                await ws.send(json.dumps({
+                    "id": 1,
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": js_code, "returnByValue": True},
+                }))
+                resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+                result = resp.get("result", {}).get("result", {})
+                return result.get("value", json.dumps(result))
+
+        return asyncio.run(_run())
+    except Exception as exc:
+        return f"CDP error: {exc}"
+
+
+def cdp_find_tab(cdp_port: int = 9223, url_filter: str = "") -> Optional[Dict]:
+    """Find a Chrome tab by URL substring."""
+    try:
+        r = requests.get(f"http://localhost:{cdp_port}/json", timeout=3)
+        tabs = r.json()
+        if url_filter:
+            return next((t for t in tabs if url_filter in t.get("url", "")), None)
+        return tabs[0] if tabs else None
+    except Exception:
+        return None
+
+
+def cdp_inject_before_load(
+    js_code: str,
+    url: str,
+    cdp_port: int = 9223,
+) -> str:
+    """Create a new tab with init script that runs before the page loads.
+
+    Args:
+        js_code: JavaScript to run on document start.
+        url: URL to navigate to.
+        cdp_port: Chrome CDP port.
+
+    Returns:
+        Result message.
+    """
+    try:
+        import websockets
+        import asyncio
+
+        async def _run():
+            r = requests.get(f"http://localhost:{cdp_port}/json/version", timeout=3)
+            ws_url = r.json().get("webSocketDebuggerUrl")
+            if not ws_url:
+                return "No browser debugger URL"
+
+            async with websockets.connect(ws_url) as ws:
+                # Create tab
+                await ws.send(json.dumps({
+                    "id": 1, "method": "Target.createTarget",
+                    "params": {"url": "about:blank"},
+                }))
+                resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+                target_id = resp.get("result", {}).get("targetId")
+                if not target_id:
+                    return "Failed to create tab"
+
+                # Find tab's WS URL
+                r2 = requests.get(f"http://localhost:{cdp_port}/json", timeout=3)
+                tab_ws = None
+                for tab in r2.json():
+                    if tab.get("id") == target_id:
+                        tab_ws = tab.get("webSocketDebuggerUrl")
+                        break
+
+                if not tab_ws:
+                    return "Tab debugger URL not found"
+
+                # Connect and inject
+                async with websockets.connect(tab_ws) as tab:
+                    await tab.send(json.dumps({
+                        "id": 2, "method": "Page.addScriptToEvaluateOnNewDocument",
+                        "params": {"source": js_code},
+                    }))
+                    await asyncio.wait_for(tab.recv(), timeout=5)
+
+                    await tab.send(json.dumps({
+                        "id": 3, "method": "Page.navigate",
+                        "params": {"url": url},
+                    }))
+                    await asyncio.wait_for(tab.recv(), timeout=10)
+
+                return f"Tab created with init script, navigating to {url}"
+
+        return asyncio.run(_run())
+    except Exception as exc:
+        return f"CDP error: {exc}"
+
+
+# ──── WebSocket Interception ─────────────────────────────────────────────────
+
+def inject_websocket_intercept(
+    field_path: str,
+    new_value: str,
+    message_type: str = "",
+    cdp_port: int = 9223,
+    tab_filter: str = "",
+) -> str:
+    """Inject a WebSocket send interceptor that modifies a field in outgoing messages.
+
+    Args:
+        field_path: Dot-notation path to the field (e.g., "settings.character").
+        new_value: Value to set.
+        message_type: Only intercept messages of this type (e.g., "call_connect").
+        cdp_port: Chrome CDP port.
+        tab_filter: Tab URL filter.
+
+    Returns:
+        Result message.
+    """
+    parts = field_path.split(".")
+    # Build nested access: p.settings.character
+    accessor = "p"
+    for part in parts[:-1]:
+        accessor += f'["{part}"]'
+    final_key = parts[-1]
+
+    type_check = f'p.type === "{message_type}" && ' if message_type else ""
+
+    js = f"""
+    (function() {{
+        const _orig = WebSocket.prototype.send;
+        WebSocket.prototype.send = function(data) {{
+            if (typeof data === 'string') {{
+                try {{
+                    const p = JSON.parse(data);
+                    if ({type_check}{accessor}) {{
+                        const old = {accessor}["{final_key}"];
+                        {accessor}["{final_key}"] = "{new_value}";
+                        data = JSON.stringify(p);
+                        console.log('[ARGUS] ' + old + ' -> {new_value}');
+                    }}
+                }} catch(e) {{}}
+            }}
+            return _orig.call(this, data);
+        }};
+        return 'WebSocket intercept active: {field_path} -> {new_value}';
+    }})()
+    """
+    return cdp_eval(js, cdp_port=cdp_port, tab_filter=tab_filter) or "No response"
+
+
+# ──── Firebase Token Management ──────────────────────────────────────────────
+
+def refresh_firebase_token(
+    refresh_token: str,
+    api_key: str,
+) -> Optional[Dict[str, str]]:
+    """Exchange a Firebase refresh_token for a fresh id_token.
+
+    Args:
+        refresh_token: The Firebase refresh token.
+        api_key: Firebase API key.
+
+    Returns:
+        Dict with id_token, refresh_token, expires_in, or None on failure.
+    """
+    try:
+        r = requests.post(
+            f"https://securetoken.googleapis.com/v1/token?key={api_key}",
+            data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+            timeout=15,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            return {
+                "id_token": data.get("id_token", ""),
+                "refresh_token": data.get("refresh_token", ""),
+                "expires_in": data.get("expires_in", ""),
+            }
+        logger.warning("[Toolkit] Token refresh failed: %d %s", r.status_code, r.text[:100])
+    except Exception as exc:
+        logger.error("[Toolkit] Token refresh error: %s", exc)
+    return None
+
+
+def extract_refresh_token_from_har(har_path: Path) -> Optional[str]:
+    """Extract a Firebase refresh_token from a HAR file."""
+    try:
+        har = json.loads(har_path.read_text(errors="replace"))
+        for entry in har.get("log", {}).get("entries", []):
+            url = entry.get("request", {}).get("url", "")
+            if "securetoken.googleapis.com" not in url:
+                continue
+            post = entry.get("request", {}).get("postData", {}).get("text", "")
+            if "refresh_token" in post:
+                parts = dict(x.split("=", 1) for x in post.split("&") if "=" in x)
+                if "refresh_token" in parts:
+                    return parts["refresh_token"]
+    except Exception:
+        pass
+    return None
