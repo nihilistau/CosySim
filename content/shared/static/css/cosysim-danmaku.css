@@ -44,9 +44,17 @@
     0 0 8px currentColor;
   /* Subtle dark backdrop for readability */
   background: rgba(0, 0, 0, 0.35);
+  /* v1.52.0 — Entrance glow pulse */
+  filter: brightness(1.0);
+  transition: filter 0.5s ease-out;
   /* Start off-screen right */
   right: 0;
   transform: translateX(100vw);
+}
+
+/* v1.52.0 [2026-03-26] — New messages glow brighter briefly */
+.cosy-danmaku-msg--new {
+  filter: brightness(1.4);
 }
 
 /* ──── Float Animation ───────────────────────────────────────────── */
