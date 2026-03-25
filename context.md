@@ -1,6 +1,6 @@
 # CosySim — Complete System Context
 
-> v1.51.1 [2026-03-25] — Everything an agent needs to understand and work with CosySim.
+> v1.52.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
 >
 > Read this file to gain full context on architecture, conventions, systems, tools,
 > protocols, and workflows. After reading, you should be able to modify any part of
@@ -492,7 +492,35 @@ Auto-started when Oracle scene serves. Registered in CharacterRegistry with pers
 
 ---
 
-## 12. Scene Development Pattern
+## 12. Co-Op Heist Squad System (`engine/multiplayer/squad.py`)
+
+Groups 2-4 players for shared heist objectives with role assignment and loot splitting.
+
+```python
+from engine.multiplayer.squad import get_squad_manager
+
+mgr = get_squad_manager()
+squad = mgr.create_squad("player_1", "Knack", scene="heist")
+mgr.join_squad(squad.squad_id, "player_2", "Viktor")
+mgr.set_role(squad.squad_id, "player_1", "hacker")
+mgr.set_role(squad.squad_id, "player_2", "muscle")
+mgr.set_ready(squad.squad_id, "player_1", True)
+mgr.set_ready(squad.squad_id, "player_2", True)
+
+heist_id = mgr.start_heist(squad.squad_id)  # All must be ready
+shares = mgr.complete_heist(squad.squad_id, total_loot=10000)
+# → {"player_1": 5000, "player_2": 5000}
+```
+
+**Roles:** hacker, muscle, talker, driver, demo, recon
+**Lifecycle:** forming → ready → in_heist → completed/disbanded
+**Loot split:** equal base + 10% bonus per obstacle cleared - 5% per argument
+
+Skills: `form_heist_squad`, `invite_to_squad`, `vote_phase_advance`
+
+---
+
+## 13. Scene Development Pattern
 
 ### Creating a Scene
 
@@ -553,7 +581,7 @@ Templates extend `neon_base.html`:
 
 ---
 
-## 11. ARGUS — API Discovery System
+## 14. ARGUS — API Discovery System
 
 ### Overview
 
@@ -603,7 +631,7 @@ Google API keys (`AIza...`), OpenAI/Stripe secrets (`sk-...`), GitHub PATs (`ghp
 
 ---
 
-## 12. ARGUS Clients
+## 15. ARGUS Clients
 
 ### Sesame AI Explorer (`scripts/argus/clients/sesame_client.py`)
 
@@ -645,7 +673,7 @@ python -m scripts.argus.clients.openroom_client full         # Run everything
 
 ---
 
-## 13. CDP Authentication (`engine/nexus/cdp_auth_recovery.py`)
+## 16. CDP Authentication (`engine/nexus/cdp_auth_recovery.py`)
 
 Chrome DevTools Protocol on **port 9223** (always 9223, never change). Auto-recovers Google auth for NLM and Gemini.
 
@@ -668,7 +696,7 @@ python -m engine.nexus.cdp_auth_recovery --keys     # API key rotation only
 
 ---
 
-## 14. Observability — The Oracle
+## 17. Observability — The Oracle
 
 ### CLI Diagnostics
 
@@ -699,7 +727,7 @@ The Oracle auto-initializes when any scene starts. Installs 3 handlers on Python
 
 ---
 
-## 15. Testing
+## 18. Testing
 
 ```bash
 # Smart runner (preferred — git-diff aware)
@@ -723,7 +751,7 @@ python scripts/browser_test.py --report       # Read telemetry
 
 ---
 
-## 16. Key Singletons Reference
+## 19. Key Singletons Reference
 
 ```python
 # Engine core
@@ -752,6 +780,9 @@ get_character_wizard()    # CharacterWizard — 6-stage creation pipeline
 get_narrative_engine()    # NarrativeModEngine — stages + targets
 get_spectator_bus()       # SpectatorBus — danmaku broadcast
 
+# Multiplayer
+get_squad_manager()       # SquadManager — co-op heist squads
+
 # Dialog & governance
 get_dialog_system()       # DialogSystem — conversation management
 get_rules_engine()        # SceneRulesEngine — scene-specific rules
@@ -770,7 +801,7 @@ get_training_flywheel()   # TrainingFlywheel — data collection for fine-tuning
 
 ---
 
-## 17. Python Conventions
+## 20. Python Conventions
 
 - **Imports:** Absolute only (`from engine.config import get_config`). Group: stdlib → third-party → engine → content → local.
 - **Types:** Required on all function signatures. Use `from __future__ import annotations`.
@@ -783,7 +814,7 @@ get_training_flywheel()   # TrainingFlywheel — data collection for fine-tuning
 
 ---
 
-## 18. Frontend Conventions
+## 21. Frontend Conventions
 
 - **Vanilla JS** (no build step — no React/Vue)
 - 2-space indent in JS/CSS. Single quotes in JS, double in HTML.
@@ -793,7 +824,7 @@ get_training_flywheel()   # TrainingFlywheel — data collection for fine-tuning
 
 ---
 
-## 19. Code Versioning
+## 22. Code Versioning
 
 Every file you create or significantly modify MUST include:
 
@@ -830,7 +861,7 @@ Change Log:
 
 ---
 
-## 20. File Structure
+## 23. File Structure
 
 ```
 CosySim/
@@ -895,7 +926,7 @@ CosySim/
 
 ---
 
-## 21. Quick Reference — Common Tasks
+## 24. Quick Reference — Common Tasks
 
 **Add a new skill:**
 ```python

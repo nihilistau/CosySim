@@ -1,6 +1,6 @@
 # TTS — Voice Generation
 
-> CosySim Documentation — v1.51.1 [2026-03-25]
+> CosySim Documentation — v1.52.0 [2026-03-26]
 >
 > Qwen3-TTS server, voice design system, presets, and agent integration.
 

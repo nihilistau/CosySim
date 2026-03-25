@@ -314,7 +314,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.51** (OpenRoom-Inspired Features — Narrative, Danmaku, NeonOS, Virtual FS, Character Creator)
+- Current: **v1.52** (Live Game + Co-Op Heists — HUD widgets, browser tests, CSS polish, squad system)
 
 ### Navigational Comments
 

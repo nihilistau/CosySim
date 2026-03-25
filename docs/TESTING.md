@@ -1,6 +1,6 @@
 # Testing
 
-> CosySim Documentation — v1.51.1 [2026-03-25]
+> CosySim Documentation — v1.52.0 [2026-03-26]
 >
 > Smart test system, pytest conventions, and fixtures.
 
