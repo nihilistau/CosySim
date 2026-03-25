@@ -15,7 +15,7 @@ These rules override all defaults. Follow them exactly — no exceptions.
 
 ## What This Project Is
 
-CosySim is a local-first multi-scene AI simulation framework. 33 launch targets (15 game + 11 service + 7 creation) run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline with ~1,030 skills across 100 packs governs all agent behavior.
+CosySim is a local-first multi-scene AI simulation framework. 33 launch targets (16 game + 11 service + 7 creation) run as Flask/Socket.IO servers, powered by LMStudio (local inference), Nexus KMS (knowledge management), and NotebookLM (research distillation). The MCP skill pipeline with ~1,040 skills across 99 packs governs all agent behavior.
 
 ## Commands
 
@@ -83,7 +83,7 @@ Browser (Neon HUD v2 — vanilla JS, Jinja2, Socket.IO)
 33 targets (15 game + 11 service + 7 creation)  ports 5555–8800
     ↓
 Skills (engine/skills/builtin/)     ←→    MCP Pipeline (engine/mcp/)
-@skill decorator · 100 packs · ~1030     30 interceptors · AgentGovernor
+@skill decorator · 99 packs · ~1,040     30 interceptors · AgentGovernor
                     ↓
 Engine Layer (engine/)
   lmstudio/   — ServerController, LMLink federation, TaskQueue

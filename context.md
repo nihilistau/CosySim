@@ -10,7 +10,7 @@
 
 ## 1. What CosySim Is
 
-CosySim is a **local-first multi-scene AI simulation framework**. 33 launch targets (15 game scenes, 11 services, 7 creation tools) run as Flask/Socket.IO servers on localhost. AI characters are LLM-powered agents governed by a 30-interceptor pipeline, ~1,030 skills across 100 packs, and a persistent knowledge layer (Nexus KMS). Local inference via LMStudio — no cloud dependency for core gameplay.
+CosySim is a **local-first multi-scene AI simulation framework**. 33 launch targets (16 game scenes, 11 services, 7 creation tools) run as Flask/Socket.IO servers on localhost. AI characters are LLM-powered agents governed by a 30-interceptor pipeline, ~1,040 skills across 99 packs, and a persistent knowledge layer (Nexus KMS). Local inference via LMStudio — no cloud dependency for core gameplay.
 
 **Design Principles:**
 - **Engine is reusable framework. Content is swappable. Config tunes without code.**
@@ -175,7 +175,7 @@ def my_skill(target: str, amount: int = 1) -> str:
     return "Result string shown to agent"
 ```
 
-**Registry:** `SKILL_REGISTRY` in `engine/skills/registry.py`. Skills auto-register at import time via `@skill` decorator. ~1,010 skills across 98 packs. 8 categories.
+**Registry:** `SKILL_REGISTRY` in `engine/skills/registry.py`. Skills auto-register at import time via `@skill` decorator. ~1,040 skills across 99 packs. 8 categories.
 
 **Governance:** `AgentGovernor` in `engine/mcp/comms_framework.py` filters the full registry to ~50-80 contextual skills per call based on scene, pack membership, cooldowns, and prerequisites.
 

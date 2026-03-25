@@ -8,18 +8,18 @@
 
 CosySim is a self-improving AI simulation framework where **33 interactive targets** (15 game scenes, 11 services, 7 creation tools) run on local Flask/Socket.IO servers, powered by **LMStudio** local inference, **Nexus KMS** knowledge management, and **NotebookLM** research distillation. Agents inhabit scenes, learn from interactions, and feed data back into the training pipeline — a closed loop that gets smarter over time.
 
-The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **character neurochemistry**, **cyberspace hacking**, a **living world engine** (markets, NPC routines, faction AI), **multiplayer foundation**, an **in-game news system**, a **virtual desktop shell (NeonOS)**, **stage-based narrative engine**, **danmaku spectator mode**, a **6-stage character creation wizard**, a **Signal Desktop app** (email, files, music), and an **Oracle persistent AI companion** — all driven by the MCP skill pipeline with ~1,030 skills across 100 packs.
+The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **character neurochemistry**, **cyberspace hacking**, a **living world engine** (markets, NPC routines, faction AI), **multiplayer foundation**, an **in-game news system**, a **virtual desktop shell (NeonOS)**, **stage-based narrative engine**, **danmaku spectator mode**, a **6-stage character creation wizard**, a **Signal Desktop app** (email, files, music), and an **Oracle persistent AI companion** — all driven by the MCP skill pipeline with ~1,040 skills across 99 packs.
 
 ## Runtime Snapshot
 
 | Metric | Value |
 |--------|-------|
 | Version | **v1.51** — OpenRoom-Inspired Features |
-| Targets | **33** (15 game + 11 service + 7 creation) |
-| Skills | **~1,030** across **100 packs** |
+| Targets | **33** (16 game + 11 service + 6 creation) |
+| Skills | **~1,040** across **99 packs** |
 | Interceptors | **30** agent pipeline hooks |
 | MCP tools | **43** domain modules |
-| Tests | **404** test files |
+| Tests | **417** test files |
 | Streamlit apps | **4** (dashboard, admin, assets, creator) |
 | Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news · narrative · danmaku · virtual FS · faction politics · heist planning · group chat · Signal Desktop · Oracle companion |
 

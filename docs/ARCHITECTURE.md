@@ -8,7 +8,7 @@
 
 ## Overview
 
-CosySim is a local-first multi-scene AI simulation framework. Every NPC is an LLM-powered agent governed by a 30-interceptor pipeline, ~1,030 skills across 100 packs, and a persistent knowledge layer (Nexus KMS). The system runs 33 launch targets as Flask, FastAPI, Streamlit, and Node servers, all orchestrated by a unified launcher and TUI.
+CosySim is a local-first multi-scene AI simulation framework. Every NPC is an LLM-powered agent governed by a 30-interceptor pipeline, ~1,040 skills across 99 packs, and a persistent knowledge layer (Nexus KMS). The system runs 33 launch targets as Flask, FastAPI, Streamlit, and Node servers, all orchestrated by a unified launcher and TUI.
 
 **Design principles:**
 
@@ -229,7 +229,7 @@ WorldSim tick (every 60s)
 
 ### Skills — Agent Capabilities
 
-`engine/skills/builtin/` — ~1,000 skills across 95 packs (45 builtin + 19 scene-specific + meta packs). See [Skills](SKILLS.md) for the full registry.
+`engine/skills/builtin/` — ~1,040 skills across 99 packs (45 builtin + 19 scene-specific + meta packs). See [Skills](SKILLS.md) for the full registry.
 
 **Skill decorator:**
 
