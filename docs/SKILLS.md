@@ -1,6 +1,6 @@
 # Skills
 
-> CosySim Documentation — v1.50 [2026-03-22]
+> CosySim Documentation — v1.51.0 [2026-03-25]
 >
 > The @skill decorator, pack system, registry, and governance filtering.
 
@@ -10,7 +10,7 @@
 
 Skills are plain Python functions that LLM agents invoke as **tools** during inference. The `@skill` decorator registers a function into the global `SKILL_REGISTRY` at import time, making it discoverable by the MCP pipeline, the AgentGovernor, and LMStudio's tool-calling API.
 
-CosySim has approximately **1,000 skills across 95 packs**:
+CosySim has approximately **1,010 skills across 98 packs**:
 
 | Source | Location | Skills | Files |
 |--------|----------|--------|-------|

@@ -1,6 +1,6 @@
 # CosySim Training Pipeline
 
-> CosySim Documentation — v1.50 [2026-03-22]
+> CosySim Documentation — v1.51.0 [2026-03-25]
 >
 > End-to-end self-improving training pipeline — data collection, fine-tuning, evaluation, and promotion.
 > Every runtime interaction feeds the DataCollector, accumulates into typed datasets, triggers

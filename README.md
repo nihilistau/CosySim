@@ -1,27 +1,27 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.50](https://img.shields.io/badge/version-1.50-blueviolet.svg)]() [![Targets: 32](https://img.shields.io/badge/targets-32-6f42c1.svg)]() [![Tests: 404 files](https://img.shields.io/badge/tests-404_files-brightgreen.svg)]() [![Skills: 1000+](https://img.shields.io/badge/skills-1%2C000%2B-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.51](https://img.shields.io/badge/version-1.51-blueviolet.svg)]() [![Targets: 33](https://img.shields.io/badge/targets-33-6f42c1.svg)]() [![Tests: 404 files](https://img.shields.io/badge/tests-404_files-brightgreen.svg)]() [![Skills: 1010+](https://img.shields.io/badge/skills-1%2C010%2B-0a7f5a.svg)]()
 
-> v1.50 — Three-Pillar Architecture — Local-first multi-scene AI simulation framework
+> v1.51 — OpenRoom-Inspired Features — Local-first multi-scene AI simulation framework
 
 ## Overview
 
-CosySim is a self-improving AI simulation framework where **32 interactive targets** (15 game scenes, 11 services, 6 creation tools) run on local Flask/Socket.IO servers, powered by **LMStudio** local inference, **Nexus KMS** knowledge management, and **NotebookLM** research distillation. Agents inhabit scenes, learn from interactions, and feed data back into the training pipeline — a closed loop that gets smarter over time.
+CosySim is a self-improving AI simulation framework where **33 interactive targets** (15 game scenes, 11 services, 7 creation tools) run on local Flask/Socket.IO servers, powered by **LMStudio** local inference, **Nexus KMS** knowledge management, and **NotebookLM** research distillation. Agents inhabit scenes, learn from interactions, and feed data back into the training pipeline — a closed loop that gets smarter over time.
 
-The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **character neurochemistry**, **cyberspace hacking**, a **living world engine** (markets, NPC routines, faction AI), **multiplayer foundation**, and an **in-game news system** — all driven by the MCP skill pipeline with ~1,000 skills across 95 packs.
+The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **character neurochemistry**, **cyberspace hacking**, a **living world engine** (markets, NPC routines, faction AI), **multiplayer foundation**, an **in-game news system**, a **virtual desktop shell (NeonOS)**, **stage-based narrative engine**, **danmaku spectator mode**, and a **6-stage character creation wizard** — all driven by the MCP skill pipeline with ~1,010 skills across 98 packs.
 
 ## Runtime Snapshot
 
 | Metric | Value |
 |--------|-------|
-| Version | **v1.50** — Three-Pillar Architecture |
-| Targets | **32** (15 game + 11 service + 6 creation) |
-| Skills | **~1,000** across **95 packs** |
-| Interceptors | **24** agent pipeline hooks |
+| Version | **v1.51** — OpenRoom-Inspired Features |
+| Targets | **33** (15 game + 11 service + 7 creation) |
+| Skills | **~1,010** across **98 packs** |
+| Interceptors | **28** agent pipeline hooks |
 | MCP tools | **43** domain modules |
 | Tests | **404** test files |
 | Streamlit apps | **4** (dashboard, admin, assets, creator) |
-| Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news |
+| Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news · narrative · danmaku · virtual FS |
 
 ## Architecture
 
@@ -40,15 +40,15 @@ The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **cha
 │  │ nexus_kms · hub · nexus_panel · dashboard · admin · tts     │   │
 │  │ bridge · nlm_proxy · system_control · command_center         │   │
 │  │ intel_hub                                                    │   │
-│  ├─ CREATION (6) ───────────────────────────────────────────────┤   │
+│  ├─ CREATION (7) ───────────────────────────────────────────────┤   │
 │  │ canvas · canvas_api · assets · creator · asset_studio        │   │
-│  │ creation_kit                                                 │   │
+│  │ creation_kit · neonos                                        │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └────────────────────┬──────────────────────┬──────────────────────────┘
                      │                      │
 ┌────────────────────▼───────┐  ┌───────────▼──────────────────────────┐
-│  ~1,000 Skills (95 packs)  │  │  MCP Pipeline                        │
-│  @skill decorator          │  │  24 interceptors · @mcp_tool         │
+│  ~1,010 Skills (98 packs)  │  │  MCP Pipeline                        │
+│  @skill decorator          │  │  28 interceptors · @mcp_tool         │
 │  auto-registry             │◄►│  AgentGovernor · DialogSystem        │
 │  cooldown · cost · prereqs │  │  StreamProcessor · state sync        │
 └────────────────────┬───────┘  └───────────┬──────────────────────────┘
@@ -124,11 +124,11 @@ python scripts/smart_test.py --smoke # ~15 files, ~53s
 ```
 CosySim/
 ├── engine/                    # Core framework
-│   ├── agents/                # VirtualAgent, AgentGovernor, 24 interceptors
+│   ├── agents/                # VirtualAgent, AgentGovernor, 28 interceptors
 │   ├── mcp/                   # MCP framework, dialog, state management
 │   │   └── tools/             # 43 domain tool modules
-│   ├── skills/                # @skill decorator, registry, 95 packs
-│   │   └── builtin/           # 785 engine-level skill implementations
+│   ├── skills/                # @skill decorator, registry, 98 packs
+│   │   └── builtin/           # 795 engine-level skill implementations
 │   ├── lmstudio/              # ServerController, LMLink, TaskQueue
 │   ├── nexus/                 # Nexus client, NLM chain, query router
 │   ├── world/                 # PlayerState, Inventory, Crew, WorldSim
@@ -142,7 +142,7 @@ CosySim/
 ├── scripts/                   # Smart test runner, browser tests, ARGUS tools
 ├── tests/                     # 404 test files
 ├── training/                  # Fine-tuning pipelines, datasets, model registry
-├── docs/                      # 25 documentation files (INDEX.md entry point)
+├── docs/                      # 34 documentation files (INDEX.md entry point)
 ├── tui.py                     # Terminal UI launcher (Textual framework)
 ├── launcher.py                # CLI scene launcher
 └── main.py                    # Application entry point
@@ -155,7 +155,7 @@ All documentation lives in `docs/` with **[INDEX.md](./docs/INDEX.md)** as the c
 | Category | Key Docs |
 |----------|----------|
 | **Architecture** | [ARCHITECTURE.md](./docs/ARCHITECTURE.md) · [MCP_FRAMEWORK.md](./docs/MCP_FRAMEWORK.md) · [INTERCEPTORS.md](./docs/INTERCEPTORS.md) |
-| **Scenes** | [SCENES.md](./docs/SCENES.md) · [SKILLS.md](./docs/SKILLS.md) · [NEON_HUD.md](./docs/NEON_HUD.md) |
+| **Scenes** | [SCENES.md](./docs/SCENES.md) · [SKILLS.md](./docs/SKILLS.md) · [NEON_HUD.md](./docs/NEON_HUD.md) · [OPENROOM_FEATURES.md](./docs/OPENROOM_FEATURES.md) |
 | **Knowledge** | [NEXUS.md](./docs/NEXUS.md) · [LMSTUDIO.md](./docs/LMSTUDIO.md) |
 | **Operations** | [OPERATIONS.md](./docs/OPERATIONS.md) · [CONFIGURATION.md](./docs/CONFIGURATION.md) · [API.md](./docs/API.md) |
 | **Development** | [CONTRIBUTING.md](./docs/CONTRIBUTING.md) · [TESTING.md](./docs/TESTING.md) |

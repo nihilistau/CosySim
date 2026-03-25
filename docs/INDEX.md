@@ -1,15 +1,15 @@
 # CosySim Documentation Index
 
-> v1.50 — Three-Pillar Architecture, 1,000+ Skills, Unified Documentation.
+> v1.51 — OpenRoom-Inspired Features + Three-Pillar Architecture, 1,010+ Skills.
 
 ## Quick Reference
 
 | Metric | Value |
 |--------|-------|
-| Version | v1.50 [2026-03-22] |
-| Targets | 32 (15 game + 11 service + 6 creation) |
-| Skills | ~1,000 across 95 packs via @skill decorator |
-| Interceptors | 24 pipeline hooks in the agent governance layer |
+| Version | v1.51.0 [2026-03-25] |
+| Targets | 33 (15 game + 11 service + 7 creation) |
+| Skills | ~1,010 across 98 packs via @skill decorator |
+| Interceptors | 28 pipeline hooks in the agent governance layer |
 | MCP Tools | 43 domain modules |
 | Tests | 404 test files (smart runner: ~53s smoke) |
 | Pillars | Game (NeonCity) / Service / Creation |
@@ -22,7 +22,7 @@ All targets defined in `engine/control_plane_registry.py`:
 |--------|-------|-------------|
 | Game | 15 | phone, penthouse, lounge, tavern, casino, gallery, arena, realm, neoncity, coders, heist, games, grid, lab_break, oracle |
 | Service | 11 | nexus_kms, hub, nexus_panel, dashboard, admin, tts, bridge, nlm_proxy, system_control, command_center, intel_hub |
-| Creation | 6 | canvas, canvas_api, assets, creator, asset_studio, creation_kit |
+| Creation | 7 | canvas, canvas_api, assets, creator, asset_studio, creation_kit, neonos |
 
 ### Key Ports
 
@@ -64,6 +64,7 @@ All targets defined in `engine/control_plane_registry.py`:
 | [Arena Guide](ARENA_GUIDE.md) | THE COLOSSEUM, card game mechanics, betting |
 | [The Grid](THE_GRID.md) | THE GRID, underground marketplace, 4 zones |
 | [Neon HUD](NEON_HUD.md) | Universal HUD v2, glass panels, phone overlay, announcer |
+| [OpenRoom Features](OPENROOM_FEATURES.md) | 6 OpenRoom-inspired features: memory, danmaku, NeonOS, virtual FS, narrative, character creator |
 
 ## Knowledge and Integration
 

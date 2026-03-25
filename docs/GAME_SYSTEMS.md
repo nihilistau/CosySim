@@ -1,6 +1,6 @@
 # CosySim Game Systems Reference
 
-> CosySim Documentation — v1.50 [2026-03-22]
+> CosySim Documentation — v1.51.0 [2026-03-25]
 >
 > Covers: WorldSim · WorldState · PlayerState · EventCascade · Economy · Factions · NPCs · Events · Inventory.
 > Living world simulation with 32 launch targets, 6 factions, and threaded daemons that keep

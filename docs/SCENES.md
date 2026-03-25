@@ -1,8 +1,8 @@
 # Scenes
 
-> CosySim Documentation — v1.50 [2026-03-22]
+> CosySim Documentation — v1.51.0 [2026-03-25]
 >
-> Complete catalog of all 32 launch targets across three pillars.
+> Complete catalog of all 33 launch targets across three pillars.
 
 CosySim organizes its launch targets into three pillars: **GAME** (15 interactive scenes), **SERVICE** (11 infrastructure and monitoring targets), and **CREATION** (6 content authoring tools). Every target is defined in `engine/control_plane_registry.py` and resolved to a port by `engine/port_registry.py`. The launcher, TUI, and Hub all derive their catalogues from these two files.
 
