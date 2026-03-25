@@ -8,6 +8,7 @@ Generic tools for analyzing any web application:
 - CDP scripting (Chrome DevTools Protocol JS execution)
 - WebSocket interception (message modification via CDP)
 - Token management (Firebase JWT refresh)
+- Deep heap mining (V8 heap snapshot credential extraction)
 
 These tools are application-agnostic. Use them from any ARGUS client.
 
@@ -442,3 +443,166 @@ def extract_refresh_token_from_har(har_path: Path) -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+# ──── Deep Heap Mining ───────────────────────────────────────────────────────
+
+def mine_heap(
+    heap_path: str,
+    output_dir: str = "data/heap_output",
+    tail_mb: int = 30,
+    nexus: bool = False,
+) -> Dict[str, Any]:
+    """Run the full heap miner on a V8 heap snapshot.
+
+    Uses scripts/heap_miner.py which has 100+ regex patterns for:
+    - Google auth cookies (SAPISID, SID, HSID, etc.)
+    - Firebase/OAuth tokens
+    - API keys (AIza*)
+    - JWTs
+    - NLM/Colab/GitHub/AI Studio credentials
+    - Email addresses, user IDs
+    - Internal API endpoints
+
+    Args:
+        heap_path: Path to .heapsnapshot file.
+        output_dir: Directory for findings output.
+        tail_mb: MB from end of file to read (strings are at the end).
+        nexus: Store findings in Nexus KMS.
+
+    Returns:
+        Dict with findings summary.
+    """
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    miner = root / "scripts" / "heap_miner.py"
+
+    if not miner.exists():
+        return {"error": f"heap_miner.py not found at {miner}"}
+
+    cmd = [
+        sys.executable, str(miner),
+        str(heap_path),
+        "--tail", str(tail_mb),
+        "--out", str(output_dir),
+    ]
+    if nexus:
+        cmd.append("--nexus")
+
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(root))
+
+    # Read the output JSON
+    heap_name = Path(heap_path).stem
+    findings_json = Path(output_dir) / f"{heap_name}_findings.json"
+    if findings_json.exists():
+        findings = json.loads(findings_json.read_text())
+        total = sum(len(v) for v in findings.values())
+        return {
+            "file": str(heap_path),
+            "findings": total,
+            "categories": len(findings),
+            "category_counts": {k: len(v) for k, v in findings.items()},
+            "output": str(findings_json),
+        }
+
+    return {"file": str(heap_path), "error": result.stderr[:500] if result.returncode else "no output"}
+
+
+def mine_heap_deep(
+    heap_path: str,
+    output_dir: str = "data/heap_output",
+    strings_only: bool = True,
+) -> Dict[str, Any]:
+    """Run the deep V8 graph parser on a heap snapshot.
+
+    This walks the entire V8 node/edge graph (not just regex). Extracts:
+    - All unique strings (sorted by length)
+    - Script source code
+    - Reconstructed JS objects
+    - DOM content
+    - Full API surface (function names)
+
+    Args:
+        heap_path: Path to .heapsnapshot file.
+        output_dir: Directory for output.
+        strings_only: Fast mode — skip graph walk, just extract strings.
+
+    Returns:
+        Dict with output paths.
+    """
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    parser = root / "scripts" / "heap_deep_parser.py"
+
+    if not parser.exists():
+        return {"error": f"heap_deep_parser.py not found at {parser}"}
+
+    cmd = [sys.executable, str(parser), str(heap_path)]
+    if strings_only:
+        cmd.append("--strings-only")
+
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(root))
+
+    heap_name = Path(heap_path).stem
+    deep_dir = Path(output_dir) / f"{heap_name}_deep"
+    if deep_dir.exists():
+        files = list(deep_dir.iterdir())
+        return {
+            "file": str(heap_path),
+            "output_dir": str(deep_dir),
+            "output_files": [f.name for f in files],
+            "total_files": len(files),
+        }
+
+    return {"file": str(heap_path), "error": result.stderr[:500] if result.returncode else "no output"}
+
+
+def decode_jwts_from_findings(findings_json_path: str) -> List[Dict[str, Any]]:
+    """Decode all JWTs found in a heap miner findings JSON file.
+
+    Args:
+        findings_json_path: Path to *_findings.json from heap_miner.
+
+    Returns:
+        List of decoded JWT dicts with header, payload, expiry status.
+    """
+    import base64
+    import time
+
+    path = Path(findings_json_path)
+    if not path.exists():
+        return []
+
+    data = json.loads(path.read_text())
+    jwts = data.get("jwt", [])
+    decoded = []
+
+    for item in jwts:
+        token = item["value"]
+        parts = token.split(".")
+        if len(parts) < 2:
+            continue
+        try:
+            header = json.loads(base64.b64decode(parts[0] + "=="))
+            payload = json.loads(base64.b64decode(parts[1] + "=="))
+            exp = payload.get("exp", 0)
+            remaining = exp - time.time() if exp else -1
+            decoded.append({
+                "algorithm": header.get("alg"),
+                "kid": header.get("kid", "none"),
+                "issuer": payload.get("iss", "?"),
+                "subject": payload.get("sub", payload.get("user_id", "?")),
+                "email": payload.get("email", ""),
+                "audience": str(payload.get("aud", "?"))[:60],
+                "expired": remaining < 0,
+                "remaining_minutes": int(remaining / 60) if remaining > 0 else int(-remaining / 60),
+                "status": f"VALID ({int(remaining/60)}min)" if remaining > 0 else f"EXPIRED ({int(-remaining/60)}min ago)",
+            })
+        except Exception:
+            pass
+
+    return decoded
