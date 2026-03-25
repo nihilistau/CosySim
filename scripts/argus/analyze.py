@@ -52,6 +52,10 @@ def main() -> None:
     dir_p.add_argument("--pattern", default="*.har")
     dir_p.add_argument("--json", action="store_true")
 
+    # deep — automated full workflow
+    deep_p = sub.add_parser("deep", help="Full automated deep analysis (HAR + heap + probing)")
+    deep_p.add_argument("path", type=Path, help="Directory containing HAR and heap files")
+
     # compare
     cmp_p = sub.add_parser("compare", help="Diff two HAR files")
     cmp_p.add_argument("file_a", type=Path)
@@ -68,7 +72,9 @@ def main() -> None:
         parser.print_help()
         return
 
-    if args.command == "har":
+    if args.command == "deep":
+        _deep_analyze(args.path)
+    elif args.command == "har":
         _analyze_har(args.path, args.json, getattr(args, 'report', False))
     elif args.command == "heap":
         _analyze_heap(args.path, args.json)
@@ -78,6 +84,17 @@ def main() -> None:
         _compare_hars(args.file_a, args.file_b)
     elif args.command == "heap-diff":
         _diff_heaps(args.before, args.after)
+
+
+# ──── Deep Analysis ───────────────────────────────────────────────────────────
+
+def _deep_analyze(path: Path) -> None:
+    from scripts.argus.analyzers.deep_analyzer import DeepAnalyzer
+    if not path.is_dir():
+        print(f"Not a directory: {path}")
+        return
+    analyzer = DeepAnalyzer()
+    analyzer.analyze(str(path))
 
 
 # ──── HAR Analysis ───────────────────────────────────────────────────────────
