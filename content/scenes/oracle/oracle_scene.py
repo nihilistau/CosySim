@@ -652,7 +652,6 @@ class OracleScene(FlaskScene):
             pass
 
         # v1.51.1 [2026-03-25] — Register Oracle in CharacterRegistry + start companion
-        # CONNECTS: CharacterWizard, OracleCompanion
         try:
             from engine.mcp.character_registry import get_character_registry
             reg = get_character_registry()

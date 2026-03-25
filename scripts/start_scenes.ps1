@@ -56,16 +56,31 @@ if ($List) {
     exit 0
 }
 
+# ── Helper: Kill zombie on port ───────────────────────────
+function Clear-Port {
+    param([int]$Port)
+    $conn = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+    if ($conn) {
+        $pid = $conn.OwningProcess | Select-Object -First 1
+        if ($pid -and $pid -ne 0) {
+            Write-Host "  [!!] Killing zombie on :$Port (PID $pid)" -ForegroundColor Yellow
+            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+        }
+    }
+}
+
 # ── Single scene mode ─────────────────────────────────────
 if ($Scene) {
+    # Get port first so we can clear zombies
+    $port = & $VenvPython -c "from engine.port_registry import get_port; print(get_port('$Scene'))" 2>$null
+    if ($port) { Clear-Port -Port ([int]$port) }
+
     Write-Host "  Starting $Scene..." -ForegroundColor Yellow
     Start-Process -FilePath $VenvPython `
         -ArgumentList "launcher.py", $Scene `
         -WorkingDirectory $Root `
-        -WindowStyle Hidden
-
-    # Get port and wait
-    $port = & $VenvPython -c "from engine.port_registry import get_port; print(get_port('$Scene'))" 2>$null
+        -WindowStyle Minimized
     if ($port) {
         $elapsed = 0
         while ($elapsed -lt 30) {
@@ -106,7 +121,7 @@ foreach ($line in $scenes -split "`n") {
         Start-Process -FilePath $VenvPython `
             -ArgumentList "launcher.py", $name `
             -WorkingDirectory $Root `
-            -WindowStyle Hidden
+            -WindowStyle Minimized
         $launched += @{ name = $name; port = [int]$port }
         Start-Sleep -Seconds 2
     }
