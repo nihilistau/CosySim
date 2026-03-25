@@ -293,6 +293,36 @@ class BaseSceneRoutesMixin:
             except Exception as _exc:
                 _bslogger.debug("HUD: skill_progression unavailable: %s", _exc)
 
+            # v1.51.1 [2026-03-25] — Narrative progress for HUD stage tracker
+            try:
+                from engine.mcp.narrative_mod import get_narrative_engine
+                ne = get_narrative_engine()
+                active_mods = ne.get_active_mods(scene_ref.scene_name) if hasattr(ne, "get_active_mods") else []
+                if active_mods:
+                    mod = active_mods[0]  # Show the first active mod
+                    stage = mod.current_stage
+                    data["narrative"] = {
+                        "mod_name": mod.mod_name,
+                        "stage": stage.title if stage else "",
+                        "stage_index": mod.stage_index + 1,
+                        "total_stages": mod.total_stages,
+                        "targets_done": sum(1 for t in (stage.targets if stage else []) if t.completed),
+                        "targets_total": len(stage.targets) if stage else 0,
+                    }
+            except Exception as _exc:
+                _bslogger.debug("HUD: narrative unavailable: %s", _exc)
+
+            # v1.51.1 [2026-03-25] — Spectator/danmaku status
+            try:
+                from engine.services.spectator_bus import get_spectator_bus
+                bus = get_spectator_bus()
+                data["spectator"] = {
+                    "subscribers": bus.subscriber_count,
+                    "buffer_size": bus.buffer_size,
+                }
+            except Exception as _exc:
+                _bslogger.debug("HUD: spectator unavailable: %s", _exc)
+
             data["scene"] = scene_ref.scene_name
             data["updated_at"] = int(_time.time() * 1000)
             return Response(_json.dumps(data), mimetype="application/json")
