@@ -1907,6 +1907,13 @@ class NeonCityScene(FlaskScene):
         except Exception as exc:
             logger.warning("[%s] LivingWorld start failed (operation=lifecycle): %s", SCENE_ID, exc)
 
+        # v1.51.0 [2026-03-25] — Auto-load NeonCity welcome story pack for new players
+        try:
+            from engine.mcp.narrative_packs import load_pack
+            load_pack("welcome_to_neoncity", scene_id=SCENE_ID, character_id="director")
+        except Exception:
+            pass
+
         # Start crew operation auto-polling (every 60s)
         import threading
 

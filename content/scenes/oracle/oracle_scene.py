@@ -644,6 +644,13 @@ class OracleScene(FlaskScene):
         logger.info("[%s] Scene online at port %d (operation=lifecycle)", SCENE_ID, DEFAULT_PORT)
         logger.info("[%s] \"In the spaces between data, I dream.\"", SCENE_ID)
 
+        # v1.51.0 [2026-03-25] — Auto-load Oracle meditation story pack
+        try:
+            from engine.mcp.narrative_packs import load_pack
+            load_pack("oracle_awakening", scene_id=SCENE_ID, character_id="oracle")
+        except Exception:
+            pass
+
     # ── Cross-Scene Arrival ───────────────────────────────────────────
     # v1.52.0 [2026-03-22] — Oracle greets arriving player with context
     # CONNECTS: FlaskScene.on_player_arrival(), city_map.travel()
