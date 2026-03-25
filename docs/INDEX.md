@@ -7,11 +7,11 @@
 | Metric | Value |
 |--------|-------|
 | Version | v1.51.1 [2026-03-25] |
-| Targets | 33 (15 game + 11 service + 7 creation) |
-| Skills | ~1,030 across 100 packs via @skill decorator |
+| Targets | 33 (16 game + 11 service + 6 creation) |
+| Skills | ~1,040 across 99 packs via @skill decorator |
 | Interceptors | 30 pipeline hooks in the agent governance layer |
 | MCP Tools | 43 domain modules |
-| Tests | 404 test files (smart runner: ~53s smoke) |
+| Tests | 417 test files (smart runner: ~53s smoke) |
 | Pillars | Game (NeonCity) / Service / Creation |
 
 ### Three-Pillar Architecture
@@ -48,7 +48,7 @@ All targets defined in `engine/control_plane_registry.py`:
 |-----|-------------|
 | [Architecture](ARCHITECTURE.md) | System design, layers, data flow, three-pillar targets, singletons |
 | [MCP Framework](MCP_FRAMEWORK.md) | Skill dispatch, governance, state coordination, dialog system |
-| [Interceptors](INTERCEPTORS.md) | 24 pre/post-call hooks, priorities, auto-registry, scene filtering |
+| [Interceptors](INTERCEPTORS.md) | 30 pre/post-call hooks, priorities, auto-registry, scene filtering |
 | [Configuration](CONFIGURATION.md) | YAML config hierarchy, get_config() pattern, environment overrides |
 | [Decisions](DECISIONS.md) | 14 architecture decision records with rationale |
 
