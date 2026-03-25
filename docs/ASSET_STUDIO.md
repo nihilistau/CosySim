@@ -1,6 +1,6 @@
 # Asset Studio — ComfyUI Integration Guide
 
-> CosySim Documentation — v1.51.0 [2026-03-25]
+> CosySim Documentation — v1.51.1 [2026-03-25]
 >
 > Asset generation, workflow tuning, and scene injection for CosySim.
 > ComfyUI pipeline with 15 workflow variants, A++ tuning engine, and batch background generation.

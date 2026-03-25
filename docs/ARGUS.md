@@ -1,6 +1,6 @@
 # ARGUS -- Intelligence Platform
 
-> CosySim Documentation -- v1.51.0 [2026-03-25]
+> CosySim Documentation -- v1.51.1 [2026-03-25]
 >
 > Browser automation, API surface discovery, RPC registry, and the LiveDebugger.
 

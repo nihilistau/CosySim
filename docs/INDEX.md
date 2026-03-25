@@ -6,10 +6,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Version | v1.51.0 [2026-03-25] |
+| Version | v1.51.1 [2026-03-25] |
 | Targets | 33 (15 game + 11 service + 7 creation) |
-| Skills | ~1,010 across 98 packs via @skill decorator |
-| Interceptors | 28 pipeline hooks in the agent governance layer |
+| Skills | ~1,030 across 100 packs via @skill decorator |
+| Interceptors | 30 pipeline hooks in the agent governance layer |
 | MCP Tools | 43 domain modules |
 | Tests | 404 test files (smart runner: ~53s smoke) |
 | Pillars | Game (NeonCity) / Service / Creation |

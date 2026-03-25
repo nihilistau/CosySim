@@ -1,6 +1,6 @@
 # LMStudio Integration
 
-> CosySim Documentation — v1.51.0 [2026-03-25]
+> CosySim Documentation — v1.51.1 [2026-03-25]
 >
 > Local inference backbone via LMStudio v1 native API at localhost:1234. SSE streaming,
 > stateful conversations via response_id, ServerController, LMLinkManager (federation),

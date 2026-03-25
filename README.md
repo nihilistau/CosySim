@@ -16,12 +16,12 @@ The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **cha
 |--------|-------|
 | Version | **v1.51** — OpenRoom-Inspired Features |
 | Targets | **33** (15 game + 11 service + 7 creation) |
-| Skills | **~1,010** across **98 packs** |
-| Interceptors | **28** agent pipeline hooks |
+| Skills | **~1,030** across **100 packs** |
+| Interceptors | **30** agent pipeline hooks |
 | MCP tools | **43** domain modules |
 | Tests | **404** test files |
 | Streamlit apps | **4** (dashboard, admin, assets, creator) |
-| Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news · narrative · danmaku · virtual FS |
+| Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news · narrative · danmaku · virtual FS · faction politics · heist planning · group chat |
 
 ## Architecture
 
@@ -47,8 +47,8 @@ The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **cha
 └────────────────────┬──────────────────────┬──────────────────────────┘
                      │                      │
 ┌────────────────────▼───────┐  ┌───────────▼──────────────────────────┐
-│  ~1,010 Skills (98 packs)  │  │  MCP Pipeline                        │
-│  @skill decorator          │  │  28 interceptors · @mcp_tool         │
+│  ~1,030 Skills (100 packs) │  │  MCP Pipeline                        │
+│  @skill decorator          │  │  30 interceptors · @mcp_tool         │
 │  auto-registry             │◄►│  AgentGovernor · DialogSystem        │
 │  cooldown · cost · prereqs │  │  StreamProcessor · state sync        │
 └────────────────────┬───────┘  └───────────┬──────────────────────────┘
@@ -124,11 +124,11 @@ python scripts/smart_test.py --smoke # ~15 files, ~53s
 ```
 CosySim/
 ├── engine/                    # Core framework
-│   ├── agents/                # VirtualAgent, AgentGovernor, 28 interceptors
+│   ├── agents/                # VirtualAgent, AgentGovernor, 30 interceptors
 │   ├── mcp/                   # MCP framework, dialog, state management
 │   │   └── tools/             # 43 domain tool modules
-│   ├── skills/                # @skill decorator, registry, 98 packs
-│   │   └── builtin/           # 795 engine-level skill implementations
+│   ├── skills/                # @skill decorator, registry, 100 packs
+│   │   └── builtin/           # 815 engine-level skill implementations
 │   ├── lmstudio/              # ServerController, LMLink, TaskQueue
 │   ├── nexus/                 # Nexus client, NLM chain, query router
 │   ├── world/                 # PlayerState, Inventory, Crew, WorldSim

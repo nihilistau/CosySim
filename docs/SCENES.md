@@ -1,6 +1,6 @@
 # Scenes
 
-> CosySim Documentation — v1.51.0 [2026-03-25]
+> CosySim Documentation — v1.51.1 [2026-03-25]
 >
 > Complete catalog of all 33 launch targets across three pillars.
 

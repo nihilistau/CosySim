@@ -1,6 +1,6 @@
 # OpenRoom-Inspired Features
 
-> CosySim Documentation — v1.51.0 [2026-03-25]
+> CosySim Documentation — v1.51.1 [2026-03-25]
 >
 > 6 features inspired by OpenRoom/VibeApps that transform AI characters from reactive
 > chat agents into autonomous beings with memory, agency, and a virtual world.
