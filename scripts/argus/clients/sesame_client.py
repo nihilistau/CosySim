@@ -1355,6 +1355,14 @@ _REPL_HELP = """
     unset <key>            Remove custom user property
     props                  Show current user properties
 
+  STATSIG:
+    sig                    Full Statsig settings overview (gates, configs, derived)
+    sig-gates [filter]     List all gates (optionally filter by name/rule)
+    sig-configs [filter]   List all dynamic configs with values
+    sig-config <key>       Search config values by key name
+    sig-diff [email]       Compare gates across email domains
+    sig-set                Show how to influence gate evaluation
+
   EXPLORE:
     configs                Show all dynamic configs
     config <name>          Show specific dynamic config
@@ -1636,6 +1644,116 @@ def run_interactive(tokens: TokenStore, har_path: Optional[Path] = None) -> None
             # ── protocol ──
             elif cmd == "protocol":
                 show_websocket_protocol()
+
+            # v1.52.0 — Statsig settings viewer/modifier
+
+            # ── sig-settings ──
+            elif cmd in ("sig-settings", "sig"):
+                client = SesameClient(tokens)
+                flags = client.get_flags(email_override=state.email)
+                gates = flags.get("feature_gates", {})
+                configs = flags.get("dynamic_configs", {})
+                enabled = sum(1 for g in gates.values() if g.get("value"))
+                print(f"  === Statsig Settings for {state.email} ===")
+                print(f"  Gates:           {enabled}/{len(gates)} enabled")
+                print(f"  Dynamic configs: {len(configs)}")
+                print(f"  Can record:      {flags.get('can_record_session', '?')}")
+                print(f"  Recording rate:  {flags.get('session_recording_rate', '?')}")
+                print(f"  Hash:            {flags.get('hash_used', '?')}")
+                derived = flags.get("derived_fields", {})
+                if derived:
+                    print(f"  IP:              {derived.get('ip', '?')}")
+                    print(f"  Country:         {derived.get('country', '?')}")
+                    print(f"  Browser:         {derived.get('browserName', '?')} {derived.get('browserVersion', '')}")
+                    print(f"  OS:              {derived.get('osName', '?')} {derived.get('osVersion', '')}")
+
+            # ── sig-gates ──
+            elif cmd == "sig-gates":
+                client = SesameClient(tokens)
+                flags = client.get_flags(email_override=state.email)
+                gates = flags.get("feature_gates", {})
+                filter_str = args[0].lower() if args else ""
+                for name, gate in sorted(gates.items(), key=lambda x: x[1].get("value", False), reverse=True):
+                    if filter_str and filter_str not in name.lower() and filter_str not in gate.get("rule_id", "").lower():
+                        continue
+                    val = "ON " if gate.get("value") else "OFF"
+                    rule = gate.get("rule_id", "default")[:40]
+                    print(f"  [{val}] {name[:55]:55s} rule={rule}")
+
+            # ── sig-configs ──
+            elif cmd == "sig-configs":
+                client = SesameClient(tokens)
+                flags = client.get_flags(email_override=state.email)
+                configs = flags.get("dynamic_configs", {})
+                filter_str = args[0].lower() if args else ""
+                for name, cfg in sorted(configs.items()):
+                    val = cfg.get("value", {})
+                    rule = cfg.get("rule_id", "default")[:40]
+                    keys_str = ", ".join(val.keys()) if isinstance(val, dict) else str(val)[:60]
+                    if filter_str and filter_str not in keys_str.lower() and filter_str not in rule.lower():
+                        continue
+                    print(f"  {name[:50]}")
+                    print(f"    rule: {rule}")
+                    if isinstance(val, dict):
+                        for k, v in val.items():
+                            print(f"    {k:40s} = {json.dumps(v, ensure_ascii=False)[:80]}")
+                    print()
+
+            # ── sig-config <key> ──
+            elif cmd == "sig-config":
+                if not args:
+                    print("  Usage: sig-config <key_filter>")
+                    print("  Example: sig-config timeout")
+                else:
+                    client = SesameClient(tokens)
+                    flags = client.get_flags(email_override=state.email)
+                    configs = flags.get("dynamic_configs", {})
+                    needle = args[0].lower()
+                    found = False
+                    for name, cfg in configs.items():
+                        val = cfg.get("value", {})
+                        if not isinstance(val, dict):
+                            continue
+                        for k, v in val.items():
+                            if needle in k.lower() or needle in json.dumps(v).lower():
+                                if not found:
+                                    print(f"  Matching configs for '{needle}':")
+                                    found = True
+                                print(f"    {k:40s} = {json.dumps(v, ensure_ascii=False)[:80]}")
+                    if not found:
+                        print(f"  No config values matching '{needle}'")
+
+            # ── sig-set <gate_hash> on|off ──
+            elif cmd == "sig-set":
+                print("  [!] Gates are server-evaluated — cannot override remotely.")
+                print("  But you CAN change which gates evaluate to ON by changing user properties:")
+                print("    set-email test@sesame.com   → enables 12 extra employee gates")
+                print("    set isStaff true            → sets custom property (no extra gates currently)")
+                print("    set tier enterprise          → sets custom property")
+
+            # ── sig-diff ──
+            elif cmd == "sig-diff":
+                emails = ["knack112358@gmail.com", "test@sesame.com", "test@meta.com"]
+                if args:
+                    emails.append(args[0])
+                client = SesameClient(tokens)
+                results = {}
+                for email in emails:
+                    flags = client.get_flags(email_override=email)
+                    gates = flags.get("feature_gates", {})
+                    on = sum(1 for g in gates.values() if g.get("value"))
+                    results[email] = on
+                    print(f"  {email:35s} {on}/{len(gates)} gates")
+                # Show which gates differ
+                base_flags = client.get_flags(email_override=emails[0])
+                max_flags = client.get_flags(email_override="test@sesame.com")
+                bg = base_flags.get("feature_gates", {})
+                mg = max_flags.get("feature_gates", {})
+                extras = [n for n, g in mg.items() if g.get("value") and not bg.get(n, {}).get("value")]
+                if extras:
+                    print(f"\n  Employee-only gates ({len(extras)}):")
+                    for g in extras:
+                        print(f"    [+] {g[:55]}")
 
             # v1.52.0 — New session/profile/connect commands
 
