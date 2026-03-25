@@ -167,6 +167,254 @@ class TokenStore:
         exp = self.expires_in
         return f"{self.name} ({self.email}) | Expires: {exp}"
 
+    # v1.52.0 [2026-03-26] — Token refresh + HAR refresh token extraction
+
+    def load_refresh_token_from_har(self, har_path: Path) -> bool:
+        """Extract refresh_token from securetoken.googleapis.com calls in HAR."""
+        try:
+            har = json.loads(har_path.read_text(errors="replace"))
+            for entry in har.get("log", {}).get("entries", []):
+                url = entry.get("request", {}).get("url", "")
+                if "securetoken.googleapis.com" not in url:
+                    continue
+                post = entry.get("request", {}).get("postData", {}).get("text", "")
+                if not post or "refresh_token" not in post:
+                    continue
+                parts = dict(x.split("=", 1) for x in post.split("&") if "=" in x)
+                if "refresh_token" in parts:
+                    self._refresh_token = parts["refresh_token"]
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def refresh(self) -> bool:
+        """Exchange refresh_token for a fresh id_token via Firebase."""
+        rt = getattr(self, "_refresh_token", None)
+        if not rt:
+            print("  [!] No refresh token. Load from HAR first.")
+            return False
+        try:
+            r = requests.post(
+                f"{FIREBASE_SECURETOKEN_URL}?key={FIREBASE_API_KEY}",
+                data={"grant_type": "refresh_token", "refresh_token": rt},
+                timeout=15,
+            )
+            if r.status_code != 200:
+                print(f"  [!] Refresh failed: {r.status_code} {r.text[:100]}")
+                return False
+            data = r.json()
+            self._set_token(data["id_token"])
+            # Update refresh token if rotated
+            if "refresh_token" in data:
+                self._refresh_token = data["refresh_token"]
+            print(f"  [OK] Token refreshed — valid for {self.expires_in}")
+            return True
+        except Exception as exc:
+            print(f"  [!] Refresh error: {exc}")
+            return False
+
+    def ensure_valid(self) -> bool:
+        """Auto-refresh if token is expired or about to expire (<5min)."""
+        if not self._token:
+            return False
+        remaining = self._expires - time.time() if self._expires else -1
+        if remaining > 300:  # More than 5 min left
+            return True
+        return self.refresh()
+
+    @property
+    def auth_headers(self) -> Dict[str, str]:
+        """Get Authorization headers, auto-refreshing if needed."""
+        self.ensure_valid()
+        return {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": "application/json",
+        }
+
+
+# ──── Sesame API Client ─────────────────────────────────────────────────────
+# v1.52.0 [2026-03-26] — Full REST + WebSocket client
+
+class SesameClient:
+    """Live API client for Sesame AI with auto-refreshing tokens."""
+
+    def __init__(self, token_store: TokenStore):
+        self.ts = token_store
+        self._session_id: Optional[str] = None
+        self._user_profile: Optional[Dict] = None
+
+    @property
+    def _h(self) -> Dict[str, str]:
+        return self.ts.auth_headers
+
+    # ── User Profile ─────────────────────────────────────────────
+
+    def get_profile(self) -> Optional[Dict]:
+        """Fetch user profile."""
+        r = requests.get(f"{SESAME_API_URL}/api/user", headers=self._h, timeout=10)
+        if r.status_code == 200:
+            self._user_profile = r.json()
+            return self._user_profile
+        print(f"  [!] Profile: {r.status_code} {r.text[:100]}")
+        return None
+
+    def update_profile(self, **fields) -> Optional[Dict]:
+        """Update writable profile fields.
+
+        Writable: nickname, birthday, allow_training_from_calls,
+                  prefer_product_news_emails
+        Protected: email, roles, moderation_status, display_name
+        """
+        r = requests.patch(
+            f"{SESAME_API_URL}/api/user", headers=self._h,
+            json=fields, timeout=10,
+        )
+        if r.status_code == 200:
+            self._user_profile = r.json()
+            return self._user_profile
+        print(f"  [!] Update: {r.status_code} {r.text[:100]}")
+        return None
+
+    # ── Health ───────────────────────────────────────────────────
+
+    def health(self) -> Dict:
+        """Check API and agent service health."""
+        results = {}
+        try:
+            r = requests.get(f"{SESAME_API_URL}/api/health", timeout=5)
+            results["api"] = r.status_code
+        except Exception:
+            results["api"] = 0
+        for i in range(5):
+            try:
+                r = requests.get(f"{SESAME_API_URL}/agent-service-{i}/health", timeout=5)
+                results[f"agent-{i}"] = r.status_code
+            except Exception:
+                results[f"agent-{i}"] = 0
+        return results
+
+    # ── Upload URL ───────────────────────────────────────────────
+
+    def get_upload_url(self, call_id: int) -> Optional[str]:
+        """Generate a presigned upload URL for a call recording."""
+        r = requests.post(
+            f"{SESAME_API_URL}/api/generate-call-file-upload-url",
+            headers=self._h, json={"call_id": call_id}, timeout=10,
+        )
+        if r.status_code == 200:
+            return r.json()
+        print(f"  [!] Upload URL: {r.status_code} {r.text[:100]}")
+        return None
+
+    # ── Feature Flags ────────────────────────────────────────────
+
+    def get_flags(self, email_override: str = "") -> Dict:
+        """Get Statsig feature flags. Optionally override email for testing."""
+        email = email_override or self.ts.email
+        r = requests.post(
+            f"{STATSIG_URL}/initialize?k={STATSIG_CLIENT_KEY}",
+            json={
+                "user": {"email": email, "userID": self.ts.user_id or "anon"},
+                "statsigMetadata": {"sdkType": "js-client", "sdkVersion": "5.4.0"},
+            },
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return r.json()
+        return {}
+
+    def get_employee_flags(self) -> Dict:
+        """Get flags as if you were a Sesame employee (@sesame.com)."""
+        return self.get_flags(email_override="staff@sesame.com")
+
+    def compare_flags(self) -> Dict[str, Any]:
+        """Compare normal vs employee flags."""
+        normal = self.get_flags()
+        employee = self.get_employee_flags()
+        ng = normal.get("feature_gates", {})
+        eg = employee.get("feature_gates", {})
+        normal_on = sum(1 for g in ng.values() if g.get("value"))
+        employee_on = sum(1 for g in eg.values() if g.get("value"))
+        extra = []
+        for name, gate in eg.items():
+            if gate.get("value") and not ng.get(name, {}).get("value"):
+                extra.append(name)
+        return {
+            "normal_gates": normal_on,
+            "employee_gates": employee_on,
+            "extra_count": len(extra),
+            "extra_gates": extra,
+            "total": len(eg),
+        }
+
+    # ── WebSocket Session ────────────────────────────────────────
+
+    def connect_agent(self, character: str = "Maya", timeout_secs: int = 15) -> Dict:
+        """Connect to Sesame voice agent via WebSocket.
+
+        Returns session info including session_id and ICE servers.
+        Does NOT do WebRTC negotiation (no audio).
+        """
+        import asyncio
+        try:
+            import websockets
+        except ImportError:
+            return {"error": "websockets not installed — pip install websockets"}
+
+        self.ts.ensure_valid()
+        result: Dict[str, Any] = {"connected": False}
+
+        async def _connect():
+            uri = f"{SESAME_WS_URL}?id_token={self.ts.token}"
+            try:
+                async with websockets.connect(uri, additional_headers={
+                    "Origin": SESAME_APP_URL,
+                    "User-Agent": "CosySim-ARGUS/1.52",
+                }) as ws:
+                    result["connected"] = True
+
+                    # Wait for initialize
+                    msg = await asyncio.wait_for(ws.recv(), timeout=10)
+                    data = json.loads(msg)
+                    result["type"] = data.get("type")
+                    result["session_id"] = data.get("session_id") or data.get("content", {}).get("session_id")
+                    self._session_id = result["session_id"]
+
+                    # Send location
+                    await ws.send(json.dumps({
+                        "type": "client_location_state",
+                        "latitude": -33.87, "longitude": 151.21,
+                        "address": "Sydney, Australia",
+                        "timezone": "Australia/Sydney",
+                    }))
+
+                    # Collect messages
+                    result["messages"] = []
+                    for _ in range(5):
+                        try:
+                            msg = await asyncio.wait_for(ws.recv(), timeout=5)
+                            data = json.loads(msg)
+                            result["messages"].append({
+                                "type": data.get("type"),
+                                "preview": json.dumps(data)[:150],
+                            })
+                            if data.get("type") == "webrtc_config":
+                                servers = data.get("content", {}).get("ice_servers", [])
+                                result["ice_servers"] = len(servers)
+                        except asyncio.TimeoutError:
+                            break
+
+                    # Disconnect gracefully
+                    await ws.send(json.dumps({"type": "call_disconnect"}))
+                    result["status"] = "session_created"
+
+            except Exception as exc:
+                result["error"] = str(exc)
+
+        asyncio.run(_connect())
+        return result
+
 
 # ──── API Clients ────────────────────────────────────────────────────────────
 
@@ -1083,25 +1331,43 @@ class _ReplState:
 _REPL_HELP = """
   Available commands:
 
-    help                   Show this help message
-    flags                  List all feature flags for current user props
-    toggle <gate_name>     Map what triggers a specific gate (combinatorial test)
-    set-email <email>      Change email (e.g. test@sesame.com) and show gate diff
-    set-user <user_id>     Change user ID
-    set <key> <value>      Set a custom user property (e.g. set isStaff true)
-    unset <key>            Remove a custom user property
+  SESSION:
+    status                 Show token status, session, profile summary
+    refresh                Refresh Firebase JWT (auto if expired)
+    connect [character]    Connect to voice agent WebSocket (Maya/Miles)
+    health                 Check API + agent service health
+
+  PROFILE:
+    profile                Fetch full user profile
+    set-nickname <name>    Update nickname
+    set-birthday <date>    Update birthday (YYYY-MM-DD)
+    set-training <on|off>  Toggle training data consent
+    set-news <on|off>      Toggle product news emails
+
+  FLAGS:
+    flags                  List all feature flags for current user
+    employee-flags         Get flags as @sesame.com employee (19/27)
+    compare                Compare normal vs employee gate counts
+    toggle <gate_name>     Map what triggers a specific gate
+    set-email <email>      Override email for flag testing
+    set-user <user_id>     Change user ID for flag testing
+    set <key> <value>      Set custom user property
+    unset <key>            Remove custom user property
     props                  Show current user properties
+
+  EXPLORE:
     configs                Show all dynamic configs
-    config <name> [value]  Show or filter dynamic configs by name
-    user                   Fetch user profile from Sesame API
-    call-info <call_id>    Generate upload URL for a call ID
-    refresh-token          Refresh Firebase JWT from HAR refresh_token
-    export                 Export full API spec to JSON
+    config <name>          Show specific dynamic config
     domains                Test email domains for flag differences
     agents                 Probe agent service instances
     bucket                 Explore public GCS bucket
     endpoints              List all discovered endpoints
     protocol               Show WebSocket agent protocol spec
+    call-info <call_id>    Generate upload URL for a call ID
+    export                 Export full API spec to JSON
+
+  META:
+    help                   Show this help message
     exit / quit            Exit the REPL
 """
 
@@ -1122,8 +1388,20 @@ def run_interactive(tokens: TokenStore, har_path: Optional[Path] = None) -> None
     """
     state = _ReplState(tokens, har_path)
 
+    # v1.52.0 — Auto-load refresh token and refresh if expired
+    if har_path and tokens.is_expired:
+        print("  [*] Token expired — attempting auto-refresh...")
+        if tokens.load_refresh_token_from_har(har_path):
+            if tokens.refresh():
+                state.email = tokens.email
+                state.user_id = tokens.user_id
+        else:
+            print("  [!] No refresh token in HAR — some commands will fail")
+    elif har_path and not hasattr(tokens, "_refresh_token"):
+        tokens.load_refresh_token_from_har(har_path)
+
     print("\n" + "=" * 60)
-    print("  SESAME INTERACTIVE EXPLORER")
+    print("  SESAME INTERACTIVE EXPLORER v1.52")
     print("  Type 'help' for commands, 'exit' to quit")
     print("=" * 60)
     print(f"  Token:  {tokens.status()}")
@@ -1358,6 +1636,136 @@ def run_interactive(tokens: TokenStore, har_path: Optional[Path] = None) -> None
             # ── protocol ──
             elif cmd == "protocol":
                 show_websocket_protocol()
+
+            # v1.52.0 — New session/profile/connect commands
+
+            # ── status ──
+            elif cmd == "status":
+                print(f"  Token:     {tokens.status()}")
+                print(f"  Email:     {state.email}")
+                print(f"  UserID:    {state.user_id}")
+                print(f"  Custom:    {state.custom or '(none)'}")
+                client = SesameClient(tokens)
+                profile = client.get_profile()
+                if profile:
+                    print(f"  Nickname:  {profile.get('nickname', '?')}")
+                    print(f"  Roles:     {', '.join(profile.get('roles', []))}")
+                    print(f"  Moderation:{profile.get('moderation_status', '?')}")
+                    print(f"  Training:  {profile.get('allow_training_from_calls', '?')}")
+                    print(f"  News:      {profile.get('prefer_product_news_emails', '?')}")
+                else:
+                    print(f"  Profile:   (failed to fetch)")
+
+            # ── refresh ──
+            elif cmd == "refresh":
+                if hasattr(tokens, "_refresh_token") and tokens._refresh_token:
+                    tokens.refresh()
+                    state.email = tokens.email
+                    state.user_id = tokens.user_id
+                elif state.har_path:
+                    tokens.load_refresh_token_from_har(state.har_path)
+                    tokens.refresh()
+                    state.email = tokens.email
+                    state.user_id = tokens.user_id
+                else:
+                    print("  [!] No refresh token or HAR available")
+
+            # ── connect [character] ──
+            elif cmd == "connect":
+                character = args[0] if args else "Maya"
+                print(f"  Connecting to {character}...")
+                client = SesameClient(tokens)
+                result = client.connect_agent(character=character)
+                if result.get("connected"):
+                    print(f"  [OK] Session: {result.get('session_id')}")
+                    print(f"  ICE servers: {result.get('ice_servers', '?')}")
+                    for msg in result.get("messages", []):
+                        print(f"  [{msg['type']}] {msg['preview'][:100]}")
+                    print(f"  Status: {result.get('status', '?')}")
+                else:
+                    print(f"  [!] {result.get('error', 'Connection failed')}")
+
+            # ── health ──
+            elif cmd == "health":
+                client = SesameClient(tokens)
+                h = client.health()
+                for svc, code in h.items():
+                    status = "UP" if code == 200 else f"DOWN ({code})"
+                    print(f"  {svc:15s} {status}")
+
+            # ── profile ──
+            elif cmd == "profile":
+                client = SesameClient(tokens)
+                profile = client.get_profile()
+                if profile:
+                    print(json.dumps(profile, indent=2))
+                else:
+                    print("  [!] Failed to fetch profile (token expired?)")
+
+            # ── set-nickname <name> ──
+            elif cmd == "set-nickname":
+                if not args:
+                    print("  Usage: set-nickname <name>")
+                else:
+                    client = SesameClient(tokens)
+                    result = client.update_profile(nickname=" ".join(args))
+                    if result:
+                        print(f"  Nickname: {result.get('nickname')}")
+
+            # ── set-birthday <date> ──
+            elif cmd == "set-birthday":
+                if not args:
+                    print("  Usage: set-birthday YYYY-MM-DD")
+                else:
+                    client = SesameClient(tokens)
+                    result = client.update_profile(birthday=f"{args[0]}T00:00:00")
+                    if result:
+                        print(f"  Birthday: {result.get('birthday')}")
+
+            # ── set-training <on|off> ──
+            elif cmd == "set-training":
+                if not args:
+                    print("  Usage: set-training on|off")
+                else:
+                    val = args[0].lower() in ("on", "true", "yes", "1")
+                    client = SesameClient(tokens)
+                    result = client.update_profile(allow_training_from_calls=val)
+                    if result:
+                        print(f"  Training: {result.get('allow_training_from_calls')}")
+
+            # ── set-news <on|off> ──
+            elif cmd == "set-news":
+                if not args:
+                    print("  Usage: set-news on|off")
+                else:
+                    val = args[0].lower() in ("on", "true", "yes", "1")
+                    client = SesameClient(tokens)
+                    result = client.update_profile(prefer_product_news_emails=val)
+                    if result:
+                        print(f"  News: {result.get('prefer_product_news_emails')}")
+
+            # ── employee-flags ──
+            elif cmd == "employee-flags":
+                client = SesameClient(tokens)
+                flags = client.get_employee_flags()
+                gates = flags.get("feature_gates", {})
+                enabled = sum(1 for g in gates.values() if g.get("value"))
+                print(f"  Employee gates (@sesame.com): {enabled}/{len(gates)}")
+                for name, gate in sorted(gates.items()):
+                    val = "ON " if gate.get("value") else "OFF"
+                    print(f"    [{val}] {name[:50]}")
+
+            # ── compare ──
+            elif cmd == "compare":
+                client = SesameClient(tokens)
+                diff = client.compare_flags()
+                print(f"  Normal:   {diff['normal_gates']}/{diff['total']} gates")
+                print(f"  Employee: {diff['employee_gates']}/{diff['total']} gates")
+                print(f"  Extra:    +{diff['extra_count']} employee-only gates")
+                if diff["extra_gates"]:
+                    print()
+                    for g in diff["extra_gates"]:
+                        print(f"    [+] {g[:50]}")
 
             # ── unknown ──
             else:
