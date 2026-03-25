@@ -69,7 +69,69 @@ GCS_PUBLIC_BUCKET = "sesame-dev-public"
 GCS_PROD_BUCKET = "sesame-call-assets-us-central1-prod"
 GCS_API = "https://storage.googleapis.com/storage/v1"
 
-RUDDERSTACK_WRITE_KEY = None  # Extracted at runtime from HAR if needed
+RUDDERSTACK_WRITE_KEY = "2wpiqnS6W3104MQz7mwfyQjME6d"
+GA4_ID = "G-ZZLPJBMBEN"
+
+# v1.52.0 [2026-03-26] — Decompiled from index-E-c2zfaB.js bundle
+# These are the ACTUAL gate and config names from the React app enum
+
+GATE_NAMES = {
+    "DUMMY": "dummy",
+    "DISABLE_CALLING": "disable_calling",
+    "UPLOAD_CLIENT_RECORDING": "upload_client_recording",
+    "VIDEO_DOWNLOAD": "video_download",
+    "SESAME_COM_LOGIN": "sesame_com_login",
+    "CONSUMER_WEB_APP": "consumer_web_app",
+    "SHOW_CALL_INFO": "show_call_info",
+    "SHOW_UPSELL_BANNER": "show_upsell_banner",
+    "SHOW_UPSELL_PAGE": "show_upsell_page",
+}
+
+CONFIG_NAMES = {
+    "DUMMY": "dummy",
+    "WEB_AUDIO_CONFIG": "web_audio_config",
+    "WEBRTC_CONFIG": "webrtc_config",
+    "VIDEO_DOWNLOAD_CONFIG": "video_download_config",
+    "WEBSOCKET_CONFIG": "websocket_config",
+    "BACKOFF_CONFIG": "backoff_config",
+    "DATADOG_CONFIG": "datadog_config",
+    "CALL_FEEDBACK_CONFIG": "call_feedback_config",
+    "OUTAGE_BANNER_CONFIG": "outage_banner_config",
+}
+
+CHARACTERS = {
+    "Maya": {"variant": "production"},
+    "Maya-Alpha": {"variant": "alpha", "note": "Unreleased alpha model"},
+    "Miles": {"variant": "production"},
+}
+
+# 32 internal endpoints behind Google IAP (discovered via bundle decompilation)
+INTERNAL_ENDPOINTS = [
+    "/external/agents", "/external/presets", "/external/preset-list",
+    "/external/preset-names", "/external/full-presets",
+    "/external/inspirations/paginated", "/external/sdui/preview",
+    "/external/labeling/crowd-items", "/external/labeling/crowd-labels",
+    "/external/labeling/staff-items", "/external/labeling/staff-labels",
+    "/external/user/responders", "/external/user/clear-chat-history",
+    "/external/user/set-eula-signed",
+    "/external/waitlist/join", "/external/waitlist/status",
+    "/external/testflight-version",
+    "/external/feedback/call", "/external/feedback/general",
+    "/external/oauth/connections",
+    "/external/oauth/google/callback", "/external/oauth/google/initiate",
+    "/external/oauth/spotify/callback", "/external/oauth/spotify/exchange",
+    "/external/oauth/spotify/initiate", "/external/oauth/spotify/token",
+    "/external/oauth/notion/token",
+    "/external/generate-call-file-upload-url", "/external/health",
+    "/external/bug-report", "/external/call-rating", "/external/call-recording",
+]
+
+SENTRY_CONFIG = {
+    "dsn_key": "8c76a2abba5510ab798298c7e6185fbf",
+    "org_id": "4507352690196480",
+    "project_id": "4509312291110912",
+    "sdk": "sentry.javascript.react/9.17.0",
+}
 
 
 # ──── Token Management ───────────────────────────────────────────────────────
