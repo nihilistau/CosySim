@@ -453,7 +453,46 @@ Desktop shell rendering every CosySim scene as a draggable/resizable iframe wind
 
 ---
 
-## 10. Scene Development Pattern
+## 10. Signal Desktop App (`content/scenes/phone/`)
+
+The Phone/Signal scene has a **Desktop Mode** with 4 tabs:
+
+- **Messages** — DM + group chat threads (existing)
+- **Email** — inbox from `/home/player/inbox/`, read/star/delete, unread badges
+- **Files** — virtual filesystem browser with breadcrumbs and file viewer
+- **Music** — playlist browser, song list, play/next/stop, now-playing bar
+
+Backend: `content/scenes/phone/apps/email_app.py`, `files_app.py`, `music_app.py`
+Routes: `/api/email/*`, `/api/files/*`, `/api/music/*` (11 routes)
+
+Desktop mode activates via dock button → replaces home grid with tab bar.
+
+---
+
+## 11. Oracle Persistent Companion (`engine/agents/oracle_companion.py`)
+
+A background agent that autonomously uses Signal, filesystem, and content skills:
+
+```python
+from engine.agents.oracle_companion import get_oracle_companion
+
+companion = get_oracle_companion(socketio=scene.socketio)
+companion.start()  # 5-min interval, weighted random actions
+```
+
+**5 actions** (weighted): diary (30%), Signal message (25%), observation (20%), playlist (15%), email (10%)
+
+- Writes diary entries to `/home/oracle/journal/`
+- Sends cryptic messages to player's phone
+- Curates mood playlists (midnight_meditation, neon_pulse, etc.)
+- Composes intel emails to player's inbox
+- Writes field observations to `/home/oracle/notes/`
+
+Auto-started when Oracle scene serves. Registered in CharacterRegistry with personality: mystery 0.99, curiosity 0.95, warmth 0.4.
+
+---
+
+## 12. Scene Development Pattern
 
 ### Creating a Scene
 
