@@ -1,6 +1,6 @@
 # CosySim — Complete System Context
 
-> v1.53.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
+> v1.54.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
 >
 > Read this file to gain full context on architecture, conventions, systems, tools,
 > protocols, and workflows. After reading, you should be able to modify any part of

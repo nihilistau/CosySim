@@ -1,15 +1,15 @@
 # CosySim Documentation Index
 
-> v1.52.1 — OpenRoom-Inspired Features + Three-Pillar Architecture + ARGUS Recon Framework, 1,040+ Skills.
+> v1.54.0 — Final System Polish + Three-Pillar Architecture + ARGUS Recon Framework, 1,040+ Skills.
 
 ## Quick Reference
 
 | Metric | Value |
 |--------|-------|
-| Version | v1.52.1 [2026-03-26] |
+| Version | v1.54.0 [2026-03-26] |
 | Targets | 35 (18 game + 11 service + 6 creation) |
 | Skills | ~1,040 across 99 packs via @skill decorator |
-| Interceptors | 30 pipeline hooks in the agent governance layer |
+| Interceptors | 36 pipeline hooks in the agent governance layer |
 | MCP Tools | 43 domain modules |
 | ARGUS | 21 toolkit functions, 13 recon techniques |
 | Tests | 417 test files (smart runner: ~53s smoke) |
