@@ -242,7 +242,7 @@ class GeminiEmbeddingProvider:
 
     def __init__(
         self,
-        model: str = "gemini-embedding-exp-03-07",
+        model: str = "gemini-embedding-2-preview",  # v1.56.1 [2026-03-26] — upgraded from deprecated exp-03-07
         output_dimensions: int = 768,
         api_key_index: int = 0,
         enabled: bool = True,
