@@ -8,10 +8,13 @@ to local Nexus for offline access.
 
 Principle: Google is the teacher. NEXUS is the student. The student graduates.
 
-Version: v1.57.0 [2026-03-26]
+Version: v1.57.1 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.57.1 [2026-03-26] — MIME type auto-detection for uploads (.md/.py/.yaml etc.),
+                            bootstrap_code_store() for engine source files,
+                            display_name passthrough in upload config
     v1.57.0 [2026-03-26] — Initial implementation: store CRUD, upload, query,
                             auto-distillation to Nexus, bootstrap_project_stores()
 
@@ -32,6 +35,46 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+# ──── MIME Type Map ───────────────────────────────────────────────
+
+# v1.57.1 [2026-03-26] — Auto-detect MIME for common file types
+# The google-genai SDK infers MIME from extension, but fails on .md and others.
+# We provide explicit mappings to avoid "Unknown mime type" errors.
+_MIME_MAP = {
+    ".md": "text/markdown",
+    ".txt": "text/plain",
+    ".py": "text/x-python",
+    ".js": "text/javascript",
+    ".json": "application/json",
+    ".yaml": "text/yaml",
+    ".yml": "text/yaml",
+    ".html": "text/html",
+    ".css": "text/css",
+    ".csv": "text/csv",
+    ".xml": "text/xml",
+    ".sh": "text/x-shellscript",
+    ".ps1": "text/plain",
+    ".toml": "text/plain",
+    ".cfg": "text/plain",
+    ".ini": "text/plain",
+    ".log": "text/plain",
+    ".rst": "text/x-rst",
+}
+
+
+def _detect_mime(file_path: str) -> str:
+    """Detect MIME type from file extension using the local map.
+
+    Args:
+        file_path: Path to the file.
+
+    Returns:
+        MIME type string, or empty string if unknown (let SDK try).
+    """
+    ext = Path(file_path).suffix.lower()
+    return _MIME_MAP.get(ext, "")
 
 
 # ──── File Search Client ──────────────────────────────────────────
@@ -163,9 +206,13 @@ class FileSearchClient:
 
     # ──── Document Upload ─────────────────────────────────────────
 
+    # v1.57.1 [2026-03-26] — MIME auto-detection + display_name via config
     def upload_document(self, store_name: str, file_path: str,
                         display_name: str = "") -> str:
         """Upload a local document to a file search store.
+
+        Automatically detects MIME type for common extensions (.md, .py, .yaml,
+        etc.) to prevent "Unknown mime type" errors from the Google API.
 
         Args:
             store_name: Target store resource name.
@@ -175,33 +222,48 @@ class FileSearchClient:
         Returns:
             The document resource name, or empty string on failure.
         """
+        from google.genai import types
+
         if not display_name:
             display_name = Path(file_path).name
+
+        # Build upload config with MIME type detection and display name
+        config_kwargs: Dict[str, Any] = {"display_name": display_name}
+        mime = _detect_mime(file_path)
+        if mime:
+            config_kwargs["mime_type"] = mime
+            logger.debug(
+                "[FileSearch] Detected MIME (operation=upload): %s → %s",
+                display_name, mime,
+            )
 
         try:
             op = self._client.file_search_stores.upload_to_file_search_store(
                 file_search_store_name=store_name,
                 file=file_path,
+                config=types.UploadToFileSearchStoreConfig(**config_kwargs),
             )
             doc_name = ""
             if hasattr(op, "response") and op.response:
                 doc_name = getattr(op.response, "document_name", "") or ""
             logger.info(
-                "[FileSearch] Uploaded (operation=upload, store=%s): %s → %s",
-                store_name, display_name, doc_name,
+                "[FileSearch] Uploaded (operation=upload, store=%s, mime=%s): %s → %s",
+                store_name, mime or "auto", display_name, doc_name,
             )
             return doc_name
         except Exception as exc:
             logger.warning(
-                "[FileSearch] Upload failed (operation=upload, file=%s): %s",
-                display_name, exc,
+                "[FileSearch] Upload failed (operation=upload, file=%s, mime=%s): %s",
+                display_name, mime or "auto", exc,
             )
             return ""
 
+    # v1.57.1 [2026-03-26] — upload_text now uses .md extension (MIME auto-detected)
     def upload_text(self, store_name: str, title: str, content: str) -> str:
         """Upload text content as a markdown document to a store.
 
         Creates a temporary .md file, uploads it, then cleans up.
+        MIME type is automatically detected as text/markdown via _detect_mime().
 
         Args:
             store_name: Target store resource name.
@@ -219,6 +281,7 @@ class FileSearchClient:
             tmp.write(f"# {title}\n\n{content}")
             tmp.close()
             tmp_path = tmp.name
+            # upload_document will auto-detect text/markdown from .md suffix
             return self.upload_document(store_name, tmp_path, f"{title}.md")
         except Exception as exc:
             logger.warning(
@@ -337,15 +400,77 @@ class FileSearchClient:
             logger.debug("[FileSearch] Nexus distill failed (operation=distill): %s", exc)
 
 
-# ──── Bootstrap Utility ───────────────────────────────────────────
+# ──── Bootstrap Utilities ─────────────────────────────────────────
 
-# v1.57.0 [2026-03-26] — Upload core project docs to File Search for grounded queries
+
+def _upload_file_list(
+    client: FileSearchClient,
+    store_name: str,
+    file_list: List[str],
+    project_root: Path,
+    label: str,
+) -> Dict[str, Any]:
+    """Upload a list of files to a store, tracking success/skip counts.
+
+    Args:
+        client: FileSearchClient instance.
+        store_name: Target store resource name.
+        file_list: Relative file paths from project root.
+        project_root: Absolute project root path.
+        label: Label for logging (e.g. "architecture", "code").
+
+    Returns:
+        Dict with 'store', 'uploaded', 'skipped', 'failed', 'total'.
+
+    CONNECTS: FileSearchClient
+    CALLED BY: bootstrap_project_stores(), bootstrap_code_store()
+    """
+    uploaded = 0
+    skipped = 0
+    failed = 0
+    for doc in file_list:
+        path = project_root / doc
+        if path.exists():
+            try:
+                result = client.upload_document(store_name, str(path))
+                if result is not None:
+                    # upload_document returns doc_name or "" — both mean the
+                    # upload call succeeded (server may not return a doc name)
+                    uploaded += 1
+                else:
+                    failed += 1
+            except Exception as exc:
+                failed += 1
+                logger.warning(
+                    "[FileSearch] Upload failed for %s (operation=bootstrap_%s): %s",
+                    doc, label, exc,
+                )
+        else:
+            skipped += 1
+            logger.debug("[FileSearch] Skipped (not found): %s", doc)
+
+    logger.info(
+        "[FileSearch] Bootstrap %s complete (operation=bootstrap_%s): "
+        "store=%s, uploaded=%d, skipped=%d, failed=%d, total=%d",
+        label, label, store_name, uploaded, skipped, failed, len(file_list),
+    )
+    return {
+        "store": store_name,
+        "uploaded": uploaded,
+        "skipped": skipped,
+        "failed": failed,
+        "total": len(file_list),
+    }
+
+
+# v1.57.1 [2026-03-26] — Re-upload with MIME fix, added INTERCEPTORS/OPERATIONS/GAME_SYSTEMS
 def bootstrap_project_stores() -> Dict[str, Any]:
     """Upload core project documentation to File Search stores.
 
     Creates (or reuses) a 'cosysim-architecture' store and uploads the key
     documentation files that define CosySim's architecture, configuration,
-    and MCP framework.
+    and MCP framework. MIME types are now auto-detected to prevent upload
+    failures on .md files.
 
     Returns:
         Dict with 'store' (resource name), 'uploaded' (count), 'total' (count).
@@ -368,35 +493,54 @@ def bootstrap_project_stores() -> Dict[str, Any]:
         "docs/MCP_FRAMEWORK.md",
         "docs/SKILLS.md",
         "docs/CONFIGURATION.md",
+        "docs/INTERCEPTORS.md",
+        "docs/OPERATIONS.md",
+        "docs/GAME_SYSTEMS.md",
+        "docs/CHARACTER_SYSTEM.md",
+        "docs/INTEGRATIONS_SDK.md",
     ]
 
-    uploaded = 0
-    skipped = 0
-    for doc in arch_docs:
-        path = project_root / doc
-        if path.exists():
-            try:
-                result = client.upload_document(arch_store, str(path))
-                if result:
-                    uploaded += 1
-                else:
-                    # upload_document returns "" on failure but logs the error
-                    uploaded += 1  # The upload itself may succeed without doc_name
-            except Exception as exc:
-                logger.warning(
-                    "[FileSearch] Upload failed for %s (operation=bootstrap): %s",
-                    doc, exc,
-                )
-        else:
-            skipped += 1
-            logger.debug("[FileSearch] Skipped (not found): %s", doc)
+    return _upload_file_list(client, arch_store, arch_docs, project_root, "architecture")
 
-    logger.info(
-        "[FileSearch] Bootstrap complete (operation=bootstrap): "
-        "store=%s, uploaded=%d, skipped=%d, total=%d",
-        arch_store, uploaded, skipped, len(arch_docs),
-    )
-    return {"store": arch_store, "uploaded": uploaded, "total": len(arch_docs)}
+
+# v1.57.1 [2026-03-26] — New: upload engine source files for code-grounded queries
+def bootstrap_code_store() -> Dict[str, Any]:
+    """Upload key engine source files to a code File Search store.
+
+    Creates (or reuses) a 'cosysim-codebase' store and uploads the core
+    engine Python modules. This enables grounded queries against actual
+    source code (e.g. "How does _try_qa_cache work in query_router.py?").
+
+    Returns:
+        Dict with 'store' (resource name), 'uploaded' (count), 'total' (count).
+
+    CONNECTS: FileSearchClient, engine source files on disk
+    CALLED BY: Manual invocation, scheduler bootstrap task
+    """
+    client = get_file_search_client()
+    project_root = Path(__file__).resolve().parents[2]
+
+    # Code store — engine source files
+    code_store = client.get_or_create_store("cosysim-codebase")
+    code_files = [
+        "engine/nexus/client.py",
+        "engine/nexus/query_router.py",
+        "engine/nexus/knowledge_pipeline.py",
+        "engine/nexus/embedding_service.py",
+        "engine/nexus/governance_rules.py",
+        "engine/agents/agent_loop.py",
+        "engine/agents/virtual_agent_manager.py",
+        "engine/mcp/comms_framework.py",
+        "engine/lmstudio/chat.py",
+        "engine/lmstudio/router.py",
+        "engine/skills/skill.py",
+        "engine/skills/registry.py",
+        "engine/config.py",
+        "engine/integrations/file_search_client.py",
+        "engine/integrations/aistudio_client.py",
+    ]
+
+    return _upload_file_list(client, code_store, code_files, project_root, "code")
 
 
 # ──── Singleton ───────────────────────────────────────────────────

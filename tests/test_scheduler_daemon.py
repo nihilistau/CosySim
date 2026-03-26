@@ -314,8 +314,8 @@ class TestBuiltinTasks:
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
         # v1.50.1 — count grows as new tasks are added; assert minimum
-        assert daemon.register.call_count >= 91, (
-            f"Expected at least 91 builtin tasks, got {daemon.register.call_count}"
+        assert daemon.register.call_count >= 92, (
+            f"Expected at least 92 builtin tasks, got {daemon.register.call_count}"
         )
 
     def test_doc_sync_task_registered(self) -> None:

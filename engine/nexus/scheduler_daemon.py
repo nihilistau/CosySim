@@ -1,8 +1,9 @@
 """Scheduled Task Runner — Lightweight cron-like daemon for CosySim autonomous operations.
 
-Version: v1.57.0 [2026-03-26]
+Version: v1.57.1 [2026-03-26]
 
 Change Log:
+    v1.57.1 [2026-03-26] — Add knowledge-full-sync (weekly) pipeline task — File Search + NLM + Nexus
     v1.57.0 [2026-03-26] — Add file-search-sync (weekly) and context-cache-refresh (every_8h) tasks
     v1.56.0 [2026-03-26] — Auto-register scheduler as system agent; add session-bulk-sync + master-notebook-rebuild tasks
     v1.50.2 [2026-03-24] — Enhanced status() with overdue/error tracking, register task-auto-assign
@@ -1021,6 +1022,37 @@ def _context_cache_refresh_callback() -> Dict[str, Any]:
         return {"status": "error", "error": str(exc)}
 
 
+# v1.53.1 [2026-03-26] — Full knowledge-sync pipeline (File Search → query → Nexus)
+# CONNECTS: WorkspacePipeline, FileSearchClient, Nexus Q&A
+# CALLED BY: scheduler daemon (knowledge-full-sync weekly)
+# EMITS: Nexus Q&A entries (file_search_distilled category)
+def _knowledge_full_sync_callback() -> Dict[str, Any]:
+    """Weekly: run full knowledge sync pipeline across File Search + NLM + Nexus."""
+    try:
+        from engine.nexus.workspace_pipeline import WorkspacePipeline
+        from pathlib import Path
+        import json
+
+        template_path = Path("data/nexus/pipelines/knowledge-sync.json")
+        if not template_path.exists():
+            return {"status": "skip", "reason": "pipeline template not found"}
+
+        template = json.loads(template_path.read_text(encoding="utf-8"))
+        pipeline = WorkspacePipeline()
+        result = pipeline.run(
+            template.get("name", "knowledge-sync"),
+            stages=template.get("stages", []),
+        )
+        return {
+            "status": "ok" if result.status.value == "completed" else "error",
+            "stages": len(template.get("stages", [])),
+            "run_id": result.run_id,
+        }
+    except Exception as exc:
+        logger.warning("[scheduler] knowledge-full-sync failed (operation=knowledge_sync): %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
 def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     """Register all built-in autonomous tasks."""
     try:
@@ -1565,6 +1597,14 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "Gemini Context Cache — refresh project context prefix (every 8h)",
         "every_8h",
         _context_cache_refresh_callback,
+    )
+
+    # v1.53.1 [2026-03-26] — Knowledge-sync full pipeline (File Search + NLM + Nexus)
+    daemon.register(
+        "knowledge-full-sync",
+        "Full knowledge sync: File Search + NLM + Nexus (weekly)",
+        "weekly",
+        _knowledge_full_sync_callback,
     )
 
 
