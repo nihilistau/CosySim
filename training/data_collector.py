@@ -1,4 +1,19 @@
-"""Runtime data collection hooks for training all model types."""
+"""
+Runtime Data Collection Hooks
+=============================
+
+Collects training examples from the live system at runtime.
+Writes to training/datasets/collected/{model_type}_live.jsonl.
+Non-blocking append-only file writes.
+
+Version: v1.55.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.55.0 [2026-03-26] — Add collect_agent_decision() and collect_agent_outcome()
+                            for self-improvement training loop
+    v1.0.0  [2026-03-01] — Initial data collection hooks
+"""
 from __future__ import annotations
 
 import json
@@ -265,6 +280,110 @@ class DataCollector:
             self._append(model_type, record)
         except Exception as e:
             logger.error(f"DataCollector.collect_voice_sample failed: {e}")
+
+    # ── Agent Decision Training ─────────────────────────────────────────
+
+    # v1.55.0 [2026-03-26] — Agent decision logging for self-improvement loop
+    def collect_agent_decision(
+        self,
+        situation: str,
+        action: str,
+        character_id: str = "",
+        scene: str = "",
+        quality: float = 1.0,
+        model: str = "",
+    ) -> None:
+        """Log an agent decision for routing/planning training data.
+
+        Captures the situation→action mapping so the self-improvement pipeline
+        can learn which decisions lead to good outcomes.
+
+        Args:
+            situation: The perceived context that led to the decision.
+            action: The action taken (e.g. "speak: Hello there").
+            character_id: Character who made the decision.
+            scene: Scene where the decision was made.
+            quality: Quality score 0.0–1.0 (1.0 = success, 0.3 = failure).
+            model: LLM model used for the decision (if known).
+        """
+        try:
+            record = {
+                "model_type": "agent_decision",
+                "input": situation,
+                "output": action,
+                "quality": quality,
+                "metadata": {
+                    "character_id": character_id,
+                    "scene": scene,
+                    "model": model,
+                },
+                "source": "runtime",
+            }
+            self._append("agent_decision", record)
+            logger.debug(
+                "[DataCollector] Agent decision collected "
+                "(operation=collect_agent_decision, character=%s, scene=%s, quality=%.1f)",
+                character_id, scene, quality,
+            )
+        except Exception as e:
+            logger.error(
+                "[DataCollector] collect_agent_decision failed "
+                "(operation=collect_agent_decision, character=%s): %s",
+                character_id, e,
+            )
+
+    # v1.55.0 [2026-03-26] — Agent outcome feedback for reinforcement signal
+    def collect_agent_outcome(
+        self,
+        decision_summary: str,
+        outcome: str,
+        quality_rating: float = 1.0,
+    ) -> None:
+        """Feedback on whether an agent action succeeded.
+
+        Provides a reinforcement signal that pairs with collect_agent_decision
+        records, allowing the training pipeline to weight decisions by outcome.
+
+        Args:
+            decision_summary: Brief description of what was decided.
+            outcome: Result category — "success", "partial", or "failure".
+            quality_rating: Numeric quality 0.0–1.0.
+        """
+        try:
+            # Map outcome string to a quality floor so the training pipeline
+            # can filter by minimum quality reliably
+            outcome_quality = {
+                "success": max(quality_rating, 0.8),
+                "partial": min(max(quality_rating, 0.3), 0.7),
+                "failure": min(quality_rating, 0.3),
+            }
+            effective_quality = outcome_quality.get(outcome, quality_rating)
+
+            record = {
+                "model_type": "agent_decision",
+                "input": f"[OUTCOME] {decision_summary}",
+                "output": f"outcome={outcome}",
+                "quality": effective_quality,
+                "metadata": {
+                    "outcome": outcome,
+                    "original_rating": quality_rating,
+                    "record_type": "outcome_feedback",
+                },
+                "source": "runtime",
+            }
+            self._append("agent_decision", record)
+            logger.debug(
+                "[DataCollector] Agent outcome collected "
+                "(operation=collect_agent_outcome, outcome=%s, quality=%.2f)",
+                outcome, effective_quality,
+            )
+        except Exception as e:
+            logger.error(
+                "[DataCollector] collect_agent_outcome failed "
+                "(operation=collect_agent_outcome): %s", e,
+            )
+
+    # ── Debug Session Training ───────────────────────────────────────────
 
     def collect_debug_session(
         self,

@@ -1,8 +1,10 @@
 """Unified embedding service — Gemini Embedding 2 with MRL + local fallback.
 
-Version: v1.50.2 [2026-03-24]
+Version: v1.55.0 [2026-03-26]
 
 Change Log:
+    v1.55.0 [2026-03-26] — Backward-compat: support old 'enable_gemini' config key
+                            with deprecation warning, migrate to 'gemini.enabled'
     v1.50.2 [2026-03-24] — Fix Gemini config key (was enable_gemini, now reads enabled),
                             add L2 normalization to LMStudio provider for cosine space
 
@@ -528,8 +530,14 @@ class EmbeddingService:
         )
         self._batch_size = batch_size
         self._api_key_index = api_key_index
-        # v1.50.2 [2026-03-24] — Fix: read correct config key (was enable_gemini, never existed)
-        self._enable_gemini = cfg.get("nexus.embeddings.enabled", True)
+        # v1.55.0 [2026-03-26] — Backward-compat: support old config key
+        gemini_enabled = cfg.get("nexus.embeddings.gemini.enabled",
+                                 cfg.get("nexus.embeddings.enabled",
+                                         cfg.get("nexus.embeddings.enable_gemini", True)))
+        if cfg.get("nexus.embeddings.enable_gemini") is not None:
+            logger.info("[EmbeddingService] Deprecated config key 'embeddings.enable_gemini' "
+                        "— migrate to 'embeddings.gemini.enabled' (operation=config_migration)")
+        self._enable_gemini = gemini_enabled
         self._lmstudio_host = cfg.get("lmstudio.host", "127.0.0.1")
         self._lmstudio_port = cfg.get("lmstudio.port", 1234)
         self._lmstudio_token = cfg.get("lmstudio.api_token", None)
