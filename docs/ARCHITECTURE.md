@@ -1,6 +1,6 @@
 # Architecture
 
-> CosySim Documentation — v1.52.0 [2026-03-26]
+> CosySim Documentation — v1.56.0 [2026-03-26]
 >
 > System design, data flow, layers, and the three-pillar architecture.
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-CosySim is a local-first multi-scene AI simulation framework. Every NPC is an LLM-powered agent governed by a 30-interceptor pipeline, ~1,040 skills across 99 packs, and a persistent knowledge layer (Nexus KMS). The system runs 33 launch targets as Flask, FastAPI, Streamlit, and Node servers, all orchestrated by a unified launcher and TUI.
+CosySim is a local-first multi-scene AI simulation framework. Every NPC is an LLM-powered agent governed by a 36-interceptor pipeline, ~1,040 skills across 99 packs, and a persistent knowledge layer (Nexus KMS v1.5.0 with agent registry). The system runs 35 launch targets as Flask, FastAPI, Streamlit, and Node servers, all orchestrated by a unified launcher and TUI.
 
 **Design principles:**
 
@@ -126,15 +126,15 @@ Content authoring, asset generation, and visual editing tools.
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐               │
 │  │   nexus/     │ │    mcp/      │ │  lmstudio/   │               │
 │  │ Knowledge    │ │ 43 tool mods │ │ Inference    │               │
-│  │ Q&A router   │ │ Governance   │ │ ServerCtrl   │               │
-│  │ Copilot sync │ │ Dialog       │ │ LMLink       │               │
-│  │ Scheduling   │ │ State coord  │ │ TaskQueue    │               │
+│  │ 6-tier router│ │ Governance   │ │ ServerCtrl   │               │
+│  │ Agent regstry│ │ Dialog       │ │ LMLink       │               │
+│  │ KnowlPipelin│ │ State coord  │ │ TaskQueue    │               │
 │  └──────────────┘ └──────────────┘ └──────────────┘               │
 │                                                                     │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐               │
-│  │ skills/ (95) │ │  agents/     │ │   world/     │               │
-│  │ ~1000 skills │ │ VirtualAgent │ │ WorldSim     │               │
-│  │ @skill deco  │ │ 26 intrcptrs │ │ PlayerState  │               │
+│  │ skills/ (99) │ │  agents/     │ │   world/     │               │
+│  │ ~1040 skills │ │ VirtualAgent │ │ WorldSim     │               │
+│  │ @skill deco  │ │ 36 intrcptrs │ │ PlayerState  │               │
 │  └──────────────┘ └──────────────┘ └──────────────┘               │
 │                                                                     │
 │  pipeline/ · services/ · tts/ · asset_studio/ · characters/        │
@@ -157,21 +157,24 @@ The engine is a reusable framework under `engine/`. Content layer scenes subclas
 
 ### Nexus — Knowledge Backbone
 
-`engine/nexus/` — Knowledge management, Q&A routing, Copilot integration, and the training flywheel. See [Nexus](NEXUS.md) for the full reference.
+`engine/nexus/` — Knowledge management (v1.5.0), Q&A routing, agent registry, Copilot integration, and the training flywheel. See [Nexus](NEXUS.md) for the full reference.
 
-**Smart Query Router** — 5-tier pipeline that progressively escalates:
+**Smart Query Router** — 6-tier pipeline that progressively escalates:
 
 ```
 Request → ① Q&A Cache (instant, 0 tokens)
-        → ② FTS5 Search (fast, synthesize from entries)
-        → ③ Nexus Ask (server-side pipeline)
-        → ④ Direct NotebookLM Ask (grounded, free)
-        → ⑤ LMStudio Fallback (local inference, auto-stored)
+        → ② Vector Search (Gemini Embedding 2 + ChromaDB)
+        → ③ FTS5 Knowledge (full-text search across entries)
+        → ④ Nexus Smart Ask (server-side pipeline)
+        → ⑤ Direct NotebookLM Ask (grounded, free)
+        → ⑥ LMStudio Fallback (local inference, auto-stored)
 ```
 
 Every LLM answer is auto-cached. The next identical question gets an instant Nexus answer.
 
-**Key modules:** NexusClient (CRUD), NexusQueryRouter (5-tier), CopilotBridge (session context), TrainingFlywheel (data collection), SchedulerDaemon (55 recurring tasks), KnowledgeCapture (entry + Q&A pair storage).
+**Agent Registry:** 8 formal agent types with tiered access control governing skills, knowledge namespaces, and system capabilities. Tracked in Nexus with 35 tables, 71K+ entries, and 3.7K+ QA pairs.
+
+**Key modules:** NexusClient (CRUD), NexusQueryRouter (6-tier), KnowledgePipeline (end-to-end knowledge flow), CopilotBridge (session context), TrainingFlywheel (data collection), SchedulerDaemon (89 recurring tasks), KnowledgeCapture (entry + Q&A pair storage).
 
 ### LMStudio — Local Inference
 
@@ -369,7 +372,7 @@ MCPFramework (singleton)
 
 ## Interceptor Pipeline
 
-24 interceptors in `engine/agents/interceptors/`, auto-discovered at import. Each has a priority (lower = runs first) and a phase (PRE = before LLM call, POST = after). See [Interceptors](INTERCEPTORS.md) for the full reference.
+36 interceptors in `engine/agents/interceptors/`, auto-discovered at import. Each has a priority (lower = runs first) and a phase (PRE = before LLM call, POST = after). See [Interceptors](INTERCEPTORS.md) for the full reference.
 
 ### Priority Bands
 
@@ -466,7 +469,7 @@ Additional singletons from other subsystems:
 ```python
 get_config()                 # ConfigManager — dot-notation config access
 get_nexus_client()           # NexusClient — knowledge CRUD
-get_query_router()           # NexusQueryRouter — 5-tier smart query
+get_query_router()           # NexusQueryRouter — 6-tier smart query
 get_port_registry()          # PortRegistry — port lookups with config override
 ```
 
@@ -543,5 +546,6 @@ Health check: `GET http://localhost:{port}/health` on all Flask/FastAPI targets.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v1.56.0 | 2026-03-26 | Updated counts: 36 interceptors, 35 targets, ~1,040 skills across 99 packs, 89 scheduler tasks. Added Nexus v1.5.0 agent registry, 6-tier query router, KnowledgePipeline |
 | v1.50 | 2026-03-22 | Full rewrite — three-pillar architecture, accurate counts (32 targets, ~1,000 skills, 24 interceptors, 43 tool modules, 404 tests), tightened structure |
 | v0.91b | 2026-03-21 | Previous version — 20 scenes, outdated counts, pre-pillar architecture |

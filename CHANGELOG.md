@@ -4,6 +4,47 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.56.0] — "NEXUS v2" — 2026-03-26
+
+Full Nexus schema expansion, agent type system with registry-backed access control, unified KnowledgePipeline, LMStudio model health with Nexus routing hints, self-maintenance (freshness scoring, hash dedup), and Oracle metrics for Nexus/LMStudio.
+
+### Part A: Nexus Schema Expansion (35 tables)
+- **agent_registry** table — stores agent type, capabilities, last seen, registration timestamp
+- **access_log** table — records every Nexus operation with agent_id, operation, resource, timestamp
+- **subscriptions** table — per-agent topic subscriptions for event routing
+- Schema now totals **35 tables** across knowledge, governance, training, agent registry, and access tracking
+
+### Part B: Agent Type System (8 types)
+- **AGENT_TYPES** enum: copilot, claude_code, scene_agent, scheduler, training, observer, player, system
+- **Auto-registration** — agents register on first Nexus interaction with type detection
+- **Registry-backed access** — governance rules resolve agent type from registry before permission check
+- Agent capabilities tracked: read, write, delete, admin, embed, train
+
+### Part C: KnowledgePipeline (unified ingest-to-Q&A)
+- **`engine/nexus/knowledge_pipeline.py`** — `get_knowledge_pipeline()` singleton
+- Unified flow: ingest → validate → dedup (content hash) → store → embed → auto Q&A generation
+- Content validation: minimum length, encoding check, duplicate detection via SHA-256 hash
+- Auto Q&A: generates question-answer pairs from stored knowledge for cache priming
+- Integrates with TrainingFlywheel for fine-tuning data collection
+
+### Part D: LMStudio Model Health & Nexus Routing Hint
+- **Model health tracking** — per-model success/failure rates, latency percentiles
+- **Nexus routing hint** — QueryRouter checks model health before falling back to LLM tier
+- Unhealthy models (>50% failure rate) trigger automatic Nexus-first routing preference
+
+### Part E: Self-Maintenance (freshness scoring, hash dedup)
+- **Freshness scoring** — knowledge entries scored by age, access frequency, and citation count
+- **Hash dedup** — SHA-256 content hashing prevents duplicate entries across all ingest paths
+- **Stale entry pruning** — scheduler task marks entries below freshness threshold for review
+- 89 scheduler tasks now registered (up from 32)
+
+### Part F: Oracle Nexus/LMStudio Metrics
+- **Oracle dashboard** now shows Nexus cache hit rate, agent registry size, and access log volume
+- **LMStudio metrics** — model load/unload events, inference latency by model, error rates
+- New Oracle CLI flags surface Nexus and LMStudio health alongside existing service grid
+
+---
+
 ## [1.55.0] — "NEXUS ALIVE" — 2026-03-26
 
 Wired the self-improvement loop end-to-end. Agents now check Nexus knowledge cache before GPU, decisions feed training, models hot-reload after promotion, and governance is enforced.
