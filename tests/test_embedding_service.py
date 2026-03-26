@@ -117,13 +117,13 @@ class TestGeminiEmbeddingProvider:
         mock_get.return_value = mock_client
 
         provider = GeminiEmbeddingProvider(
-            model="gemini-embedding-exp-03-07",
+            model="gemini-embedding-2-preview",
             output_dimensions=768,
         )
         result = provider.embed("test text", task_type="RETRIEVAL_DOCUMENT")
 
         mock_client.embed_content.assert_called_once_with(
-            model="gemini-embedding-exp-03-07",
+            model="gemini-embedding-2-preview",
             content="test text",
             task_type="RETRIEVAL_DOCUMENT",
             output_dimensionality=768,
@@ -161,10 +161,10 @@ class TestGeminiEmbeddingProvider:
 
     def test_properties(self) -> None:
         provider = GeminiEmbeddingProvider(
-            model="gemini-embedding-exp-03-07",
+            model="gemini-embedding-2-preview",
             output_dimensions=1536,
         )
-        assert provider.name == "gemini:gemini-embedding-exp-03-07"
+        assert provider.name == "gemini:gemini-embedding-2-preview"
         assert provider.dimensions == 1536
 
 

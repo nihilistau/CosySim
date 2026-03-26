@@ -804,7 +804,7 @@ nexus:
   embeddings:
     enabled: true                # v1.50.2 — Controls Gemini provider init (EmbeddingService reads this)
     provider: "auto"             # "gemini" (primary), "local" (LMStudio), "auto"
-    model: "gemini-embedding-001"  # Gemini Embedding (v1beta)
+    model: "gemini-embedding-2-preview"  # Gemini Embedding 2 Preview (multimodal, MRL)
     dimensions: 768              # MRL: 768 (fast), 1536 (balanced), 3072 (max quality)
     local_model: "text-embedding-nomic-embed-text-v1.5"  # LMStudio embedding model key (fallback)
     cache_size: 10000            # In-memory embedding cache entries

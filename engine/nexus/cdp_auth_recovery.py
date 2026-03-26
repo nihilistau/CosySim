@@ -90,7 +90,7 @@ def _cdp_host() -> str:
     return f"http://localhost:{_get_cdp_config()['port']}"
 GEMINI_EMBED_URL = (
     "https://generativelanguage.googleapis.com/v1beta"
-    "/models/gemini-embedding-001:embedContent"
+    "/models/gemini-embedding-2-preview:embedContent"
 )
 _AIKEY_RE = re.compile(r"AIza[a-zA-Z0-9_\-]{35}")
 _HARVEST_URL_HINT = "alkalimakersuite-pa.clients6.google.com"
@@ -274,7 +274,7 @@ def _test_key(key: str) -> bool:
     try:
         resp = requests.post(
             f"{GEMINI_EMBED_URL}?key={key}",
-            json={"model": "models/gemini-embedding-001",
+            json={"model": "models/gemini-embedding-2-preview",
                   "content": {"parts": [{"text": "test"}]}},
             timeout=8,
         )
