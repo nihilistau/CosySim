@@ -318,7 +318,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.52** (Live Game + Co-Op Heists — HUD widgets, browser tests, CSS polish, squad system)
+- Current: **v1.53** (Baseline — all 14 scenes verified, ARGUS first-class, Nexus governance + self-maintenance, 32 scheduler tasks)
 
 ### Navigational Comments
 
