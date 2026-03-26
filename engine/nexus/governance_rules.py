@@ -6,6 +6,13 @@ with basic regex-based validation for coding standards.
 
 The @governed decorator and enforce_governance() function provide active
 enforcement at the Python API level — not just advisory, but blocking.
+
+Version: v1.55.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.55.0 [2026-03-26] — Auto-seed governance rules on first access (ensure_seeded)
+    v1.50.0 [2026-03-20] — Initial governance rules engine with enforcement
 """
 from __future__ import annotations
 
@@ -520,6 +527,7 @@ class GovernanceManager:
 # ──── Singleton ────
 
 _manager: Optional[GovernanceManager] = None
+_seeded: bool = False
 
 
 def get_governance_manager() -> GovernanceManager:
@@ -528,6 +536,34 @@ def get_governance_manager() -> GovernanceManager:
     if _manager is None:
         _manager = GovernanceManager()
     return _manager
+
+
+# v1.55.0 [2026-03-26] — Auto-seed governance rules on first access
+def ensure_seeded() -> None:
+    """Idempotent auto-seed of governance rules into Nexus.
+
+    Safe to call multiple times — only seeds once per process lifetime.
+    Called by FlaskScene.start() or any startup path that needs governance
+    rules to be present.
+
+    CONNECTS: GovernanceManager, NexusClient
+    CALLED BY: FlaskScene.start(), manual startup scripts
+    """
+    global _seeded
+    if _seeded:
+        return
+    _seeded = True
+    try:
+        mgr = get_governance_manager()
+        result = mgr.seed_rules()
+        logger.info(
+            "[GovernanceRules] Auto-seed complete (operation=ensure_seeded): %s", result,
+        )
+    except Exception as exc:
+        # Don't block startup if Nexus is unreachable
+        logger.warning(
+            "[GovernanceRules] Auto-seed failed (operation=ensure_seeded): %s", exc,
+        )
 
 
 # ──── Helpers ────

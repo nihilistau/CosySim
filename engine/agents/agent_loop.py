@@ -21,6 +21,8 @@ Version: v1.49.3 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.55.0 [2026-03-26] — Hook agent decisions into DataCollector for
+                            self-improvement training loop
     v1.54.0 [2026-03-26] — Upgrade unregister_character debug→warning for MCP leave_scene failure
     v1.49.3 [2026-03-22] — Structured logging context: [AgentLoop] prefix,
                             operation= and entity= context on all log calls
@@ -238,6 +240,8 @@ class AgentLoop:
                 actions.append(result)
                 if self._on_action:
                     self._on_action(cid, result)
+                # v1.55.0 — Log decision for training pipeline
+                self._log_decision_for_training(cid, contexts.get(cid, ""), decision, result)
             except Exception as e:
                 logger.warning("[AgentLoop] Execute error (operation=execute, character_id=%s, scene=%s): %s", cid, self.scene_id, e)
                 actions.append({"character_id": cid, "action": "idle", "error": str(e)})
@@ -703,6 +707,44 @@ class AgentLoop:
         # Emit to UI
         if self.socketio:
             self.socketio.emit("agent_action", result)
+
+    # ── Training Data Hook ────────────────────────────────────────────
+
+    # v1.55.0 [2026-03-26] — Feed agent decisions to DataCollector for self-improvement loop
+    # CONNECTS: DataCollector, training pipeline (auto_train.py)
+    # CALLED BY: tick() Phase 3 after _execute()
+    def _log_decision_for_training(
+        self, character_id: str, context: str, decision: Dict, result: Dict
+    ) -> None:
+        """Feed agent decisions to training pipeline.
+
+        Captures situation→action pairs with quality signals so the
+        self-improvement pipeline can learn from real agent behavior.
+        Wrapped in try/except so training collection never crashes the loop.
+
+        Args:
+            character_id: Character who made the decision.
+            context: Perception context string (truncated for storage).
+            decision: The structured decision dict from Phase 2.
+            result: The execution result dict from Phase 3.
+        """
+        try:
+            from training.data_collector import get_data_collector
+            dc = get_data_collector()
+            dc.collect_agent_decision(
+                situation=context[:500],  # truncate for storage
+                action=f"{decision.get('action', 'idle')}: {decision.get('message', '')[:200]}",
+                character_id=character_id,
+                scene=self.scene_id,
+                quality=1.0 if result.get("success") else 0.3,
+                model=getattr(self, "_current_model", ""),
+            )
+        except Exception as exc:
+            logger.debug(
+                "[AgentLoop] Training data logging failed "
+                "(operation=collect_decision, character_id=%s, scene=%s): %s",
+                character_id, self.scene_id, exc,
+            )
 
     def _log_action(self, result: Dict) -> None:
         """Log action to EventChain (best-effort)."""

@@ -4,6 +4,15 @@ Nexus HTTP Client — CosySim's interface to the Nexus Knowledge System.
 v0.50a: Extended with session tracking, rules engine, prompt management,
 batch operations, and retry logic.
 
+Version: v1.55.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.55.0 [2026-03-26] — Re-raise PermissionError in all governance-guarded methods (RBAC enforcement)
+    v1.53.0 [2026-03-26] — Added filesystem/oracle/scheduler/training to trusted actors
+    v1.49.5 [2026-03-22] — Per-request timeout override, structured logging
+    v0.50a  [2026-03-15] — Session tracking, rules engine, prompt management, batch ops
+
 Usage:
     from engine.nexus.client import get_nexus_client
     client = get_nexus_client()
@@ -286,6 +295,8 @@ class NexusClient:
                 created_by=created_by,
                 namespace=namespace,
             )
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
             logger.warning("[NexusClient] Entry validation failed (operation=add_entry): %s", exc)
             return None
@@ -331,6 +342,8 @@ class NexusClient:
                 if "category" in fields:
                     fields["category"] = normalized["category"]
                 fields["tags"] = normalized["tags"]
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
             logger.warning("[NexusClient] Update entry governance failed (operation=update_entry): %s", exc)
             return False
@@ -342,6 +355,8 @@ class NexusClient:
             current = self.get_entry(entry_id)
             created_by = current.get("created_by", "") if current else ""
             self._check_governance("delete", agent_id=agent_id, created_by=created_by)
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
             logger.warning("[NexusClient] Delete entry governance failed (operation=delete_entry): %s", exc)
             return False
@@ -389,6 +404,8 @@ class NexusClient:
         """Create a new session record in Nexus. Returns session ID."""
         try:
             self._check_governance("write", agent_id=agent_id, created_by=agent_id)
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
             logger.warning("[NexusClient] Log session governance failed (operation=log_session): %s", exc)
             return None
@@ -405,6 +422,8 @@ class NexusClient:
         """Update session (summary, commits, files_changed, status, etc.)."""
         try:
             self._check_governance("write", agent_id=agent_id, created_by=agent_id)
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
             logger.warning("[NexusClient] Update session governance failed (operation=update_session): %s", exc)
             return False
@@ -442,6 +461,8 @@ class NexusClient:
         """Create a new rule. Returns rule ID."""
         try:
             self._check_governance("admin", agent_id=agent_id, created_by=agent_id)
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
             logger.warning("[NexusClient] Add rule governance failed (operation=add_rule): %s", exc)
             return None
@@ -491,6 +512,8 @@ class NexusClient:
                         namespace=entry.get("namespace", ""),
                     )
                 )
+            except PermissionError:
+                raise  # v1.55.0 — Don't swallow RBAC violations
             except Exception as exc:
                 logger.warning("[NexusClient] Skipping batch entry due to governance failure (operation=batch_add): %s", exc)
         if not normalized_entries:
@@ -595,6 +618,8 @@ class NexusClient:
                 tags=tags,
                 namespace=namespace,
             )
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
             logger.warning("[NexusClient] Add Q&A governance failed (operation=add_qa): %s", exc)
             return None

@@ -4,6 +4,13 @@ Provides agent-callable skills that wrap the KnowledgeForge and NLMEngine
 for Q&A distillation, plan decomposition, code analysis, dialog polish,
 training export, and the NLM-first router.
 
+Version: v1.55.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.55.0 [2026-03-26] — Added nlm_decompose_task skill for plan decomposition
+    v1.50.0 [2026-03-20] — Initial NLM forge skills (ask, batch, distill, decompose, etc.)
+
 Usage by agents:
     nlm_ask("How does the interceptor pipeline work?")
     nlm_batch_ask(questions=["Q1?", "Q2?"], notebook_id="nb-123")
@@ -479,3 +486,110 @@ def nlm_chat_history(notebook_id: str) -> str:
         return json.dumps(result, ensure_ascii=False)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
+
+
+# ── Plan Decomposition ────────────────────────────────────────────────
+
+# v1.55.0 [2026-03-26] — Plan decomposition skill for agent task planning
+@skill(
+    pack="nlm_forge",
+    description="Break a complex task into numbered steps a local agent can follow",
+    category="SYSTEM",
+    cooldown=10.0,
+    cost=2.0,
+    tags=["planning", "decomposition", "nlm"],
+)
+def nlm_decompose_task(task_description: str, model_size: str = "small") -> str:
+    """Decompose a complex task into simple executable steps via NLM.
+
+    Tries KnowledgeForge.decompose() first for structured output, then
+    falls back to a simple numbered-list prompt via NLM ask.
+
+    Args:
+        task_description: The complex task to break down into steps.
+        model_size: Target model size hint — "small" (sub-3B), "medium" (3-9B),
+            or "large" (10B+). Smaller targets get more granular steps.
+
+    Returns:
+        JSON with numbered steps, step_count, and source method.
+
+    CONNECTS: KnowledgeForge, NLMRouter, NexusClient
+    CALLED BY: Agent planning pipeline, auto-skill system
+    """
+    import logging as _logging
+    _logger = _logging.getLogger(__name__)
+
+    # ── Attempt 1: KnowledgeForge.decompose() ──
+    try:
+        forge = _get_forge()
+        result = forge.decompose(
+            task_description, notebook_id="", model_size=model_size,
+        )
+        if result.success and result.steps:
+            _logger.info(
+                "[nlm_decompose_task] Forge decomposition succeeded (operation=decompose, steps=%d)",
+                len(result.steps),
+            )
+            return json.dumps({
+                "steps": result.steps,
+                "step_count": len(result.steps),
+                "source": "knowledge_forge",
+                "model_size": model_size,
+                "duration_seconds": result.duration_seconds,
+            }, ensure_ascii=False)
+    except Exception as exc:
+        _logger.debug(
+            "[nlm_decompose_task] Forge decompose unavailable (operation=decompose): %s", exc,
+        )
+
+    # ── Attempt 2: NLM ask with a decomposition prompt ──
+    try:
+        # Build granularity guidance based on model_size
+        granularity = {
+            "small": "very granular (one simple action per step, no multi-step logic)",
+            "medium": "moderately detailed (2-3 actions per step acceptable)",
+            "large": "high-level (each step can involve multiple sub-actions)",
+        }.get(model_size, "moderately detailed")
+
+        prompt = (
+            f"Break the following task into numbered steps that a {model_size} "
+            f"language model can follow. Steps should be {granularity}. "
+            f"Return ONLY a numbered list, no preamble.\n\n"
+            f"Task: {task_description}"
+        )
+
+        router = _get_router()
+        result = router.route(prompt)
+        answer = result.answer if hasattr(result, "answer") else str(result)
+
+        # Parse numbered steps from the answer
+        import re
+        steps = []
+        for line in answer.strip().splitlines():
+            line = line.strip()
+            # Match lines starting with a number followed by . or )
+            match = re.match(r"^\d+[.)]\s*(.+)", line)
+            if match:
+                steps.append(match.group(1).strip())
+
+        if not steps:
+            # Fallback: treat each non-empty line as a step
+            steps = [l.strip() for l in answer.strip().splitlines() if l.strip()]
+
+        _logger.info(
+            "[nlm_decompose_task] NLM decomposition succeeded (operation=decompose, steps=%d)",
+            len(steps),
+        )
+        return json.dumps({
+            "steps": steps,
+            "step_count": len(steps),
+            "source": "nlm_router",
+            "model_size": model_size,
+            "raw_answer": answer,
+        }, ensure_ascii=False)
+
+    except Exception as exc:
+        _logger.warning(
+            "[nlm_decompose_task] All decomposition methods failed (operation=decompose): %s", exc,
+        )
+        return json.dumps({"error": str(exc), "steps": [], "step_count": 0})

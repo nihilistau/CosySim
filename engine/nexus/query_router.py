@@ -1,8 +1,9 @@
 """Nexus Query Router — Smart query routing through Nexus-first pipeline.
 
-Version: v1.50.2 [2026-03-24]
+Version: v1.55.0 [2026-03-26]
 
 Change Log:
+    v1.55.0 [2026-03-26] — Add agent_id tracking to query(), per-agent stats for VAM integration
     v1.54.0 [2026-03-26] — Null guards on client in tier methods, defensive QueryRouter
     v1.50.2 [2026-03-24] — Add vector store feature flag guard, provenance logging
 
@@ -78,6 +79,9 @@ class RouterStats:
     no_answer: int = 0
     total_tokens_saved: int = 0
     answers_stored: int = 0
+    # v1.55.0 [2026-03-26] — Per-agent query tracking for VAM integration
+    agent_queries: Dict[str, int] = field(default_factory=dict)
+    agent_hits: Dict[str, int] = field(default_factory=dict)
 
     def hit_rate(self) -> float:
         if self.total_queries == 0:
@@ -96,6 +100,8 @@ class RouterStats:
             "total_tokens_saved": self.total_tokens_saved,
             "answers_stored": self.answers_stored,
             "nexus_hit_rate": f"{self.hit_rate():.1%}",
+            "agent_queries": dict(self.agent_queries),
+            "agent_hits": dict(self.agent_hits),
         }
 
 
@@ -152,29 +158,39 @@ class NexusQueryRouter:
     def stats(self) -> RouterStats:
         return self._stats
 
-    # v1.50.2 [2026-03-24] — Provenance logging for Oracle observability
-    def _log_resolution(self, question: str, result: "QueryResult") -> None:
+    # v1.55.0 [2026-03-26] — Provenance logging with agent_id tracking
+    def _log_resolution(self, question: str, result: "QueryResult",
+                        agent_id: Optional[str] = None) -> None:
         """Log which tier resolved the query, for Oracle aggregation."""
+        agent_tag = f", agent={agent_id}" if agent_id else ""
         if result.source == "none":
             logger.info(
-                "[QueryRouter] No answer (operation=query, time_ms=%.1f): %s",
-                result.query_time_ms, question[:80],
+                "[QueryRouter] No answer (operation=query, time_ms=%.1f%s): %s",
+                result.query_time_ms, agent_tag, question[:80],
             )
         else:
+            # v1.55.0 — Track per-agent hit counts
+            if agent_id and result.source != "none":
+                with self._lock:
+                    self._stats.agent_hits[agent_id] = (
+                        self._stats.agent_hits.get(agent_id, 0) + 1
+                    )
             logger.info(
                 "[QueryRouter] Resolved (operation=query, tier=%s, confidence=%.2f, "
-                "time_ms=%.1f, tokens_saved=%d): %s",
+                "time_ms=%.1f, tokens_saved=%d%s): %s",
                 result.source, result.confidence, result.query_time_ms,
-                result.tokens_saved, question[:80],
+                result.tokens_saved, agent_tag, question[:80],
             )
 
     # ── Main Query Method ───────────────────────────────────────────
 
+    # v1.55.0 [2026-03-26] — Added agent_id parameter for per-agent tracking
     def query(self, question: str, min_confidence: float = 0.3,
               use_llm: bool = True, category: str = "",
               tags: Optional[List[str]] = None,
               source_hint: str = "system",
-              depth: str = "auto") -> QueryResult:
+              depth: str = "auto",
+              agent_id: Optional[str] = None) -> QueryResult:
         """Route a query through the Nexus-first pipeline.
 
         Args:
@@ -185,6 +201,7 @@ class NexusQueryRouter:
             tags: Tags to apply when storing new answers.
             source_hint: Who's asking (system, agent, copilot, scene).
             depth: "shallow", "auto", or "deep" for the Nexus smart-ask tier.
+            agent_id: Optional agent identifier for per-agent stats tracking.
 
         Returns:
             QueryResult with answer, source, confidence, and metadata.
@@ -192,6 +209,11 @@ class NexusQueryRouter:
         start = time.time()
         with self._lock:
             self._stats.total_queries += 1
+            # v1.55.0 — Track per-agent query counts
+            if agent_id:
+                self._stats.agent_queries[agent_id] = (
+                    self._stats.agent_queries.get(agent_id, 0) + 1
+                )
 
         # Check local session cache
         cache_key = self._cache_key(question)
@@ -218,7 +240,7 @@ class NexusQueryRouter:
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
-            self._log_resolution(question, result)
+            self._log_resolution(question, result, agent_id=agent_id)
             return result
 
         # Tier 2: Vector Semantic Search (Gemini Embedding 2 + ChromaDB)
@@ -232,7 +254,7 @@ class NexusQueryRouter:
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
-            self._log_resolution(question, result)
+            self._log_resolution(question, result, agent_id=agent_id)
             return result
 
         # Tier 3: FTS Knowledge Search
@@ -281,7 +303,7 @@ class NexusQueryRouter:
             source="none",
             query_time_ms=(time.time() - start) * 1000,
         )
-        self._log_resolution(question, no_result)
+        self._log_resolution(question, no_result, agent_id=agent_id)
         return no_result
 
     # ── Pipeline Tiers ──────────────────────────────────────────────

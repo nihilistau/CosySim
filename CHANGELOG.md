@@ -4,6 +4,50 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.55.0] — "NEXUS ALIVE" — 2026-03-26
+
+Wired the self-improvement loop end-to-end. Agents now check Nexus knowledge cache before GPU, decisions feed training, models hot-reload after promotion, and governance is enforced.
+
+### Nexus-First Agent Inference (THE BIG ONE)
+- **VirtualAgentManager** checks QueryRouter BEFORE LMStudio — cache hits skip GPU entirely
+- Feature-flagged via `nexus.agent_cache.enabled` (default true), min confidence 0.75
+- Per-agent stats tracking in QueryRouter (agent_queries, agent_hits)
+- Graceful fallback: if Nexus unavailable, falls through to LLM as before
+
+### Training Feedback Loop Closed
+- **DataCollector**: new `collect_agent_decision()` and `collect_agent_outcome()` methods
+- **AgentLoop**: every tick logs situation→action→result to `agent_decision_live.jsonl`
+- Quality signals: success=1.0, failure=0.3 — auto-feeds training pipeline
+- Loop: agent decisions → JSONL → auto_train → finetune → promote → hot-reload
+
+### Model Hot-Reload After Promotion
+- **ModelRegistry.promote()** now broadcasts to VirtualAgentManager
+- **VirtualAgentManager.on_model_promoted()** accepts live model updates
+- No restart needed — agents pick up new models immediately
+
+### Governance Enforcement
+- **PermissionError** re-raised in 8 NexusClient methods (was silently swallowed)
+- **Governance rules auto-seeded** on first access (idempotent `ensure_seeded()`)
+- Callers can now catch and handle RBAC violations explicitly
+
+### Plan Decomposition Skill
+- New `nlm_decompose_task` skill in nlm_forge pack
+- Breaks complex tasks into numbered steps via NLM (adapts to model size)
+- Two-tier: KnowledgeForge.decompose() → NLM router fallback
+
+### Nexus KMS v1.4.0 (C:\Files\Nexus)
+- Fixed NLMSyncEngine import mismatch in routes/nlm.py
+- Fixed NLMSyncEngine constructor missing store/client args in mcp/server.py
+- Removed deprecated browser_bridge.py (HTTP-only backend)
+- Added API key auth for non-localhost requests
+- Config: prefer_backend changed from "auto" to "http"
+
+### Embedding Config Migration
+- Backward-compatible support for old `embeddings.enable_gemini` key
+- Deprecation warning logged with migration instructions
+
+---
+
 ## [1.54.0] — "FINAL SYSTEM POLISH" — 2026-03-26
 
 Full system audit and hardening across 30 scenes, engine layer, and all subsystems. Production-ready.

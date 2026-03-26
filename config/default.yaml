@@ -827,6 +827,13 @@ nexus:
     min_answer_length: 20        # Minimum chars for valid answer
     local_cache_ttl: 300         # Session cache TTL in seconds
 
+  # v1.55.0 [2026-03-26] — Nexus-first agent cache: check knowledge before GPU
+  agent_cache:
+    enabled: true                # Master toggle for Nexus-first agent inference
+    min_confidence: 0.75         # Minimum confidence to accept a Nexus answer
+    skip_tool_calls: true        # Skip Nexus check when request has tool integrations
+    skip_system_only: true       # Skip when request has no user message (system-only)
+
   # v1.51.0 [2026-03-24] — Backup count cap to prevent unbounded growth
   backup_max_per_db: 3             # Keep N most recent backups per database name
 

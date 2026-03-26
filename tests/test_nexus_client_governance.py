@@ -1,6 +1,13 @@
-"""Focused governance tests for engine.nexus.client."""
+"""Focused governance tests for engine.nexus.client.
+
+Version: v1.55.0 [2026-03-26]
+
+Change Log:
+    v1.55.0 [2026-03-26] — Updated denial tests to expect PermissionError (RBAC enforcement)
+"""
 from __future__ import annotations
 
+import pytest
 from unittest.mock import MagicMock, patch
 
 from engine.nexus.client import NexusClient
@@ -40,6 +47,7 @@ class TestEntryGovernance:
         assert "copilot" in payload["tags"]
         assert "manual" in payload["tags"]
 
+    # v1.55.0 [2026-03-26] — PermissionError now propagates instead of returning None
     def test_add_entry_denied_for_low_permission_actor(self) -> None:
         client = NexusClient("http://test")
         manager = MagicMock()
@@ -49,13 +57,13 @@ class TestEntryGovernance:
             "engine.nexus.governance_rules.get_governance_manager",
             return_value=manager,
         ), patch.object(client, "_post") as mock_post:
-            entry_id = client.add_entry(
-                "Title",
-                "Content",
-                agent_id="qwen3-0.6b",
-            )
+            with pytest.raises(PermissionError):
+                client.add_entry(
+                    "Title",
+                    "Content",
+                    agent_id="qwen3-0.6b",
+                )
 
-        assert entry_id is None
         mock_post.assert_not_called()
 
 
@@ -87,6 +95,7 @@ class TestQaGovernance:
 
 
 class TestDeleteGovernance:
+    # v1.55.0 [2026-03-26] — PermissionError now propagates instead of returning False
     def test_delete_entry_blocks_low_permission_actor(self) -> None:
         client = NexusClient("http://test")
         manager = MagicMock()
@@ -100,17 +109,55 @@ class TestDeleteGovernance:
             "get_entry",
             return_value={"created_by": "copilot"},
         ), patch.object(client, "_delete") as mock_delete:
-            ok = client.delete_entry("entry-1", agent_id="qwen3-0.6b")
+            with pytest.raises(PermissionError):
+                client.delete_entry("entry-1", agent_id="qwen3-0.6b")
 
-        assert ok is False
         mock_delete.assert_not_called()
 
 
 class TestBatchGovernance:
-    def test_batch_add_skips_denied_entries_and_posts_allowed_ones(self) -> None:
+    # v1.55.0 [2026-03-26] — PermissionError now propagates from batch_add
+    def test_batch_add_raises_on_denied_entry(self) -> None:
         client = NexusClient("http://test")
         manager = MagicMock()
         manager.check_permissions.side_effect = [True, False]
+
+        with patch(
+            "engine.nexus.governance_rules.get_governance_manager",
+            return_value=manager,
+        ), patch.object(
+            client,
+            "_post",
+            return_value={"ok": True, "data": {"ids": ["entry-1"]}},
+        ):
+            with pytest.raises(PermissionError):
+                client.batch_add(
+                    [
+                        {
+                            "title": "Allowed",
+                            "content": "First payload",
+                            "content_type": "note",
+                            "category": "architecture",
+                            "tags": [],
+                            "created_by": "copilot",
+                            "agent_id": "copilot",
+                        },
+                        {
+                            "title": "Denied",
+                            "content": "Second payload",
+                            "content_type": "note",
+                            "category": "architecture",
+                            "tags": [],
+                            "created_by": "tiny-model",
+                            "agent_id": "qwen3-0.6b",
+                        },
+                    ]
+                )
+
+    def test_batch_add_posts_when_all_allowed(self) -> None:
+        client = NexusClient("http://test")
+        manager = MagicMock()
+        manager.check_permissions.return_value = True
 
         with patch(
             "engine.nexus.governance_rules.get_governance_manager",
@@ -130,15 +177,6 @@ class TestBatchGovernance:
                         "tags": [],
                         "created_by": "copilot",
                         "agent_id": "copilot",
-                    },
-                    {
-                        "title": "Denied",
-                        "content": "Second payload",
-                        "content_type": "note",
-                        "category": "architecture",
-                        "tags": [],
-                        "created_by": "tiny-model",
-                        "agent_id": "qwen3-0.6b",
                     },
                 ]
             )
