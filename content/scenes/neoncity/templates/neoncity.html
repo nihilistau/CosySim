@@ -171,7 +171,11 @@
           {% if d.key == 'hacker_den' %}
           <div class="nc-district__actions">
             <button class="nc-btn nc-btn--xs" onclick="event.stopPropagation();NeonCityApp.openHackTargets()">&#128187; HACK</button>
-            <button class="nc-btn nc-btn--xs nc-btn--green" onclick="event.stopPropagation();window.location.href='/cyberspace'">&#9635; CYBERSPACE</button>
+            <button class="nc-btn nc-btn--xs nc-btn--green" onclick="event.stopPropagation();window.location.href='http://localhost:5573'">&#9635; CYBERSPACE</button>
+          </div>
+          {% elif d.key == 'black_market' %}
+          <div class="nc-district__actions">
+            <button class="nc-btn nc-btn--xs" style="border-color:#fbbf24;color:#fbbf24" onclick="event.stopPropagation();window.location.href='http://localhost:5574'">&#127963; AUCTION</button>
           </div>
           {% endif %}
         </div>
