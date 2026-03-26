@@ -321,7 +321,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.57** (Gemini Native — File Search, structured output, context caching, 7-tier query pipeline, 91 scheduler tasks)
+- Current: **v1.57.2** (RPC System Overhaul — call-time get_rpcid(), RpcidUpdater, 60 gRPC methods, 92 scheduler tasks)
 
 ### Navigational Comments
 

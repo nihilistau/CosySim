@@ -21,7 +21,7 @@ The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **cha
 | MCP tools | **43** domain modules |
 | Tests | **417** test files |
 | Agent types | **8** (copilot, claude_code, scene_agent, scheduler, training, observer, player, system) |
-| Scheduler tasks | **91** autonomous maintenance jobs |
+| Scheduler tasks | **92** autonomous maintenance jobs |
 | Gemini APIs | File Search (managed RAG), structured output, context caching, multimodal embeddings |
 | Nexus tables | **35** (knowledge, agent_registry, access_log, subscriptions, ...) |
 | Streamlit apps | **4** (dashboard, admin, assets, creator) |

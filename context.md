@@ -1,6 +1,6 @@
 # CosySim — Complete System Context
 
-> v1.57.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
+> v1.57.2 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
 >
 > Read this file to gain full context on architecture, conventions, systems, tools,
 > protocols, and workflows. After reading, you should be able to modify any part of
@@ -272,7 +272,8 @@ results = nx.search("query text", limit=10)
 # Q&A (cached)
 answer = nx.ask("What is the player's reputation?", depth="auto")
 
-# NLM (NotebookLM)
+# NLM (NotebookLM) — rpcids resolved at call time via get_rpcid()
+# 3-tier fallback: YAML registry → JSON mapper → hardcoded
 answer = nx.nlm_ask("Explain the faction system", notebook_id="...")
 
 # Session logging
@@ -312,7 +313,7 @@ Every mutation operation on `NexusClient` calls `_check_governance()` before pro
 
 ### 5.2c Scheduler Daemon (`engine/nexus/scheduler_daemon.py`)
 
-91 registered autonomous maintenance tasks:
+92 registered autonomous maintenance tasks:
 
 ```python
 from engine.nexus.scheduler_daemon import get_scheduler_daemon
