@@ -41,6 +41,7 @@ def _resolve_governance_actor(agent_id: str = "", created_by: str = "") -> str:
         return agent_id
 
     created_by_normalized = (created_by or "").strip().lower()
+    # v1.53.0 [2026-03-26] — Added filesystem, oracle, scheduler, training actors
     trusted_prefixes = (
         "copilot",
         "nexus",
@@ -51,6 +52,10 @@ def _resolve_governance_actor(agent_id: str = "", created_by: str = "") -> str:
         "benchmark",
         "api",
         "system",
+        "filesystem",
+        "oracle",
+        "scheduler",
+        "training",
     )
     trusted_suffixes = (
         "_workflow",
