@@ -4,10 +4,13 @@ Nexus HTTP Client — CosySim's interface to the Nexus Knowledge System.
 v0.50a: Extended with session tracking, rules engine, prompt management,
 batch operations, and retry logic.
 
-Version: v1.56.0 [2026-03-26]
+Version: v1.57.1 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.57.1 [2026-03-26] — Non-blocking embedding hooks: auto_embed_entry/auto_embed_qa
+                            now run in daemon threads so embedding failures never block
+                            Nexus writes or health checks
     v1.56.0 [2026-03-26] — Agent registry access check before heuristic fallback
     v1.55.0 [2026-03-26] — Re-raise PermissionError in all governance-guarded methods (RBAC enforcement)
     v1.53.0 [2026-03-26] — Added filesystem/oracle/scheduler/training to trusted actors
@@ -361,8 +364,16 @@ class NexusClient:
         result = self._post("/api/entries", payload)
         entry_id = result.get("data", {}).get("id") if result.get("ok") else None
         if entry_id:
-            from engine.nexus.embedding_hooks import auto_embed_entry
-            auto_embed_entry(entry_id, content, content_type, category, tags)
+            # v1.57.1 [2026-03-26] — Non-blocking embed: run in daemon thread so
+            # embedding failures never block the Nexus write path or health checks
+            def _bg_embed() -> None:
+                try:
+                    from engine.nexus.embedding_hooks import auto_embed_entry
+                    auto_embed_entry(entry_id, content, content_type, category, tags)
+                except Exception as exc:
+                    logger.debug("[NexusClient] Background embed failed for %s: %s", entry_id, exc)
+            t = threading.Thread(target=_bg_embed, name=f"embed-{entry_id[:8]}", daemon=True)
+            t.start()
         return entry_id
     
     def get_entry(self, entry_id: str) -> Optional[NexusEntry]:
@@ -688,8 +699,16 @@ class NexusClient:
         })
         qa_id = result.get("data", {}).get("id") if result.get("ok") else None
         if qa_id:
-            from engine.nexus.embedding_hooks import auto_embed_qa
-            auto_embed_qa(qa_id, question, answer, category)
+            # v1.57.1 [2026-03-26] — Non-blocking embed: run in daemon thread so
+            # embedding failures never block the Nexus write path or health checks
+            def _bg_embed_qa() -> None:
+                try:
+                    from engine.nexus.embedding_hooks import auto_embed_qa
+                    auto_embed_qa(qa_id, question, answer, category)
+                except Exception as exc:
+                    logger.debug("[NexusClient] Background Q&A embed failed for %s: %s", qa_id, exc)
+            t = threading.Thread(target=_bg_embed_qa, name=f"embed-qa-{qa_id[:8]}", daemon=True)
+            t.start()
         return qa_id
 
     # ─── Research Sessions (v0.50b) ──────────────────────────

@@ -1,8 +1,12 @@
 """Unified embedding service — Gemini Embedding 2 with MRL + local fallback.
 
-Version: v1.57.0 [2026-03-26]
+Version: v1.57.1 [2026-03-26]
 
 Change Log:
+    v1.57.1 [2026-03-26] — Switch GeminiEmbeddingProvider to google.genai SDK (API key
+                            only, no cookies needed). Fixes silent provider creation
+                            failure when aistudio_client cookies are unavailable.
+                            aistudio_client REST wrapper kept as internal fallback.
     v1.57.0 [2026-03-26] — Add embed_image() for multimodal embedding via Gemini
                             (images → vectors using google.genai SDK inline_data)
     v1.55.0 [2026-03-26] — Backward-compat: support old 'enable_gemini' config key
@@ -254,6 +258,7 @@ class GeminiEmbeddingProvider:
         self._dimensions = output_dimensions
         self._api_key_index = api_key_index
         self._client: Any = None
+        self._use_genai_sdk: bool = False  # v1.57.1 — set True when using google.genai SDK
         self._lock = threading.Lock()
         self._call_count = 0
         self._error_count = 0
@@ -267,30 +272,97 @@ class GeminiEmbeddingProvider:
     def dimensions(self) -> int:
         return self._dimensions
 
+    # v1.57.1 [2026-03-26] — Use google.genai SDK directly (API key only, no cookies)
+    # Falls back to aistudio_client REST wrapper if genai SDK fails to init.
+    # CONNECTS: google.genai Client, AI Studio API keys
+    # CALLED BY: embed(), embed_batch(), embed_image()
     def _get_client(self) -> Any:
+        """Get google.genai client — uses API key directly, no cookies needed.
+
+        Primary path: google.genai SDK with API key from the key pool.
+        Fallback: aistudio_client REST wrapper (needs cookies from account pool).
+
+        Returns:
+            google.genai.Client instance (or AIStudioClient as fallback).
+
+        Raises:
+            RuntimeError: If provider is disabled or both paths fail.
+        """
         if not self._enabled:
             raise RuntimeError("Gemini embedding provider disabled")
         if self._client is None:
+            # Primary path — google.genai SDK with API key (no cookies needed)
             try:
-                from engine.integrations.aistudio_client import get_aistudio_client
-
-                self._client = get_aistudio_client()
-            except Exception as exc:
-                # v1.49.3 [2026-03-22] — Structured logging context
-                logger.error("[EmbeddingService] Failed to create AIStudioClient (operation=init_provider): %s", exc)
-                raise
+                from google import genai
+                from engine.integrations.aistudio_client import API_KEYS
+                self._client = genai.Client(api_key=API_KEYS[self._api_key_index])
+                self._use_genai_sdk = True
+                logger.info(
+                    "[EmbeddingService] Initialized google.genai SDK client "
+                    "(operation=init_provider, key_index=%d)",
+                    self._api_key_index,
+                )
+            except Exception as genai_exc:
+                logger.warning(
+                    "[EmbeddingService] google.genai SDK init failed, "
+                    "falling back to aistudio_client (operation=init_provider): %s",
+                    genai_exc,
+                )
+                # Fallback — aistudio_client REST wrapper (needs cookies)
+                try:
+                    from engine.integrations.aistudio_client import get_aistudio_client
+                    self._client = get_aistudio_client()
+                    self._use_genai_sdk = False
+                except Exception as rest_exc:
+                    logger.error(
+                        "[EmbeddingService] Both genai SDK and aistudio_client "
+                        "failed (operation=init_provider): genai=%s, rest=%s",
+                        genai_exc, rest_exc,
+                    )
+                    raise RuntimeError(
+                        f"All Gemini client init paths failed: "
+                        f"genai={genai_exc}, rest={rest_exc}"
+                    ) from rest_exc
         return self._client
 
+    # v1.57.1 [2026-03-26] — google.genai SDK primary, aistudio_client fallback
     def embed(self, text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> List[float]:
-        """Generate a single embedding vector."""
+        """Generate a single embedding vector.
+
+        Uses google.genai SDK (primary) or aistudio_client REST (fallback).
+
+        Args:
+            text: Text to embed.
+            task_type: Gemini task type (RETRIEVAL_DOCUMENT, RETRIEVAL_QUERY, etc.).
+
+        Returns:
+            List of float embedding values.
+        """
         client = self._get_client()
         try:
-            vector = client.embed_content(
-                model=self._model,
-                content=text,
-                task_type=task_type,
-                output_dimensionality=self._dimensions if self._dimensions != 3072 else None,
-            )
+            if getattr(self, "_use_genai_sdk", False):
+                # google.genai SDK path — API key only, no cookies
+                config = (
+                    {"output_dimensionality": self._dimensions}
+                    if self._dimensions != 3072
+                    else None
+                )
+                result = client.models.embed_content(
+                    model=self._model,
+                    contents=text,
+                    config=config,
+                )
+                vector = list(result.embeddings[0].values)
+            else:
+                # Fallback: aistudio_client REST wrapper
+                vector = client.embed_content(
+                    model=self._model,
+                    content=text,
+                    task_type=task_type,
+                    output_dimensionality=(
+                        self._dimensions if self._dimensions != 3072 else None
+                    ),
+                )
             self._call_count += 1
             if self._dimensions < 3072:
                 vector = _l2_normalize(vector)
@@ -298,22 +370,56 @@ class GeminiEmbeddingProvider:
         except Exception as exc:
             self._error_count += 1
             self._last_error = str(exc)
-            logger.warning("[EmbeddingService] Gemini embed failed (operation=embed): %s", exc)
+            logger.warning(
+                "[EmbeddingService] Gemini embed failed (operation=embed): %s", exc
+            )
             raise
 
+    # v1.57.1 [2026-03-26] — google.genai SDK primary, aistudio_client fallback
     def embed_batch(self, texts: List[str],
                     task_type: str = "RETRIEVAL_DOCUMENT") -> List[List[float]]:
-        """Generate embeddings for multiple texts in one API call."""
+        """Generate embeddings for multiple texts.
+
+        Uses google.genai SDK (primary) or aistudio_client REST (fallback).
+        The SDK does not have a native batch endpoint, so texts are embedded
+        individually when using genai SDK.
+
+        Args:
+            texts: List of texts to embed.
+            task_type: Gemini task type.
+
+        Returns:
+            List of embedding vectors, one per input text.
+        """
         if not texts:
             return []
         client = self._get_client()
         try:
-            vectors = client.batch_embed_contents(
-                model=self._model,
-                texts=texts,
-                task_type=task_type,
-                output_dimensionality=self._dimensions if self._dimensions != 3072 else None,
-            )
+            if getattr(self, "_use_genai_sdk", False):
+                # google.genai SDK path — embed each text individually
+                config = (
+                    {"output_dimensionality": self._dimensions}
+                    if self._dimensions != 3072
+                    else None
+                )
+                vectors: List[List[float]] = []
+                for text in texts:
+                    result = client.models.embed_content(
+                        model=self._model,
+                        contents=text,
+                        config=config,
+                    )
+                    vectors.append(list(result.embeddings[0].values))
+            else:
+                # Fallback: aistudio_client REST wrapper (native batch)
+                vectors = client.batch_embed_contents(
+                    model=self._model,
+                    texts=texts,
+                    task_type=task_type,
+                    output_dimensionality=(
+                        self._dimensions if self._dimensions != 3072 else None
+                    ),
+                )
             self._call_count += 1
             if self._dimensions < 3072:
                 vectors = [_l2_normalize(v) for v in vectors]
@@ -321,7 +427,11 @@ class GeminiEmbeddingProvider:
         except Exception as exc:
             self._error_count += 1
             self._last_error = str(exc)
-            logger.warning("[EmbeddingService] Gemini batch embed failed (operation=embed_batch, texts=%d): %s", len(texts), exc)
+            logger.warning(
+                "[EmbeddingService] Gemini batch embed failed "
+                "(operation=embed_batch, texts=%d): %s",
+                len(texts), exc,
+            )
             raise
 
 
@@ -757,7 +867,7 @@ class EmbeddingService:
 
     # ──── Multimodal embedding ─────────────────────────────────────────────
 
-    # v1.57.0 [2026-03-26] — Multimodal embedding via Gemini google.genai SDK
+    # v1.57.1 [2026-03-26] — Reuse Gemini provider's genai client (no duplicate init)
     # CONNECTS: google.genai Client, AI Studio API keys, Gemini embedding model
     # CALLED BY: External callers needing image→vector embeddings (e.g. visual search)
     def embed_image(
@@ -767,9 +877,9 @@ class EmbeddingService:
     ) -> Optional[List[float]]:
         """Embed an image using Gemini's multimodal embedding model.
 
-        Uses the google.genai client directly since image embedding requires
-        inline_data content parts, not plain text. Falls back gracefully if
-        the google-genai SDK is unavailable or the API call fails.
+        Reuses the GeminiEmbeddingProvider's genai client when available.
+        Falls back to creating a standalone client if the provider chain
+        doesn't have a genai-SDK-based Gemini provider.
 
         Args:
             image_path: Path to the image file (PNG, JPEG, etc.).
@@ -780,13 +890,27 @@ class EmbeddingService:
             List of float embedding values, or None on failure.
         """
         try:
-            from google import genai
             from google.genai import types
             from pathlib import Path as _Path
 
-            # Get API key from aistudio — reuse the existing key pool
-            from engine.integrations.aistudio_client import API_KEYS
-            client = genai.Client(api_key=API_KEYS[0])
+            # Try to reuse the Gemini provider's client from the provider chain
+            self._ensure_providers()
+            genai_client = None
+            for provider in self._providers:
+                if isinstance(provider, GeminiEmbeddingProvider):
+                    try:
+                        client = provider._get_client()
+                        if getattr(provider, "_use_genai_sdk", False):
+                            genai_client = client
+                    except Exception:
+                        pass
+                    break
+
+            # Fallback: create a standalone genai client
+            if genai_client is None:
+                from google import genai
+                from engine.integrations.aistudio_client import API_KEYS
+                genai_client = genai.Client(api_key=API_KEYS[0])
 
             # Read image and detect MIME type
             img_path = _Path(image_path)
@@ -812,7 +936,7 @@ class EmbeddingService:
             # Determine output dimensions from provider chain if available
             output_dims = self._dimensions if self._dimensions else 768
 
-            result = client.models.embed_content(
+            result = genai_client.models.embed_content(
                 model="gemini-embedding-2-preview",
                 contents=types.Content(parts=[
                     types.Part(
