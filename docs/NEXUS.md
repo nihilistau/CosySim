@@ -1,18 +1,22 @@
 # Nexus — Knowledge Pipeline
 
-> CosySim Documentation — v1.50.2 [2026-03-24]
+> CosySim Documentation — v1.56.0 [2026-03-26]
 >
-> Nexus KMS, NotebookLM integration, query routing, and the training flywheel.
+> Nexus KMS v1.5.0, agent registry, KnowledgePipeline, NotebookLM integration, 6-tier query routing, and the training flywheel.
 
 ---
 
 ## 1. Overview
 
-Nexus is CosySim's central knowledge management system — a persistent SQLite + FTS5
-backbone that stores entries, rules, Q&A pairs, session history, prompts, benchmarks,
-and training data. Every agent, scene, skill, and development session consumes and
-contributes to Nexus. The system is designed to compound: every interaction makes
-future interactions cheaper and more accurate.
+Nexus is CosySim's central knowledge management system (v1.5.0) — a persistent SQLite + FTS5
+backbone with 35 tables, 71K+ entries, and 3.7K+ QA pairs. It stores entries, rules, Q&A pairs,
+session history, prompts, benchmarks, agent registry, and training data. Every agent, scene,
+skill, and development session consumes and contributes to Nexus. The system is designed to
+compound: every interaction makes future interactions cheaper and more accurate.
+
+**Agent Registry:** Nexus maintains a formal agent registry with 8 agent types, each with
+tiered access control governing which skills, knowledge namespaces, and system capabilities
+are available. Agent identities, permissions, and interaction history are tracked centrally.
 
 Nexus runs as a managed service on port `8700`. It auto-starts via `--core` / `--all` /
 TUI autostart (priority 0 — launches first). Manual start:
@@ -25,7 +29,7 @@ The knowledge pipeline connects three tiers of intelligence:
 
 | Tier | System | Role |
 |------|--------|------|
-| **Nexus KMS** | SQLite + FTS5 on `:8700` | Persistent knowledge, rules, Q&A, sessions |
+| **Nexus KMS** | SQLite + FTS5 on `:8700` | Persistent knowledge, rules, Q&A, sessions, agent registry |
 | **NotebookLM** | Google Gemini via NLM Proxy on `:8800` | Free Gemini inference, research distillation |
 | **LMStudio** | Local LLM on `:1234` | Last-resort fallback for novel queries |
 
@@ -39,6 +43,7 @@ compute; every subsequent time it is served from Nexus cache for free.
 | Knowledge | `entries` | Notes, code, docs, prompts, transcripts, memories, plans |
 | Rules | `rules` | Governance rules with scope, conditions, actions |
 | Q&A Cache | `qa_pairs` | Direct question-to-answer lookup (fastest tier) |
+| Agent Registry | `agent_registry` | 8 formal agent types with tiered access control |
 
 ### Content Types
 
@@ -83,12 +88,13 @@ Every agent and session follows this discipline:
 ├──────────────────────────────────────────────────────────────┤
 │  CosySim Engine (Agents, Scenes, Skills)                     │
 │  ├── NexusClient          HTTP client for Nexus API          │
-│  ├── NexusQueryRouter     6-tier smart routing (v1.50.2)     │
+│  ├── NexusQueryRouter     6-tier smart routing (v1.56.0)     │
 │  ├── EmbeddingService     Gemini Embedding 2 + LMStudio      │
 │  ├── NexusVectorStore     ChromaDB semantic search            │
 │  ├── TrainingFlywheel     auto-collect training data         │
 │  ├── TaskScheduler        agent task ticketing + auto-assign │
-│  ├── SchedulerDaemon      84 recurring tasks (cron-like)     │
+│  ├── KnowledgePipeline    end-to-end knowledge flow orch.   │
+│  ├── SchedulerDaemon      89 recurring tasks (cron-like)     │
 │  ├── OperatorInbox        off-turn directive intake          │
 │  ├── KnowledgeCapture     dual-write backfill helper         │
 │  ├── NLMChain             multi-step chain-prompting         │
@@ -105,7 +111,8 @@ Every agent and session follows this discipline:
 │  Nexus Server (C:\Files\Nexus)                               │
 │  ├── SQLite + FTS5         Full-text search engine            │
 │  ├── Flask REST API        CRUD + search + rules + sessions   │
-│  └── 3-layer DB            entries, rules, Q&A cache          │
+│  ├── Agent Registry        8 agent types, tiered access       │
+│  └── 35-table DB           entries, rules, Q&A, registry      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -208,7 +215,7 @@ notes = client.list_by_type("note", category="architecture", limit=50)
 ### Q&A Operations
 
 ```python
-# Smart ask (4-tier routing)
+# Smart ask (6-tier routing)
 result = client.ask("How does the interceptor pipeline work?", depth="auto")
 # Returns: {answer, source, confidence, sources, qa_id}
 
@@ -999,7 +1006,7 @@ Cycle repeats — each generation improves the next
 | `nexus_converse` | Continue a research conversation |
 | `nexus_finish_research` | Complete and distill research |
 | `nexus_youtube` | Import YouTube transcript |
-| `nexus_smart_query` | Smart query with 4-tier routing |
+| `nexus_smart_query` | Smart query with 6-tier routing |
 | `nexus_router_stats` | Get router effectiveness stats |
 
 ### Coding Skills (9 skills, pack="coding")
@@ -1152,10 +1159,15 @@ Key scheduler tasks related to Nexus and NLM:
 ## Change Log
 
 ```
-v1.50 [2026-03-22] — Consolidated from NEXUS_INTEGRATION.md, NLM_REFERENCE.md,
-                      and NLM_API_REFERENCE.md into unified knowledge pipeline doc.
-                      Updated query router to 4-tier (vector search merged into tier 2).
-                      Added ARGUS observed RPC coverage (33/50 rpcids).
-                      Added multimodal workflow reference.
-                      Added full configuration reference with current default.yaml keys.
+v1.56.0 [2026-03-26] — Updated to Nexus v1.5.0: 35 tables, 71K+ entries, 3.7K+ QA pairs.
+                        Added agent_registry with 8 formal agent types and tiered access.
+                        Added KnowledgePipeline orchestration module.
+                        Updated scheduler tasks from 84 to 89.
+                        Confirmed 6-tier query router (was documented as 4-tier in v1.50).
+v1.50 [2026-03-22]  — Consolidated from NEXUS_INTEGRATION.md, NLM_REFERENCE.md,
+                       and NLM_API_REFERENCE.md into unified knowledge pipeline doc.
+                       Updated query router to 4-tier (vector search merged into tier 2).
+                       Added ARGUS observed RPC coverage (33/50 rpcids).
+                       Added multimodal workflow reference.
+                       Added full configuration reference with current default.yaml keys.
 ```

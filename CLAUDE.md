@@ -87,7 +87,7 @@ Browser (Neon HUD v2 — vanilla JS, Jinja2, Socket.IO)
 35 targets (18 game + 11 service + 6 creation)  ports 5555–8800
     ↓
 Skills (engine/skills/builtin/)     ←→    MCP Pipeline (engine/mcp/)
-@skill decorator · 99 packs · ~1,040     30 interceptors · AgentGovernor
+@skill decorator · 99 packs · ~1,040     36 interceptors · AgentGovernor
                     ↓
 Engine Layer (engine/)
   lmstudio/   — ServerController, LMLink federation, TaskQueue
@@ -109,6 +109,7 @@ get_rules_engine()        # SceneRulesEngine
 get_scene_state_manager() # SceneStateManager
 get_governor()            # AgentGovernor (budget, cooldowns, prereqs)
 get_router()              # AgentRouter
+get_knowledge_pipeline()  # KnowledgePipeline (ingest → validate → dedup → store → embed → Q&A)
 ```
 
 ### Interceptor Pipeline Priority Order
@@ -318,7 +319,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.54** (Final System Polish — 36 interceptors, BenchHUD eliminated, silent failures logged, stale code removed, 496 tests pass)
+- Current: **v1.56** (Nexus v2 — agent registry, KnowledgePipeline, 36 interceptors, 89 scheduler tasks, self-maintenance)
 
 ### Navigational Comments
 

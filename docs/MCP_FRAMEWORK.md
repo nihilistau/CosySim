@@ -1,6 +1,6 @@
 # MCP Framework
 
-> CosySim Documentation -- v1.52.0 [2026-03-26]
+> CosySim Documentation -- v1.56.0 [2026-03-26]
 >
 > Skill dispatch, agent governance, state coordination, and the dialog system.
 
@@ -12,8 +12,8 @@ The MCP Framework is CosySim's core runtime substrate. Every character reply
 flows through this pipeline: skill discovery, pre-call interceptors, LLM
 inference, post-call interceptors, tag extraction, and state synchronization.
 
-The framework manages approximately 1,000 skills across 95 packs (785 engine
-+ 223 scene-level), 24 interceptor classes, 43 MCP tool modules, and 9 key
+The framework manages approximately 1,040 skills across 99 packs (785 engine
++ 255 scene-level), 36 interceptor classes, 43 MCP tool modules, and 10 key
 singletons. Eight skill categories classify all registered abilities:
 COMMUNICATION, MEMORY, MEDIA, GAME, SOCIAL, ENVIRONMENT, SYSTEM, and
 NARRATIVE.
@@ -27,7 +27,7 @@ User message
 |  +------------------------+ |
 |  | 1. Load Manifest       | |   SkillManifest per scene
 |  | 2. AUTO Skills         | |   inject results into context
-|  | 3. Pre-Call             |---> InterceptorPipeline (26 classes)
+|  | 3. Pre-Call             |---> InterceptorPipeline (36 classes)
 |  | 4. LLM Inference       |---> VirtualAgentManager -> LMSClient
 |  | 5. Parse Response      | |   StreamProcessor tag extraction
 |  | 6. Post-Call            |---> InterceptorPipeline
@@ -212,6 +212,7 @@ access.
 | `AgentRouter` | `engine/mcp/comms_framework.py` | `get_router()` | Cross-agent message routing |
 | `GameState` | `engine/mcp/comms_framework.py` | `get_game_state()` | Thread-safe key-value store for game variables |
 | `SkillManifest` | `engine/mcp/comms_framework.py` | `get_skill_manifest()` | Scene-to-skill mapping (auto/optional/required) |
+| `KnowledgePipeline` | `engine/nexus/knowledge_pipeline.py` | `get_knowledge_pipeline()` | End-to-end knowledge flow orchestration (Nexus-first inference) |
 
 ### Usage Pattern
 
@@ -622,7 +623,7 @@ authoring guide -- see [Interceptors](INTERCEPTORS.md).
 
 ### InterceptorBase
 
-All 24 interceptors extend `InterceptorBase` in
+All 36 interceptors extend `InterceptorBase` in
 `engine/mcp/comms_framework.py`:
 
 ```python
@@ -693,7 +694,7 @@ Pri 68  -> TTSStyle             inject TTS hints
 Pri 70  -> ResponseShaper       format/tone refinement
 ```
 
-### Interceptor Inventory (26 classes)
+### Interceptor Inventory (36 classes)
 
 Located in `engine/agents/interceptors/`:
 
@@ -880,7 +881,7 @@ comms:
     - PolicyEnforcer
     - Cache
     - ActivityLogger
-    # ... (26 total, loaded in priority order)
+    # ... (36 total, loaded in priority order)
   pipeline:
     max_interceptors: 30
     timeout_per_interceptor_ms: 5000
@@ -898,13 +899,13 @@ mcp:
 
 | Metric | Value |
 |--------|-------|
-| Total skills | ~1,000 across 95 packs |
+| Total skills | ~1,040 across 99 packs |
 | Engine skills | ~785 |
-| Scene skills | ~223 |
+| Scene skills | ~255 |
 | Skill categories | 8 |
 | MCP tool modules | 43 |
-| Interceptor classes | 26 |
-| Key singletons | 9 |
+| Interceptor classes | 36 |
+| Key singletons | 10 |
 | STAT_KEYS | 12 |
 | Inline tag patterns | 5 core + extensible via TagRegistry |
 | Stream tag types | [MOOD], [IMAGE], [ACTION], [STAT], [VOICE] |
@@ -914,10 +915,13 @@ mcp:
 ## Change Log
 
 ```
-v1.50 [2026-03-22] - Complete rewrite: accurate skill counts (~1,000 across
-                      95 packs), corrected interceptor count (26), updated
-                      singletons table (9 accessors), added AgentGovernor
-                      budget/cooldown/prerequisite documentation, streamlined
-                      from ~30K to ~20K, fixed cross-references
-v1.42 [2026-03-21] - Initial comprehensive MCP Framework reference
+v1.56.0 [2026-03-26] - Updated counts: 36 interceptors, ~1,040 skills across
+                       99 packs, 10 singletons. Added KnowledgePipeline to
+                       singletons reference.
+v1.50 [2026-03-22]  - Complete rewrite: accurate skill counts (~1,000 across
+                       95 packs), corrected interceptor count (26), updated
+                       singletons table (9 accessors), added AgentGovernor
+                       budget/cooldown/prerequisite documentation, streamlined
+                       from ~30K to ~20K, fixed cross-references
+v1.42 [2026-03-21]  - Initial comprehensive MCP Framework reference
 ```

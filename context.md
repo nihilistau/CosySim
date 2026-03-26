@@ -1,6 +1,6 @@
 # CosySim — Complete System Context
 
-> v1.54.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
+> v1.56.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
 >
 > Read this file to gain full context on architecture, conventions, systems, tools,
 > protocols, and workflows. After reading, you should be able to modify any part of
@@ -10,7 +10,7 @@
 
 ## 1. What CosySim Is
 
-CosySim is a **local-first multi-scene AI simulation framework**. 35 launch targets (18 game scenes, 11 services, 6 creation tools) run as Flask/Socket.IO servers on localhost. AI characters are LLM-powered agents governed by a 30-interceptor pipeline, ~1,040 skills across 99 packs, and a persistent knowledge layer (Nexus KMS). Local inference via LMStudio — no cloud dependency for core gameplay.
+CosySim is a **local-first multi-scene AI simulation framework**. 35 launch targets (18 game scenes, 11 services, 6 creation tools) run as Flask/Socket.IO servers on localhost. AI characters are LLM-powered agents governed by a 36-interceptor pipeline, ~1,040 skills across 99 packs, and a persistent knowledge layer (Nexus KMS). Local inference via LMStudio — no cloud dependency for core gameplay.
 
 **Design Principles:**
 - **Engine is reusable framework. Content is swappable. Config tunes without code.**
@@ -192,7 +192,7 @@ def my_skill(target: str, amount: int = 1) -> str:
 
 ### 4.5 Interceptor Pipeline (`engine/agents/interceptors/`)
 
-28 interceptors run pre-call (before LLM) and post-call (after LLM) on every agent response.
+36 interceptors run pre-call (before LLM) and post-call (after LLM) on every agent response.
 
 ```python
 from engine.mcp.comms_framework import InterceptorBase, ResponseContext
@@ -310,7 +310,7 @@ Every mutation operation on `NexusClient` calls `_check_governance()` before pro
 
 ### 5.2c Scheduler Daemon (`engine/nexus/scheduler_daemon.py`)
 
-32 registered autonomous maintenance tasks:
+89 registered autonomous maintenance tasks:
 
 ```python
 from engine.nexus.scheduler_daemon import get_scheduler_daemon
@@ -329,7 +329,45 @@ Collects training examples from: task completions, Q&A pairs, NLM conversations,
 
 Bidirectional intelligence bridge: Copilot → Nexus (store sessions, decisions, snippets) and Nexus → Copilot (pre-plan guidance, context primers, learned preferences). Session logger captures all conversation turns, checkpoints, and decisions. Context packets enable seamless resume across sessions.
 
-### 5.3 Embedding Service (`engine/nexus/embedding_service.py`)
+### 5.3 Agent Registry & Access Control (`engine/nexus/governance_rules.py`)
+
+The Nexus agent registry tracks all agents that interact with the knowledge system. 8 agent types are defined in `AGENT_TYPES`: copilot, claude_code, scene_agent, scheduler, training, observer, player, system.
+
+```python
+from engine.nexus.client import get_nexus_client
+
+nx = get_nexus_client()
+
+# Agents auto-register on first Nexus interaction
+# Registry stores: agent_id, agent_type, capabilities, last_seen, registered_at
+
+# Access log records every operation
+# Columns: agent_id, operation, resource, timestamp, allowed (bool)
+```
+
+**Auto-registration:** When an agent makes its first Nexus call, it is automatically registered in the `agent_registry` table with type detection based on the caller context. Capabilities (read, write, delete, admin, embed, train) are assigned based on the agent type tier.
+
+**Registry-backed access:** Governance rules (`_check_governance()`) now resolve the agent's type from the registry before applying permission checks. The `access_log` table provides a full audit trail of all operations.
+
+**Subscriptions:** The `subscriptions` table enables per-agent topic subscriptions for event routing (e.g., a scene_agent subscribes to knowledge updates relevant to its scene).
+
+**Schema totals:** Nexus now has 35 tables spanning knowledge storage, governance, training data, agent registry, access logging, and subscriptions.
+
+### 5.3b KnowledgePipeline (`engine/nexus/knowledge_pipeline.py`)
+
+Unified ingest-to-Q&A pipeline:
+
+```python
+from engine.nexus.knowledge_pipeline import get_knowledge_pipeline
+
+pipeline = get_knowledge_pipeline()
+pipeline.ingest("Title", "Content body", content_type="knowledge", tags=["tag1"])
+# Flow: validate → dedup (SHA-256) → store → embed → auto Q&A generation
+```
+
+**Stages:** Content validation (min length, encoding) → duplicate detection via SHA-256 hash → Nexus storage → embedding generation → automatic Q&A pair creation for cache priming. Integrates with TrainingFlywheel for fine-tuning data collection.
+
+### 5.4 Embedding Service (`engine/nexus/embedding_service.py`)
 
 ```python
 from engine.nexus.embedding_service import get_embedding_service
@@ -342,7 +380,7 @@ score = emb.cosine_similarity(vec_a, vec_b)
 
 **Providers:** Gemini Embedding 2 (primary, via AIStudio REST) → LMStudio (fallback, local). Circuit breaker per provider (5 transient failures → 300s cooldown).
 
-### 5.4 Virtual Filesystem (`engine/nexus/filesystem.py`)
+### 5.5 Virtual Filesystem (`engine/nexus/filesystem.py`)
 
 ```python
 from engine.nexus.filesystem import get_filesystem
@@ -357,7 +395,7 @@ tree = fs.tree("/home/player/", max_depth=3)
 
 Maps virtual paths to Nexus entries via `content_type="filesystem"` + path tags. Auto-seeds `/home/player/`, `/shared/`, `/system/`.
 
-### 5.5 RAG Memory (`content/simulation/database/rag.py`)
+### 5.6 RAG Memory (`content/simulation/database/rag.py`)
 
 ```python
 from content.simulation.database.rag import RAGMemory
@@ -369,7 +407,7 @@ results = rag.query_memories("lola", "What does the player like?", n_results=5)
 
 ChromaDB-backed vector store. Per-character memories with type, importance, emotion, chain_id.
 
-### 5.6 Training Flywheel (`engine/nexus/training_flywheel.py`)
+### 5.7 Training Flywheel (`engine/nexus/training_flywheel.py`)
 
 ```python
 from engine.nexus.training_flywheel import get_training_flywheel
@@ -843,6 +881,7 @@ get_nexus_client()        # NexusClient — Nexus REST API
 get_query_router()        # NexusQueryRouter — 6-tier query pipeline
 get_embedding_service()   # EmbeddingService — Gemini/LMStudio embeddings
 get_filesystem()          # NexusFilesystem — virtual FS over Nexus
+get_knowledge_pipeline()  # KnowledgePipeline — ingest → validate → dedup → store → embed → Q&A
 
 # Characters & world
 get_character_registry()  # CharacterRegistry — profiles, states, skills
@@ -940,11 +979,11 @@ Change Log:
 ```
 CosySim/
 ├── engine/                    # Core framework
-│   ├── agents/                # VirtualAgent, AgentGovernor, 28 interceptors
+│   ├── agents/                # VirtualAgent, AgentGovernor, 36 interceptors
 │   │   └── interceptors/      # Pre/post-call pipeline hooks
 │   ├── mcp/                   # MCPFramework, dialog, state, narrative_mod
 │   │   └── tools/             # 43 domain tool modules
-│   ├── skills/                # @skill decorator, registry, 98 packs
+│   ├── skills/                # @skill decorator, registry, 99 packs
 │   │   └── builtin/           # 795 engine-level skills (memory, fs, narrative, creation)
 │   ├── lmstudio/              # chat.py, ServerController, LMLink, TaskQueue
 │   ├── nexus/                 # NexusClient, QueryRouter, EmbeddingService, filesystem
