@@ -185,20 +185,16 @@
   const _externalAnimCallbacks = [];
 
   // Mutable location positions (overridable from YAML config)
-  // v1.53.0 [2026-03-26] — Y offsets so characters stand ON furniture, not through it
-  //   bed:       mattress top ≈ 0.70
-  //   couch:     seat top ≈ 0.50
-  //   bath:      tub rim ≈ 0.45
-  //   bar:       stool height ≈ 0.55
-  //   vanity:    stool height ≈ 0.40
-  //   fireplace/balcony/doorway: floor level
+  // v1.53.1 [2026-03-26] — Y at furniture surface; X/Z offset from center to avoid clipping
+  //   Bed headboard at local x=-2.85, footboard at x=1.82 → place near foot (local x=0.8)
+  //   Anim system handles pose: bed→lie, couch→lounge, bar→drink, vanity→primp, bath→bathe
   let _locationPositions = {
-    bed:       { x: -5,   y: 0.70, z: -1 },
-    couch:     { x:  5.5, y: 0.50, z:  0 },
-    fireplace: { x: -2,   y: 0,    z:  5.5 },
-    bar:       { x: -3,   y: 0.55, z: -5.5 },
-    vanity:    { x:  3,   y: 0.40, z: -5.8 },
-    bath:      { x:  6.5, y: 0.45, z: -4.5 },
+    bed:       { x: -4.2, y: 0.70, z: -1 },
+    couch:     { x:  5.5, y: 0.50, z:  0.5 },
+    fireplace: { x: -2,   y: 0,    z:  4.5 },
+    bar:       { x: -3,   y: 0.55, z: -4.8 },
+    vanity:    { x:  3,   y: 0.40, z: -5.2 },
+    bath:      { x:  6.2, y: 0.45, z: -4.5 },
     balcony:   { x:  5,   y: 0,    z:  5.5 },
     doorway:   { x:  0,   y: 0,    z: -6.5 },
   };
