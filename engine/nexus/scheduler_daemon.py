@@ -1,8 +1,9 @@
 """Scheduled Task Runner — Lightweight cron-like daemon for CosySim autonomous operations.
 
-Version: v1.56.0 [2026-03-26]
+Version: v1.57.0 [2026-03-26]
 
 Change Log:
+    v1.57.0 [2026-03-26] — Add file-search-sync (weekly) and context-cache-refresh (every_8h) tasks
     v1.56.0 [2026-03-26] — Auto-register scheduler as system agent; add session-bulk-sync + master-notebook-rebuild tasks
     v1.50.2 [2026-03-24] — Enhanced status() with overdue/error tracking, register task-auto-assign
 
@@ -987,6 +988,39 @@ def _copilot_self_sync_callback() -> Dict[str, Any]:
         return {"error": str(exc)}
 
 
+# v1.57.0 [2026-03-26] — Google File Search store sync (weekly)
+# CONNECTS: file_search_client.bootstrap_project_stores
+# CALLED BY: scheduler daemon (file-search-sync weekly)
+# EMITS: Nexus entry on success/failure
+def _file_search_sync_callback() -> Dict[str, Any]:
+    """Weekly: upload changed project docs to Google File Search store."""
+    try:
+        from engine.integrations.file_search_client import get_file_search_client, bootstrap_project_stores
+        result = bootstrap_project_stores()
+        logger.info("[scheduler] file-search-sync: uploaded %d/%d docs (operation=file_search_sync)",
+                    result.get("uploaded", 0), result.get("total", 0))
+        return {"status": "ok", **result}
+    except Exception as exc:
+        logger.warning("[scheduler] file-search-sync failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+# v1.57.0 [2026-03-26] — Gemini context cache refresh (every 8h)
+# CONNECTS: context_cache_client.ensure_project_context
+# CALLED BY: scheduler daemon (context-cache-refresh every_8h)
+# EMITS: Nexus entry on success/failure
+def _context_cache_refresh_callback() -> Dict[str, Any]:
+    """Every 8h: refresh Gemini context cache with latest project context."""
+    try:
+        from engine.integrations.context_cache_client import get_context_cache
+        cache = get_context_cache()
+        cache_name = cache.ensure_project_context(ttl_seconds=28800)  # 8h TTL
+        return {"status": "ok", "cache_name": cache_name or "none"}
+    except Exception as exc:
+        logger.warning("[scheduler] context-cache-refresh failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
 def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     """Register all built-in autonomous tasks."""
     try:
@@ -1517,6 +1551,20 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "Rebuild Master Intelligence notebook with latest project knowledge (weekly)",
         "weekly",
         _master_notebook_rebuild_callback,
+    )
+
+    # v1.57.0 [2026-03-26] — Gemini File Search + Context Cache tasks
+    daemon.register(
+        "file-search-sync",
+        "Google File Search Store — sync project docs for grounded RAG (weekly)",
+        "weekly",
+        _file_search_sync_callback,
+    )
+    daemon.register(
+        "context-cache-refresh",
+        "Gemini Context Cache — refresh project context prefix (every 8h)",
+        "every_8h",
+        _context_cache_refresh_callback,
     )
 
 

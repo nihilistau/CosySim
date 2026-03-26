@@ -19,10 +19,11 @@ The Oracle wires together 10+ dormant subsystems that were never activated:
   - ErrorAggregator → fingerprint, group, count errors
   - Error callbacks → Oracle dashboard SocketIO feed
 
-Version: v1.56.0 [2026-03-26]
+Version: v1.57.0 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.57.0 [2026-03-26] — File Search + Context Cache metrics in diagnose() output (GEMINI SERVICES section)
     v1.56.0 [2026-03-26] — Nexus KB metrics + LMStudio model health in diagnose() output
     v1.54.0 [2026-03-26] — Upgrade silent except-pass in OracleHandler.emit to traceback.print_exc
     v1.49.4 [2026-03-22] — Initial Oracle observability system — the All-Seeing Eye
@@ -251,6 +252,50 @@ def _lmstudio_model_health() -> Dict[str, Any]:
     return {"server_reachable": False, "models": []}
 
 
+# ──── Gemini Service Metrics ──────────────────────────────────────────────────
+
+# v1.57.0 [2026-03-26] — File Search store stats for Oracle dashboard
+# CONNECTS: FileSearchClient (engine.integrations.file_search_client)
+# CALLED BY: diagnose()
+# EMITS: dict with availability, store count, store names
+def _file_search_metrics() -> Dict[str, Any]:
+    """Fetch Google File Search store stats.
+
+    Returns:
+        Dict with ``available`` flag, store count, and store display names,
+        or just ``available: False`` if unreachable.
+    """
+    try:
+        from engine.integrations.file_search_client import get_file_search_client
+        client = get_file_search_client()
+        stores = client.list_stores()
+        return {
+            "available": True,
+            "stores": len(stores),
+            "store_names": [s.get("display_name", "") for s in stores],
+        }
+    except Exception:
+        return {"available": False}
+
+
+# v1.57.0 [2026-03-26] — Context cache status for Oracle dashboard
+# CONNECTS: ContextCacheClient (engine.integrations.context_cache_client)
+# CALLED BY: diagnose()
+# EMITS: dict with cached flag, cache name, TTL remaining
+def _context_cache_metrics() -> Dict[str, Any]:
+    """Fetch Gemini context cache status.
+
+    Returns:
+        Dict from ContextCacheClient.status(), or fallback dict.
+    """
+    try:
+        from engine.integrations.context_cache_client import get_context_cache
+        cache = get_context_cache()
+        return cache.status()
+    except Exception:
+        return {"cached": False}
+
+
 # ──── Diagnostic API ─────────────────────────────────────────────────────────
 # Callable from Python REPL, tests, or scripts/oracle.py
 
@@ -402,6 +447,38 @@ def diagnose(verbose: bool = False) -> Dict[str, Any]:
                 print(f"       {err[:80]}")
     except Exception as exc:
         print(f"  [!] LMStudio model health unavailable: {exc}")
+
+    # ── Gemini Services ──────────────────────────────────────
+    # v1.57.0 [2026-03-26] — File Search + Context Cache in Oracle diagnostic
+    print("")
+    print("-- GEMINI SERVICES --")
+    try:
+        fs_metrics = _file_search_metrics()
+        result["file_search"] = fs_metrics
+        if fs_metrics.get("available"):
+            store_count = fs_metrics.get("stores", 0)
+            names = ", ".join(fs_metrics.get("store_names", [])[:5]) or "(none)"
+            print(f"  [OK] File Search         UP  ({store_count} store(s))")
+            if verbose:
+                print(f"       Stores: {names}")
+        else:
+            print("  [--] File Search         UNAVAILABLE")
+    except Exception as exc:
+        print(f"  [!] File Search metrics unavailable: {exc}")
+
+    try:
+        cc_metrics = _context_cache_metrics()
+        result["context_cache"] = cc_metrics
+        if cc_metrics.get("cached"):
+            cache_name = cc_metrics.get("cache_name", "unknown")
+            ttl_remaining = cc_metrics.get("ttl_remaining_seconds", 0)
+            print(f"  [OK] Context Cache       ACTIVE  (TTL {ttl_remaining}s remaining)")
+            if verbose:
+                print(f"       Cache: {cache_name}")
+        else:
+            print("  [--] Context Cache       INACTIVE")
+    except Exception as exc:
+        print(f"  [!] Context Cache metrics unavailable: {exc}")
 
     print("")
     print("=" * 60)

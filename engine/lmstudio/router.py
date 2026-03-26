@@ -22,10 +22,12 @@ Priority levels:
 
 Thread-safe.  All public methods are safe to call from multiple threads.
 
-Version: v1.56.0 [2026-03-26]
+Version: v1.57.0 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.57.0 [2026-03-26] — Enhanced Nexus-aware routing: agent hit-rate analysis
+                             from QueryRouter stats for smarter model selection
     v1.56.0 [2026-03-26] — Nexus-aware routing hint for small model selection
     v1.49.0 [2026-03-22] — Initial three-tier priority queue router
 """
@@ -320,15 +322,17 @@ class InferenceRouter:
 
     # ─────────────────────────────── Nexus-aware routing ──
 
-    # v1.56.0 [2026-03-26] — Route simple queries to smaller models
-    # CONNECTS: select_tier(), Nexus knowledge confidence
+    # v1.57.0 [2026-03-26] — Enhanced Nexus-aware routing with agent hit-rate analysis
+    # CONNECTS: select_tier(), Nexus QueryRouter stats, knowledge confidence
     # CALLED BY: select_tier() as a pre-check before ML/rule routing
     def _nexus_routing_hint(self, request: InferenceRequest) -> Optional[str]:
-        """If query is simple (short, factual), suggest smaller model.
+        """Use Nexus query patterns to optimize model selection.
 
-        Short questions (< 50 chars with a question mark) are likely
-        factual lookups that a smaller CPU model can handle.  Returns
-        ``"small"`` to hint at T2/T3, or ``None`` for no preference.
+        Checks two signals:
+        1. Short factual questions (< 50 chars with '?') → small model
+        2. Agent-level Nexus hit rate — if an agent gets 70%+ cache hits
+           from Nexus (after 10+ queries), it asks simple questions that
+           a smaller CPU model can handle.
 
         Args:
             request: The inference request to evaluate.
@@ -351,6 +355,23 @@ class InferenceRouter:
         # Short factual questions → small model
         if len(user_msg) < 50 and "?" in user_msg:
             return "small"
+
+        # v1.57.0 [2026-03-26] — Check if Nexus-first inference is catching
+        # most queries for this agent.  High hit rate means simple questions
+        # that a smaller model can handle just as well.
+        agent_id = request.agent_id
+        if agent_id:
+            try:
+                from engine.nexus.query_router import get_query_router
+                stats = get_query_router().stats
+                agent_hits = stats.agent_hits.get(agent_id, 0)
+                agent_queries = stats.agent_queries.get(agent_id, 0)
+                if agent_queries > 10 and agent_hits / max(1, agent_queries) > 0.7:
+                    # This agent gets 70%+ cache hits — simple questions, use small model
+                    return "small"
+            except Exception:
+                pass
+
         return None
 
     # ─────────────────────────────── routing logic ──
