@@ -4158,3 +4158,94 @@ batchexecute_services:
       host: opal.google.com
       rpcid_count: 1
       notes: NEW — Google Labs experimental workspace. Minimal rpcid surface so far.
+
+# ════════════════════════════════════════════════════════════════════════════
+# gRPC METHOD NAMES → OPERATION MAPPING
+#
+# v1.57.2 [2026-03-26] — gRPC method names extracted from V8 heap snapshots
+# Maps proto service method names (google.internal.labs.tailwind.*) to
+# batchexecute operation names and rpcids. Methods with rpcid: null are
+# internal-only (no known batchexecute equivalent).
+#
+# Source: ARGUS heap mining of NotebookLM V8 snapshots
+# Service: google.internal.labs.tailwind.orchestration.v1.LabsTailwindOrchestrationService
+# ════════════════════════════════════════════════════════════════════════════
+grpc_methods:
+  # ──── Sources ──────────────────────────────────────────────────────────
+  AddSources: {operation: add_source, rpcid: izAoDd, category: sources}
+  AddTentativeSources: {operation: add_tentative_sources, rpcid: null, category: sources}
+  CheckSourceFreshness: {operation: check_source_freshness, rpcid: null, category: sources}
+  DeleteSources: {operation: delete_source, rpcid: tGMBJ, category: sources}
+  DiscoverSources: {operation: discover_sources, rpcid: null, category: sources}
+  DiscoverSourcesAsync: {operation: discover_sources_async, rpcid: null, category: sources}
+  DiscoverSourcesManifold: {operation: discover_sources_manifold, rpcid: null, category: sources}
+  CancelDiscoverSourcesJob: {operation: cancel_discover, rpcid: null, category: sources}
+  FinishDiscoverSourcesRun: {operation: finish_discover, rpcid: null, category: sources}
+  LoadSource: {operation: load_source, rpcid: wXbhsf, category: sources}
+  MutateSource: {operation: mutate_source, rpcid: null, category: sources}
+  RefreshSource: {operation: refresh_source, rpcid: null, category: sources}
+  ListAvailableContent: {operation: list_available_content, rpcid: null, category: sources}
+
+  # ──── Projects ─────────────────────────────────────────────────────────
+  CreateProject: {operation: create_notebook, rpcid: CCqFvf, category: projects}
+  CopyProject: {operation: copy_project, rpcid: null, category: projects}
+  DeleteProjects: {operation: delete_projects, rpcid: null, category: projects}
+  GetProject: {operation: load_notebook, rpcid: rLM1Ne, category: projects}
+  GetProjectAnalytics: {operation: notebook_analytics, rpcid: JFMDGd, category: projects}
+  MutateProject: {operation: mutate_project, rpcid: null, category: projects}
+  ListFeaturedProjects: {operation: list_featured, rpcid: null, category: projects}
+  ListRecentlyViewedProjects: {operation: list_recent, rpcid: null, category: projects}
+  RemoveRecentlyViewedProject: {operation: remove_recent, rpcid: null, category: projects}
+  UpdateFeaturedNotebookStatus: {operation: update_featured, rpcid: null, category: projects}
+
+  # ──── Artifacts ────────────────────────────────────────────────────────
+  CreateArtifact: {operation: create_artifact, rpcid: null, category: artifacts}
+  DeleteArtifact: {operation: delete_artifact, rpcid: null, category: artifacts}
+  DeriveArtifact: {operation: derive_artifact, rpcid: null, category: artifacts}
+  GenerateArtifact: {operation: generate_artifact, rpcid: null, category: artifacts}
+  GetArtifact: {operation: get_artifact, rpcid: null, category: artifacts}
+  GetArtifactCustomizationChoices: {operation: artifact_options, rpcid: sqTeoe, category: artifacts}
+  GetArtifactUserState: {operation: artifact_user_state, rpcid: null, category: artifacts}
+  ListArtifacts: {operation: list_artifacts, rpcid: gArtLc, category: artifacts}
+  UpdateArtifact: {operation: update_artifact, rpcid: R7cb6c, category: artifacts}
+  UpsertArtifactUserState: {operation: upsert_artifact_state, rpcid: null, category: artifacts}
+
+  # ──── Notes ────────────────────────────────────────────────────────────
+  CreateNote: {operation: create_note, rpcid: CYK0Xb, category: notes}
+  DeleteNotes: {operation: delete_notes, rpcid: null, category: notes}
+  GetNotes: {operation: get_notes, rpcid: cFji9, category: notes}
+  MutateNote: {operation: mutate_note, rpcid: null, category: notes}
+
+  # ──── Chat ─────────────────────────────────────────────────────────────
+  GenerateFreeFormStreamed: {operation: chat, rpcid: null, endpoint: grpc, category: chat}
+  ListChatSessions: {operation: list_chat_sessions, rpcid: null, category: chat}
+  ListChatTurns: {operation: list_chat_turns, rpcid: hPTbtc, category: chat}
+  DeleteChatTurns: {operation: delete_chat_turns, rpcid: null, category: chat}
+  GeneratePromptSuggestions: {operation: prompt_suggestions, rpcid: null, category: chat}
+
+  # ──── Generation ───────────────────────────────────────────────────────
+  ActOnSources: {operation: act_on_sources, rpcid: tGMBJ, category: generation}
+  GenerateDocumentGuides: {operation: generate_guides, rpcid: ciyUvf, category: generation}
+  GenerateMagicView: {operation: generate_magic_view, rpcid: CCqFvf, category: generation}
+  GenerateNotebookGuide: {operation: generate_notebook_guide, rpcid: xqEXEf, category: generation}
+  GenerateReportSuggestions: {operation: report_suggestions, rpcid: null, category: generation}
+  GetMagicIndex: {operation: magic_index, rpcid: VfAZjd, category: generation}
+  GetMagicView: {operation: get_magic_view, rpcid: yyryJe, category: generation}
+  ExecuteWritingFunction: {operation: writing_function, rpcid: null, category: generation}
+
+  # ──── Account ──────────────────────────────────────────────────────────
+  GetOrCreateAccount: {operation: session_init, rpcid: ZwVcOc, category: account}
+  MutateAccount: {operation: mutate_account, rpcid: null, category: account}
+  GenerateAccessToken: {operation: generate_token, rpcid: null, category: account}
+
+  # ──── Export ───────────────────────────────────────────────────────────
+  ExportToDrive: {operation: export_drive, rpcid: Krh3pd, category: export}
+
+  # ──── Media (Audio Overview / WebRTC) ──────────────────────────────────
+  GetIceConfig: {operation: ice_config, rpcid: null, category: media}
+  SendSdpOffer: {operation: sdp_offer, rpcid: null, category: media}
+  ListModelOptions: {operation: list_model_options, rpcid: null, category: media}
+
+  # ──── Feedback ─────────────────────────────────────────────────────────
+  ReportContent: {operation: report_content, rpcid: null, category: feedback}
+  SubmitFeedback: {operation: submit_feedback, rpcid: null, category: feedback}

@@ -1,4 +1,12 @@
-"""NLM batchexecute transport layer — headers, HTTP calls, and response parsing."""
+"""NLM batchexecute transport layer — headers, HTTP calls, and response parsing.
+
+Version: v1.57.2 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.57.2 [2026-03-26] — Auto-recovery on rpcid rotation via fallback registry
+    v1.53.0 [2026-03-21] — Baseline transport layer
+"""
 from __future__ import annotations
 
 import json
@@ -18,6 +26,9 @@ from engine.mcp.nlm_auth import (
 logger = logging.getLogger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────
+# v1.57.2 [2026-03-26] — Track rpcids known to be stale after rotation
+_STALE_RPCIDS: set = set()
+
 _NLM_HOST = "notebooklm.google.com"
 _BATCH_URL = f"https://{_NLM_HOST}/_/LabsTailwindUi/data/batchexecute"
 _REQUEST_TIMEOUT = 60
@@ -42,6 +53,36 @@ _REQUEST_TIMEOUT = 60
 #   • The source-path URL parameter sets the notebook context for NLM's
 #     server-side session tracking (affects source-scoped calls).
 # ════════════════════════════════════════════════════════════════════════════
+
+# ── Rotation Recovery Helper ──────────────────────────────────────────────
+
+# v1.57.2 [2026-03-26] — Rotation detection with fallback rpcid lookup
+# CONNECTS: NLMRpcRegistry (config/nlm_rpcids.yaml)
+# CALLED BY: _batchexecute_multi response parsing
+def _get_fallback_rpcid(rpc_id: str) -> Optional[str]:
+    """Get a fallback rpcid for a stale one via the registry.
+
+    Performs a reverse lookup from rpcid to operation name, then retrieves
+    the fallback rpcid for that operation. This enables auto-recovery when
+    Google rotates rpcids during frontend deployments.
+
+    Args:
+        rpc_id: The rpcid that returned null/error (potentially stale).
+
+    Returns:
+        Fallback rpcid string, or None if no fallback exists.
+    """
+    try:
+        from engine.integrations.nlm_rpc_registry import get_rpc_registry
+        reg = get_rpc_registry()
+        # Reverse lookup: rpcid → operation name
+        op = reg.find_operation_by_rpcid(rpc_id)
+        if op:
+            return reg.get_fallback_rpcid(op)
+    except Exception:
+        pass
+    return None
+
 
 def _build_headers(cookies: Dict[str, str]) -> Dict[str, str]:
     """Build the HTTP headers required for NLM batchexecute requests.
@@ -238,6 +279,51 @@ def _batchexecute_multi(
         logger.info("All batchexecute results null — refreshing session tokens and retrying")
         if refresh_session_tokens():
             return _batchexecute_multi(calls, cookies, notebook_id, _refreshed=True)
+
+    # ── Rotation detection with fallback ─────────────────────────────────
+    # v1.57.2 [2026-03-26] — Per-rpcid rotation recovery
+    # If a SPECIFIC rpcid returns null (but not all of them), it may be a
+    # rotated rpcid rather than a stale session. Try the fallback rpcid
+    # from the registry. Only attempt once per call (_refreshed flag reused
+    # to prevent infinite recursion).
+    if not _refreshed:
+        recovered_results = list(results)
+        any_recovered = False
+        for idx, ((orig_rpcid, orig_args), (ret_rpcid, ret_data)) in enumerate(
+            zip(calls, results)
+        ):
+            if ret_data is not None:
+                continue  # This call succeeded — skip
+            # null result for a non-session rpcid → possible rotation
+            fallback = _get_fallback_rpcid(orig_rpcid)
+            if fallback and fallback != orig_rpcid:
+                logger.info(
+                    "[NLMTransport] Trying fallback rpcid %s → %s "
+                    "(operation=rotation_recovery)",
+                    orig_rpcid, fallback,
+                )
+                fallback_results = _batchexecute_multi(
+                    [(fallback, orig_args)], cookies, notebook_id,
+                    _refreshed=True,
+                )
+                if fallback_results and fallback_results[0][1] is not None:
+                    recovered_results[idx] = fallback_results[0]
+                    any_recovered = True
+                    # Mark the original rpcid as stale for diagnostics
+                    _STALE_RPCIDS.add(orig_rpcid)
+                    logger.info(
+                        "[NLMTransport] Rotation recovery succeeded: "
+                        "%s → %s (operation=rotation_recovery)",
+                        orig_rpcid, fallback,
+                    )
+                else:
+                    logger.warning(
+                        "[NLMTransport] Fallback rpcid %s also returned null "
+                        "(operation=rotation_recovery)",
+                        fallback,
+                    )
+        if any_recovered:
+            return recovered_results
 
     return results
 
