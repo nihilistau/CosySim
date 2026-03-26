@@ -106,23 +106,31 @@ async def ask(question: str, port: int = CDP_PORT) -> str:
                 return f"[ERROR: {desc[:200]}]"
             raw = json.dumps(result_obj)[:2000]
 
+        # v1.57.1 [2026-03-26] — Updated parser for current Gemini response format.
         # Parse wrb.fr chunks — extract the final answer, skip thinking traces.
         # Response structure (streaming):
         #   Chunks 0-N: Thinking traces (bold headers like "**Analyzing...**\n\n")
         #   Chunks N+1..M: Answer building progressively (each adds more text)
         #   Last chunks: Final answer (stabilized, repeated)
-        # Strategy: take the last chunk, skip if it looks like a thinking trace.
+        # Strategy: take the longest non-thinking chunk.
         texts = []
         for line in raw.replace(")]}'", "").split("\n"):
             line = line.strip()
             if not line or not line.startswith("["):
                 continue
             try:
-                for item in json.loads(line):
+                items = json.loads(line)
+                for item in items:
                     if isinstance(item, list) and len(item) >= 3 and item[0] == "wrb.fr" and item[2]:
                         d = json.loads(item[2])
                         if isinstance(d, list) and d:
-                            txt = d[0][0] if isinstance(d[0], list) and d[0] else d[0] if isinstance(d[0], str) else ""
+                            # Try multiple extraction paths for different response formats
+                            txt = ""
+                            first = d[0]
+                            if isinstance(first, list) and first and isinstance(first[0], str):
+                                txt = first[0]
+                            elif isinstance(first, str):
+                                txt = first
                             if isinstance(txt, str) and txt.strip():
                                 texts.append(txt)
             except Exception:
