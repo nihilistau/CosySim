@@ -308,6 +308,24 @@ class NexusQueryRouter:
 
     # ── Pipeline Tiers ──────────────────────────────────────────────
 
+    # v1.56.1 [2026-03-26] — Relevance scoring for Q&A cache hits
+    @staticmethod
+    def _question_relevance(query: str, cached_question: str) -> float:
+        """Score 0.0-1.0 how relevant a cached question is to the query."""
+        q_words = set(query.lower().split())
+        c_words = set(cached_question.lower().split())
+        # Remove stop words
+        stop = {"a", "an", "the", "is", "are", "was", "were", "what", "how",
+                "does", "do", "in", "of", "to", "for", "and", "or", "it", "this",
+                "that", "with", "from", "on", "at", "by", "be", "has", "have", "i"}
+        q_words -= stop
+        c_words -= stop
+        if not q_words or not c_words:
+            return 0.0
+        overlap = q_words & c_words
+        # Jaccard-like: overlap relative to query size
+        return len(overlap) / max(len(q_words), 1)
+
     def _try_qa_cache(self, client, question: str) -> Optional[QueryResult]:
         """Tier 1: Check the Q&A cache for a matching answer."""
         # v1.54.0 [2026-03-26] — Null guard on client
@@ -315,23 +333,40 @@ class NexusQueryRouter:
             logger.debug("[QueryRouter] Nexus client unavailable, skipping cache tier")
             return None
         try:
-            qa_results = client.find_qa(question, limit=3)
+            qa_results = client.find_qa(question, limit=5)
             if qa_results:
-                best = qa_results[0]
-                answer = best.get("answer", "")
-                if answer and len(answer) >= self.MIN_ANSWER_LENGTH:
-                    with self._lock:
-                        self._stats.cache_hits += 1
-                        tokens_saved = self._estimate_tokens(answer)
-                        self._stats.total_tokens_saved += tokens_saved
-                    return QueryResult(
-                        answer=answer,
-                        source="cache",
-                        confidence=self.CACHE_CONFIDENCE,
-                        cached=True,
-                        tokens_saved=tokens_saved,
-                        sources=[best.get("question", "")],
-                    )
+                # v1.56.1 — Score relevance instead of blindly taking first result
+                best = None
+                best_relevance = 0.0
+                for qa in qa_results:
+                    cached_q = qa.get("question", "")
+                    relevance = self._question_relevance(question, cached_q)
+                    if relevance > best_relevance:
+                        best_relevance = relevance
+                        best = qa
+
+                # Require at least 40% word overlap to consider it a real match
+                if best and best_relevance >= 0.4:
+                    answer = best.get("answer", "")
+                    if answer and len(answer) >= self.MIN_ANSWER_LENGTH:
+                        # Scale confidence by relevance (0.4 relevance → 0.72 conf, 1.0 → 0.90)
+                        confidence = min(self.CACHE_CONFIDENCE, 0.5 + best_relevance * 0.4)
+                        with self._lock:
+                            self._stats.cache_hits += 1
+                            tokens_saved = self._estimate_tokens(answer)
+                            self._stats.total_tokens_saved += tokens_saved
+                        return QueryResult(
+                            answer=answer,
+                            source="cache",
+                            confidence=confidence,
+                            cached=True,
+                            tokens_saved=tokens_saved,
+                            sources=[best.get("question", "")],
+                        )
+                    else:
+                        logger.debug("[QueryRouter] Cache hit too short (%d chars)", len(answer) if answer else 0)
+                else:
+                    logger.debug("[QueryRouter] Cache miss — best relevance %.2f < 0.4 threshold", best_relevance)
         except Exception as exc:
             logger.debug("Q&A cache lookup failed: %s", exc)
         return None
