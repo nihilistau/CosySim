@@ -21,6 +21,13 @@ Priority levels:
     BATCH(3)       — Image prompts, analytics, non-urgent
 
 Thread-safe.  All public methods are safe to call from multiple threads.
+
+Version: v1.56.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.56.0 [2026-03-26] — Nexus-aware routing hint for small model selection
+    v1.49.0 [2026-03-22] — Initial three-tier priority queue router
 """
 from __future__ import annotations
 
@@ -311,6 +318,41 @@ class InferenceRouter:
         future = self.submit(request)
         return future.result(timeout=timeout)
 
+    # ─────────────────────────────── Nexus-aware routing ──
+
+    # v1.56.0 [2026-03-26] — Route simple queries to smaller models
+    # CONNECTS: select_tier(), Nexus knowledge confidence
+    # CALLED BY: select_tier() as a pre-check before ML/rule routing
+    def _nexus_routing_hint(self, request: InferenceRequest) -> Optional[str]:
+        """If query is simple (short, factual), suggest smaller model.
+
+        Short questions (< 50 chars with a question mark) are likely
+        factual lookups that a smaller CPU model can handle.  Returns
+        ``"small"`` to hint at T2/T3, or ``None`` for no preference.
+
+        Args:
+            request: The inference request to evaluate.
+
+        Returns:
+            ``"small"`` if a lightweight model would suffice, else ``None``.
+        """
+        messages = getattr(request, "messages", None) or []
+        if not isinstance(messages, list):
+            return None
+        # Find the last user message
+        user_msg = ""
+        for m in reversed(messages):
+            if isinstance(m, dict) and m.get("role") == "user":
+                user_msg = m.get("content", "")
+                break
+        if not user_msg:
+            return None
+
+        # Short factual questions → small model
+        if len(user_msg) < 50 and "?" in user_msg:
+            return "small"
+        return None
+
     # ─────────────────────────────── routing logic ──
 
     def select_tier(self, request: InferenceRequest) -> Tier:
@@ -332,6 +374,14 @@ class InferenceRouter:
             affinity_tier = self._agent_affinity[request.agent_id]
             if self.has_available_slot(affinity_tier):
                 return affinity_tier
+
+        # v1.56.0 — Nexus-aware routing hint: short factual queries → small model
+        hint = self._nexus_routing_hint(request)
+        if hint == "small" and not request.tools:
+            # Prefer CPU utility for simple questions (saves GPU for dialogue)
+            if self._tiers.get(Tier.CPU_UTILITY, TierConfig(Tier.CPU_UTILITY)).enabled:
+                if self.has_available_slot(Tier.CPU_UTILITY):
+                    return Tier.CPU_UTILITY
 
         # RouterV3 ML-based prediction
         try:

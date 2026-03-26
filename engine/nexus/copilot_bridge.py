@@ -1,8 +1,9 @@
 """Copilot Bridge — Makes Copilot CLI self-improving via NLM + Nexus.
 
-Version: v1.50.2 [2026-03-24]
+Version: v1.56.0 [2026-03-26]
 
 Change Log:
+    v1.56.0 [2026-03-26] — Auto-register Copilot with Nexus agent_registry on init
     v1.50.2 [2026-03-24] — Wire config pull at session start, push at session end
 
 Provides functions that the Copilot CLI hooks can call to:
@@ -99,6 +100,30 @@ class CopilotBridge:
         self._nexus = None
         self._router = None
         self._forge = None
+        # v1.56.0 [2026-03-26] — Auto-register Copilot with Nexus agent_registry
+        self._register_with_nexus()
+
+    # v1.56.0 [2026-03-26] — Auto-register Copilot with Nexus agent_registry
+    # CONNECTS: NexusClient (agent_registry API)
+    # CALLED BY: __init__
+    # EMITS: Nexus /api/agents/register POST
+    def _register_with_nexus(self) -> None:
+        """Register the Copilot bridge as an expert-tier agent in Nexus.
+
+        Best-effort: failures are silently ignored so bridge init never
+        blocks on Nexus availability.
+        """
+        try:
+            client = self._get_nexus()
+            if client and client.is_available(timeout=2):
+                client._post("/api/agents/register", {
+                    "agent_id": "copilot",
+                    "display_name": "Claude Code",
+                    "agent_type": "copilot",
+                    "tier": "expert",
+                })
+        except Exception:
+            pass
 
     @staticmethod
     def _looks_like_runtime_task(task_description: str) -> bool:

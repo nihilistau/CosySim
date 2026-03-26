@@ -532,7 +532,7 @@ class TestIntegrationFlow:
         daemon = MagicMock()
         _register_builtin_tasks(daemon)
         task_ids = [c.args[0] if c.args else c.kwargs.get("task_id") for c in daemon.register.call_args_list]
-        assert daemon.register.call_count == 76
+        assert daemon.register.call_count == 89
         assert "knowledge-quality" in task_ids
         assert "notebook-rotation" in task_ids
         assert "news-fetch" in task_ids

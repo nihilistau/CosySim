@@ -13,6 +13,14 @@ Channels used:
 The ServerController is wired into the InferenceOrchestrator and exposed
 via MCP skills so agents can self-manage their model instances.
 
+Version: v1.56.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.56.0 [2026-03-26] — Per-model health metrics via get_model_health()
+    v1.50.1 [2026-03-22] — Auto-unload idle agent instances
+    v1.49.3 [2026-03-22] — Initial ServerController with SDK/CLI channels
+
 Usage::
 
     from engine.lmstudio.server_controller import get_server_controller
@@ -269,6 +277,75 @@ class ServerController:
         self._last_health = health
         self._metrics["health_checks"] += 1
         return health
+
+    # v1.56.0 [2026-03-26] — Per-model health metrics for monitoring
+    # CONNECTS: get_server_status(), SDK/CLI model listing
+    # CALLED BY: Oracle diagnostics, /api/oracle/health, admin overlay
+    # EMITS: structured dict with per-model VRAM/context/loaded status
+    def get_model_health(self) -> Dict[str, Any]:
+        """Return health metrics for all loaded models.
+
+        Queries the server for loaded models and returns per-model details
+        including VRAM usage estimates and context lengths, plus aggregate
+        totals.  Falls back gracefully if the server is unreachable.
+
+        Returns:
+            Dict with ``models`` list, ``total_vram_mb``, ``model_count``,
+            and ``server_reachable`` flag.
+        """
+        try:
+            status = self.get_server_status()
+            models: List[Dict[str, Any]] = []
+
+            # Build per-model entries from loaded model names + instance data
+            for model_name in status.model_names:
+                instance = self._instances.get(model_name)
+                vram_estimate = 0.0
+                ctx = 0
+                if instance:
+                    # Use actual instance config if available
+                    gpu_frac = instance.gpu_offload
+                    vram_estimate = 4000 * gpu_frac  # ~4GB base per model * GPU fraction
+                    ctx = instance.context_length
+                else:
+                    # Estimate from config defaults
+                    gpu_frac = float(
+                        self._config.get("lmstudio.default_load_opts.gpu", 0.9)
+                    )
+                    vram_estimate = 4000 * gpu_frac
+                    ctx = int(
+                        self._config.get("lmstudio.default_load_opts.context_length", 4096)
+                    )
+
+                models.append({
+                    "id": model_name,
+                    "loaded": True,
+                    "vram_mb": round(vram_estimate, 1),
+                    "context_length": ctx,
+                    "request_count": instance.request_count if instance else 0,
+                    "total_tokens": instance.total_tokens if instance else 0,
+                    "idle_seconds": round(instance.idle_seconds, 1) if instance else 0,
+                })
+
+            total_vram = sum(m["vram_mb"] for m in models)
+            logger.debug(
+                "[ServerController] Model health check (operation=get_model_health, "
+                "model_count=%d, total_vram_mb=%.1f)",
+                len(models), total_vram,
+            )
+
+            return {
+                "models": models,
+                "total_vram_mb": round(total_vram, 1),
+                "model_count": len(models),
+                "server_reachable": True,
+            }
+        except Exception as exc:
+            logger.warning(
+                "[ServerController] Model health check failed (operation=get_model_health): %s",
+                exc,
+            )
+            return {"server_reachable": False, "error": str(exc), "models": []}
 
     # ── Model lifecycle ──────────────────────────────────────────────
 

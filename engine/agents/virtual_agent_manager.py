@@ -1,9 +1,10 @@
 """
 VirtualAgentManager v3.4 — Centralised agent call server for CosySim.
 
-Version: v1.55.0 [2026-03-26]
+Version: v1.56.0 [2026-03-26]
 
 Change Log:
+    v1.56.0 [2026-03-26] — Structured nexus_first dict in get_stats() with gpu_calls_saved
     v1.55.0 [2026-03-26] — Nexus-first inference: check knowledge cache before GPU
     v1.55.0 [2026-03-26] — Added on_model_promoted() for training pipeline hot-reload
     v3.3    [2026-03-19] — Three-tier InferenceRouter, SDK + REST dual channel
@@ -1056,7 +1057,7 @@ class VirtualAgentManager:
             ),
             "router_enabled": self._router_enabled,
             "pipeline_enabled": self._pipeline is not None,
-            # v1.55.0 [2026-03-26] — Nexus-first cache stats
+            # v1.55.0 [2026-03-26] — Nexus-first cache stats (flat)
             "nexus_first_enabled": self._nexus_first_enabled,
             "nexus_hits": self._nexus_hits,
             "nexus_misses": self._nexus_misses,
@@ -1064,6 +1065,16 @@ class VirtualAgentManager:
                 f"{self._nexus_hits / (self._nexus_hits + self._nexus_misses):.1%}"
                 if (self._nexus_hits + self._nexus_misses) > 0 else "0.0%"
             ),
+            # v1.56.0 [2026-03-26] — Structured Nexus-first cache effectiveness
+            "nexus_first": {
+                "enabled": self._nexus_first_enabled,
+                "hits": self._nexus_hits,
+                "misses": self._nexus_misses,
+                "hit_rate": (
+                    f"{self._nexus_hits / max(1, self._nexus_hits + self._nexus_misses) * 100:.1f}%"
+                ),
+                "gpu_calls_saved": self._nexus_hits,
+            },
         }
         if self._router:
             stats["router"] = self._router.get_metrics()
