@@ -4,6 +4,31 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.53.1] — "PENTHOUSE REVIVAL" — 2026-03-26
+
+Four penthouse bugs fixed: 3D characters now render, move, and interact correctly.
+
+### Penthouse 3D — Character Rendering Fixed
+- **penthouse_3d.js scoping crash** — `_initialized`, `_initError`, `_readyCallbacks` were declared inside `init()` but referenced from `_safeInit()` at IIFE scope; strict mode threw `ReferenceError`, permanently blocking CharacterBridge `onReady` callbacks and leaving `_scene` null
+- **Character models now visible** — CharacterBridge pipeline unfrozen: init → syncCharacters → CharModels.create → scene.add all flow correctly
+- **Per-location Y offsets** — characters placed ON furniture (bed y=0.70, couch y=0.50, bar y=0.55, bath y=0.45, vanity y=0.40) instead of at floor level clipping through geometry
+- **Duplicate name labels fixed** — CharacterBridge now removes built-in CharModels label before adding its own styled pill label
+
+### Penthouse Agent Loop — Multi-Character Fix
+- **Hot-registration** — characters added after the agent loop starts are now immediately registered via `_register_char_with_loop()`, with full agent + governance + context injection
+- Previously, only characters present at loop start time participated; latecomers stood idle
+
+### Footer Cleanup
+- **BenchHUD removed from penthouse** — legacy collapsible performance HUD (`cs-bench-hud`, z-index 9990) overlapped the new `cs-footer`; script removed entirely from template, `_initBenchHUD()` method deleted
+- **Footer version bumped** — `neon_base.html` footer now reads "CosySim v1.53"
+
+### Diagnostic Logging
+- `[CharModels]` load confirmation with outfit/look/pose counts
+- `[CharBridge]` breadcrumbs at init, syncCharacters, ensureCharacter with dependency state
+- try/catch around `CharModels.create()` — errors surface in console instead of failing silently
+
+---
+
 ## [1.52.0] — "LIVE GAME + CO-OP HEISTS" — 2026-03-26
 
 HUD polish, browser test coverage, CSS responsiveness, multiplayer co-op

@@ -4,7 +4,7 @@
  * Manages all client-side logic for the Penthouse UI:
  *   Socket.IO connection · Chat rendering · Emotion bars ·
  *   Scenario selection · Scene Director · Economy · Memories ·
- *   ParticleSystem3D · BenchHUD · VoiceManager integration
+ *   ParticleSystem3D · VoiceManager integration
  */
 
 'use strict';
@@ -69,7 +69,6 @@ class PenthouseScene {
     this._setupSocket();
     this._setupDOM();
     this._initParticles();
-    this._initBenchHUD();
 
     // Request initial economy balance
     setTimeout(() => this.socket && this.socket.emit('get_economy', {}), 1500);
@@ -797,18 +796,6 @@ class PenthouseScene {
     if (main) {
       main.classList.add('celebrating');
       setTimeout(() => main.classList.remove('celebrating'), 500);
-    }
-  }
-
-  /* ── BenchHUD ───────────────────────────────────────────────────── */
-
-  _initBenchHUD() {
-    if (typeof BenchHUD === 'undefined') return;
-    try {
-      const hud = new BenchHUD({ collapsed: true, poll: 8000 });
-      hud.mount(document.body);
-    } catch (err) {
-      console.warn('[Penthouse] BenchHUD init failed:', err);
     }
   }
 

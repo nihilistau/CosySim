@@ -177,83 +177,92 @@
 
     animate();
     console.debug('[Penthouse3D] v2.0 AAA++ initialised');
-
-    // External animation callbacks (used by character_bridge.js)
-    const _externalAnimCallbacks = [];
-
-    // Mutable location positions (overridable from YAML config)
-    let _locationPositions = {
-      bed:       { x: -5,   y: 0, z: -1 },
-      couch:     { x:  5.5, y: 0, z:  0 },
-      fireplace: { x: -2,   y: 0, z:  5.5 },
-      bar:       { x: -3,   y: 0, z: -5.5 },
-      vanity:    { x:  3,   y: 0, z: -5.8 },
-      bath:      { x:  6.5, y: 0, z: -4.5 },
-      balcony:   { x:  5,   y: 0, z:  5.5 },
-      doorway:   { x:  0,   y: 0, z: -6.5 },
-    };
-
-    // v1.49.2 [2026-03-22] — Initialization tracking + onReady callback for race condition fix
-    let _initialized = false;
-    let _initError = null;
-    const _readyCallbacks = [];
-
-    window.penthouse3D = {
-      switchView,
-      getViewNames: () => Object.keys(CAMERA_VIEWS),
-      toggleFirstPerson: toggleFirstPersonMode,
-      isFirstPerson: () => fpsMode,
-
-      // ── Initialization state API ────────────────────────────────
-      isInitialized: () => _initialized,
-      getInitError: () => _initError,
-      onReady: (cb) => {
-        if (_initialized) { cb(window.penthouse3D); return; }
-        if (_initError) { console.warn('[Penthouse3D] init failed, callback skipped:', _initError); return; }
-        _readyCallbacks.push(cb);
-      },
-
-      // ── Character integration API ─────────────────────────────────
-      getScene: () => scene,
-      getCamera: () => camera,
-      getRenderer: () => renderer,
-
-      getLocationPositions: () => ({ ..._locationPositions }),
-
-      addToAnimationLoop: (cb) => {
-        if (typeof cb === 'function') _externalAnimCallbacks.push(cb);
-      },
-
-      removeFromAnimationLoop: (cb) => {
-        const idx = _externalAnimCallbacks.indexOf(cb);
-        if (idx !== -1) _externalAnimCallbacks.splice(idx, 1);
-      },
-
-      // ── YAML Config setters ───────────────────────────────────────
-      setLocationPositions: (positions) => {
-        Object.assign(_locationPositions, positions);
-      },
-
-      setCameraViews: (views) => {
-        for (const [name, view] of Object.entries(views)) {
-          CAMERA_VIEWS[name] = view;
-        }
-      },
-
-      setLightingPresets: (presets) => {
-        // Store for runtime switching
-        window._penthouse3D_lightingPresets = presets;
-      },
-
-      setEffectsConfig: (effects) => {
-        // Store for runtime access
-        window._penthouse3D_effectsConfig = effects;
-      },
-    };
-
-    // Store reference for animate() to call external callbacks
-    window._penthouse3D_animCallbacks = _externalAnimCallbacks;
   }
+
+  // v1.53.0 [2026-03-26] — Moved to IIFE scope (was inside init(), causing ReferenceError in _safeInit)
+
+  // External animation callbacks (used by character_bridge.js)
+  const _externalAnimCallbacks = [];
+
+  // Mutable location positions (overridable from YAML config)
+  // v1.53.0 [2026-03-26] — Y offsets so characters stand ON furniture, not through it
+  //   bed:       mattress top ≈ 0.70
+  //   couch:     seat top ≈ 0.50
+  //   bath:      tub rim ≈ 0.45
+  //   bar:       stool height ≈ 0.55
+  //   vanity:    stool height ≈ 0.40
+  //   fireplace/balcony/doorway: floor level
+  let _locationPositions = {
+    bed:       { x: -5,   y: 0.70, z: -1 },
+    couch:     { x:  5.5, y: 0.50, z:  0 },
+    fireplace: { x: -2,   y: 0,    z:  5.5 },
+    bar:       { x: -3,   y: 0.55, z: -5.5 },
+    vanity:    { x:  3,   y: 0.40, z: -5.8 },
+    bath:      { x:  6.5, y: 0.45, z: -4.5 },
+    balcony:   { x:  5,   y: 0,    z:  5.5 },
+    doorway:   { x:  0,   y: 0,    z: -6.5 },
+  };
+
+  // v1.49.2 [2026-03-22] — Initialization tracking + onReady callback for race condition fix
+  let _initialized = false;
+  let _initError = null;
+  const _readyCallbacks = [];
+
+  window.penthouse3D = {
+    switchView,
+    getViewNames: () => Object.keys(CAMERA_VIEWS),
+    toggleFirstPerson: toggleFirstPersonMode,
+    isFirstPerson: () => fpsMode,
+
+    // ── Initialization state API ────────────────────────────────
+    isInitialized: () => _initialized,
+    getInitError: () => _initError,
+    onReady: (cb) => {
+      if (_initialized) { cb(window.penthouse3D); return; }
+      if (_initError) { console.warn('[Penthouse3D] init failed, callback skipped:', _initError); return; }
+      _readyCallbacks.push(cb);
+    },
+
+    // ── Character integration API ─────────────────────────────────
+    getScene: () => scene,
+    getCamera: () => camera,
+    getRenderer: () => renderer,
+
+    getLocationPositions: () => ({ ..._locationPositions }),
+
+    addToAnimationLoop: (cb) => {
+      if (typeof cb === 'function') _externalAnimCallbacks.push(cb);
+    },
+
+    removeFromAnimationLoop: (cb) => {
+      const idx = _externalAnimCallbacks.indexOf(cb);
+      if (idx !== -1) _externalAnimCallbacks.splice(idx, 1);
+    },
+
+    // ── YAML Config setters ───────────────────────────────────────
+    setLocationPositions: (positions) => {
+      Object.assign(_locationPositions, positions);
+    },
+
+    setCameraViews: (views) => {
+      for (const [name, view] of Object.entries(views)) {
+        CAMERA_VIEWS[name] = view;
+      }
+    },
+
+    setLightingPresets: (presets) => {
+      // Store for runtime switching
+      window._penthouse3D_lightingPresets = presets;
+    },
+
+    setEffectsConfig: (effects) => {
+      // Store for runtime access
+      window._penthouse3D_effectsConfig = effects;
+    },
+  };
+
+  // Store reference for animate() to call external callbacks
+  window._penthouse3D_animCallbacks = _externalAnimCallbacks;
 
   // ═══════════════════════════════════════════════════════════════════
   //  LIGHTING  (14 lights total)
