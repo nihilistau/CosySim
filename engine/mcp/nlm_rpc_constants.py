@@ -5,10 +5,21 @@ Contains:
 - Build label defaults (_DEFAULT_BL, _DEFAULT_BL_DATE)
 - _RateLimiter class and singleton
 - All RPC_* and GRPC_* constants (resolved via _rpc() from YAML registry)
+- get_rpcid() — call-time rpcid lookup (preferred over import-time constants)
 - Response length and document type constants
 - _WRITE_CONFIG / _SOURCE_CONFIG shared payloads
 - _GRPC_CHAT_URL endpoint
 - _is_valid_nlm_build_label() validator
+
+Version: v1.57.2 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.57.2 [2026-03-26] — Add get_rpcid() for call-time registry lookups,
+                            add _FALLBACKS dict from hardcoded constants
+    v1.50.2 [2026-03-23] — Updated _WRITE_CONFIG from [[2,1]] to [[2,1,3]]
+    v3.1    [2026-02-28] — Deep HAR session: rename, add_source, research RPCs
+    v3.0    [2026-02-24] — Corrected mappings from heap snapshot diffing
 """
 
 from __future__ import annotations
@@ -108,7 +119,114 @@ def _rpc(operation: str, fallback: str) -> str:
             return rid
     return fallback
 
-# Readable aliases (resolved at call time via _rpc() in actual calls)
+
+# ════════════════════════════════════════════════════════════════════════════
+# HARDCODED FALLBACKS — last-resort values when registries are unavailable.
+# These are extracted from the RPC_* constants below so get_rpcid() can
+# work even when YAML and JSON registries fail to load.
+# ════════════════════════════════════════════════════════════════════════════
+
+# v1.57.2 [2026-03-26] — Hardcoded fallback dict for get_rpcid()
+_FALLBACKS: Dict[str, str] = {
+    "session_init":         "ZwVcOc",
+    "list_sources":         "wXbhsf",
+    "list_notebooks":       "ub2Bae",
+    "list_audio_types":     "sqTeoe",
+    "load_notebook":        "rLM1Ne",
+    "notebook_info":        "e3bVqc",
+    "get_thread_ids":       "hPTbtc",
+    "read_thread":          "khqZz",
+    "user_profile":         "JFMDGd",
+    "ai_summary":           "VfAZjd",
+    "list_artifacts":       "gArtLc",
+    "mind_map":             "cFji9",
+    "account_state":        "ozz5Z",
+    "read_source":          "tr032e",
+    "resume_session":       "CCqFvf",
+    "rename_notebook":      "s0tc2d",
+    "create_note":          "CYK0Xb",
+    "generate_doc":         "ciyUvf",
+    "save_report":          "R7cb6c",
+    "fast_research_start":  "Ljjv0c",
+    "add_research_source":  "LBwxtb",
+    "add_source":           "izAoDd",
+    "start_deep_research":  "QA9ei",
+    "delete_source":        "tGMBJ",
+    "user_plan":            "ZwVcOc",
+    "open_notebook":        "CCqFvf",
+    "source_status":        "rLM1Ne",
+    "pending_sources":      "hPTbtc",
+    "notebook_details":     "JFMDGd",
+    "notebook_content":     "VfAZjd",
+    "save_note":            "cYAfTb",
+    "source_detail":        "hizoJc",
+    "register_files":       "o4cbdc",
+    "sync_notes":           "cFji9",
+    "notebook_state":       "e3bVqc",
+    "list_notes":           "khqZz",
+    "get_audio_options":    "sqTeoe",
+    "get_artifacts":        "gArtLc",
+    "get_source_summary":   "tr032e",
+}
+
+
+# v1.57.2 [2026-03-26] — Call-time rpcid lookup (replaces import-time constants)
+# CONNECTS: nlm_rpc_registry.py (YAML), nlm_rpc_mapper.py (JSON), _FALLBACKS
+# CALLED BY: nlm_operations.py, nlm_direct_client.py, any RPC caller
+def get_rpcid(operation: str) -> str:
+    """Get rpcid at CALL TIME.  Registry -> mapper -> hardcoded fallback.
+
+    This is the preferred way to resolve rpcids.  Unlike the RPC_* module
+    constants (which are frozen at import time), get_rpcid() checks the
+    live registries on every call so rpcid rotations picked up by
+    RpcidUpdater take effect immediately without restarting the process.
+
+    Lookup order:
+        1. YAML registry (config/nlm_rpcids.yaml) — primary source of truth
+        2. JSON mapper  (data/nlm_rpc_registry.json) — runtime cache
+        3. Hardcoded _FALLBACKS dict — last resort
+
+    Args:
+        operation: Operation name in snake_case (e.g. "create_note",
+                   "rename_notebook", "add_source").
+
+    Returns:
+        rpcid string.  Returns empty string if operation is completely
+        unknown (should never happen for documented operations).
+    """
+    # 1. YAML registry (primary)
+    if _get_registry is not None:
+        try:
+            reg = _get_registry()
+            if reg:
+                rpcid = reg.get_rpcid(operation)
+                if rpcid:
+                    return rpcid
+        except Exception:
+            pass
+
+    # 2. JSON mapper (secondary)
+    if _registry_available:
+        try:
+            rpcid = _get_rpc_id(operation)
+            if rpcid:
+                return rpcid
+        except Exception:
+            pass
+
+        # Also try UPPER_SNAKE_CASE variant (JSON cache uses that format)
+        try:
+            rpcid = _get_rpc_id(operation.upper())
+            if rpcid:
+                return rpcid
+        except Exception:
+            pass
+
+    # 3. Hardcoded fallback (last resort)
+    return _FALLBACKS.get(operation, "")
+
+
+# Readable aliases (resolved at import time via _rpc() — kept for backward compat)
 # Each constant has: confirmed date · payload signature · response shape · gotchas
 
 RPC_SESSION_INIT = _rpc("session_init", "ZwVcOc")
