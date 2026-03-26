@@ -24,11 +24,7 @@
     v1.42.0 [2026-03-21] — Pillar wiring, hub modernization
     v0.68   [prior]      — Initial B1 track implementation
 -->
-{#
-  NOTE: The HTML comment above is visible in rendered output for
-  debugging. The Jinja2 comments below ({# ... #}) are stripped
-  during template rendering and are for developer-only reference.
-#}
+{# NOTE: HTML comment above is visible in output. Jinja2 comments (like this one) are stripped. #}
 {% set current_scene = current_scene | default('') %}
 {% set scene_name    = scene_name    | default('CosySim') %}
 {% set scene_accent  = scene_accent  | default('#00e5ff') %}
