@@ -17,10 +17,11 @@ Usage::
     loop.register_character(char_b)
     loop.start(interval=30)
 
-Version: v1.49.3 [2026-03-22]
+Version: v1.56.0 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.56.0 [2026-03-26] — Auto-register scene agents with Nexus agent_registry
     v1.55.0 [2026-03-26] — Hook agent decisions into DataCollector for
                             self-improvement training loop
     v1.54.0 [2026-03-26] — Upgrade unregister_character debug→warning for MCP leave_scene failure
@@ -162,6 +163,44 @@ class AgentLoop:
                 logger.warning("[AgentLoop] Pipeline inference failed, falling back to infer_processed (operation=infer, scene=%s)", self.scene_id, exc_info=True)
         return mgr.infer_processed(request)
 
+    # ── Nexus Agent Registration ──────────────────────────────────────────
+
+    # v1.56.0 [2026-03-26] — Auto-register scene agents with Nexus agent_registry
+    # CONNECTS: NexusClient (agent_registry API), AGENT_TYPES
+    # CALLED BY: start()
+    # EMITS: Nexus /api/agents/register POST per character
+    def _register_agents_with_nexus(self) -> None:
+        """Register all characters as scene_agent type in Nexus agent registry.
+
+        Best-effort: failures are logged at debug level and never block
+        scene startup. Characters are registered with agent_type=scene_agent
+        and tier=worker so the governance system can resolve them from the
+        registry instead of relying on heuristic prefix matching.
+        """
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            if not client.is_available(timeout=2):
+                return
+            count = 0
+            for cid in self._characters:
+                char = self._characters[cid]
+                client._post("/api/agents/register", {
+                    "agent_id": cid,
+                    "display_name": getattr(char, "name", cid),
+                    "agent_type": "scene_agent",
+                    "model_size": "",
+                    "tier": "worker",
+                })
+                count += 1
+            if count:
+                logger.info(
+                    "[AgentLoop] Registered %d agents with Nexus (operation=register, scene=%s)",
+                    count, self.scene_id,
+                )
+        except Exception as exc:
+            logger.debug("[AgentLoop] Nexus agent registration skipped: %s", exc)
+
     # ── Loop control ────────────────────────────────────────────────────
     def start(self, interval: float = 30.0) -> None:
         """Start the autonomous tick loop in a background thread."""
@@ -169,6 +208,10 @@ class AgentLoop:
             return
         self._running = True
         self._stop_event.clear()
+
+        # v1.56.0 — Register scene agents with Nexus before starting tick loop
+        self._register_agents_with_nexus()
+
         self._thread = threading.Thread(
             target=self._run, args=(interval,), daemon=True, name="AgentLoop"
         )

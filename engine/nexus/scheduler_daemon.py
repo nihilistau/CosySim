@@ -1,8 +1,9 @@
 """Scheduled Task Runner — Lightweight cron-like daemon for CosySim autonomous operations.
 
-Version: v1.50.2 [2026-03-24]
+Version: v1.56.0 [2026-03-26]
 
 Change Log:
+    v1.56.0 [2026-03-26] — Auto-register scheduler as system agent; add session-bulk-sync + master-notebook-rebuild tasks
     v1.50.2 [2026-03-24] — Enhanced status() with overdue/error tracking, register task-auto-assign
 
 Manages recurring background tasks (Nexus maintenance, dedup, quality checks)
@@ -262,6 +263,22 @@ class TaskSchedulerDaemon:
         if self._running:
             logger.warning("Scheduler daemon already running")
             return
+
+        # v1.56.0 [2026-03-26] — Register scheduler as system agent with Nexus
+        # CONNECTS: NexusClient (agent_registry API)
+        # EMITS: Nexus /api/agents/register POST
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            if client.is_available(timeout=2):
+                client._post("/api/agents/register", {
+                    "agent_id": "scheduler",
+                    "display_name": "Scheduler Daemon",
+                    "agent_type": "scheduler",
+                    "tier": "system",
+                })
+        except Exception:
+            pass
 
         self._running = True
         self._thread = threading.Thread(
@@ -1488,6 +1505,20 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         _conversation_evict_callback,
     )
 
+    # v1.56.0 [2026-03-26] — Unified knowledge pipeline scheduler tasks
+    daemon.register(
+        "session-bulk-sync",
+        "Bulk sync Copilot sessions from ~/.copilot to Nexus (daily)",
+        "daily",
+        _session_bulk_sync_callback,
+    )
+    daemon.register(
+        "master-notebook-rebuild",
+        "Rebuild Master Intelligence notebook with latest project knowledge (weekly)",
+        "weekly",
+        _master_notebook_rebuild_callback,
+    )
+
 
 # v1.51.0 [2026-03-24] — System maintenance callbacks
 def _system_cleanup_callback() -> Dict[str, Any]:
@@ -1509,6 +1540,33 @@ def _conversation_evict_callback() -> Dict[str, Any]:
     except Exception as exc:
         logger.warning("[SchedulerDaemon] Conversation eviction failed (operation=conv_evict): %s", exc)
         return {"error": str(exc)}
+
+
+# v1.56.0 [2026-03-26] — Unified knowledge pipeline scheduler callbacks
+# CONNECTS: sync_sessions_to_nexus.sync_all, master_notebook_builder.refresh_master_notebook
+# CALLED BY: scheduler daemon (session-bulk-sync daily, master-notebook-rebuild weekly)
+
+def _session_bulk_sync_callback() -> Dict[str, Any]:
+    """Bulk sync recent Copilot sessions to Nexus (last 7 days)."""
+    try:
+        from engine.nexus.sync_sessions_to_nexus import sync_all
+        result = sync_all(days=7)
+        return {"status": "ok", "synced": result.get("synced", 0), "total": result.get("total", 0)}
+    except Exception as exc:
+        logger.warning("[SchedulerDaemon] session-bulk-sync failed (operation=session_bulk_sync): %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+def _master_notebook_rebuild_callback() -> Dict[str, Any]:
+    """Rebuild the master NLM notebook from current project state."""
+    try:
+        from engine.nexus.master_notebook_builder import get_master_notebook_builder
+        builder = get_master_notebook_builder(dry_run=False)
+        result = builder.build(sources_only=False)
+        return {"status": "ok", "sources": result.get("sources_added", 0)}
+    except Exception as exc:
+        logger.warning("[SchedulerDaemon] master-notebook-rebuild failed (operation=notebook_rebuild): %s", exc)
+        return {"status": "error", "error": str(exc)}
 
 
 def _nlm_auto_distill_callback() -> Dict[str, Any]:

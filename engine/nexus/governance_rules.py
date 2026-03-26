@@ -7,10 +7,11 @@ with basic regex-based validation for coding standards.
 The @governed decorator and enforce_governance() function provide active
 enforcement at the Python API level — not just advisory, but blocking.
 
-Version: v1.55.0 [2026-03-26]
+Version: v1.56.0 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.56.0 [2026-03-26] — Formal agent type system backed by Nexus agent_registry
     v1.55.0 [2026-03-26] — Auto-seed governance rules on first access (ensure_seeded)
     v1.50.0 [2026-03-20] — Initial governance rules engine with enforcement
 """
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import json
 import logging
 import re
 import sys
@@ -32,6 +34,23 @@ logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 logger = logging.getLogger(__name__)
+
+# ──── Agent Type System ───────────────────────────────────────────────
+
+# v1.56.0 [2026-03-26] — Formal agent type system backed by Nexus agent_registry
+# Each agent type defines a tier, allowed operations, and description.
+# The Nexus agent_registry is the source of truth; this dict is the
+# authoritative fallback when the registry is unavailable.
+AGENT_TYPES: Dict[str, Dict[str, Any]] = {
+    "copilot":      {"tier": "expert",   "ops": ["read", "write", "delete", "admin"], "description": "Claude Code / GitHub Copilot CLI"},
+    "claude_code":  {"tier": "expert",   "ops": ["read", "write", "delete", "admin"], "description": "Claude Code CLI agent"},
+    "scene_agent":  {"tier": "worker",   "ops": ["read", "write"],                    "description": "In-scene character agent"},
+    "scheduler":    {"tier": "system",   "ops": ["read", "write", "admin"],           "description": "Background scheduler daemon"},
+    "training":     {"tier": "system",   "ops": ["read", "write"],                    "description": "Training pipeline worker"},
+    "observer":     {"tier": "readonly", "ops": ["read"],                             "description": "Read-only monitoring agent"},
+    "player":       {"tier": "worker",   "ops": ["read", "write"],                    "description": "Human player actions"},
+    "system":       {"tier": "admin",    "ops": ["read", "write", "delete", "admin"], "description": "System-level operations"},
+}
 
 # ──── Rule Definitions ────
 
@@ -460,8 +479,121 @@ class GovernanceManager:
 
         return violations
 
+    # v1.56.0 [2026-03-26] — Formal agent type resolution from Nexus registry
+    # CONNECTS: NexusClient (agent_registry API), AGENT_TYPES fallback
+    # CALLED BY: check_permissions, enforce_governance
+    def resolve_agent_type(self, agent_id: str) -> Dict[str, Any]:
+        """Resolve agent type from Nexus registry, falling back to heuristic.
+
+        Queries the Nexus agent_registry first (authoritative).  When the
+        registry is unavailable or the agent is unregistered, falls back to
+        the local ``_heuristic_resolve`` based on prefix matching and the
+        static ``AGENT_TYPES`` table.
+
+        Args:
+            agent_id: Agent identifier (e.g. "copilot", "lola", "scheduler").
+
+        Returns:
+            Dict with keys: agent_type, tier, ops, description, source.
+            ``source`` is "registry" or "heuristic".
+        """
+        # Try Nexus registry first
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            if client.is_available(timeout=2):
+                resp = client._get(f"/api/agents/{agent_id}")
+                if resp.get("ok") and resp.get("data", {}).get("agent_id"):
+                    data = resp["data"]
+                    agent_type = data.get("agent_type", "")
+                    type_def = AGENT_TYPES.get(agent_type, {})
+                    ops = type_def.get("ops", ["read"])
+                    # If the registry stored allowed_operations, prefer that
+                    raw_ops = data.get("allowed_operations", "")
+                    if raw_ops:
+                        try:
+                            parsed_ops = json.loads(raw_ops) if isinstance(raw_ops, str) else raw_ops
+                            if isinstance(parsed_ops, list) and parsed_ops:
+                                ops = parsed_ops
+                        except Exception:
+                            pass
+                    return {
+                        "agent_type": agent_type,
+                        "tier": data.get("tier", type_def.get("tier", "worker")),
+                        "ops": ops,
+                        "description": type_def.get("description", ""),
+                        "source": "registry",
+                    }
+        except Exception:
+            pass
+
+        # Fall back to existing heuristic
+        return self._heuristic_resolve(agent_id)
+
+    def _heuristic_resolve(self, agent_id: str) -> Dict[str, Any]:
+        """Resolve agent type using local prefix-matching heuristic.
+
+        This is the original resolution logic, preserved as a fallback
+        when the Nexus agent_registry is unavailable.
+
+        For agents not matching any known type or prefix, returns an
+        empty dict so that ``check_permissions`` falls through to the
+        legacy size-based permission rules — preserving backward
+        compatibility for model IDs like "qwen3-0.6b" or "llama-7b".
+
+        Args:
+            agent_id: Agent identifier string.
+
+        Returns:
+            Dict with agent_type, tier, ops, description, source="heuristic",
+            or empty dict if the agent should fall through to legacy rules.
+        """
+        agent_id_lower = agent_id.lower()
+
+        # Direct match against AGENT_TYPES keys
+        if agent_id_lower in AGENT_TYPES:
+            t = AGENT_TYPES[agent_id_lower]
+            return {
+                "agent_type": agent_id_lower,
+                "tier": t["tier"],
+                "ops": t["ops"],
+                "description": t["description"],
+                "source": "heuristic",
+            }
+
+        # Prefix matching for known agent patterns
+        prefix_map = {
+            "copilot": "copilot",
+            "claude": "claude_code",
+            "scheduler": "scheduler",
+            "training": "training",
+            "system": "system",
+            "observer": "observer",
+            "player": "player",
+        }
+        for prefix, agent_type in prefix_map.items():
+            if agent_id_lower.startswith(prefix):
+                t = AGENT_TYPES[agent_type]
+                return {
+                    "agent_type": agent_type,
+                    "tier": t["tier"],
+                    "ops": t["ops"],
+                    "description": t["description"],
+                    "source": "heuristic",
+                }
+
+        # Unknown agent: return empty dict so check_permissions falls
+        # through to the legacy size-based rule matching.  This preserves
+        # backward compatibility for model IDs (e.g. "qwen3-0.6b") and
+        # truly unknown agents (which default to deny).
+        return {}
+
     def check_permissions(self, agent_id: str, operation: str) -> bool:
         """Check if an agent is allowed to perform an operation.
+
+        Uses the formal agent type system (Nexus registry + heuristic
+        fallback) first.  Falls back to the legacy size-based rule
+        matching only when the type system does not cover the agent.
 
         Args:
             agent_id: Agent identifier (e.g. "copilot", "qwen3-0.6b").
@@ -470,6 +602,12 @@ class GovernanceManager:
         Returns:
             True if the operation is allowed.
         """
+        # v1.56.0 — Try formal type system first
+        resolved = self.resolve_agent_type(agent_id)
+        if resolved and resolved.get("ops"):
+            return operation in resolved["ops"]
+
+        # Legacy fallback: size-based rule matching for model IDs
         agent_info = _parse_agent_info(agent_id)
         rules = self._rule_set.agent_permissions()
 

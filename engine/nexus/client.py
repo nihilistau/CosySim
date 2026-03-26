@@ -4,10 +4,11 @@ Nexus HTTP Client — CosySim's interface to the Nexus Knowledge System.
 v0.50a: Extended with session tracking, rules engine, prompt management,
 batch operations, and retry logic.
 
-Version: v1.55.0 [2026-03-26]
+Version: v1.56.0 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.56.0 [2026-03-26] — Agent registry access check before heuristic fallback
     v1.55.0 [2026-03-26] — Re-raise PermissionError in all governance-guarded methods (RBAC enforcement)
     v1.53.0 [2026-03-26] — Added filesystem/oracle/scheduler/training to trusted actors
     v1.49.5 [2026-03-22] — Per-request timeout override, structured logging
@@ -155,16 +156,73 @@ class NexusClient:
                 tags=_parse_tags(d.get("tags", [])),
             )
 
+    # v1.56.0 [2026-03-26] — Check agent access via Nexus registry before heuristic
+    # CONNECTS: Nexus agent_registry API, GovernanceManager
+    # CALLED BY: _check_governance
+    def _check_access_registry(self, agent_id: str, operation: str) -> Optional[bool]:
+        """Check agent access via Nexus agent_registry. Falls back to heuristic.
+
+        Queries the agent_registry for the agent's allowed_operations.
+        Returns True/False if a definitive answer is found, or None to
+        signal that the caller should fall back to the heuristic path.
+
+        Args:
+            agent_id: Agent identifier to look up.
+            operation: Operation to check (read/write/delete/admin).
+
+        Returns:
+            True if allowed, False if denied, None if registry unavailable.
+        """
+        try:
+            if self.is_available(timeout=2):
+                resp = self._get(f"/api/agents/{agent_id}")
+                if resp.get("ok") and resp.get("data", {}).get("agent_id"):
+                    data = resp["data"]
+                    raw_ops = data.get("allowed_operations", "")
+                    if raw_ops:
+                        allowed_ops = json.loads(raw_ops) if isinstance(raw_ops, str) else raw_ops
+                        if isinstance(allowed_ops, list) and allowed_ops:
+                            return operation in allowed_ops
+                    # Agent exists but no stored ops — resolve from type
+                    agent_type = data.get("agent_type", "")
+                    if agent_type:
+                        from engine.nexus.governance_rules import AGENT_TYPES
+                        type_def = AGENT_TYPES.get(agent_type)
+                        if type_def:
+                            return operation in type_def.get("ops", [])
+        except Exception:
+            pass
+        return None  # None = use heuristic fallback
+
     def _check_governance(
         self,
         operation: str,
         agent_id: str = "",
         created_by: str = "",
     ) -> str:
-        """Resolve actor identity and enforce mutation permissions."""
+        """Resolve actor identity and enforce mutation permissions.
+
+        v1.56.0: Checks the Nexus agent_registry first for a definitive
+        allow/deny.  Falls back to the GovernanceManager heuristic when
+        the registry is unavailable or the agent is not registered.
+        """
         from engine.nexus.governance_rules import get_governance_manager
 
         actor = _resolve_governance_actor(agent_id=agent_id, created_by=created_by)
+
+        # v1.56.0 — Try registry-backed access check first
+        registry_result = self._check_access_registry(actor, operation)
+        if registry_result is not None:
+            if not registry_result:
+                logger.warning(
+                    "[NexusClient] Registry denied (operation=%s, actor=%s)",
+                    operation,
+                    actor,
+                )
+                raise PermissionError(f"Agent '{actor}' is not permitted to perform '{operation}'")
+            return actor
+
+        # Heuristic fallback via GovernanceManager
         mgr = get_governance_manager()
         if not mgr.check_permissions(actor, operation):
             # v1.49.3 [2026-03-22] — Structured logging context

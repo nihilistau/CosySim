@@ -19,10 +19,11 @@ The Oracle wires together 10+ dormant subsystems that were never activated:
   - ErrorAggregator → fingerprint, group, count errors
   - Error callbacks → Oracle dashboard SocketIO feed
 
-Version: v1.49.4 [2026-03-22]
+Version: v1.56.0 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.56.0 [2026-03-26] — Nexus KB metrics + LMStudio model health in diagnose() output
     v1.54.0 [2026-03-26] — Upgrade silent except-pass in OracleHandler.emit to traceback.print_exc
     v1.49.4 [2026-03-22] — Initial Oracle observability system — the All-Seeing Eye
 
@@ -200,6 +201,56 @@ def unregister_error_callback(fn: Callable) -> None:
         _error_callbacks.remove(fn)
 
 
+# ──── Nexus & LMStudio Metrics Helpers ───────────────────────────────────────
+
+# v1.56.0 [2026-03-26] — Nexus knowledge base metrics for Oracle dashboard
+# CONNECTS: NexusClient, engine.nexus.client
+# CALLED BY: diagnose()
+# EMITS: dict with availability, entry/qa/session counts
+def _nexus_metrics() -> Dict[str, Any]:
+    """Fetch Nexus metrics for Oracle dashboard.
+
+    Returns:
+        Dict with ``available`` flag and entry/qa/session counts,
+        or just ``available: False`` if unreachable.
+    """
+    try:
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        if client.is_available(timeout=3):
+            stats = client.stats()
+            return {
+                "available": True,
+                "entries": stats.get("total_entries", 0),
+                "qa_pairs": stats.get("total_qa", 0),
+                "sessions": stats.get("total_sessions", 0),
+                "rules": stats.get("total_rules", 0),
+                "prompts": stats.get("total_prompts", 0),
+            }
+    except Exception:
+        pass
+    return {"available": False}
+
+
+# v1.56.0 [2026-03-26] — LMStudio per-model health for Oracle dashboard
+# CONNECTS: ServerController.get_model_health()
+# CALLED BY: diagnose()
+# EMITS: dict with model list, VRAM totals, reachability
+def _lmstudio_model_health() -> Dict[str, Any]:
+    """Fetch LMStudio model health for Oracle dashboard.
+
+    Returns:
+        Dict from ServerController.get_model_health(), or fallback dict.
+    """
+    try:
+        from engine.lmstudio.server_controller import get_server_controller
+        ctrl = get_server_controller()
+        return ctrl.get_model_health()
+    except Exception:
+        pass
+    return {"server_reachable": False, "models": []}
+
+
 # ──── Diagnostic API ─────────────────────────────────────────────────────────
 # Callable from Python REPL, tests, or scripts/oracle.py
 
@@ -304,6 +355,53 @@ def diagnose(verbose: bool = False) -> Dict[str, Any]:
                     print(f"  LLM {op:25s}  avg={stats.get('avg_latency_ms',0):.0f}ms  tok/s={stats.get('tokens_per_sec',0):.1f}")
     except Exception as exc:
         print(f"  [!] Benchmarks unavailable: {exc}")
+
+    # ── Nexus Knowledge Base ─────────────────────────────────
+    # v1.56.0 [2026-03-26] — Nexus KB metrics in Oracle diagnostic
+    print("")
+    print("-- NEXUS KNOWLEDGE BASE --")
+    try:
+        nexus = _nexus_metrics()
+        result["nexus"] = nexus
+        if nexus.get("available"):
+            print(f"  [OK] Nexus KMS           UP")
+            print(f"  Entries: {nexus.get('entries', 0)}  |  "
+                  f"Q&A: {nexus.get('qa_pairs', 0)}  |  "
+                  f"Sessions: {nexus.get('sessions', 0)}")
+            if verbose:
+                print(f"  Rules: {nexus.get('rules', 0)}  |  "
+                      f"Prompts: {nexus.get('prompts', 0)}")
+        else:
+            print("  [!!] Nexus KMS           DOWN")
+    except Exception as exc:
+        print(f"  [!] Nexus metrics unavailable: {exc}")
+
+    # ── LMStudio Model Health ────────────────────────────────
+    # v1.56.0 [2026-03-26] — Per-model VRAM/health in Oracle diagnostic
+    print("")
+    print("-- LMSTUDIO MODELS --")
+    try:
+        model_health = _lmstudio_model_health()
+        result["lmstudio_models"] = model_health
+        if model_health.get("server_reachable"):
+            count = model_health.get("model_count", 0)
+            vram = model_health.get("total_vram_mb", 0)
+            print(f"  Models loaded: {count}  |  Est. VRAM: {vram:.0f}MB")
+            for m in model_health.get("models", []):
+                req_count = m.get("request_count", 0)
+                idle = m.get("idle_seconds", 0)
+                print(f"    {m['id'][:40]:40s}  "
+                      f"ctx={m.get('context_length', 0)}  "
+                      f"vram={m.get('vram_mb', 0):.0f}MB  "
+                      f"reqs={req_count}  "
+                      f"idle={idle:.0f}s")
+        else:
+            print("  [!!] LMStudio server not reachable")
+            err = model_health.get("error", "")
+            if err:
+                print(f"       {err[:80]}")
+    except Exception as exc:
+        print(f"  [!] LMStudio model health unavailable: {exc}")
 
     print("")
     print("=" * 60)

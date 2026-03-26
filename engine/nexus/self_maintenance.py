@@ -5,6 +5,14 @@ Provides scheduled tasks for deduplication, compaction, health monitoring,
 and quality scoring of Nexus knowledge entries.  Can be run as a standalone
 CLI or integrated via the CosySim MCP server.
 
+Version: v1.56.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.56.0 [2026-03-26] — Added score_freshness() standalone + find_duplicates_by_hash()
+    v1.53.0 [2026-03-25] — KnowledgeScorer class with 4-dimension scoring
+    v1.52.0 [2026-03-24] — Backup/restore, scheduled maintenance, quality_report()
+
 Usage:
     python -m engine.nexus.self_maintenance [action]
 
@@ -986,6 +994,120 @@ def quality_report() -> Dict[str, Any]:
         "stale": stale[:30],
         "recommendations": recommendations,
     }
+
+
+# ── Standalone Freshness Scoring ──────────────────────────────────────
+
+# v1.56.0 [2026-03-26] — Knowledge freshness scoring (standalone function)
+# CONNECTS: KnowledgeScorer.freshness(), quality_report()
+# CALLED BY: Oracle diagnostics, scheduler maintenance tasks
+def score_freshness(entry: Dict[str, Any]) -> float:
+    """Score entry freshness 0.0 (stale) to 1.0 (fresh).
+
+    A simpler standalone function that combines age, access frequency
+    (via content richness as a proxy), and content length into a single
+    freshness score.  For full 4-dimension scoring, use ``KnowledgeScorer``.
+
+    Args:
+        entry: Nexus entry dict (expects ``created_at`` or ``updated_at``).
+
+    Returns:
+        Freshness score between 0.0 and 1.0.
+    """
+    score = 0.5  # base
+
+    # Age factor (newer = higher)
+    created = entry.get("updated_at") or entry.get("created_at", "")
+    if created:
+        try:
+            if isinstance(created, (int, float)):
+                entry_dt = datetime.fromtimestamp(created, tz=timezone.utc)
+            else:
+                entry_dt = datetime.fromisoformat(
+                    str(created).replace("Z", "+00:00")
+                )
+            age_days = (datetime.now(timezone.utc) - entry_dt).total_seconds() / 86400
+            if age_days < 7:
+                score += 0.3
+            elif age_days < 30:
+                score += 0.15
+            elif age_days > 90:
+                score -= 0.2
+        except (ValueError, TypeError, OSError):
+            pass
+
+    # Content richness (richer = more valuable, less likely to go stale)
+    content = entry.get("content", "")
+    if len(content) > 500:
+        score += 0.1
+    if len(content) > 2000:
+        score += 0.1
+
+    return max(0.0, min(1.0, round(score, 4)))
+
+
+# ── Content-Hash Deduplication ───────────────────────────────────────
+
+# v1.56.0 [2026-03-26] — Content-hash based deduplication
+# CONNECTS: nexus_find_duplicates(), nexus_merge_duplicates()
+# CALLED BY: full maintenance, scheduler dedup task
+def find_duplicates_by_hash(batch_size: int = 100) -> List[Dict]:
+    """Find entries with identical content hashes (faster than title similarity).
+
+    Uses hashlib MD5 on normalised content to find exact-match duplicates.
+    Much faster than the Jaccard title similarity approach for large knowledge
+    bases, but only catches exact (or near-exact after normalisation) dupes.
+
+    Args:
+        batch_size: Number of entries to fetch per batch.
+
+    Returns:
+        List of duplicate groups, each with ``hash``, ``entries`` list,
+        and ``count``.
+    """
+    import hashlib
+
+    client = _get_client()
+    try:
+        all_entries = client.list_entries(limit=batch_size)
+    except Exception as exc:
+        logger.error(
+            "[self_maintenance] Failed to list entries for hash dedup "
+            "(operation=find_duplicates_by_hash): %s", exc,
+        )
+        return []
+
+    # Build hash → entries mapping
+    hash_map: Dict[str, List[Dict]] = defaultdict(list)
+    for entry in all_entries:
+        content = (entry.get("content", "") or "").strip().lower()
+        if not content:
+            continue
+        # Normalise whitespace before hashing
+        normalised = re.sub(r"\s+", " ", content)
+        content_hash = hashlib.md5(normalised.encode("utf-8")).hexdigest()
+        hash_map[content_hash].append({
+            "id": entry.get("id", ""),
+            "title": entry.get("title", "(untitled)"),
+            "content_length": len(content),
+        })
+
+    # Filter to only groups with duplicates
+    groups = []
+    for content_hash, entries in hash_map.items():
+        if len(entries) > 1:
+            groups.append({
+                "hash": content_hash,
+                "entries": entries,
+                "count": len(entries),
+            })
+
+    logger.info(
+        "[self_maintenance] Hash dedup found %d duplicate groups across %d entries "
+        "(operation=find_duplicates_by_hash)",
+        len(groups), len(all_entries),
+    )
+    return groups
 
 
 # ── Scheduled Maintenance ──────────────────────────────────────────────
