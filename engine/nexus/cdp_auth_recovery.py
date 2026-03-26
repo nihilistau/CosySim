@@ -158,6 +158,19 @@ def _cdp_get(path: str, timeout: int = 5) -> Any:
         return None
 
 
+def _find_nlm_tab() -> Optional[Dict[str, Any]]:
+    """Find an existing NLM tab in Chrome (if user already has it open)."""
+    try:
+        tabs = _cdp_get("/json")
+        if tabs:
+            for t in tabs:
+                if "notebooklm" in t.get("url", "") and t.get("type") == "page":
+                    return t
+    except Exception:
+        pass
+    return None
+
+
 def _open_new_tab() -> Optional[Dict[str, Any]]:
     """Open a new blank tab via CDP and return its descriptor."""
     try:
@@ -527,27 +540,64 @@ async def _async_recover(keys_only: bool = False) -> AuthStatus:
         async with websockets.connect(ws_url, max_size=10 * 1024 * 1024) as ws:
 
             if not keys_only:
-                # 3. Load + inject saved cookies
-                saved: Dict[str, str] = {}
-                if NLM_COOKIES_PATH.exists():
+                # v1.55.0 [2026-03-26] — Check for existing NLM tab first.
+                # If Chrome already has NLM open and logged in, use that tab
+                # directly instead of injecting stale cookies into a new tab
+                # (which causes CookieMismatch redirects).
+                existing_nlm = _find_nlm_tab()
+                if existing_nlm:
+                    logger.info("Found existing NLM tab — extracting directly (no cookie injection)")
                     try:
-                        saved = json.loads(NLM_COOKIES_PATH.read_text(encoding="utf-8"))
+                        async with websockets.connect(
+                            existing_nlm["webSocketDebuggerUrl"],
+                            max_size=10 * 1024 * 1024,
+                        ) as nlm_ws:
+                            status.nlm_logged_in = True
+                            # Extract session tokens from existing tab
+                            nlm_session = await _extract_nlm_session(nlm_ws, base_id=130)
+                            if nlm_session.get("bl"):
+                                status.bl_refreshed = True
+                                status.bl_value = nlm_session["bl"]
+                            if nlm_session.get("f_sid") or nlm_session.get("at"):
+                                status.session_tokens_refreshed = True
+                            # Extract fresh cookies from Chrome
+                            fresh = await _extract_cookies(nlm_ws, msg_id=200)
+                            if fresh:
+                                NLM_COOKIES_PATH.write_text(
+                                    json.dumps(fresh, indent=2), encoding="utf-8"
+                                )
+                                status.cookies_extracted = len(fresh)
+                            logger.info("NLM: extracted from existing tab (BL=%s, cookies=%d)",
+                                        "ok" if status.bl_refreshed else "missing",
+                                        status.cookies_extracted)
                     except Exception as exc:
-                        status.errors.append(f"Cookie load error: {exc}")
+                        logger.warning("Existing NLM tab extraction failed: %s", exc)
+                        status.nlm_logged_in = False
 
-                if saved:
-                    status.cookies_injected = await _inject_cookies(ws, saved, base_id=10)
-                    logger.info("Injected %d cookies", status.cookies_injected)
+                if not status.nlm_logged_in:
+                    # Fallback: inject saved cookies into disposable tab + navigate
+                    saved: Dict[str, str] = {}
+                    if NLM_COOKIES_PATH.exists():
+                        try:
+                            saved = json.loads(NLM_COOKIES_PATH.read_text(encoding="utf-8"))
+                        except Exception as exc:
+                            status.errors.append(f"Cookie load error: {exc}")
 
-                # 4. Navigate to NLM → check login
-                status.nlm_logged_in = await _navigate_and_check(
-                    ws, _NLM_URL, "NotebookLM", base_id=100
-                )
+                    if saved:
+                        status.cookies_injected = await _inject_cookies(ws, saved, base_id=10)
+                        logger.info("Injected %d cookies into disposable tab", status.cookies_injected)
+
+                    # Navigate to NLM → check login
+                    status.nlm_logged_in = await _navigate_and_check(
+                        ws, _NLM_URL, "NotebookLM", base_id=100
+                    )
+
                 logger.info("NLM: %s", "logged in" if status.nlm_logged_in else "FAILED")
 
                 # 5. Extract BL + session tokens from WIZ_global_data
+                # (skip if already extracted from existing tab above)
                 nlm_session: Dict[str, str] = {}
-                if status.nlm_logged_in:
+                if status.nlm_logged_in and not status.bl_refreshed:
                     nlm_session = await _extract_nlm_session(ws, base_id=130)
                     if nlm_session.get("bl"):
                         status.bl_refreshed = True
