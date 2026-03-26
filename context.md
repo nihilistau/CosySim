@@ -1,6 +1,6 @@
 # CosySim — Complete System Context
 
-> v1.52.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
+> v1.53.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
 >
 > Read this file to gain full context on architecture, conventions, systems, tools,
 > protocols, and workflows. After reading, you should be able to modify any part of
@@ -592,11 +592,11 @@ Templates extend `neon_base.html`:
 
 ---
 
-## 14. ARGUS — API Discovery System
+## 14. ARGUS — First-Class Reconnaissance Toolkit
 
 ### Overview
 
-ARGUS is a **generic API discovery engine** that analyzes HAR files, V8 heap snapshots, and application protocols. Protocol-agnostic — works on any web application.
+ARGUS is CosySim's **integrated web application analysis framework** — a first-class tool with 21 reusable functions, 13 documented techniques, and proven results against production AI applications. Use it automatically whenever encountering HAR files, heap snapshots, or web applications.
 
 ### CLI Usage
 
@@ -604,21 +604,47 @@ ARGUS is a **generic API discovery engine** that analyzes HAR files, V8 heap sna
 # Single HAR analysis
 python -m scripts.argus.analyze har path/to/file.har
 python -m scripts.argus.analyze har file.har --report    # Generate Markdown report
-python -m scripts.argus.analyze har file.har --json       # JSON output
 
-# V8 heap snapshot
+# V8 heap snapshot (regex scan)
 python -m scripts.argus.analyze heap file.heapsnapshot
 
-# Batch analysis
-python -m scripts.argus.analyze dir path/to/har_folder/
+# V8 heap deep parse (full graph walk)
+python scripts/heap_deep_parser.py file.heapsnapshot --out data/heap_output/
 
-# Deep automated pipeline (HAR → JWT → Firebase → flags → WS → services)
-python -m scripts.argus.analyze deep path/to/directory/
+# Auto-analyze: full pipeline on a directory of captures
+python -m scripts.argus.analyze auto path/to/captures/
 
 # Compare two captures
 python -m scripts.argus.analyze compare a.har b.har
-python -m scripts.argus.analyze heap-diff before.heap after.heap
 ```
+
+### Toolkit Functions (`scripts/argus/toolkit.py`)
+
+| Function | Purpose |
+|----------|---------|
+| `mine_heap()` | 100+ regex patterns on V8 heap (JWTs, API keys, internal URLs) |
+| `mine_heap_deep()` | Full V8 graph walk — all strings, objects, scripts |
+| `extract_agent_messages()` | Multi-agent orchestration trace extraction |
+| `extract_chain_of_thought()` | Leaked model reasoning fragments |
+| `extract_app_schemas()` | Tool definitions from YAML configs |
+| `extract_protobuf_definitions()` | Proto3 schema extraction |
+| `decompile_bundle()` | Feature flags, API routes, env vars from minified JS |
+| `inject_statsig_gates()` | Flip Statsig gates via localStorage/CDP |
+| `cdp_eval()` / `cdp_find_tab()` | Chrome DevTools Protocol scripting |
+| `refresh_firebase_token()` | Exchange refresh_token for fresh JWT |
+| `auto_analyze()` | Full automated pipeline (detect → mine → extract → report) |
+
+### Proven Results
+
+Extracted from Sesame AI + OpenRoom.ai: 555+ credentials, 375+ URLs, 73 API methods, 5 JWTs, 5 sub-agents (MiniMax-M2.5), 12 apps, 1 protobuf schema, 15+ chain-of-thought fragments, 14 security findings. All from V8 heap snapshots.
+
+### Key Documentation
+
+- `scripts/argus/README.md` — Full usage guide with regex patterns
+- `docs/ARGUS_METHODOLOGY.md` — 13 reusable recon techniques
+- `docs/ARGUS_DISCOVERY_JOURNAL.md` — Narrative of all exploration sessions
+- `docs/ARGUS_SESAME_REPORT.md` — Sesame AI complete intelligence (876 lines)
+- `docs/ARGUS_OPENROOM_REPORT.md` — OpenRoom/Talkie/MiniMax intelligence (1,138 lines)
 
 ### Analyzers (`scripts/argus/analyzers/`)
 

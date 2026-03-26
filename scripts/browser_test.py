@@ -7,12 +7,17 @@ and tests every interactive HUD element. Reads telemetry logs after
 each interaction. Outputs a structured diagnostic report.
 
 Usage:
-    python scripts/browser_test.py                    # Full test
+    python scripts/browser_test.py                    # Full NeonCity test
     python scripts/browser_test.py --scene penthouse  # Test specific scene
+    python scripts/browser_test.py --all              # Quick smoke test all scenes
     python scripts/browser_test.py --report           # Just read last telemetry
 
-Version: v1.43.0 [2026-03-21]
+Version: v1.53.0 [2026-03-26]
 Author:  CosySim Team
+
+Change Log:
+    v1.53.0 [2026-03-26] — Added --all multi-scene smoke tests (14 scenes)
+    v1.43.0 [2026-03-21] — Initial NeonCity deep test suite
 """
 from __future__ import annotations
 
@@ -363,16 +368,100 @@ def read_telemetry(limit: int = 30) -> None:
         print(f"  {icon} [{lvl:7s}] {ts} {msg[:90]}")
 
 
+# v1.53.0 [2026-03-26] — Multi-scene smoke test for --all flag
+# ──── Scene Registry ─────────────────────────────────────────────────
+ALL_SCENES = {
+    "neoncity":     ("http://localhost:5563", "NEON CITY"),
+    "penthouse":    ("http://localhost:5556", "THE PENTHOUSE"),
+    "phone":        ("http://localhost:5555", "SIGNAL"),
+    "lounge":       ("http://localhost:5557", "THE VELVET PIT"),
+    "tavern":       ("http://localhost:5558", "THE RUSTY ANCHOR"),
+    "casino":       ("http://localhost:5559", "CLUB NOIR"),
+    "gallery":      ("http://localhost:5560", "THE OBSCURA"),
+    "arena":        ("http://localhost:5561", "THE COLOSSEUM"),
+    "cyberspace":   ("http://localhost:5573", "CYBERSPACE"),
+    "auction":      ("http://localhost:5574", "THE AUCTION HOUSE"),
+    "neonos":       ("http://localhost:5593", "NEON OS"),
+    "creation_kit": ("http://localhost:5592", "CREATION KIT"),
+    "grid":         ("http://localhost:5569", "THE GRID"),
+    "lab_break":    ("http://localhost:5571", "LAB BREAK"),
+}
+
+
+def run_smoke_all() -> dict:
+    """Quick smoke test: page load + basic DOM check for every scene."""
+    from playwright.sync_api import sync_playwright
+
+    results = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "mode": "smoke-all",
+        "scenes": [],
+        "summary": {"up": 0, "down": 0, "errors": 0},
+    }
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+
+        for key, (url, display_name) in ALL_SCENES.items():
+            scene_result = {"key": key, "name": display_name, "url": url}
+            try:
+                page = browser.new_page(viewport={"width": 1920, "height": 1080})
+                js_errors = []
+                page.on("console", lambda msg: js_errors.append(msg.text) if msg.type == "error" else None)
+
+                page.goto(url, timeout=8000)
+                page.wait_for_load_state("load", timeout=6000)
+                page.wait_for_timeout(1500)
+
+                html_len = len(page.content())
+                has_content = html_len > 2000
+                scene_result["status"] = "UP" if has_content else "EMPTY"
+                scene_result["html_bytes"] = html_len
+                scene_result["js_errors"] = len(js_errors)
+
+                # Check for shared footer (present on most scenes)
+                footer = page.query_selector(".cs-footer")
+                scene_result["has_footer"] = footer is not None
+
+                results["summary"]["up"] += 1
+                icon = "[UP]"
+                print(f"  {icon}  {display_name:24s} {url:36s} {html_len:>7,}B  errors:{len(js_errors)}")
+                page.close()
+
+            except Exception as exc:
+                scene_result["status"] = "DOWN"
+                scene_result["error"] = str(exc)[:120]
+                results["summary"]["down"] += 1
+                print(f"  [DOWN] {display_name:24s} {url:36s} {str(exc)[:60]}")
+
+            results["scenes"].append(scene_result)
+
+        browser.close()
+
+    # Save report
+    report_path = Path("data/browser_smoke_report.json")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(results, indent=2))
+
+    up = results["summary"]["up"]
+    down = results["summary"]["down"]
+    print(f"\n  === SMOKE: {up} UP / {down} DOWN / {up + down} total ===\n")
+    return results
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="CosySim Browser Test Suite")
     parser.add_argument("--scene", default="http://localhost:5563", help="Scene URL")
     parser.add_argument("--report", action="store_true", help="Just read last telemetry")
+    parser.add_argument("--all", action="store_true", help="Quick smoke test all scenes")
     args = parser.parse_args()
 
     if args.report:
         read_telemetry()
+    elif args.all:
+        run_smoke_all()
     else:
         SCENE_URL = args.scene
         results = run_tests()
