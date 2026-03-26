@@ -4,6 +4,39 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.54.0] — "FINAL SYSTEM POLISH" — 2026-03-26
+
+Full system audit and hardening across 30 scenes, engine layer, and all subsystems. Production-ready.
+
+### BenchHUD Cleanup (7 scenes)
+- Removed legacy `cosysim-bench.js` script from arena, gallery, neoncity, intel_hub, heist, phone templates
+- Eliminates duplicate footer bar that overlapped the shared `cs-footer`
+
+### Interceptor Pipeline Completion
+- Registered 6 missing interceptors in `engine/agents/interceptors/__init__.py`
+- ContentIntensityInterceptor (pri 1), CharacterMemoryInterceptor (pri 7), WorldStateInterceptor (pri 15), ReputationInterceptor (pri 22), DialogueGateInterceptor (pri 45), GrammarScannerInterceptor (pri 95)
+- Full pipeline now 36 interceptors, sorted by priority
+
+### Silent Failure Elimination
+- **Oracle**: error handler emit failures now logged (was silent `pass`)
+- **Gallery/Lounge interceptors**: 8 debug-level exception handlers upgraded to warnings with Oracle-format context
+- **CharacterRegistry**: Nexus sync failures now logged (was silent `pass`)
+- **AgentLoop**: unregister MCP failure upgraded from debug to warning
+- **Crew system**: PlayerProfile import failure now logged
+
+### Stale Code Cleanup
+- Deleted `neoncity_v146.html` (stale v1.46 template, 577 lines)
+- Converted `console.log` → `console.info` with module prefixes in neonos, auction, cyberspace JS
+- Converted 140+ `var` → `const`/`let` in penthouse_model_import.js and penthouse_anim_studio.js
+
+### System Hardening
+- **AgentGovernor**: auto-skill type validation before `_invoke_mcp_tool()` invocation
+- **QueryRouter**: null guards on Nexus client in all 4 tier methods
+- **NeonCity board game**: bounds checking on hex grid positions with `_validate_position()`
+- **Config**: detailed logging of loaded base, env, and pillar files on init
+
+---
+
 ## [1.53.1] — "PENTHOUSE REVIVAL" — 2026-03-26
 
 Four penthouse bugs fixed: 3D characters now render, move, and interact correctly.

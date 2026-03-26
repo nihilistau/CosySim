@@ -1,8 +1,20 @@
-"""engine/agents/interceptors/__init__.py — Auto-registry for all interceptors.
+"""
+Interceptor Registry
+====================
 
-Import this module and call get_all_interceptors() to get a list of all
-registered interceptor classes. comms_framework.py uses this instead of
-maintaining a hardcoded list.
+Auto-registry for all InterceptorBase subclasses in the agent pipeline.
+Import this module and call ``get_all_interceptors()`` to get a list of all
+registered interceptor classes, sorted by priority.  ``comms_framework.py``
+uses this instead of maintaining a hardcoded list.
+
+Version: v1.54.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.54.0 [2026-03-26] — Registered 6 missing interceptors, sorted registry by priority
+    v1.51.1 [2026-03-25] — Added FactionContext + HeatAwareness interceptors
+    v1.51.0 [2026-03-25] — Added SpectatorBroadcast + NarrativeMod interceptors
+    v1.49.1 [2026-03-22] — Switched to real RelationshipContextInterceptor
 
 Usage::
 
@@ -53,42 +65,55 @@ from engine.agents.interceptors.heat_awareness import HeatAwarenessInterceptor
 from engine.characters.neurochemistry import NeurochemistryInterceptor
 # v1.49.1 [2026-03-22] — Use the real RelationshipContextInterceptor (not the split stub)
 from engine.agents.relationship_interceptor import RelationshipContextInterceptor  # noqa: F401
-from engine.agents.dialogue_gate import DialogueGateInterceptor  # noqa: F401
+from engine.agents.dialogue_gate import DialogueGateInterceptor
+# v1.54.0 [2026-03-26] — Registered missing interceptors from engine subsystems
+from engine.content.content_gate import ContentIntensityInterceptor
+from engine.characters.memory import CharacterMemoryInterceptor
+from engine.world.world_state import WorldStateInterceptor
+from engine.characters.reputation import ReputationInterceptor
+from engine.agents.grammar_scanner_interceptor import GrammarScannerInterceptor
 # Backward-compat aliases — GameInterceptor merged GameSession + GameRules in v3.1
 GameSessionInterceptor = GameInterceptor
 GameRulesInterceptor = GameInterceptor
 
+# v1.54.0 [2026-03-26] — Sorted by priority, registered 6 missing interceptors
 _REGISTRY: list[Type] = [
-    NeurochemistryInterceptor,
-    RouterMessageInjector,
-    AutoResultInjector,
-    SkillAwarenessInterceptor,
-    GameInterceptor,
-    PersonalityGuardInterceptor,
-    ConversationVarietyInterceptor,
-    PolicyEnforcerInterceptor,
-    MemoryEnhancerInterceptor,
-    ResponseShaperInterceptor,
-    ActivityLoggerInterceptor,
-    PenthouseSceneInterceptor,
-    PhoneSceneInterceptor,
-    LoungeSceneInterceptor,
-    GallerySceneInterceptor,
-    UniversalSceneInterceptor,
-    AmbientEventInterceptor,
-    CharacterRegistryInterceptor,
-    DialogDirectiveInterceptor,
-    TTSStyleInterceptor,
-    MoodSyncInterceptor,
-    NaturalMoodDriftInterceptor,
-    ConversationRecapInterceptor,
-    RelationshipEventInterceptor,
-    RelationshipContextInterceptor,
-    NexusPromptInterceptor,
-    NarrativeModInterceptor,        # v1.51.0 — stage context injection (pri 15)
-    FactionContextInterceptor,      # v1.51.1 — faction standing context (pri 40)
-    HeatAwarenessInterceptor,       # v1.51.1 — heat/wanted awareness (pri 75)
-    SpectatorBroadcastInterceptor,  # v1.51.0 — danmaku spectator broadcast (pri 92)
+    ContentIntensityInterceptor,    # pri  1 — content profile injection (NEW)
+    NeurochemistryInterceptor,      # pri  4 — neurochemistry mood tagging
+    NaturalMoodDriftInterceptor,    # pri  5 — natural stat drift + inner thoughts
+    NexusPromptInterceptor,         # pri  6 — Nexus context hydration
+    ConversationRecapInterceptor,   # pri  7 — short-term conversation memory
+    CharacterMemoryInterceptor,     # pri  7 — RAG character memory injection (NEW)
+    CharacterRegistryInterceptor,   # pri  8 — character identity injection
+    RouterMessageInjector,          # pri 10 — agent-router inbox messages
+    DialogDirectiveInterceptor,     # pri 12 — must_include / style_lock directives
+    NarrativeModInterceptor,        # pri 15 — stage context injection
+    PenthouseSceneInterceptor,      # pri 15 — penthouse scene context
+    PhoneSceneInterceptor,          # pri 15 — phone scene context
+    LoungeSceneInterceptor,         # pri 15 — lounge scene context
+    GallerySceneInterceptor,        # pri 15 — gallery scene context
+    WorldStateInterceptor,          # pri 15 — world time/weather/events (NEW)
+    UniversalSceneInterceptor,      # pri 16 — universal scene fallback
+    AmbientEventInterceptor,        # pri 17 — random ambient micro-events
+    AutoResultInjector,             # pri 20 — auto-skill result injection
+    ReputationInterceptor,          # pri 22 — reputation context block (NEW)
+    SkillAwarenessInterceptor,      # pri 30 — skill manifest awareness
+    GameInterceptor,                # pri 35 — game session/rules
+    FactionContextInterceptor,      # pri 40 — faction standing context
+    DialogueGateInterceptor,        # pri 45 — reputation-based dialogue gating (NEW)
+    RelationshipContextInterceptor, # pri 46 — relationship context
+    PersonalityGuardInterceptor,    # pri 50 — personality consistency guard
+    ConversationVarietyInterceptor, # pri 55 — anti-repetition + expressiveness
+    PolicyEnforcerInterceptor,      # pri 60 — policy enforcement
+    MemoryEnhancerInterceptor,      # pri 70 — deep RAG memory recall
+    HeatAwarenessInterceptor,       # pri 75 — heat/wanted level awareness
+    ResponseShaperInterceptor,      # pri 80 — response formatting/shaping
+    TTSStyleInterceptor,            # pri 85 — TTS voice style tags
+    ActivityLoggerInterceptor,      # pri 90 — EventChain + training logging
+    MoodSyncInterceptor,            # pri 92 — mood sync to CharacterRegistry
+    SpectatorBroadcastInterceptor,  # pri 92 — danmaku spectator broadcast
+    RelationshipEventInterceptor,   # pri 93 — relationship buff detection
+    GrammarScannerInterceptor,      # pri 95 — output quality flagging (NEW)
 ]
 
 
@@ -116,33 +141,51 @@ __all__ = [
     "register_interceptor",
     "INTERCEPTOR_CACHE",
     "_InterceptorCache",
+    "ContentIntensityInterceptor",
+    "NeurochemistryInterceptor",
+    "NaturalMoodDriftInterceptor",
+    "NexusPromptInterceptor",
+    "ConversationRecapInterceptor",
+    "CharacterMemoryInterceptor",
+    "CharacterRegistryInterceptor",
     "RouterMessageInjector",
-    "AutoResultInjector",
-    "SkillAwarenessInterceptor",
-    "GameInterceptor",
-    "GameSessionInterceptor",
-    "GameRulesInterceptor",
-    "DialogueGateInterceptor",
-    "PersonalityGuardInterceptor",
-    "ConversationVarietyInterceptor",
-    "PolicyEnforcerInterceptor",
-    "MemoryEnhancerInterceptor",
-    "ResponseShaperInterceptor",
-    "ActivityLoggerInterceptor",
+    "DialogDirectiveInterceptor",
+    "NarrativeModInterceptor",
     "PenthouseSceneInterceptor",
     "PhoneSceneInterceptor",
     "LoungeSceneInterceptor",
     "GallerySceneInterceptor",
+    "WorldStateInterceptor",
     "UniversalSceneInterceptor",
     "AmbientEventInterceptor",
-    "CharacterRegistryInterceptor",
-    "DialogDirectiveInterceptor",
-    "TTSStyleInterceptor",
-    "MoodSyncInterceptor",
-    "NaturalMoodDriftInterceptor",
-    "ConversationRecapInterceptor",
-    "RelationshipEventInterceptor",
+    "AutoResultInjector",
+    "ReputationInterceptor",
+    "SkillAwarenessInterceptor",
+    "GameInterceptor",
+    "GameSessionInterceptor",
+    "GameRulesInterceptor",
+    "FactionContextInterceptor",
+    "DialogueGateInterceptor",
     "RelationshipContextInterceptor",
-    "NexusPromptInterceptor",
+    "PersonalityGuardInterceptor",
+    "ConversationVarietyInterceptor",
+    "PolicyEnforcerInterceptor",
+    "MemoryEnhancerInterceptor",
+    "HeatAwarenessInterceptor",
+    "ResponseShaperInterceptor",
+    "TTSStyleInterceptor",
+    "ActivityLoggerInterceptor",
+    "MoodSyncInterceptor",
     "SpectatorBroadcastInterceptor",
+    "RelationshipEventInterceptor",
+    "GrammarScannerInterceptor",
 ]
+
+
+# v1.54.0 [2026-03-26] — Log interceptor registration count at import time
+import logging as _logging
+_logger = _logging.getLogger(__name__)
+_logger.info(
+    "[interceptors] Registered %d interceptors (operation=init)",
+    len(_REGISTRY),
+)

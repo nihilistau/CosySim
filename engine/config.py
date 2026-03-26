@@ -18,6 +18,7 @@ Version: v1.42.1 [2026-03-21]
 Author:  CosySim Team
 
 Change Log:
+    v1.54.0 [2026-03-26] — Detailed config load logging with pillar count
     v1.42.1 [2026-03-21] — Added module header, section dividers, version stamps
     v1.42.0 [2026-03-21] — Three-pillar architecture, pillar overlay loading
     v1.41.0 [2026-03-20] — ARGUS deep polish, extended rpcids
@@ -35,7 +36,7 @@ Usage::
 import os
 import yaml
 from pathlib import Path
-from typing import Any, Optional, Dict
+from typing import Any, Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -94,18 +95,26 @@ class ConfigManager:
                 logger.warning(f"Environment config not found: {env_config_path}")
 
         # 2b. Load pillar-specific overlays (game.yaml, services.yaml, creation.yaml)
+        pillar_files: List[str] = []
         for pillar_name in ("game", "services", "creation"):
             pillar_path = self.config_dir / f"{pillar_name}.yaml"
             if pillar_path.exists():
                 pillar_config = self._load_yaml(pillar_path)
                 if pillar_config:
                     self._config = self._deep_merge(self._config, pillar_config)
+                    pillar_files.append(pillar_path.name)
                     logger.info("Loaded pillar config: %s", pillar_path.name)
 
         # 3. Override with environment variables
         self._apply_env_overrides()
-        
-        logger.info(f"Configuration loaded (environment: {self.environment})")
+
+        # v1.54.0 [2026-03-26] — Detailed config load summary for diagnostics
+        base_path = self.config_dir / "default.yaml"
+        env_config_path = self.config_dir / f"{self.environment}.yaml" if self.environment != "default" else "none"
+        logger.info(
+            "[Config] Loaded: base=%s, env=%s, pillars=%d (operation=init)",
+            base_path, env_config_path, len(pillar_files),
+        )
     
     def _load_yaml(self, path: Path) -> Optional[Dict[str, Any]]:
         """Load YAML file."""

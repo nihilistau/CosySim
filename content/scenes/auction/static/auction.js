@@ -37,7 +37,7 @@ class AuctionController {
     this._cacheDOM();
     this._bindEvents();
     this._setupSocket();
-    console.log('[THE AUCTION HOUSE] Scene initialized');
+    console.info('[Auction] Scene initialized');
   }
 
   // ── DOM Cache ─────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ class AuctionController {
     this.socket = io('', { transports: ['websocket', 'polling'] });
 
     this.socket.on('connect', () => {
-      console.log('[THE AUCTION HOUSE] Socket connected');
+      console.info('[Auction] Socket connected');
     });
 
     // Scene state (general)

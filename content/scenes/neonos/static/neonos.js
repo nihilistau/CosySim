@@ -26,11 +26,11 @@
   const socket = io('', { transports: ['websocket', 'polling'] });
 
   socket.on('connect', () => {
-    console.log('[NeonOS] Socket connected');
+    console.info('[NeonOS] Socket connected');
   });
 
   socket.on('scene_state', (data) => {
-    console.log('[NeonOS] State received:', data);
+    console.info('[NeonOS] State received:', data);
   });
 
   socket.on('error', (data) => {

@@ -23,6 +23,7 @@ Version: v1.49.4 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.54.0 [2026-03-26] — Upgrade silent except-pass in OracleHandler.emit to traceback.print_exc
     v1.49.4 [2026-03-22] — Initial Oracle observability system — the All-Seeing Eye
 
 CONNECTS: StructuredLogger, CosyLogger, ErrorAggregator, ActivityBus, Oracle scene
@@ -152,7 +153,9 @@ class _OracleHandler(logging.Handler):
                         k: v for k, v in self._flood_guard.items() if v > cutoff
                     }
         except Exception:
-            pass  # Never crash the log handler
+            # v1.54.0 [2026-03-26] — Log handler errors instead of swallowing
+            import traceback
+            traceback.print_exc()  # Safe fallback since logger may be broken
 
 
 # ──── Public API ─────────────────────────────────────────────────────────────
