@@ -857,7 +857,7 @@ codespace:
 # CDP Auth Recovery — Chrome DevTools Protocol settings
 # v1.50.1 [2026-03-22] — Config-driven CDP auth recovery
 cdp:
-  port: 9222                         # Chrome CDP port
+  port: 9223                         # Chrome CDP port (CLAUDE.md: always 9223)
   navigation_wait_s: 6               # Seconds to wait after page navigate
   harvest_timeout_s: 18              # API key harvest deadline
   cookie_max_age_days: 7             # Trigger recovery when cookies older
