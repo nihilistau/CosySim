@@ -4,6 +4,45 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.57.2] — "RPC SYSTEM OVERHAUL" — 2026-03-26
+
+Complete NLM rpcid system rebuild. Operations now use call-time registry lookups
+instead of import-time constants. Auto-recovery on rpcid rotation.
+
+### RPC Auto-Update Pipeline
+- `RpcidUpdater` bridges ARGUS HAR/heap mining → registry (NEW: engine/integrations/rpcid_updater.py)
+- Parses batchexecute traffic from HAR files, extracts rpcids, updates JSON cache
+- Mines V8 heap snapshots for gRPC method names
+
+### Call-Time Registry Lookups
+- `get_rpcid(operation)` replaces import-time RPC_* constants
+- 3-tier fallback: YAML registry → JSON mapper → hardcoded
+- All 15 _batchexecute() calls in nlm_operations.py converted
+- Rpcid changes picked up at runtime without restart
+
+### Auto-Recovery on Rotation
+- Per-rpcid null detection in nlm_transport.py
+- Automatic fallback to alternate rpcid from registry
+- Stale rpcids tracked for diagnostics
+
+### 60 gRPC Method Names Mapped
+- LMStudio heap mining revealed complete LabsTailwindOrchestrationService surface
+- 59 methods mapped in nlm_rpcids.yaml across 10 categories
+- New methods: AddTentativeSources, DiscoverSourcesManifold, CheckSourceFreshness,
+  RefreshSource, CopyProject, ExecuteWritingFunction, MutateAccount/Note/Project/Source
+- gRPC method lookup in nlm_rpc_registry.py
+
+### Embedding Pipeline Fixed
+- GeminiEmbeddingProvider uses google.genai SDK (no cookies needed)
+- Embedding hooks run in daemon threads (non-blocking)
+- Model standardized to gemini-embedding-2-preview across all files
+
+### NLM Parser Updated
+- nlm_ask.py updated for current Gemini response format
+- Handles nested wrb.fr chunk structure
+
+---
+
 ## [1.57.0] — "GEMINI NATIVE" — 2026-03-26
 
 Full Gemini API integration: embeddings, File Search, structured output, context caching.
