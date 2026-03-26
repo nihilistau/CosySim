@@ -821,6 +821,8 @@ nexus:
   query_router:
     cache_confidence: 0.90       # Q&A cache hit confidence
     vector_confidence: 0.82      # Vector semantic search confidence
+    # v1.57.0 [2026-03-26] — Tier 2.5: Google File Search grounded citations
+    file_search_confidence: 0.85 # Google File Search (managed RAG with grounded docs)
     search_high: 0.75            # Strong FTS match
     search_medium: 0.50          # Decent FTS match
     search_low: 0.30             # Weak match

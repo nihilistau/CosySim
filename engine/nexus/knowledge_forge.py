@@ -4,6 +4,13 @@ Uses NotebookLM (free Gemini compute) to distill Q&A, decompose plans,
 analyze code, polish dialog, generate training data, and build topic
 knowledge bases. Every answer is stored in Nexus for compound reuse.
 
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Add _extract_qa_structured() for Gemini structured output
+                            extraction of Q&A pairs from raw text (preferred over regex);
+                            add _extract_qa_regex() as explicit fallback method
+
 Usage:
     from engine.nexus.knowledge_forge import get_knowledge_forge
     forge = get_knowledge_forge()
@@ -713,6 +720,103 @@ class KnowledgeForge:
             topic, notebook_id[:8], len(result.qa_pairs), result.duration_seconds,
         )
         return result
+
+    # ──── Structured Q&A Extraction ────
+
+    # v1.57.0 [2026-03-26] — Gemini structured output for Q&A extraction
+    # CONNECTS: engine.integrations.aistudio_client.generate_structured, engine.nexus.schemas
+    # CALLED BY: External callers needing structured Q&A from raw text (e.g. bulk ingestion)
+    def _extract_qa_structured(self, text: str, topic: str) -> List[Dict]:
+        """Extract Q&A pairs from raw text using Gemini structured output.
+
+        Uses Gemini's JSON schema enforcement to produce guaranteed well-formed
+        Q&A pairs, eliminating regex-based parsing of fenced JSON blocks.
+        Falls back to _extract_qa_regex() if the structured API is unavailable.
+
+        Args:
+            text: Raw text to extract Q&A pairs from.
+            topic: Topic context for the extraction prompt.
+
+        Returns:
+            List of dicts with 'question', 'answer', and optional 'confidence'/'category'.
+        """
+        try:
+            from engine.integrations.aistudio_client import generate_structured
+            from engine.nexus.schemas import QA_BATCH_SCHEMA
+
+            # Truncate to avoid exceeding model context limits
+            prompt = (
+                f"Extract question-and-answer pairs from this text about '{topic}'. "
+                f"Each pair should have a clear, self-contained question and a "
+                f"comprehensive answer. Include a confidence score (0.0-1.0) and "
+                f"category for each pair.\n\n"
+                f"Text:\n{text[:5000]}"
+            )
+            result = generate_structured(prompt, QA_BATCH_SCHEMA)
+            if isinstance(result, list):
+                logger.debug(
+                    "[KnowledgeForge] Structured Q&A extraction succeeded "
+                    "(operation=extract_qa_structured, topic=%s, pairs=%d)",
+                    topic,
+                    len(result),
+                )
+                return result
+            return []
+        except Exception as exc:
+            logger.debug(
+                "[KnowledgeForge] Structured extraction failed, using regex fallback "
+                "(operation=extract_qa_structured, topic=%s): %s",
+                topic,
+                exc,
+            )
+            return self._extract_qa_regex(text)
+
+    def _extract_qa_regex(self, text: str) -> List[Dict]:
+        """Extract Q&A pairs from text using regex patterns (fallback).
+
+        Looks for common Q&A patterns in the text:
+          - "Q: ... A: ..." style pairs
+          - Numbered question-answer blocks
+          - Markdown-formatted Q&A sections
+
+        Args:
+            text: Raw text to parse for Q&A patterns.
+
+        Returns:
+            List of dicts with 'question' and 'answer' keys.
+        """
+        import re
+
+        pairs: List[Dict] = []
+
+        # Pattern 1: "Q: question\nA: answer" style
+        qa_pattern = re.compile(
+            r"(?:Q|Question)\s*[:.]?\s*(.+?)\n\s*(?:A|Answer)\s*[:.]?\s*(.+?)(?=\n\s*(?:Q|Question)\s*[:.]?|\Z)",
+            re.DOTALL | re.IGNORECASE,
+        )
+        for match in qa_pattern.finditer(text):
+            q = match.group(1).strip()
+            a = match.group(2).strip()
+            if q and a:
+                pairs.append({"question": q, "answer": a})
+
+        # Pattern 2: numbered "1. question\nanswer" style
+        if not pairs:
+            numbered_pattern = re.compile(
+                r"\d+\.\s*\*?\*?(.+?)\*?\*?\n((?:(?!\d+\.).)+)",
+                re.DOTALL,
+            )
+            for match in numbered_pattern.finditer(text):
+                q = match.group(1).strip()
+                a = match.group(2).strip()
+                if q and a and len(a) > 20:
+                    pairs.append({"question": q, "answer": a})
+
+        logger.debug(
+            "[KnowledgeForge] Regex Q&A extraction (operation=extract_qa_regex, pairs=%d)",
+            len(pairs),
+        )
+        return pairs
 
     # ──── Scoring ────
 

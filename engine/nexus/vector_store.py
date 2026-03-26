@@ -1,8 +1,10 @@
 """ChromaDB-backed vector store for Nexus semantic search.
 
-Version: v1.50.2 [2026-03-24]
+Version: v1.57.0 [2026-03-26]
 
 Change Log:
+    v1.57.0 [2026-03-26] — Native ChromaDB Gemini EF (GoogleGenerativeAiEmbeddingFunction)
+                            with automatic fallback to _ServiceEmbeddingFunction bridge
     v1.50.2 [2026-03-24] — Add health() method, is_vector_store_enabled() feature flag guard
 
 Provides persistent vector storage and similarity search for all Nexus content
@@ -51,7 +53,52 @@ COLLECTION_MAP: Dict[str, str] = {
 DEFAULT_PERSIST_DIR = "data/nexus_vectors"
 
 
-# ──── Custom ChromaDB embedding function ─────────────────────────────────────
+# ──── Native ChromaDB Gemini embedding function ──────────────────────────────
+
+# v1.57.0 [2026-03-26] — Native ChromaDB Gemini embedding function
+# CONNECTS: ChromaDB GoogleGenerativeAiEmbeddingFunction, AI Studio API keys
+# CALLED BY: NexusVectorStore._get_collection() (preferred over _ServiceEmbeddingFunction)
+def _create_gemini_native_ef(
+    api_key: str,
+    model: str = "models/gemini-embedding-2-preview",
+) -> Any:
+    """Create ChromaDB's native Gemini embedding function.
+
+    Uses ChromaDB's built-in GoogleGenerativeAiEmbeddingFunction for direct
+    Gemini API integration, bypassing our EmbeddingService bridge. This is
+    faster and avoids double-normalization since ChromaDB handles the vectors
+    directly.
+
+    Args:
+        api_key: Google AI Studio API key.
+        model: Gemini embedding model name (must include 'models/' prefix).
+
+    Returns:
+        GoogleGenerativeAiEmbeddingFunction instance, or None on failure.
+    """
+    try:
+        from chromadb.utils.embedding_functions import GoogleGenerativeAiEmbeddingFunction
+        ef = GoogleGenerativeAiEmbeddingFunction(
+            api_key=api_key,
+            model_name=model,
+            task_type="RETRIEVAL_DOCUMENT",
+        )
+        logger.info(
+            "[VectorStore] Native Gemini EF created (operation=init_ef, model=%s)",
+            model,
+        )
+        return ef
+    except ImportError:
+        logger.debug("[VectorStore] chromadb GoogleGenerativeAiEmbeddingFunction not available")
+        return None
+    except Exception as exc:
+        logger.warning(
+            "[VectorStore] Native Gemini EF unavailable (operation=init_ef): %s", exc
+        )
+        return None
+
+
+# ──── Custom ChromaDB embedding function (fallback bridge) ────────────────────
 
 class _ServiceEmbeddingFunction:
     """ChromaDB-compatible embedding function backed by EmbeddingService.
@@ -122,6 +169,19 @@ class NexusVectorStore:
         self._collections: Dict[str, Any] = {}
         self._lock = threading.Lock()
 
+        # v1.57.0 [2026-03-26] — Try native Gemini EF first, fall back to service bridge
+        # The native EF is faster (no double-normalization) and uses ChromaDB's
+        # built-in Google integration directly.
+        self._embedding_fn: Any = None
+        try:
+            from engine.integrations.aistudio_client import API_KEYS
+            self._embedding_fn = _create_gemini_native_ef(API_KEYS[0])
+        except Exception as exc:
+            logger.debug("[VectorStore] Could not load API_KEYS for native EF: %s", exc)
+        if self._embedding_fn is None:
+            self._embedding_fn = _ServiceEmbeddingFunction()
+            logger.info("[VectorStore] Using _ServiceEmbeddingFunction bridge (operation=init)")
+
         # Stats
         self._adds = 0
         self._searches = 0
@@ -156,10 +216,13 @@ class NexusVectorStore:
         client = self._get_client()
         collection_name = COLLECTION_MAP.get(collection_key, f"nexus_{collection_key}")
 
-        # Create embedding function that routes through our EmbeddingService
-        # The purpose determines the task type (RETRIEVAL_DOCUMENT vs RETRIEVAL_QUERY)
-        purpose = "knowledge" if collection_key != "qa" else "qa_answer"
-        embed_fn = _ServiceEmbeddingFunction(purpose=purpose)
+        # v1.57.0 [2026-03-26] — Use native Gemini EF if available, otherwise
+        # fall back to _ServiceEmbeddingFunction bridge with purpose-specific
+        # task type (RETRIEVAL_DOCUMENT vs RETRIEVAL_QUERY)
+        embed_fn = self._embedding_fn
+        if embed_fn is None or isinstance(embed_fn, _ServiceEmbeddingFunction):
+            purpose = "knowledge" if collection_key != "qa" else "qa_answer"
+            embed_fn = _ServiceEmbeddingFunction(purpose=purpose)
 
         try:
             collection = client.get_or_create_collection(

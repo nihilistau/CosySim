@@ -1,8 +1,9 @@
 """Nexus Query Router — Smart query routing through Nexus-first pipeline.
 
-Version: v1.55.0 [2026-03-26]
+Version: v1.57.0 [2026-03-26]
 
 Change Log:
+    v1.57.0 [2026-03-26] — Tier 2.5: Google File Search with grounded citations + auto-distill
     v1.55.0 [2026-03-26] — Add agent_id tracking to query(), per-agent stats for VAM integration
     v1.54.0 [2026-03-26] — Null guards on client in tier methods, defensive QueryRouter
     v1.50.2 [2026-03-24] — Add vector store feature flag guard, provenance logging
@@ -10,6 +11,7 @@ Change Log:
 Routes all queries through a confidence-scored pipeline:
   1. Q&A Cache (instant, high confidence)
   2. Vector Semantic Search (Gemini Embedding 2 + ChromaDB, high confidence)
+  2.5. Google File Search (managed RAG with grounded citations)
   3. FTS Knowledge Search (fast, medium confidence)
   4. Nexus Smart Ask / NotebookLM-backed research
   5. Direct NotebookLM unified ask (when smart ask cannot answer)
@@ -73,6 +75,8 @@ class RouterStats:
     total_queries: int = 0
     cache_hits: int = 0
     vector_hits: int = 0
+    # v1.57.0 [2026-03-26] — File Search tier (Google managed RAG)
+    file_search_hits: int = 0
     search_hits: int = 0
     nlm_hits: int = 0
     llm_fallbacks: int = 0
@@ -86,13 +90,14 @@ class RouterStats:
     def hit_rate(self) -> float:
         if self.total_queries == 0:
             return 0.0
-        return (self.cache_hits + self.vector_hits + self.search_hits + self.nlm_hits) / self.total_queries
+        return (self.cache_hits + self.vector_hits + self.file_search_hits + self.search_hits + self.nlm_hits) / self.total_queries
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "total_queries": self.total_queries,
             "cache_hits": self.cache_hits,
             "vector_hits": self.vector_hits,
+            "file_search_hits": self.file_search_hits,
             "search_hits": self.search_hits,
             "nlm_hits": self.nlm_hits,
             "llm_fallbacks": self.llm_fallbacks,
@@ -108,9 +113,10 @@ class RouterStats:
 class NexusQueryRouter:
     """Routes queries through Nexus-first pipeline with LLM fallback.
 
-    The router implements a 6-tier lookup:
+    The router implements a 7-tier lookup:
       1. Q&A Cache — exact or fuzzy match on previously answered questions
       2. Vector Search — semantic similarity via Gemini Embedding 2 + ChromaDB
+      2.5. File Search — Google managed RAG with grounded citations
       3. FTS Search — synthesise answer from matching knowledge entries
       4. Nexus Smart Ask — server-side cache → FTS → NotebookLM pipeline
       5. Direct NotebookLM ask — use the unified backend before local GPU
@@ -122,6 +128,8 @@ class NexusQueryRouter:
     # Confidence thresholds
     CACHE_CONFIDENCE = 0.90    # Q&A cache hit — very high confidence
     VECTOR_CONFIDENCE = 0.82   # Strong vector search match
+    # v1.57.0 [2026-03-26] — Tier 2.5: Google File Search with grounded citations
+    FILE_SEARCH_CONFIDENCE = 0.85  # High confidence — answers are grounded in uploaded docs
     SEARCH_HIGH = 0.75         # Strong search match
     SEARCH_MEDIUM = 0.50       # Decent search match
     SEARCH_LOW = 0.30          # Weak match
@@ -136,6 +144,8 @@ class NexusQueryRouter:
         cfg = get_config()
         self.CACHE_CONFIDENCE = cfg.get("nexus.query_router.cache_confidence", self.CACHE_CONFIDENCE)
         self.VECTOR_CONFIDENCE = cfg.get("nexus.query_router.vector_confidence", self.VECTOR_CONFIDENCE)
+        # v1.57.0 [2026-03-26] — File Search confidence from config
+        self.FILE_SEARCH_CONFIDENCE = cfg.get("nexus.query_router.file_search_confidence", self.FILE_SEARCH_CONFIDENCE)
         self.SEARCH_HIGH = cfg.get("nexus.query_router.search_high", self.SEARCH_HIGH)
         self.SEARCH_MEDIUM = cfg.get("nexus.query_router.search_medium", self.SEARCH_MEDIUM)
         self.SEARCH_LOW = cfg.get("nexus.query_router.search_low", self.SEARCH_LOW)
@@ -251,6 +261,15 @@ class NexusQueryRouter:
             result = None
         else:
             result = self._try_vector_search(question)
+        if result and result.confidence >= min_confidence:
+            result.query_time_ms = (time.time() - start) * 1000
+            self._store_local_cache(cache_key, result)
+            self._log_resolution(question, result, agent_id=agent_id)
+            return result
+
+        # Tier 2.5: Google File Search (managed RAG with grounded citations)
+        # v1.57.0 [2026-03-26] — Grounded answers from uploaded project docs
+        result = self._try_file_search(question)
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
@@ -427,6 +446,66 @@ class NexusQueryRouter:
             logger.debug("Vector store not available (chromadb not installed)")
         except Exception as exc:
             logger.debug("Vector search failed: %s", exc)
+        return None
+
+    # v1.57.0 [2026-03-26] — Tier 2.5: Google File Search with grounded citations
+    def _try_file_search(self, question: str) -> Optional[QueryResult]:
+        """Tier 2.5: Google File Search — managed RAG with citations.
+
+        Queries all available File Search stores for grounded answers.
+        Answers auto-distill to Nexus Q&A cache via the FileSearchClient.
+
+        CONNECTS: FileSearchClient, Google AI File Search stores
+        CALLED BY: query() pipeline (between Tier 2 vector and Tier 3 FTS)
+
+        Args:
+            question: The question to answer.
+
+        Returns:
+            QueryResult if a grounded answer is found, None otherwise.
+        """
+        try:
+            from engine.integrations.file_search_client import get_file_search_client
+            client = get_file_search_client()
+
+            # Get available stores — bail if none exist
+            stores = client.list_stores()
+            if not stores:
+                return None
+
+            # Try each store until we get a substantive grounded answer
+            for store in stores:
+                try:
+                    result = client.query(
+                        store["name"], question, distill_to_nexus=True,
+                    )
+                    answer = result.get("answer", "")
+                    if answer and len(answer) >= self.MIN_ANSWER_LENGTH:
+                        with self._lock:
+                            self._stats.file_search_hits += 1
+                            tokens_saved = self._estimate_tokens(answer)
+                            self._stats.total_tokens_saved += tokens_saved
+                        return QueryResult(
+                            answer=answer,
+                            source="file_search",
+                            confidence=self.FILE_SEARCH_CONFIDENCE,
+                            cached=False,
+                            tokens_saved=tokens_saved,
+                            sources=[store.get("display_name", store["name"])],
+                            metadata={
+                                "store": store["name"],
+                                "grounded": True,
+                            },
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "[QueryRouter] File Search store %s failed: %s",
+                        store.get("display_name", "?"), exc,
+                    )
+        except ImportError:
+            logger.debug("[QueryRouter] File Search not available (google-genai not installed)")
+        except Exception as exc:
+            logger.debug("[QueryRouter] File Search failed (operation=query): %s", exc)
         return None
 
     def _try_fts_search(self, client, question: str,
