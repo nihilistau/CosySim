@@ -1,6 +1,6 @@
 # Nexus KMS API Reference
 
-> v1.56.0 [2026-03-26] — Complete endpoint reference for agents and developers.
+> v1.57.0 [2026-03-26] — Complete endpoint reference for agents and developers.
 
 ---
 
@@ -554,7 +554,7 @@ router = get_query_router()
 
 ### `query(question, min_confidence=0.3, use_llm=True, category="", tags=None, source_hint="system", depth="auto", agent_id=None) -> QueryResult`
 
-Route a query through the 6-tier Nexus-first pipeline.
+Route a query through the 7-tier Nexus-first pipeline (including Gemini File Search at Tier 2.5).
 
 **Parameters:**
 
@@ -574,7 +574,7 @@ Route a query through the 6-tier Nexus-first pipeline.
 | Field | Type | Description |
 |-------|------|-------------|
 | `answer` | `str` | The answer text |
-| `source` | `str` | Tier: `cache`, `vector`, `search`, `nexus-*`, `nlm*`, `llm`, `none` |
+| `source` | `str` | Tier: `cache`, `vector`, `file_search`, `search`, `nexus-*`, `nlm*`, `llm`, `none` |
 | `confidence` | `float` | 0.0-1.0 confidence score |
 | `cached` | `bool` | Whether served from cache |
 | `tokens_saved` | `int` | Estimated tokens saved vs LLM |
@@ -676,7 +676,7 @@ All keys are accessed via `get_config().get("dotted.path", default)`.
 |-----|---------|-------------|
 | `nexus.embeddings.enabled` | `true` | Enable embedding service |
 | `nexus.embeddings.provider` | `"auto"` | `gemini`, `local`, or `auto` |
-| `nexus.embeddings.model` | `"gemini-embedding-001"` | Gemini model name |
+| `nexus.embeddings.model` | `"gemini-embedding-2-preview"` | Gemini embedding model |
 | `nexus.embeddings.dimensions` | `768` | MRL dimensions (768/1536/3072) |
 | `nexus.embeddings.local_model` | `"text-embedding-nomic-embed-text-v1.5"` | LMStudio fallback model |
 | `nexus.embeddings.cache_size` | `10000` | In-memory embedding cache size |
@@ -837,9 +837,191 @@ class AgentMemory(BaseModel):
 
 ---
 
+## Gemini File Search Client API
+
+### Access
+
+```python
+from engine.nexus.gemini.file_search import get_file_search_client
+client = get_file_search_client()
+```
+
+### `create_store(name: str, description: str = "") -> FileSearchStore`
+
+Create a new Gemini managed RAG store.
+
+```python
+store = client.create_store("project-docs", description="Core project documentation")
+print(store.id, store.name)
+```
+
+### `upload_document(store_id: str, file_path: str, display_name: str = "") -> str`
+
+Upload a document to a File Search store. Returns the document ID.
+
+```python
+doc_id = client.upload_document(store.id, "docs/ARCHITECTURE.md")
+```
+
+### `query(store_id: str, question: str, top_k: int = 5) -> FileSearchResult`
+
+Query a File Search store with grounded citations.
+
+```python
+result = client.query(store.id, "How does the interceptor pipeline work?")
+print(result.answer)          # Grounded answer text
+print(result.citations)       # Source document references
+print(result.confidence)      # Confidence score
+```
+
+**Returns `FileSearchResult`:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `answer` | `str` | Grounded answer text |
+| `citations` | `List[Citation]` | Source document references with page/chunk |
+| `confidence` | `float` | 0.0-1.0 confidence score |
+| `store_id` | `str` | Which store answered |
+
+### `list_stores() -> List[FileSearchStore]`
+
+List all managed RAG stores.
+
+### `delete_store(store_id: str) -> bool`
+
+Delete a store and all its documents.
+
+### `bootstrap_project_stores() -> Dict`
+
+Upload 9 core project docs (README, CLAUDE.md, context.md, ARCHITECTURE.md, etc.) to a default project store. Idempotent — skips already-uploaded docs.
+
+```python
+result = client.bootstrap_project_stores()
+print(result["uploaded"], result["skipped"])
+```
+
+---
+
+## Context Cache Client API
+
+### Access
+
+```python
+from engine.nexus.gemini.context_cache import get_context_cache
+cache = get_context_cache()
+```
+
+### `cache_files(file_paths: List[str], ttl_hours: int = 24) -> CacheHandle`
+
+Cache one or more files server-side in Gemini for repeated use.
+
+```python
+handle = cache.cache_files(["context.md", "CLAUDE.md"], ttl_hours=24)
+print(handle.cache_id, handle.expires_at)
+```
+
+### `get_cached_context(cache_id: str = None) -> Optional[CacheHandle]`
+
+Retrieve the current cached context handle. If `cache_id` is None, returns the most recent.
+
+```python
+handle = cache.get_cached_context()
+if handle and not handle.is_expired:
+    # Use cached context for inference
+    pass
+```
+
+### `invalidate(cache_id: str = None) -> bool`
+
+Invalidate a cached context. If `cache_id` is None, invalidates all.
+
+### `status() -> Dict`
+
+Returns current cache status: active caches, TTLs, sizes, last refresh time.
+
+```python
+status = cache.status()
+print(status["active_caches"], status["total_size_bytes"])
+```
+
+---
+
+## Structured Output Schemas
+
+### Access
+
+```python
+from engine.nexus.gemini.structured_output import generate_structured
+```
+
+### `generate_structured(prompt: str, schema: str, model: str = "gemini-2.0-flash") -> Dict`
+
+Generate Gemini output conforming to a JSON schema.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `prompt` | `str` | required | The generation prompt |
+| `schema` | `str` | required | Schema name (see below) |
+| `model` | `str` | `"gemini-2.0-flash"` | Gemini model to use |
+
+### Available Schemas
+
+| Schema | Fields | Use Case |
+|--------|--------|----------|
+| `QA_BATCH` | `pairs: [{question, answer, confidence}]` | Batch Q&A extraction from text |
+| `TASK_DECOMPOSITION` | `steps: [{step_number, description, dependencies}]` | Break tasks into steps |
+| `KNOWLEDGE_ENTRY` | `{title, content, category, tags, importance}` | Extract structured knowledge |
+| `AGENT_DECISION` | `{action, reasoning, confidence, alternatives}` | Structure agent decisions |
+| `GROUNDED_ANSWER` | `{answer, sources: [{title, relevance}], confidence}` | Answer with citations |
+
+**Example:**
+
+```python
+result = generate_structured(
+    prompt="Extract all Q&A pairs from the following text:\n\n" + text,
+    schema="QA_BATCH",
+)
+for pair in result["pairs"]:
+    print(pair["question"], "→", pair["answer"])
+```
+
+---
+
+## Updated Query Router Tiers
+
+The v1.57.0 query router has 7 tiers (Tier 2.5 is new):
+
+| Tier | Source | Confidence | Cost | Auto-Store |
+|------|--------|------------|------|------------|
+| 1 | Q&A Cache | 0.90 | 0 tokens | -- |
+| 2 | Vector Search | 0.82 | 1 embed call | -- |
+| **2.5** | **Gemini File Search** | **0.85** | **1 API call** | **Yes** |
+| 3 | FTS Search | 0.75/0.50/0.30 | 0 tokens | Yes |
+| 4 | Nexus Smart Ask | variable | variable | Yes |
+| 5 | NotebookLM Ask | variable | 0 (free tier) | Yes |
+| 6 | LLM Fallback | 0.60 | GPU tokens | Yes |
+
+### File Search Configuration
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `nexus.file_search.enabled` | `true` | Enable Gemini File Search tier |
+| `nexus.file_search.confidence` | `0.85` | Confidence for File Search hits |
+| `nexus.file_search.auto_distill` | `true` | Auto-store answers as Q&A pairs |
+| `nexus.context_cache.enabled` | `true` | Enable Gemini context caching |
+| `nexus.context_cache.ttl_hours` | `24` | Default cache TTL |
+| `nexus.structured_output.model` | `"gemini-2.0-flash"` | Model for structured generation |
+
+---
+
 ## Change Log
 
 ```
+v1.57.0 [2026-03-26] — Gemini Native: File Search Client API, Context Cache Client API,
+                        structured output schemas, 7-tier query router, updated
+                        embedding model to gemini-embedding-2-preview.
 v1.56.0 [2026-03-26] — Initial creation: complete API reference covering Python client,
                         REST endpoints, MCP tools, query router, knowledge pipeline,
                         configuration, authentication, and data models.

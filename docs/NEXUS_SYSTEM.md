@@ -1,6 +1,6 @@
 # Nexus KMS — The Brain of CosySim
 
-> CosySim Documentation — v1.56.0 [2026-03-26]
+> CosySim Documentation — v1.57.0 [2026-03-26]
 >
 > Complete technical reference for Nexus, the central knowledge management and
 > command-control system that powers CosySim's self-improving AI agents.
@@ -84,13 +84,13 @@ compute; every subsequent time it is served from Nexus cache for free.
 ├───────────────────────────────────────────────────────────────────┤
 │  CosySim Engine (Agents, Scenes, Skills)                          │
 │  ├── NexusClient          HTTP client for Nexus API               │
-│  ├── NexusQueryRouter     6-tier smart routing                    │
-│  ├── EmbeddingService     Gemini Embedding 2 + LMStudio           │
+│  ├── NexusQueryRouter     7-tier smart routing (+ Gemini File Search) │
+│  ├── EmbeddingService     Gemini Embedding 2 Preview + LMStudio   │
 │  ├── NexusVectorStore     ChromaDB semantic search                 │
 │  ├── KnowledgePipeline    Unified ingest: validate→dedup→store    │
 │  ├── TrainingFlywheel     auto-collect training data              │
 │  ├── TaskScheduler        agent task ticketing + auto-assign      │
-│  ├── SchedulerDaemon      89 recurring tasks (cron-like)          │
+│  ├── SchedulerDaemon      91 recurring tasks (cron-like)          │
 │  ├── OperatorInbox        off-turn directive intake               │
 │  ├── KnowledgeCapture     dual-write backfill helper              │
 │  ├── NLMChain             multi-step chain-prompting              │
@@ -204,7 +204,7 @@ Entries are further organized by namespace (defined in
 
 ---
 
-## 3. The 6-Tier Query Pipeline
+## 3. The 7-Tier Query Pipeline
 
 The query router (`engine/nexus/query_router.py`) is the heart of the knowledge
 pipeline. Every information retrieval request passes through confidence-scored tiers,
@@ -225,11 +225,19 @@ Question arrives → NexusQueryRouter.query()
 │   └── On hit → return immediately                               │
 ├─────────────────────────────────────────────────────────────────┤
 │ Tier 2: Vector Semantic Search                                   │
-│   ├── Gemini Embedding 2 + ChromaDB cosine similarity           │
+│   ├── Gemini Embedding 2 Preview + ChromaDB cosine similarity   │
 │   ├── Searches: knowledge, qa, code, news collections            │
 │   ├── Confidence: 0.82 (configurable)                           │
 │   ├── Cost: 1 embedding API call (~0.001 cents)                 │
 │   ├── Feature flag: nexus.vector_store.enabled                   │
+│   └── On hit → return immediately                               │
+├─────────────────────────────────────────────────────────────────┤
+│ Tier 2.5: Gemini File Search (Managed RAG)              [NEW]    │
+│   ├── FileSearchClient queries Gemini managed RAG stores         │
+│   ├── Grounded citations with source document references         │
+│   ├── Confidence: 0.85 (configurable)                           │
+│   ├── Cost: 1 Gemini API call                                   │
+│   ├── Auto-distills answers into Nexus Q&A cache                 │
 │   └── On hit → return immediately                               │
 ├─────────────────────────────────────────────────────────────────┤
 │ Tier 3: FTS Knowledge Search                                     │
@@ -415,7 +423,7 @@ ingest(title, content, content_type, category, tags, agent_id)
 ├──────────────────────────────────────────────────┤
 │ Step 5: Auto-Embed in Vector Store                │
 │   ├── Push to ChromaDB via EmbeddingService        │
-│   └── Uses Gemini Embedding 2 (768/1536/3072 dim) │
+│   └── Uses Gemini Embedding 2 Preview (768/1536/3072) │
 ├──────────────────────────────────────────────────┤
 │ Step 6: Auto-Generate Q&A Pairs                   │
 │   ├── Only if quality_score >= 0.5                 │
@@ -655,8 +663,8 @@ For each high-quality entry:
 
 ## 8. Scheduler Tasks
 
-The `TaskSchedulerDaemon` (`engine/nexus/scheduler_daemon.py`) manages 89 recurring
-tasks organized into 15 categories. The daemon runs in a background thread, checking
+The `TaskSchedulerDaemon` (`engine/nexus/scheduler_daemon.py`) manages 91 recurring
+tasks organized into 16 categories. The daemon runs in a background thread, checking
 for due tasks every 60 seconds.
 
 ### Task Categories
@@ -790,9 +798,99 @@ for due tasks every 60 seconds.
 | `stall-detection-sweep` | Every 4h | Scan for stalled processes |
 | Additional dynamic tasks | Various | Registered by sub-modules |
 
+#### Gemini Integration (2 tasks)
+
+| Task ID | Schedule | Description |
+|---------|----------|-------------|
+| `file-search-sync` | Weekly | Sync project docs to Gemini File Search stores |
+| `context-cache-refresh` | Every 8h | Refresh Gemini server-side context cache |
+
 ---
 
-## 9. Governance Rules
+## 9. Gemini Native Integration
+
+v1.57.0 introduced full Gemini API integration across embeddings, managed RAG,
+structured output, and context caching.
+
+### Gemini Embedding 2 Preview
+
+Upgraded from `gemini-embedding-exp-03-07` to `gemini-embedding-2-preview`:
+
+- ChromaDB native `GoogleGenerativeAiEmbeddingFunction` (replaces custom bridge)
+- Multimodal `embed_image()` for PNG/JPEG/GIF/WEBP via google.genai SDK
+- All 5 API keys confirmed working, round-robin rotation
+
+### Gemini File Search (Managed RAG)
+
+`FileSearchClient` (`engine/nexus/gemini/file_search.py`) provides Gemini managed RAG:
+
+```python
+from engine.nexus.gemini.file_search import get_file_search_client
+
+client = get_file_search_client()
+store = client.create_store("project-docs")
+client.upload_document(store.id, "path/to/doc.md")
+results = client.query(store.id, "How does the query router work?")
+# Returns grounded citations with source document references
+```
+
+- Integrated as QueryRouter **Tier 2.5** between vector search and FTS
+- Every File Search answer auto-distilled into Nexus Q&A cache
+- `bootstrap_project_stores()` uploads 9 core docs (README, CLAUDE.md, context.md, etc.)
+- Q&A cache relevance scoring with 40% word overlap threshold
+
+### Structured Output
+
+`generate_structured()` (`engine/nexus/gemini/structured_output.py`) enforces JSON
+schema on Gemini responses:
+
+```python
+from engine.nexus.gemini.structured_output import generate_structured
+
+result = generate_structured(
+    prompt="Extract Q&A pairs from this text...",
+    schema="QA_BATCH",
+)
+```
+
+6 extraction schemas:
+
+| Schema | Use Case |
+|--------|----------|
+| `QA_BATCH` | Extract question-answer pairs from text |
+| `TASK_DECOMPOSITION` | Break complex tasks into steps |
+| `KNOWLEDGE_ENTRY` | Extract structured knowledge entries |
+| `AGENT_DECISION` | Structure agent decision reasoning |
+| `GROUNDED_ANSWER` | Answer with source citations |
+
+NLM Flywheel, QA Distiller, and Knowledge Forge all prefer structured output over regex parsing.
+
+### Context Caching
+
+`ContextCacheClient` (`engine/nexus/gemini/context_cache.py`) caches large context
+documents server-side in Gemini:
+
+```python
+from engine.nexus.gemini.context_cache import get_context_cache
+
+cache = get_context_cache()
+cache.cache_files(["context.md", "CLAUDE.md"])
+```
+
+- Copilot Bridge uses cached context for plan decomposition
+- Scheduler task `context-cache-refresh` refreshes every 8h
+- Reduces per-request token costs for repeated context
+
+### Oracle Integration
+
+The Oracle dashboard now includes a **GEMINI SERVICES** section:
+- File Search store count and document inventory
+- Context cache status (TTL, size, last refresh)
+- Embedding model health (gemini-embedding-2-preview)
+
+---
+
+## 10. Governance Rules
 
 Governance rules are stored in the `rules` table and enforced via both Nexus server-side
 checks and client-side validation in `GovernanceManager`.
@@ -854,7 +952,7 @@ def store_knowledge(title: str, content: str) -> str:
 
 ---
 
-## 10. Configuration
+## 11. Configuration
 
 All Nexus-related configuration is in `config/default.yaml`.
 
@@ -940,7 +1038,7 @@ comms:
 
 ---
 
-## 11. API Quick Reference
+## 12. API Quick Reference
 
 All endpoints are on `http://localhost:8700` unless noted otherwise.
 
@@ -1024,7 +1122,7 @@ All endpoints are on `http://localhost:8700` unless noted otherwise.
 
 ---
 
-## 12. MCP Tools
+## 13. MCP Tools
 
 ### Nexus Skills (17 skills, pack="nexus")
 
@@ -1087,7 +1185,7 @@ All endpoints are on `http://localhost:8700` unless noted otherwise.
 
 ---
 
-## 13. CLI Reference
+## 14. CLI Reference
 
 ### Nexus Bridge CLI
 
@@ -1180,7 +1278,7 @@ python -m engine.nexus.nlm_cli ask "What is X?" --notebook <id>
 | `engine/nexus/query_router.py` | NexusQueryRouter — 6-tier query pipeline |
 | `engine/nexus/knowledge_pipeline.py` | KnowledgePipeline — unified ingestion |
 | `engine/nexus/vector_store.py` | NexusVectorStore — ChromaDB semantic search |
-| `engine/nexus/embedding_service.py` | EmbeddingService — Gemini Embedding 2 + local |
+| `engine/nexus/embedding_service.py` | EmbeddingService — Gemini Embedding 2 Preview + local |
 | `engine/nexus/governance_rules.py` | GovernanceManager — rules + AGENT_TYPES |
 | `engine/nexus/nexus_namespaces.py` | Namespace definitions and enforcement |
 | `engine/nexus/scheduler_daemon.py` | TaskSchedulerDaemon — 89 recurring tasks |
@@ -1202,6 +1300,10 @@ python -m engine.nexus.nlm_cli ask "What is X?" --notebook <id>
 ## Change Log
 
 ```
+v1.57.0 [2026-03-26] — Gemini Native: 7-tier query pipeline (+ File Search at Tier 2.5),
+                        Gemini integration section (File Search, structured output, context
+                        caching, Embedding 2 Preview), 91 scheduler tasks (+2 Gemini),
+                        Oracle Gemini Services section, renumbered sections 9-14.
 v1.56.0 [2026-03-26] — Initial creation: comprehensive deep-dive document covering
                         architecture, query pipeline, agent registry, knowledge pipeline,
                         NLM integration, self-improvement loop, 89 scheduler tasks,

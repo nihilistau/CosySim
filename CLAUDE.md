@@ -91,7 +91,7 @@ Skills (engine/skills/builtin/)     ←→    MCP Pipeline (engine/mcp/)
                     ↓
 Engine Layer (engine/)
   lmstudio/   — ServerController, LMLink federation, TaskQueue
-  nexus/      — Nexus client, NLM chain, 4-tier query router
+  nexus/      — Nexus client, NLM chain, 7-tier query router, File Search
   world/      — PlayerState, Inventory, Crew, WorldSim (economy ticks)
   agents/     — CharacterAgent, VirtualAgent, interceptors/
   training/   — DataCollector, FinetuneOrchestrator, BenchmarkRunner
@@ -110,6 +110,8 @@ get_scene_state_manager() # SceneStateManager
 get_governor()            # AgentGovernor (budget, cooldowns, prereqs)
 get_router()              # AgentRouter
 get_knowledge_pipeline()  # KnowledgePipeline (ingest → validate → dedup → store → embed → Q&A)
+get_file_search_client()  # FileSearchClient (Gemini managed RAG — create stores, upload, query)
+get_context_cache()       # ContextCacheClient (Gemini server-side context caching)
 ```
 
 ### Interceptor Pipeline Priority Order
@@ -319,7 +321,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.56** (Nexus v2 — agent registry, KnowledgePipeline, 36 interceptors, 89 scheduler tasks, self-maintenance)
+- Current: **v1.57** (Gemini Native — File Search, structured output, context caching, 7-tier query pipeline, 91 scheduler tasks)
 
 ### Navigational Comments
 
