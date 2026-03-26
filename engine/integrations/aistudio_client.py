@@ -2,6 +2,12 @@
 
 Derived from HAR + V8 heap analysis (March 2026). 136 methods extracted.
 See docs/AISTUDIO_API_REFERENCE.md for full protocol spec.
+
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Add generate_structured() for Gemini JSON schema output
+                            via google.genai SDK; module-level convenience function
 """
 
 from __future__ import annotations
@@ -2402,6 +2408,57 @@ class AIStudioClient:
         img_b64 = result.get("imageData", "")
         return _b64.b64decode(img_b64) if img_b64 else b""
 
+    # ──── Structured Output ────
+
+    # v1.57.0 [2026-03-26] — Gemini structured output via google.genai SDK
+    # CONNECTS: google.genai Client, Gemini 2.5 Flash (or any model supporting JSON schema)
+    # CALLED BY: engine.nexus.knowledge_forge, engine.nexus.schemas consumers
+    # EMITS: Parsed Python object matching the provided JSON schema
+    def generate_structured(
+        self,
+        prompt: str,
+        schema: dict,
+        model: str = "gemini-2.5-flash",
+        system_instruction: str = "",
+    ) -> Any:
+        """Generate content with JSON schema enforcement.
+
+        Uses the google.genai SDK for native structured output. The model is
+        forced to produce JSON matching the provided schema, eliminating the
+        need for regex-based extraction of fenced JSON from markdown responses.
+
+        Args:
+            prompt: User prompt text.
+            schema: JSON schema dict (Gemini format with STRING/NUMBER/OBJECT/ARRAY types).
+            model: Model to use for generation.
+            system_instruction: Optional system instruction text.
+
+        Returns:
+            Parsed Python object (dict, list, etc.) matching the schema.
+
+        Raises:
+            Exception: On API failure or JSON parse error.
+        """
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=self._api_key)
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=schema,
+        )
+        if system_instruction:
+            config.system_instruction = system_instruction
+
+        result = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=config,
+        )
+
+        return json.loads(result.text)
+
 
 # ──── Singleton ────
 
@@ -2430,3 +2487,23 @@ def get_aistudio_client(cookies: Optional[dict] = None, api_key: str = API_KEYS[
                 cookies = {}
         _client = AIStudioClient(cookies, api_key=api_key)
     return _client
+
+
+# v1.57.0 [2026-03-26] — Module-level convenience for Gemini structured output
+def generate_structured(prompt: str, schema: dict, **kwargs: Any) -> Any:
+    """Module-level convenience for structured output via Gemini.
+
+    Creates/reuses the singleton AIStudioClient and calls generate_structured().
+    Accepts all keyword arguments that AIStudioClient.generate_structured() does
+    (model, system_instruction).
+
+    Args:
+        prompt: User prompt text.
+        schema: JSON schema dict (Gemini format).
+        **kwargs: Passed through to AIStudioClient.generate_structured().
+
+    Returns:
+        Parsed Python object matching the schema.
+    """
+    client = get_aistudio_client()
+    return client.generate_structured(prompt, schema, **kwargs)

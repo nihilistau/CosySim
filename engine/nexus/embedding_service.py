@@ -1,8 +1,10 @@
 """Unified embedding service — Gemini Embedding 2 with MRL + local fallback.
 
-Version: v1.55.0 [2026-03-26]
+Version: v1.57.0 [2026-03-26]
 
 Change Log:
+    v1.57.0 [2026-03-26] — Add embed_image() for multimodal embedding via Gemini
+                            (images → vectors using google.genai SDK inline_data)
     v1.55.0 [2026-03-26] — Backward-compat: support old 'enable_gemini' config key
                             with deprecation warning, migrate to 'gemini.enabled'
     v1.50.2 [2026-03-24] — Fix Gemini config key (was enable_gemini, now reads enabled),
@@ -752,6 +754,106 @@ class EmbeddingService:
             raise EmbeddingUnavailableError(f"All providers failed for batch. Last: {last_exc}")
         logger.error("[EmbeddingService] No providers configured for batch")
         raise EmbeddingUnavailableError("No embedding providers configured")
+
+    # ──── Multimodal embedding ─────────────────────────────────────────────
+
+    # v1.57.0 [2026-03-26] — Multimodal embedding via Gemini google.genai SDK
+    # CONNECTS: google.genai Client, AI Studio API keys, Gemini embedding model
+    # CALLED BY: External callers needing image→vector embeddings (e.g. visual search)
+    def embed_image(
+        self,
+        image_path: str,
+        purpose: str = "knowledge",
+    ) -> Optional[List[float]]:
+        """Embed an image using Gemini's multimodal embedding model.
+
+        Uses the google.genai client directly since image embedding requires
+        inline_data content parts, not plain text. Falls back gracefully if
+        the google-genai SDK is unavailable or the API call fails.
+
+        Args:
+            image_path: Path to the image file (PNG, JPEG, etc.).
+            purpose: Semantic purpose (currently unused for images, reserved
+                for future task-type differentiation).
+
+        Returns:
+            List of float embedding values, or None on failure.
+        """
+        try:
+            from google import genai
+            from google.genai import types
+            from pathlib import Path as _Path
+
+            # Get API key from aistudio — reuse the existing key pool
+            from engine.integrations.aistudio_client import API_KEYS
+            client = genai.Client(api_key=API_KEYS[0])
+
+            # Read image and detect MIME type
+            img_path = _Path(image_path)
+            if not img_path.exists():
+                logger.warning(
+                    "[EmbeddingService] Image not found (operation=embed_image, path=%s)",
+                    image_path,
+                )
+                return None
+
+            img_bytes = img_path.read_bytes()
+            suffix = img_path.suffix.lower()
+            mime_map = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+                ".bmp": "image/bmp",
+            }
+            mime = mime_map.get(suffix, "image/png")
+
+            # Determine output dimensions from provider chain if available
+            output_dims = self._dimensions if self._dimensions else 768
+
+            result = client.models.embed_content(
+                model="gemini-embedding-2-preview",
+                contents=types.Content(parts=[
+                    types.Part(
+                        inline_data=types.Blob(mime_type=mime, data=img_bytes),
+                    ),
+                ]),
+                config={"output_dimensionality": output_dims},
+            )
+
+            if result.embeddings:
+                vector = list(result.embeddings[0].values)
+                # L2-normalize for cosine space consistency
+                if output_dims < 3072:
+                    vector = _l2_normalize(vector)
+                logger.debug(
+                    "[EmbeddingService] Image embedded (operation=embed_image, path=%s, dims=%d)",
+                    image_path,
+                    len(vector),
+                )
+                return vector
+
+            logger.warning(
+                "[EmbeddingService] Image embedding returned no vectors (operation=embed_image, path=%s)",
+                image_path,
+            )
+            return None
+
+        except ImportError as exc:
+            logger.warning(
+                "[EmbeddingService] google-genai SDK not available for image embedding "
+                "(operation=embed_image): %s",
+                exc,
+            )
+            return None
+        except Exception as exc:
+            logger.warning(
+                "[EmbeddingService] Image embedding failed (operation=embed_image, path=%s): %s",
+                image_path,
+                exc,
+            )
+            return None
 
     # ──── Similarity utilities ────────────────────────────────────────────
 

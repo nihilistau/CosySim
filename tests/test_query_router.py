@@ -1,4 +1,11 @@
-"""Tests for the NexusQueryRouter."""
+"""Tests for the NexusQueryRouter.
+
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Mock File Search client (Tier 2.5) to prevent real API calls
+    v1.50.2 [2026-03-24] — Mock vector store instead of disabling it entirely
+"""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -24,6 +31,21 @@ def _mock_vector_store(monkeypatch):
         "engine.nexus.vector_store.get_vector_store", lambda **kw: mock_store
     )
     return mock_store
+
+
+# v1.57.0 [2026-03-26] — Mock File Search client (Tier 2.5) to prevent real
+# Google API calls during testing. Returns no stores by default so the tier
+# is skipped, letting queries fall through to the mocked Nexus tiers below.
+@pytest.fixture(autouse=True)
+def _mock_file_search(monkeypatch):
+    """Mock File Search client with no stores by default (override per-test)."""
+    mock_client = MagicMock()
+    mock_client.list_stores.return_value = []
+    monkeypatch.setattr(
+        "engine.integrations.file_search_client.get_file_search_client",
+        lambda: mock_client,
+    )
+    return mock_client
 
 
 # ── QueryResult tests ────────────────────────────────────────────────────
