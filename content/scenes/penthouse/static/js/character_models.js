@@ -893,7 +893,20 @@ function _buildAllClothing(gender, charColor) {
 //  MAIN CREATE FUNCTION
 // ═══════════════════════════════════════════════════════════════════════
 
+// v1.53.0 [2026-03-26] — Wrapped in try/catch for diagnostic visibility
 function createDetailedCharacter(opts) {
+    console.info('[CharModels] createDetailedCharacter called — name=%s, gender=%s',
+        opts.name || '?', opts.gender || 'auto');
+    try {
+        return _createDetailedCharacterImpl(opts);
+    } catch (err) {
+        console.error('[CharModels] createDetailedCharacter FAILED for %s: %s',
+            opts.name || '?', err.message, err);
+        throw err;
+    }
+}
+
+function _createDetailedCharacterImpl(opts) {
     const name = (opts.name || '').toLowerCase();
     const look = CHAR_LOOKS[name] || {};
     const gender = opts.gender || look.gender || 'female';
@@ -1814,3 +1827,8 @@ window.CharModels = {
     FD,
     MD,
 };
+
+// v1.53.0 [2026-03-26] — Load confirmation for CharacterBridge diagnostics
+console.info('[CharModels] API registered — %d outfits, %d char looks, %d poses',
+    Object.keys(OUTFIT_MAP).length, Object.keys(CHAR_LOOKS).length,
+    typeof SEX_POSES !== 'undefined' ? Object.keys(SEX_POSES).length : 0);
