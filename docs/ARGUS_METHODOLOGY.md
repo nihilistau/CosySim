@@ -20,9 +20,12 @@
 9. [Profile CRUD Testing](#8-profile-crud-testing)
 10. [Environment Mapping](#9-environment-mapping)
 11. [Security Assessment Checklist](#10-security-assessment-checklist)
-12. [ARGUS CLI Quick Reference](#argus-cli-quick-reference)
-13. [Cross-References](#cross-references)
-14. [Change Log](#change-log)
+12. [Agent Orchestration Extraction](#11-agent-orchestration-extraction)
+13. [Chain-of-Thought Extraction](#12-chain-of-thought-extraction)
+14. [App Schema & Tool Definition Extraction](#13-app-schema--tool-definition-extraction)
+15. [ARGUS CLI Quick Reference](#argus-cli-quick-reference)
+16. [Cross-References](#cross-references)
+17. [Change Log](#change-log)
 
 ---
 
@@ -1334,9 +1337,172 @@ python -m engine.nexus.bridge ask "What new endpoints did ARGUS find?"
 
 ---
 
+## 11. Agent Orchestration Extraction
+
+> v1.52.1 — Extract multi-agent dispatch traces from V8 heap snapshots
+
+### When to Use
+
+When a web app uses **multi-agent AI orchestration** (multiple sub-agents handling different tasks in parallel), the heap often contains the full message stream between agents. This reveals:
+- Agent names and roles
+- Tool definitions and execution traces
+- Parallel dispatch patterns
+- Error handling behavior
+
+### How It Works
+
+Modern AI apps (OpenRoom/Talkie, Cursor, Claude Code) dispatch to specialized sub-agents. The client receives streamed messages tagged with `sub_agent_name`, `tool_calls`, and content chunks. These accumulate in heap memory.
+
+### Technique
+
+```python
+from scripts.argus.toolkit import extract_agent_messages
+
+# Extract full agent orchestration trace
+result = extract_agent_messages("data/heap_output/Heap_deep/strings_all.txt")
+
+# result = {
+#   "total_events": 53,
+#   "agents": {"character_agent": 9, "app_expert_1_os": 4, "app_expert_2_twitter": 3},
+#   "tool_calls": [...],   # Every tool invocation with status
+#   "messages": [...]      # Content produced by each agent
+# }
+```
+
+### What You'll Find
+
+| Pattern | Description |
+|---------|-------------|
+| `onReceiveAgentMessage` | WebSocket event with full agent dispatch payload |
+| `sub_agent_name` | Named sub-agent: `character_agent`, `app_expert_1_os`, etc. |
+| `tool_call_status` | 1=running, 2=completed, 3=failed |
+| `tool_call_display_name` | Human-readable: `> Reading file...`, `> Writing into file...` |
+| `tool_call_display_data` | JSON with file_path, bytes_written, directory, etc. |
+| `msg_type` | 2=user-facing response, 3=system/tool response |
+| `chunk_index` | Streaming order (reconstruct full messages) |
+
+### OpenRoom Example: 3-Agent Parallel Dispatch
+
+One user message ("Are we safe here?") dispatched to 3 agents simultaneously:
+1. **character_agent** — Scanned filesystem, read app configs, generated in-character dialogue
+2. **app_expert_1_os** — Set wallpaper, operated desktop OS
+3. **app_expert_2_twitter** — Created directory, wrote in-character tweet post
+
+All three agents used a shared virtual filesystem and tool protocol.
+
+---
+
+## 12. Chain-of-Thought Extraction
+
+> v1.52.1 — Extract leaked model reasoning from heap memory
+
+### When to Use
+
+When an AI app streams model output to the client (text chat, not voice-only), the model's internal reasoning may persist in heap memory. This includes:
+- Character/persona switching logic
+- Stage progression planning
+- Content moderation reasoning
+- Tool selection logic
+
+### Why It Leaks
+
+Some models use `<think>` tags or internal reasoning blocks that are:
+1. Streamed to the client for latency purposes
+2. Filtered in the UI but kept in memory
+3. Part of the full response JSON that isn't garbage collected
+
+### Technique
+
+```python
+from scripts.argus.toolkit import extract_chain_of_thought
+
+# Extract model reasoning fragments
+cot = extract_chain_of_thought("data/heap_output/Heap_deep/strings_all.txt")
+
+# cot = [
+#   {"line": 597, "pattern": "reasoning", "content": "The user is asking if they're safe..."},
+#   {"line": 599, "pattern": "reasoning", "content": "Let me re-read the context..."},
+#   {"line": 601, "pattern": "planning",  "content": "The current stage is 0: Lockdown Initiated..."},
+# ]
+```
+
+### Patterns Searched
+
+| Pattern | What It Catches |
+|---------|----------------|
+| `The user is asking...` | User intent analysis |
+| `I need to respond as...` | Character/persona selection |
+| `I should...` / `Let me...` | Action planning |
+| `All tasks completed...` | Task completion + next steps |
+| `The current stage...` | Stage/narrative progression logic |
+| `</think` | Think tag boundaries (model reasoning blocks) |
+
+### Key Finding: Voice vs Text
+
+- **Sesame AI (voice):** 0 CoT fragments — model runs server-side, only audio stream reaches client
+- **OpenRoom (text):** 15+ CoT fragments — full model reasoning streamed as text
+
+This means **text-based AI chat apps** are significantly more vulnerable to CoT extraction than voice-based ones.
+
+---
+
+## 13. App Schema & Tool Definition Extraction
+
+> v1.52.1 — Extract tool definitions from virtual filesystem configs in heap memory
+
+### When to Use
+
+When an AI app implements a **virtual desktop/OS** with apps (OpenRoom, OpenClaw), the app definitions (meta.yaml + guide.yaml) are loaded into the agent's context and persist in heap memory. These contain:
+- Complete tool/action schemas
+- Parameter definitions
+- File system structure documentation
+- App-to-app interaction patterns
+
+### Technique
+
+```python
+from scripts.argus.toolkit import extract_app_schemas, extract_protobuf_definitions
+
+# Extract app tool definitions
+apps = extract_app_schemas("data/heap_output/Heap_deep/strings_all.txt")
+# apps = [
+#   {"app_id": 1, "app_name": "os", "display_name": "OS",
+#    "actions": ["OPEN_APP", "CLOSE_APP", "SET_WALLPAPER"]},
+#   {"app_id": 2, "app_name": "twitter", "actions": ["CREATE_POST"]},
+#   {"app_id": 3, "app_name": "musicPlayer", "actions": ["PLAY_SONG", "PAUSE"]},
+# ]
+
+# Extract protobuf schemas (WebSocket protocol)
+protos = extract_protobuf_definitions("data/heap_output/Heap_deep/strings_all.txt")
+# protos = ['syntax = "proto3";\nenum Command {\n  Unknown = 0;\n  ...']
+```
+
+### OpenRoom Virtual Filesystem
+
+```
+/workspace
+  workspace.json
+  apps/
+    album/        (guide.yaml, meta.yaml, data/images/*.json)
+    chatroom/     (guide.yaml, meta.yaml)
+    diary/        (guide.yaml, meta.yaml)
+    email/        (guide.yaml, meta.yaml)
+    evidencevault/(guide.yaml, meta.yaml)
+    musicPlayer/  (guide.yaml, meta.yaml, data/state.json, playlists/*.json)
+    os/           (guide.yaml, meta.yaml, data/wallpaper/*.json)
+    twitter/      (guide.yaml, meta.yaml, data/posts/*.json)
+```
+
+Storage backed by Cloud NAS via Weaver Storage Gateway.
+
+---
+
 ## Change Log
 
 ```
+v1.52.1 [2026-03-26] — Added 3 new techniques: Agent Orchestration Extraction (#11),
+                        Chain-of-Thought Extraction (#12), App Schema Extraction (#13)
+                        from deep V8 heap analysis of Sesame + OpenRoom
 v1.52.0 [2026-03-26] — Initial methodology guide covering all 10 reconnaissance
                         techniques from Sesame + OpenRoom explorations
 ```

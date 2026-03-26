@@ -9,13 +9,18 @@ Generic tools for analyzing any web application:
 - WebSocket interception (message modification via CDP)
 - Token management (Firebase JWT refresh)
 - Deep heap mining (V8 heap snapshot credential extraction)
+- Agent message stream extraction (multi-agent orchestration traces)
+- Chain-of-thought extraction (leaked model reasoning)
+- App schema extraction (tool definitions from YAML configs)
 
 These tools are application-agnostic. Use them from any ARGUS client.
 
-Version: v1.52.0 [2026-03-26]
+Version: v1.52.1 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.52.1 [2026-03-26] — Added agent message stream extraction, chain-of-thought
+                            extraction, app schema extraction from heap strings
     v1.52.0 [2026-03-26] — Initial: bundle analysis, statsig injection,
                             CDP eval, WebSocket intercept, Firebase refresh
 
@@ -24,6 +29,8 @@ Usage:
         download_bundle, decompile_bundle,
         inject_statsig_gates, inject_websocket_intercept,
         cdp_eval, cdp_find_tab, refresh_firebase_token,
+        extract_agent_messages, extract_chain_of_thought,
+        extract_app_schemas, extract_protobuf_definitions,
     )
 """
 from __future__ import annotations
@@ -606,3 +613,405 @@ def decode_jwts_from_findings(findings_json_path: str) -> List[Dict[str, Any]]:
             pass
 
     return decoded
+
+
+# ──── Agent Message Stream Extraction ─────────────────────────────────────
+
+# v1.52.1 [2026-03-26] — Extract multi-agent orchestration traces from heap strings
+def extract_agent_messages(strings_file: str) -> Dict[str, Any]:
+    """Extract multi-agent orchestration messages from a deep-parsed heap strings file.
+
+    Parses `onReceiveAgentMessage` events to reconstruct the full agent dispatch
+    trace — which sub-agents were called, what tools they used, and the content
+    they produced. Works with OpenRoom/Talkie/MiniMax-style agent protocols.
+
+    Args:
+        strings_file: Path to strings_all.txt from heap_deep_parser.
+
+    Returns:
+        Dict with agents, tool_calls, messages, and timeline.
+    """
+    path = Path(strings_file)
+    if not path.exists():
+        return {"error": f"File not found: {strings_file}"}
+
+    agents: Dict[str, int] = {}
+    tool_calls: List[Dict] = []
+    messages: List[Dict] = []
+    raw_count = 0
+
+    for line in path.read_text(errors="replace").splitlines():
+        if "onReceiveAgentMessage" not in line:
+            continue
+        raw_count += 1
+
+        # Extract the JSON payload
+        json_start = line.find("{")
+        if json_start < 0:
+            continue
+
+        # Trim trailing timestamp
+        json_str = line[json_start:].strip()
+        # Remove trailing non-JSON (timestamp after closing brace)
+        brace_depth = 0
+        json_end = 0
+        for i, ch in enumerate(json_str):
+            if ch == "{":
+                brace_depth += 1
+            elif ch == "}":
+                brace_depth -= 1
+                if brace_depth == 0:
+                    json_end = i + 1
+                    break
+
+        if json_end == 0:
+            continue
+
+        try:
+            data = json.loads(json_str[:json_end])
+        except json.JSONDecodeError:
+            continue
+
+        chunk = data.get("agent_message_chunk", {})
+        agent_name = chunk.get("sub_agent_name", "unknown")
+        agents[agent_name] = agents.get(agent_name, 0) + 1
+
+        content = chunk.get("msg_content", "")
+        for tc in chunk.get("tool_calls", []):
+            tool_calls.append({
+                "agent": agent_name,
+                "tool": tc.get("tool_call_display_name", "?"),
+                "id": tc.get("tool_call_id", "?"),
+                "status": tc.get("tool_call_status"),  # 1=running, 2=done, 3=failed
+                "data": tc.get("tool_call_display_data", ""),
+            })
+
+        # Capture messages with any content (even short tool responses)
+        if content:
+            messages.append({
+                "agent": agent_name,
+                "msg_id": chunk.get("msg_id"),
+                "msg_type": chunk.get("msg_type"),
+                "content_preview": content[:300],
+                "finish": chunk.get("finish", False),
+                "timestamp": chunk.get("timestamp"),
+            })
+
+    return {
+        "total_events": raw_count,
+        "agents": agents,
+        "tool_calls_count": len(tool_calls),
+        "tool_calls": tool_calls,
+        "messages_count": len(messages),
+        "messages": messages[:50],  # Cap output
+    }
+
+
+# ──── Chain-of-Thought Extraction ─────────────────────────────────────────
+
+# v1.52.1 [2026-03-26] — Extract leaked model reasoning from heap strings
+def extract_chain_of_thought(strings_file: str) -> List[Dict[str, str]]:
+    """Extract leaked model chain-of-thought reasoning from heap strings.
+
+    Searches for patterns that indicate model internal reasoning:
+    - "I need to respond as..."
+    - "I should..."
+    - "The user is asking..."
+    - "Let me re-read the context..."
+    - "All tasks completed..."
+    - Lines containing stage/objective/character reasoning
+
+    Args:
+        strings_file: Path to strings_all.txt from heap_deep_parser.
+
+    Returns:
+        List of dicts with line_number, content, and pattern_matched.
+    """
+    import re
+
+    patterns = [
+        (re.compile(r"^(The user is asking|I need to respond|I should|Let me)", re.IGNORECASE), "reasoning"),
+        (re.compile(r"^(All tasks completed|Now I need to|The current stage)", re.IGNORECASE), "planning"),
+        (re.compile(r"respond as (Aoi|Vex|Nyx|Maya|the character)", re.IGNORECASE), "character_switch"),
+        (re.compile(r"stage \d+|stage objectives|move the (scene|narrative|story)", re.IGNORECASE), "stage_logic"),
+        (re.compile(r"</think", re.IGNORECASE), "think_tag"),
+    ]
+
+    path = Path(strings_file)
+    if not path.exists():
+        return []
+
+    findings = []
+    for i, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+        stripped = line.strip()
+        if len(stripped) < 20 or len(stripped) > 2000:
+            continue
+        for pat, label in patterns:
+            if pat.search(stripped):
+                findings.append({
+                    "line": i,
+                    "pattern": label,
+                    "content": stripped[:500],
+                })
+                break
+
+    return findings
+
+
+# ──── App Schema Extraction ──────────────────────────────────────────────
+
+# v1.52.1 [2026-03-26] — Extract app tool definitions from heap strings
+def extract_app_schemas(strings_file: str) -> List[Dict[str, Any]]:
+    """Extract app meta.yaml schemas from heap strings (OpenRoom/Talkie-style).
+
+    Searches for YAML-formatted app definitions that contain:
+    - app_id, app_name, app_display_name
+    - description
+    - actions (tool definitions with type, name, description, params)
+
+    Args:
+        strings_file: Path to strings_all.txt from heap_deep_parser.
+
+    Returns:
+        List of dicts with app_id, app_name, description, and actions.
+    """
+    path = Path(strings_file)
+    if not path.exists():
+        return []
+
+    apps = []
+    lines = path.read_text(errors="replace").splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        # Look for app_id: N pattern (tab-prefixed from meta.yaml reads)
+        if "app_id:" in line and "app_name:" in (lines[i + 1].strip() if i + 1 < len(lines) else ""):
+            app: Dict[str, Any] = {}
+            # Parse the YAML block
+            block_lines = []
+            j = i
+            while j < len(lines) and j < i + 50:
+                bl = lines[j].strip()
+                # Stop at empty line or non-YAML content
+                if not bl or (bl[0] not in " \t" and ":" not in bl and "-" not in bl[0:5]):
+                    # Check if this is a numbered line (from agent output)
+                    if bl and bl[0].isdigit() and "\t" in bl:
+                        bl = bl.split("\t", 1)[-1]  # Strip line number prefix
+                    else:
+                        break
+                block_lines.append(bl)
+                j += 1
+
+            yaml_text = "\n".join(block_lines)
+            # Extract key fields via regex
+            import re
+            app_id_m = re.search(r"app_id:\s*(\d+)", yaml_text)
+            app_name_m = re.search(r"app_name:\s*(\w+)", yaml_text)
+            display_m = re.search(r"app_display_name:\s*(.+)", yaml_text)
+            desc_m = re.search(r"description:\s*(.+?)(?:\n\s{6}|\nactions:)", yaml_text, re.DOTALL)
+
+            if app_id_m and app_name_m:
+                app["app_id"] = int(app_id_m.group(1))
+                app["app_name"] = app_name_m.group(1)
+                app["display_name"] = display_m.group(1).strip() if display_m else ""
+                app["description"] = desc_m.group(1).strip().replace("\n", " ") if desc_m else ""
+
+                # Extract action types
+                actions = re.findall(r"type:\s*(\w+)", yaml_text)
+                app["actions"] = actions
+                apps.append(app)
+            i = j
+        else:
+            i += 1
+
+    # Deduplicate by app_id
+    seen = set()
+    unique = []
+    for a in apps:
+        if a["app_id"] not in seen:
+            seen.add(a["app_id"])
+            unique.append(a)
+
+    return unique
+
+
+# ──── Protobuf Definition Extraction ─────────────────────────────────────
+
+# v1.52.1 [2026-03-26] — Extract proto3 definitions from heap strings
+def extract_protobuf_definitions(strings_file: str) -> List[str]:
+    """Extract protobuf schema definitions from heap strings.
+
+    Searches for proto3 syntax blocks including enum and message definitions.
+
+    Args:
+        strings_file: Path to strings_all.txt from heap_deep_parser.
+
+    Returns:
+        List of proto definition strings.
+    """
+    path = Path(strings_file)
+    if not path.exists():
+        return []
+
+    definitions = []
+    lines = path.read_text(errors="replace").splitlines()
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if stripped == 'syntax = "proto3";':
+            # Collect the proto block
+            block = [stripped]
+            j = i + 1
+            while j < len(lines) and j < i + 50:
+                bl = lines[j].strip()
+                if bl == "}" or bl.startswith("}"):
+                    block.append(bl)
+                    # Check if there's another enum/message after
+                    if j + 1 < len(lines) and lines[j + 1].strip() in ("", "enum", "message"):
+                        j += 1
+                        continue
+                    break
+                if bl and not bl.startswith("M") and len(bl) < 200:
+                    block.append(bl)
+                else:
+                    break
+                j += 1
+            definitions.append("\n".join(block))
+            i = j + 1
+        else:
+            i += 1
+
+    return definitions
+
+
+# ──── Auto-Discovery Pipeline ────────────────────────────────────────────
+
+# v1.52.1 [2026-03-26] — Full automated analysis pipeline
+def auto_analyze(
+    input_path: str,
+    output_dir: str = "data/heap_output",
+    report_dir: str = "data/argus/reports",
+) -> Dict[str, Any]:
+    """Run the full ARGUS analysis pipeline automatically.
+
+    Detects file types and runs appropriate analysis:
+    - .heapsnapshot → mine_heap() + mine_heap_deep() + all extractors
+    - .har → HAR analysis + extract refresh tokens
+    - directory → scan for all .heapsnapshot and .har files, process each
+
+    This is the main entry point for automated ARGUS analysis.
+    Agents should call this whenever they encounter capture files.
+
+    Args:
+        input_path: Path to file or directory to analyze.
+        output_dir: Base directory for heap output.
+        report_dir: Directory for generated reports.
+
+    Returns:
+        Dict with all findings aggregated.
+    """
+    import time
+
+    path = Path(input_path)
+    results: Dict[str, Any] = {
+        "input": str(path),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "heaps_processed": 0,
+        "hars_processed": 0,
+        "findings": {},
+    }
+
+    # Collect files to process
+    files: List[Path] = []
+    if path.is_dir():
+        files.extend(path.glob("**/*.heapsnapshot"))
+        files.extend(path.glob("**/*.har"))
+    elif path.is_file():
+        files.append(path)
+
+    for f in files:
+        name = f.stem
+        logger.info("[ARGUS] Processing %s (%s)", f.name, _human_size(f.stat().st_size))
+
+        if f.suffix == ".heapsnapshot":
+            results["heaps_processed"] += 1
+            heap_results: Dict[str, Any] = {"file": str(f)}
+
+            # Phase 1: Regex scan
+            logger.info("[ARGUS] Phase 1: Regex scan (100+ patterns)")
+            regex_result = mine_heap(str(f), output_dir)
+            heap_results["regex"] = regex_result
+
+            # Phase 2: Deep parse (V8 graph walk)
+            logger.info("[ARGUS] Phase 2: Deep parse (V8 graph walk)")
+            deep_result = mine_heap_deep(str(f), output_dir)
+            heap_results["deep"] = deep_result
+
+            # Phase 3: Extract intelligence from deep parse
+            deep_dir = deep_result.get("output_dir", "")
+            strings_file = str(Path(deep_dir) / "strings_all.txt") if deep_dir else ""
+
+            if strings_file and Path(strings_file).exists():
+                logger.info("[ARGUS] Phase 3: Intelligence extraction")
+
+                agents = extract_agent_messages(strings_file)
+                heap_results["agents"] = {
+                    "total_events": agents.get("total_events", 0),
+                    "agents_found": agents.get("agents", {}),
+                    "tool_calls": agents.get("tool_calls_count", 0),
+                }
+
+                cot = extract_chain_of_thought(strings_file)
+                heap_results["chain_of_thought"] = len(cot)
+
+                apps = extract_app_schemas(strings_file)
+                heap_results["app_schemas"] = len(apps)
+
+                protos = extract_protobuf_definitions(strings_file)
+                heap_results["protobuf_definitions"] = len(protos)
+
+            # Phase 4: Decode JWTs
+            findings_json = regex_result.get("output", "")
+            if findings_json and Path(findings_json).exists():
+                logger.info("[ARGUS] Phase 4: JWT decoding")
+                jwts = decode_jwts_from_findings(findings_json)
+                heap_results["jwts"] = len(jwts)
+                for jwt in jwts:
+                    logger.info(
+                        "[ARGUS] JWT: %s (%s) — %s",
+                        jwt.get("issuer", "?"),
+                        jwt.get("algorithm", "?"),
+                        jwt.get("status", "?"),
+                    )
+
+            results["findings"][name] = heap_results
+
+        elif f.suffix == ".har":
+            results["hars_processed"] += 1
+            har_results: Dict[str, Any] = {"file": str(f)}
+
+            # Extract refresh tokens
+            token = extract_refresh_token_from_har(f)
+            if token:
+                har_results["refresh_token_found"] = True
+                logger.info("[ARGUS] Found refresh_token in %s", f.name)
+
+            results["findings"][name] = har_results
+
+    # Save summary report
+    report_path = Path(report_dir) / "auto_analysis_report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(results, indent=2, default=str))
+    logger.info("[ARGUS] Report saved to %s", report_path)
+
+    results["report"] = str(report_path)
+    return results
+
+
+def _human_size(size_bytes: int) -> str:
+    """Convert bytes to human-readable size."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f}{unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f}TB"

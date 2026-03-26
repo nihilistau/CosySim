@@ -1,6 +1,6 @@
 # CosySim Documentation Index
 
-> v1.52 — OpenRoom-Inspired Features + Three-Pillar Architecture, 1,010+ Skills.
+> v1.52.1 — OpenRoom-Inspired Features + Three-Pillar Architecture + ARGUS Recon Framework, 1,040+ Skills.
 
 ## Quick Reference
 
@@ -73,7 +73,10 @@ All targets defined in `engine/control_plane_registry.py`:
 | [Nexus](NEXUS.md) | Nexus KMS, NLM integration, smart query router, training flywheel |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, ServerController, LMLink federation, SSE streaming |
 | [ARGUS](ARGUS.md) | Browser automation, CDP, API surface discovery, RPC registry |
-| [ARGUS Methodology](ARGUS_METHODOLOGY.md) | 10 reusable recon techniques: bundle decompilation, flag injection, CDP scripting, WebSocket interception |
+| [ARGUS Methodology](ARGUS_METHODOLOGY.md) | 13 reusable recon techniques: heap mining, bundle decompilation, flag injection, CDP scripting, agent extraction |
+| [ARGUS Discovery Journal](ARGUS_DISCOVERY_JOURNAL.md) | Narrative of reverse-engineering Sesame AI + OpenRoom.ai — timeline, techniques born, insights |
+| [ARGUS: Sesame AI Report](ARGUS_SESAME_REPORT.md) | Complete intelligence: 53 API methods, WebRTC, Statsig, RLHF pipeline, security assessment |
+| [ARGUS: OpenRoom Report](ARGUS_OPENROOM_REPORT.md) | Complete intelligence: 5-brand mapping, multi-agent architecture, virtual OS, protobuf protocol |
 
 ## Infrastructure
 
