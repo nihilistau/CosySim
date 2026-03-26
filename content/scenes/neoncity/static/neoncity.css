@@ -162,11 +162,14 @@
 @keyframes nc-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 /* ── Dashboard Grid ──────────────────────────────────────────────────── */
+/* v1.52.1 [2026-03-26] — Override neon_base.css .neon-main flex-column
+   that was collapsing the 3-column grid into a single column */
 .nc-dash {
-  display: grid;
+  display: grid !important;
   grid-template-columns: 220px 1fr 240px;
   gap: 0;
   min-height: calc(100vh - 140px);
+  flex: 1;
 }
 
 /* ── Sidebars ────────────────────────────────────────────────────────── */
@@ -596,10 +599,21 @@
 .nc-side::-webkit-scrollbar-thumb, .nc-center::-webkit-scrollbar-thumb { background: var(--nc-border); border-radius: 2px; }
 
 /* ── Responsive ──────────────────────────────────────────────────────── */
+/* v1.52.1 [2026-03-26] — Lowered breakpoints to keep 3-col grid on
+   smaller viewports (NUC at 764px was collapsing to single column) */
 @media (max-width: 1100px) {
-  .nc-dash { grid-template-columns: 180px 1fr 200px; }
+  .nc-dash { grid-template-columns: 170px 1fr 190px; }
 }
-@media (max-width: 850px) {
+@media (max-width: 900px) {
+  .nc-dash { grid-template-columns: 150px 1fr 170px; }
+  .nc-side { padding: 6px; }
+}
+@media (max-width: 700px) {
+  .nc-dash { grid-template-columns: 140px 1fr; }
+  .nc-side--right { display: none; }
+  .nc-bottom { grid-template-columns: 1fr; }
+}
+@media (max-width: 500px) {
   .nc-dash { grid-template-columns: 1fr; }
   .nc-side--left, .nc-side--right { border: none; border-bottom: 1px solid var(--nc-border); }
   .nc-bottom { grid-template-columns: 1fr; }
