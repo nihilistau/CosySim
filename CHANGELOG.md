@@ -4,6 +4,42 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.57.0] — "GEMINI NATIVE" — 2026-03-26
+
+Full Gemini API integration: embeddings, File Search, structured output, context caching.
+
+### Gemini Embedding 2 Preview
+- Upgraded from deprecated `gemini-embedding-exp-03-07` to `gemini-embedding-2-preview`
+- ChromaDB native `GoogleGenerativeAiEmbeddingFunction` (replaces custom bridge)
+- Multimodal `embed_image()` for PNG/JPEG/GIF/WEBP via google.genai SDK
+- All 5 API keys confirmed working
+
+### Gemini File Search (Managed RAG)
+- `FileSearchClient` — create stores, upload docs, query with grounded citations
+- QueryRouter Tier 2.5 between vector search and FTS
+- Auto-distillation: every File Search answer stored in Nexus Q&A cache
+- `bootstrap_project_stores()` uploads 9 core docs
+
+### Structured Output
+- `generate_structured()` via google.genai SDK with JSON schema enforcement
+- 6 extraction schemas: QA_BATCH, TASK_DECOMPOSITION, KNOWLEDGE_ENTRY, AGENT_DECISION, GROUNDED_ANSWER
+- NLM Flywheel + QA Distiller upgraded to prefer structured output over regex
+- Knowledge Forge Q&A extraction uses structured output
+
+### Context Caching
+- `ContextCacheClient` — cache context.md + CLAUDE.md server-side
+- Copilot Bridge uses cached context for plan decomposition
+- Scheduler: `context-cache-refresh` task every 8h
+
+### System-Wide Integration
+- Scheduler: 91 tasks (+2: file-search-sync weekly, context-cache-refresh 8h)
+- Oracle: GEMINI SERVICES section (File Search stores + context cache status)
+- LMStudio Router: per-agent Nexus hit rate → route to smaller model
+- ARGUS: File Search API endpoints in recon config
+- Q&A cache relevance scoring (40% word overlap threshold)
+
+---
+
 ## [1.56.0] — "NEXUS v2" — 2026-03-26
 
 Full Nexus schema expansion, agent type system with registry-backed access control, unified KnowledgePipeline, LMStudio model health with Nexus routing hints, self-maintenance (freshness scoring, hash dedup), and Oracle metrics for Nexus/LMStudio.

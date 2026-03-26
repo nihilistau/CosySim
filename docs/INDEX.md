@@ -1,12 +1,12 @@
 # CosySim Documentation Index
 
-> v1.56.0 — Nexus v1.5.0, Agent Registry, KnowledgePipeline, Three-Pillar Architecture + ARGUS Recon Framework, 1,040+ Skills.
+> v1.57.0 — Gemini Native (File Search, structured output, context caching), 7-tier query pipeline, 91 scheduler tasks, Three-Pillar Architecture + ARGUS Recon Framework, 1,040+ Skills.
 
 ## Quick Reference
 
 | Metric | Value |
 |--------|-------|
-| Version | v1.56.0 [2026-03-26] |
+| Version | v1.57.0 [2026-03-26] |
 | Targets | 35 (18 game + 11 service + 6 creation) |
 | Skills | ~1,040 across 99 packs via @skill decorator |
 | Interceptors | 36 pipeline hooks in the agent governance layer |
@@ -71,9 +71,9 @@ All targets defined in `engine/control_plane_registry.py`:
 
 | Doc | Description |
 |-----|-------------|
-| [Nexus](NEXUS.md) | Nexus KMS v1.5.0, agent registry, KnowledgePipeline, 6-tier query router, NLM integration, training flywheel |
-| [Nexus System](NEXUS_SYSTEM.md) | Nexus internals, self-maintenance, governance, agent registry (planned) |
-| [Nexus API Reference](NEXUS_API_REFERENCE.md) | Complete Nexus REST API endpoint catalog (planned) |
+| [Nexus](NEXUS.md) | Nexus KMS v1.5.0, agent registry, KnowledgePipeline, 7-tier query router (+ Gemini File Search), NLM integration, training flywheel |
+| [Nexus System](NEXUS_SYSTEM.md) | Nexus internals, 7-tier query pipeline, Gemini integration, self-maintenance, governance, agent registry |
+| [Nexus API Reference](NEXUS_API_REFERENCE.md) | Complete Nexus REST API + Gemini File Search/structured output/context cache APIs |
 | [LMStudio](LMSTUDIO.md) | InferenceOrchestrator, ServerController, LMLink federation, SSE streaming |
 | [ARGUS](ARGUS.md) | Browser automation, CDP, API surface discovery, RPC registry |
 | [ARGUS Methodology](ARGUS_METHODOLOGY.md) | 13 reusable recon techniques: heap mining, bundle decompilation, flag injection, CDP scripting, agent extraction |

@@ -1,6 +1,6 @@
 # CosySim — Complete System Context
 
-> v1.56.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
+> v1.57.0 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
 >
 > Read this file to gain full context on architecture, conventions, systems, tools,
 > protocols, and workflows. After reading, you should be able to modify any part of
@@ -279,20 +279,22 @@ answer = nx.nlm_ask("Explain the faction system", notebook_id="...")
 nx.log_session(session_id="sess-1", project="CosySim", agent_id="claude")
 ```
 
-### 5.2 Query Router — 6-Tier Pipeline (`engine/nexus/query_router.py`)
+### 5.2 Query Router — 7-Tier Pipeline (`engine/nexus/query_router.py`)
 
 ```python
 from engine.nexus.query_router import get_query_router
 
 router = get_query_router()
 result = router.query("How does the economy work?")
-# result.answer, result.source ("cache"|"vector"|"fts"|"nexus"|"nlm"|"llm"),
+# result.answer, result.source ("cache"|"vector"|"file_search"|"fts"|"nexus"|"nlm"|"llm"),
 # result.confidence (0.0-1.0), result.tokens_saved
 ```
 
-**Tiers:** Q&A Cache (0.90) → Vector Search (0.82) → FTS (0.75) → Nexus Ask → NLM → LLM Fallback (0.60). Each tier auto-stores results for future cache hits.
+**Tiers:** Q&A Cache (0.90) → Vector Search (0.82) → **Gemini File Search (0.85)** → FTS (0.75) → Nexus Ask → NLM → LLM Fallback (0.60). Each tier auto-stores results for future cache hits.
 
-**Self-Improving Loop:** Tiers 3/5/6 auto-call `_store_qa()` to promote answers to Tier 1 cache. Over time, cache hit rate compounds — fewer expensive LLM/NLM calls. Training flywheel captures Q&A pairs for local model fine-tuning.
+**Tier 2.5 — Gemini File Search:** Uses `FileSearchClient` to query Gemini managed RAG stores with grounded citations. Sits between Vector Search and FTS. Answers auto-distilled into Nexus Q&A cache.
+
+**Self-Improving Loop:** Tiers 3/5/6/7 auto-call `_store_qa()` to promote answers to Tier 1 cache. Over time, cache hit rate compounds — fewer expensive LLM/NLM calls. Training flywheel captures Q&A pairs for local model fine-tuning.
 
 ### 5.2b Governance & Agent Permissions (`engine/nexus/governance_rules.py`)
 
@@ -310,7 +312,7 @@ Every mutation operation on `NexusClient` calls `_check_governance()` before pro
 
 ### 5.2c Scheduler Daemon (`engine/nexus/scheduler_daemon.py`)
 
-89 registered autonomous maintenance tasks:
+91 registered autonomous maintenance tasks:
 
 ```python
 from engine.nexus.scheduler_daemon import get_scheduler_daemon
@@ -319,7 +321,7 @@ daemon.run_due()       # Execute all overdue tasks
 daemon.get_state()     # Check last run times
 ```
 
-**Key recurring tasks:** nexus-maintenance (daily), nexus-dedup (weekly), knowledge-quality (weekly), training-sync (daily), qa-generation (daily), session-distillation (daily), copilot-rules-refresh (weekly), control-notebook-flywheel (8h), operator-inbox-sync (15m).
+**Key recurring tasks:** nexus-maintenance (daily), nexus-dedup (weekly), knowledge-quality (weekly), training-sync (daily), qa-generation (daily), session-distillation (daily), copilot-rules-refresh (weekly), control-notebook-flywheel (8h), operator-inbox-sync (15m), file-search-sync (weekly), context-cache-refresh (8h).
 
 ### 5.2d Training Flywheel (`engine/nexus/training_flywheel.py`)
 
@@ -378,7 +380,42 @@ vectors = emb.embed_batch(["text1", "text2"])
 score = emb.cosine_similarity(vec_a, vec_b)
 ```
 
-**Providers:** Gemini Embedding 2 (primary, via AIStudio REST) → LMStudio (fallback, local). Circuit breaker per provider (5 transient failures → 300s cooldown).
+**Providers:** Gemini Embedding 2 Preview (primary, via google.genai SDK, ChromaDB native `GoogleGenerativeAiEmbeddingFunction`) → LMStudio (fallback, local). Circuit breaker per provider (5 transient failures → 300s cooldown). Multimodal: `embed_image()` supports PNG/JPEG/GIF/WEBP.
+
+### 5.4b Gemini APIs (`engine/nexus/gemini/`)
+
+**File Search (Managed RAG):**
+```python
+from engine.nexus.gemini.file_search import get_file_search_client
+
+fs = get_file_search_client()
+store = fs.create_store("project-docs")
+fs.upload_document(store.id, "path/to/doc.md")
+results = fs.query(store.id, "How does the query router work?")
+# Returns grounded citations with source references
+```
+QueryRouter Tier 2.5 — sits between Vector Search and FTS. Auto-distills answers into Q&A cache. `bootstrap_project_stores()` uploads 9 core docs.
+
+**Structured Output:**
+```python
+from engine.nexus.gemini.structured_output import generate_structured
+
+result = generate_structured(
+    prompt="Extract Q&A pairs from this text...",
+    schema="QA_BATCH",  # or TASK_DECOMPOSITION, KNOWLEDGE_ENTRY, AGENT_DECISION, GROUNDED_ANSWER
+)
+```
+6 extraction schemas. Used by NLM Flywheel, QA Distiller, and Knowledge Forge.
+
+**Context Caching:**
+```python
+from engine.nexus.gemini.context_cache import get_context_cache
+
+cache = get_context_cache()
+cache.cache_files(["context.md", "CLAUDE.md"])  # Server-side caching
+# Copilot Bridge uses cached context for plan decomposition
+# Scheduler: context-cache-refresh task every 8h
+```
 
 ### 5.5 Virtual Filesystem (`engine/nexus/filesystem.py`)
 
@@ -878,10 +915,12 @@ get_lmlink_manager()     # LMLinkManager — multi-instance federation
 
 # Knowledge
 get_nexus_client()        # NexusClient — Nexus REST API
-get_query_router()        # NexusQueryRouter — 6-tier query pipeline
-get_embedding_service()   # EmbeddingService — Gemini/LMStudio embeddings
+get_query_router()        # NexusQueryRouter — 7-tier query pipeline (+ Gemini File Search)
+get_embedding_service()   # EmbeddingService — Gemini Embedding 2 / LMStudio
 get_filesystem()          # NexusFilesystem — virtual FS over Nexus
 get_knowledge_pipeline()  # KnowledgePipeline — ingest → validate → dedup → store → embed → Q&A
+get_file_search_client()  # FileSearchClient — Gemini managed RAG (create stores, upload, query)
+get_context_cache()       # ContextCacheClient — Gemini server-side context caching
 
 # Characters & world
 get_character_registry()  # CharacterRegistry — profiles, states, skills

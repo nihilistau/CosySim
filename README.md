@@ -1,12 +1,12 @@
 # CosySim
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.56](https://img.shields.io/badge/version-1.56-blueviolet.svg)]() [![Targets: 35](https://img.shields.io/badge/targets-35-6f42c1.svg)]() [![Tests: 417 files](https://img.shields.io/badge/tests-417_files-brightgreen.svg)]() [![Skills: 1040+](https://img.shields.io/badge/skills-1%2C040%2B-0a7f5a.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/) [![Version: 1.57](https://img.shields.io/badge/version-1.57-blueviolet.svg)]() [![Targets: 35](https://img.shields.io/badge/targets-35-6f42c1.svg)]() [![Tests: 417 files](https://img.shields.io/badge/tests-417_files-brightgreen.svg)]() [![Skills: 1040+](https://img.shields.io/badge/skills-1%2C040%2B-0a7f5a.svg)]()
 
-> v1.56 — Nexus v2 — Local-first multi-scene AI simulation framework
+> v1.57 — Gemini Native — Local-first multi-scene AI simulation framework
 
 ## Overview
 
-CosySim is a self-improving AI simulation framework where **35 interactive targets** (18 game scenes, 11 services, 6 creation tools) run on local Flask/Socket.IO servers, powered by **LMStudio** local inference, **Nexus KMS** knowledge management, and **NotebookLM** research distillation. Agents inhabit scenes, learn from interactions, and feed data back into the training pipeline — a closed loop that gets smarter over time. The **Nexus agent registry** with tiered access control governs 8 agent types, **Nexus-first inference** checks the knowledge cache before GPU, and the **KnowledgePipeline** auto-generates Q&A pairs for continuous self-improvement.
+CosySim is a self-improving AI simulation framework where **35 interactive targets** (18 game scenes, 11 services, 6 creation tools) run on local Flask/Socket.IO servers, powered by **LMStudio** local inference, **Nexus KMS** knowledge management, **NotebookLM** research distillation, and **Gemini Native APIs** (File Search, structured output, context caching, multimodal embeddings). Agents inhabit scenes, learn from interactions, and feed data back into the training pipeline — a closed loop that gets smarter over time. The **7-tier query pipeline** (with Gemini File Search at Tier 2.5) routes knowledge retrieval through confidence-scored tiers, the **Nexus agent registry** with tiered access control governs 8 agent types, and the **KnowledgePipeline** auto-generates Q&A pairs for continuous self-improvement.
 
 The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **character neurochemistry**, **cyberspace hacking**, a **living world engine** (markets, NPC routines, faction AI), **multiplayer foundation**, an **in-game news system**, a **virtual desktop shell (NeonOS)**, **stage-based narrative engine**, **danmaku spectator mode**, a **6-stage character creation wizard**, a **Signal Desktop app** (email, files, music), and an **Oracle persistent AI companion** — all driven by the MCP skill pipeline with ~1,040 skills across 99 packs.
 
@@ -14,14 +14,15 @@ The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **cha
 
 | Metric | Value |
 |--------|-------|
-| Version | **v1.56** — Nexus v2 |
+| Version | **v1.57** — Gemini Native |
 | Targets | **35** (18 game + 11 service + 6 creation) |
 | Skills | **~1,040** across **99 packs** |
 | Interceptors | **36** agent pipeline hooks |
 | MCP tools | **43** domain modules |
 | Tests | **417** test files |
 | Agent types | **8** (copilot, claude_code, scene_agent, scheduler, training, observer, player, system) |
-| Scheduler tasks | **89** autonomous maintenance jobs |
+| Scheduler tasks | **91** autonomous maintenance jobs |
+| Gemini APIs | File Search (managed RAG), structured output, context caching, multimodal embeddings |
 | Nexus tables | **35** (knowledge, agent_registry, access_log, subscriptions, ...) |
 | Streamlit apps | **4** (dashboard, admin, assets, creator) |
 | Game systems | neurochemistry · cyberspace · territory · market · factions · multiplayer · news · narrative · danmaku · virtual FS · faction politics · heist planning · group chat · Signal Desktop · Oracle companion |
@@ -60,17 +61,17 @@ The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **cha
 │                         Engine Layer                                 │
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────┐ │
 │  │ LMStudio     │ │ Nexus KMS    │ │ World Sim    │ │ Training   │ │
-│  │ ServerCtrl   │ │ QueryRouter  │ │ PlayerState  │ │ Flywheel   │ │
-│  │ LMLink Fed   │ │ NLM Chain    │ │ EventCascade │ │ Benchmark  │ │
+│  │ ServerCtrl   │ │ 7-Tier Query │ │ PlayerState  │ │ Flywheel   │ │
+│  │ LMLink Fed   │ │ File Search  │ │ EventCascade │ │ Benchmark  │ │
 │  │ TaskQueue    │ │ Smart Q&A    │ │ Economy      │ │ DataCollect│ │
 │  └──────────────┘ └──────────────┘ └──────────────┘ └────────────┘ │
-└────────┬──────────────────┬───────────────────┬──────────────────────┘
-         │                  │                   │
-┌────────▼────────┐ ┌───────▼─────────┐ ┌───────▼──────────────────────┐
-│ LMStudio :1234  │ │ Nexus KMS :8700 │ │ NotebookLM (CDP/ARGUS)      │
-│ CUDA · LMLink   │ │ FTS5 · Q&A      │ │ Research · Distillation     │
-│ Vision · Coding  │ │ Rules · Memory  │ │ RPC Registry · Pro tier     │
-└─────────────────┘ └─────────────────┘ └──────────────────────────────┘
+└────────┬──────────────────┬──────────────┬──────────────────────────┘
+         │                  │              │
+┌────────▼────────┐ ┌───────▼───────┐ ┌───▼────────────────────────────┐
+│ LMStudio :1234  │ │ Nexus :8700   │ │ Gemini APIs                    │
+│ CUDA · LMLink   │ │ FTS5 · Q&A    │ │ File Search · Structured Out   │
+│ Vision · Coding  │ │ Rules · Memory│ │ Context Cache · Embeddings     │
+└─────────────────┘ └───────────────┘ └────────────────────────────────┘
 ```
 
 ## Game Scenes (18)
@@ -99,6 +100,7 @@ The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **cha
 |---------|-----:|---------|
 | LMStudio | 1234 | Local LLM inference (v1 API, CUDA, bearer auth) |
 | Nexus KMS | 8700 | Knowledge management REST API (auto-managed) |
+| Gemini APIs | cloud | File Search, structured output, context caching, embeddings (API key) |
 | ComfyUI | 8188 | Image/video generation (optional) |
 | Qwen3 TTS | 8600 | Text-to-speech server |
 
