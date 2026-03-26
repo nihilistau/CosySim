@@ -519,7 +519,7 @@ class EmbeddingService:
     ) -> None:
         cfg = get_config()
         self._model = model or cfg.get(
-            "nexus.embeddings.model", "gemini-embedding-exp-03-07"
+            "nexus.embeddings.model", "gemini-embedding-2-preview"
         )
         self._dimensions = dimensions or cfg.get(
             "nexus.embeddings.dimensions", 768
