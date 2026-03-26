@@ -292,6 +292,43 @@ result = router.query("How does the economy work?")
 
 **Tiers:** Q&A Cache (0.90) → Vector Search (0.82) → FTS (0.75) → Nexus Ask → NLM → LLM Fallback (0.60). Each tier auto-stores results for future cache hits.
 
+**Self-Improving Loop:** Tiers 3/5/6 auto-call `_store_qa()` to promote answers to Tier 1 cache. Over time, cache hit rate compounds — fewer expensive LLM/NLM calls. Training flywheel captures Q&A pairs for local model fine-tuning.
+
+### 5.2b Governance & Agent Permissions (`engine/nexus/governance_rules.py`)
+
+Nexus enforces tiered access control based on agent identity:
+
+| Tier | Condition | Operations | Scope |
+|------|-----------|-----------|-------|
+| Read-Only | Agent < 1B params | `read` | All entries |
+| Worker | 1B–10B params | `read`, `write` | Assigned files |
+| Expert | ≥10B params or Copilot | `read`, `write`, `delete`, `admin` | Full |
+
+**Trusted internal actors** (resolve to Expert level): `copilot`, `nexus`, `session`, `research`, `content`, `workflow`, `benchmark`, `api`, `system`, `filesystem`, `oracle`, `scheduler`, `training`.
+
+Every mutation operation on `NexusClient` calls `_check_governance()` before proceeding. Denied operations raise `PermissionError`.
+
+### 5.2c Scheduler Daemon (`engine/nexus/scheduler_daemon.py`)
+
+32 registered autonomous maintenance tasks:
+
+```python
+from engine.nexus.scheduler_daemon import get_scheduler_daemon
+daemon = get_scheduler_daemon()
+daemon.run_due()       # Execute all overdue tasks
+daemon.get_state()     # Check last run times
+```
+
+**Key recurring tasks:** nexus-maintenance (daily), nexus-dedup (weekly), knowledge-quality (weekly), training-sync (daily), qa-generation (daily), session-distillation (daily), copilot-rules-refresh (weekly), control-notebook-flywheel (8h), operator-inbox-sync (15m).
+
+### 5.2d Training Flywheel (`engine/nexus/training_flywheel.py`)
+
+Collects training examples from: task completions, Q&A pairs, NLM conversations, routing decisions, preference pairs. Exports as JSONL/ShareGPT/DPO for local model fine-tuning. Quality scored 0.0-1.0 with dedup by content hash.
+
+### 5.2e Copilot Bridge (`engine/nexus/copilot_bridge.py`)
+
+Bidirectional intelligence bridge: Copilot → Nexus (store sessions, decisions, snippets) and Nexus → Copilot (pre-plan guidance, context primers, learned preferences). Session logger captures all conversation turns, checkpoints, and decisions. Context packets enable seamless resume across sessions.
+
 ### 5.3 Embedding Service (`engine/nexus/embedding_service.py`)
 
 ```python
