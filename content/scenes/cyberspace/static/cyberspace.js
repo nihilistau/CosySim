@@ -58,7 +58,7 @@ class CyberspaceController {
     this._setupSocket();
     this._bindDom();
     this._bindKeyboard();
-    console.log('[CYBERSPACE] Controller initialized');
+    console.info('[Cyberspace] Controller initialized');
   }
 
   // ── Socket.IO ──────────────────────────────────────────────────────
@@ -69,12 +69,12 @@ class CyberspaceController {
     this.socket = io('', { transports: ['websocket', 'polling'] });
 
     this.socket.on('connect', () => {
-      console.log('[CYBERSPACE] Socket connected');
+      console.info('[Cyberspace] Socket connected');
     });
 
     // Full scene state (base HUD)
     this.socket.on('scene_state', (data) => {
-      console.log('[CYBERSPACE] Scene state:', data);
+      console.info('[Cyberspace] Scene state:', data);
     });
 
     // Cyberspace game state — main state push

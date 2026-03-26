@@ -70,6 +70,7 @@ Version: v1.49.3 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.54.0 [2026-03-26] — Validate skill entry before auto-skill invocation
     v1.49.3 [2026-03-22] — Structured logging context: [CommsFramework]/[AgentGovernor]
                             prefixes, operation= and entity= context on all log calls
     v1.49.1 [2026-03-22] — Audit: upgrade error swallowing from debug→warning,
@@ -598,6 +599,12 @@ class AgentGovernor:
 
         # ── 2. Execute AUTO skills ───────────────────────────────────
         for skill_entry in manifest.auto_skills():
+            # v1.54.0 [2026-03-26] — Validate skill entry before invocation
+            if not hasattr(skill_entry, "name") or not skill_entry.name:
+                logger.warning(
+                    "[AgentGovernor] Invalid auto skill entry skipped (operation=auto_skill)"
+                )
+                continue
             try:
                 result = _invoke_mcp_tool(skill_entry.name, skill_entry.args_template, ctx)
                 ctx["auto_results"][skill_entry.name] = result

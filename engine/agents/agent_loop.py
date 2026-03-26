@@ -21,6 +21,7 @@ Version: v1.49.3 [2026-03-22]
 Author:  CosySim Team
 
 Change Log:
+    v1.54.0 [2026-03-26] — Upgrade unregister_character debug→warning for MCP leave_scene failure
     v1.49.3 [2026-03-22] — Structured logging context: [AgentLoop] prefix,
                             operation= and entity= context on all log calls
     v1.49.1 [2026-03-22] — Audit: type guard for batch responses, upgrade error
@@ -133,8 +134,9 @@ class AgentLoop:
         try:
             from engine.mcp.framework import get_framework
             get_framework().get_character(character_id).leave_scene()
-        except Exception:
-            logger.debug("AgentLoop.unregister_character MCP leave_scene failed for %s", character_id, exc_info=True)
+        except Exception as exc:
+            # v1.54.0 [2026-03-26] — Upgrade debug→warning for MCP leave_scene failure
+            logger.warning("[AgentLoop] MCP leave_scene failed (operation=unregister, character=%s): %s", character_id, exc)
 
     def set_action_callback(self, fn: Callable) -> None:
         """Set a callback ``fn(character_id, action_dict)`` fired after every action."""

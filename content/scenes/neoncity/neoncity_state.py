@@ -4,6 +4,11 @@ NeonCity — Cyberpunk Strategy Board Game State Engine
 
 Procedural hex grid with Glitch Storm shrink mechanic, prefab locations,
 turn-based movement/action, and MCP GameState integration.
+
+Version: v1.54.0 [2026-03-26]
+
+Change Log:
+    v1.54.0 [2026-03-26] — Grid bounds validation helper + guards in move_player and ai_turn
 """
 from __future__ import annotations
 
@@ -307,7 +312,11 @@ class NeonCityGameState:
             return {"error": "Invalid player"}
         if "stunned" in p.status_effects:
             return {"error": "Player is stunned"}
-        if tx < 0 or ty < 0 or tx >= self.grid_size or ty >= self.grid_size:
+        # v1.54.0 [2026-03-26] — Bounds validation via helper
+        try:
+            self._validate_position(tx, ty)
+        except ValueError as exc:
+            logger.warning("[NeonCity] Move rejected (operation=move, player=%s): %s", player_id, exc)
             return {"error": "Out of bounds"}
         cell = self.grid[ty][tx]
         if cell.terrain == "building":
@@ -461,8 +470,14 @@ class NeonCityGameState:
         dx = 1 if self.target_x > p.x else (-1 if self.target_x < p.x else 0)
         dy = 1 if self.target_y > p.y else (-1 if self.target_y < p.y else 0)
         nx, ny = p.x + dx, p.y + dy
+        # v1.54.0 [2026-03-26] — Clamp and validate AI move target
         nx = max(0, min(self.grid_size - 1, nx))
         ny = max(0, min(self.grid_size - 1, ny))
+        try:
+            self._validate_position(nx, ny)
+        except ValueError:
+            logger.warning("[NeonCity] AI move out of bounds (operation=ai_turn, player=%s, pos=(%d,%d))", player_id, nx, ny)
+            return actions
         if self.grid[ny][nx].terrain != "building":
             result = self.move_player(player_id, nx, ny)
             actions.append({"action": "move", **result})
@@ -480,6 +495,14 @@ class NeonCityGameState:
             actions.append({"action": "hack", **result})
 
         return actions
+
+    # v1.54.0 [2026-03-26] — Grid bounds validation helper
+    def _validate_position(self, x: int, y: int) -> None:
+        """Raise ValueError if (x, y) is outside the hex grid."""
+        if not (0 <= x < self.grid_size and 0 <= y < self.grid_size):
+            raise ValueError(
+                f"Position ({x}, {y}) out of bounds (grid size {self.grid_size})"
+            )
 
     def _get_player(self, player_id: str) -> Optional[NeonPlayer]:
         return next((p for p in self.players if p.id == player_id), None)

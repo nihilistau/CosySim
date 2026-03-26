@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 
 try:
     from engine.characters.player_profile import get_player_profile as _get_player_profile
-except Exception:  # pragma: no cover
+except Exception as _exc:  # pragma: no cover
+    # v1.54.0 [2026-03-26] — Warn when PlayerProfile is unavailable instead of silent swallow
+    logger.warning("[Crew] PlayerProfile unavailable (operation=import): %s", _exc)
     _get_player_profile = None  # type: ignore[assignment]
 
 

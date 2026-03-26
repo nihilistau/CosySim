@@ -3,6 +3,7 @@
 Version: v1.50.2 [2026-03-24]
 
 Change Log:
+    v1.54.0 [2026-03-26] — Null guards on client in tier methods, defensive QueryRouter
     v1.50.2 [2026-03-24] — Add vector store feature flag guard, provenance logging
 
 Routes all queries through a confidence-scored pipeline:
@@ -287,6 +288,10 @@ class NexusQueryRouter:
 
     def _try_qa_cache(self, client, question: str) -> Optional[QueryResult]:
         """Tier 1: Check the Q&A cache for a matching answer."""
+        # v1.54.0 [2026-03-26] — Null guard on client
+        if client is None:
+            logger.debug("[QueryRouter] Nexus client unavailable, skipping cache tier")
+            return None
         try:
             qa_results = client.find_qa(question, limit=3)
             if qa_results:
@@ -370,6 +375,10 @@ class NexusQueryRouter:
     def _try_fts_search(self, client, question: str,
                         category: str = "") -> Optional[QueryResult]:
         """Tier 3: Full-text search across knowledge entries."""
+        # v1.54.0 [2026-03-26] — Null guard on client
+        if client is None:
+            logger.debug("[QueryRouter] Nexus client unavailable, skipping FTS tier")
+            return None
         try:
             results = client.search(question, limit=5)
             if not results:
@@ -421,7 +430,11 @@ class NexusQueryRouter:
 
     def _try_nexus_ask(self, client, question: str,
                        category: str = "", depth: str = "auto") -> Optional[QueryResult]:
-        """Tier 3: Use Nexus server-side smart Q&A / NotebookLM pipeline."""
+        """Tier 4: Use Nexus server-side smart Q&A / NotebookLM pipeline."""
+        # v1.54.0 [2026-03-26] — Null guard on client
+        if client is None:
+            logger.debug("[QueryRouter] Nexus client unavailable, skipping Nexus ask tier")
+            return None
         try:
             ask_depth = depth if depth in {"shallow", "auto", "deep"} else "auto"
             result = client.ask(question, depth=ask_depth, category=category)
@@ -449,7 +462,11 @@ class NexusQueryRouter:
         return None
 
     def _try_direct_nlm(self, client, question: str) -> Optional[QueryResult]:
-        """Tier 4: Ask NotebookLM directly through the unified backend."""
+        """Tier 5: Ask NotebookLM directly through the unified backend."""
+        # v1.54.0 [2026-03-26] — Null guard on client
+        if client is None:
+            logger.debug("[QueryRouter] Nexus client unavailable, skipping NLM tier")
+            return None
         if not self._nlm_backend_available(client):
             return None
 
