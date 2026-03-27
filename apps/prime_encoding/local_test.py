@@ -51,14 +51,18 @@ def make_cfg(quick: bool = False, variants: list = None) -> dict:
         batch, grad_accum = 1, 16
 
     all_variants = [
-        "sinusoidal",  # baseline
-        "rope",        # baseline
-        "zeta",        # primary candidate
-        "hybrid_90z",  # best local PPL
-        "hybrid_50z",  # comparison
-        "prime_05",    # pure prime
-        "random_irr",  # CRITICAL CONTROL
-        "learned",     # CRITICAL CONTROL
+        "sinusoidal",       # additive baseline
+        "rope",             # rotary baseline
+        "zeta",             # primary candidate
+        "hybrid_90z",       # best local PPL (90% zeta / 10% prime)
+        "hybrid_50z",       # comparison
+        "prime_05",         # pure prime
+        "random_irr",       # CRITICAL CONTROL — falsification test
+        "random_irr_matched", # magnitude-matched random (isolates spacing vs magnitude)
+        "learned",          # can the model discover zeta-like spacing?
+        "zeta_rope",        # rotary with zeta frequencies
+        "random_irr_rope",  # rotary control
+        "position_shuffle", # ablation: does PE structure matter at all?
     ]
 
     return {
@@ -170,9 +174,36 @@ def freq_spec(pe_name: str, d_model: int) -> dict:
         p = torch.tensor(get_primes(half), dtype=torch.float32)
         freqs = p.sqrt().frac()
         return {"type": "additive", "learnable": False, "freqs": freqs / freqs.max()}
+    elif pe_name == "random_irr_matched":
+        # Magnitude-matched random: same numerical range as zeta, random spacing
+        # Isolates whether advantage is from zeta structure or just lower magnitudes
+        zf = get_zeta_freqs(half)
+        torch.manual_seed(12345)
+        freqs = torch.rand(half) * (zf.max() - zf.min()) + zf.min()
+        return {"type": "additive", "learnable": False, "freqs": freqs.sort(descending=True).values}
     elif pe_name == "learned":
         f = 1.0 / (10000 ** (torch.arange(half).float() / half))
         return {"type": "additive", "learnable": True, "freqs": f}
+    # ── RoPE variants ──
+    elif pe_name == "zeta_rope":
+        zf = get_zeta_freqs(half // 2)
+        geo = 1.0 / (10000 ** (torch.arange(0, half // 2 * 2, 2).float() / (half // 2 * 2)))
+        scale = geo.mean() / zf[:len(geo)].mean()
+        freqs = (zf[:len(geo)] * scale)
+        return {"type": "rope", "learnable": False, "freqs": freqs}
+    elif pe_name == "random_irr_rope":
+        # Critical RoPE control: random irrational rotation frequencies
+        p = torch.tensor(get_primes(half // 2), dtype=torch.float32)
+        geo = 1.0 / (10000 ** (torch.arange(0, half // 2 * 2, 2).float() / (half // 2 * 2)))
+        rand_freqs = p.sqrt().frac()
+        scale = geo.mean() / rand_freqs.mean()
+        freqs = rand_freqs * scale
+        return {"type": "rope", "learnable": False, "freqs": freqs}
+    elif pe_name == "position_shuffle":
+        # Ablation: standard sinusoidal but positions are randomly permuted
+        # Tests whether PE structure matters at all, or just having *some* PE is enough
+        f = torch.exp(-torch.arange(0, half).float() * math.log(10000.0) / half)
+        return {"type": "additive", "learnable": False, "freqs": f, "shuffle": True}
     else:
         raise ValueError(f"Unknown PE: {pe_name}")
 
@@ -279,7 +310,8 @@ class PrimePEModel(nn.Module):
 
         self.embed      = nn.Embedding(cfg["vocab_size"], d)
         self.embed_drop = nn.Dropout(cfg["dropout"])
-        self.pe = AdditivePE(d, spec["freqs"], learnable=spec["learnable"]) \
+        self.shuffle_positions = spec.get("shuffle", False)
+        self.pe = AdditivePE(d, spec["freqs"], learnable=spec.get("learnable", False)) \
                   if spec["type"] == "additive" else None
 
         atype = spec["type"] if spec["type"] != "additive" else "standard"
@@ -310,7 +342,21 @@ class PrimePEModel(nn.Module):
     def forward(self, ids: torch.Tensor) -> torch.Tensor:
         d = self.embed.embedding_dim
         x = self.embed(ids) * math.sqrt(d)
-        if self.pe: x = self.pe(x)
+        if self.pe:
+            if self.shuffle_positions:
+                # Position shuffle ablation: get PE then permute positions
+                T = ids.shape[1]
+                perm = torch.randperm(T, device=ids.device)
+                if self.pe._cache is not None:
+                    pe = self.pe._cache[:T][perm].unsqueeze(0).to(x.dtype)
+                else:
+                    pos = torch.arange(T, device=ids.device).float().unsqueeze(1)
+                    phases = pos * self.pe.freqs.unsqueeze(0)
+                    pe = torch.cat([torch.sin(phases), torch.cos(phases)], dim=-1)
+                    pe = pe[perm].unsqueeze(0).to(x.dtype)
+                x = x + pe
+            else:
+                x = self.pe(x)
         x = self.embed_drop(x)
         for block in self.blocks:
             x = block(x)
@@ -453,8 +499,26 @@ def train_variant(pe_name: str, cfg: dict, train_loader, val_loader) -> dict:
 # ─── Section: Perplexity eval ─────────────────────────────────────────────────
 
 @torch.no_grad()
-def ppl_at_len(model, seq_len, cfg, ChunkDataset, n_batches=40):
-    ds = ChunkDataset("test", seq_len + 1)
+def ppl_at_len(model, seq_len, cfg, ChunkDataset_cls, n_batches=40):
+    """Evaluate perplexity at a specific context length."""
+    from datasets import load_dataset
+    from transformers import GPT2TokenizerFast
+    MAX_TOKENS = 1_000_000
+    raw = load_dataset("wikitext", "wikitext-103-raw-v1", split="test")
+    tok = GPT2TokenizerFast.from_pretrained("gpt2")
+    tok.pad_token = tok.eos_token
+    all_ids = []
+    for row in raw:
+        t = row["text"]
+        if t.strip():
+            all_ids.extend(tok.encode(t))
+            if len(all_ids) >= MAX_TOKENS:
+                break
+    ids = torch.tensor(all_ids[:MAX_TOKENS], dtype=torch.long)
+    sl = seq_len + 1
+    n = (len(ids) // sl) * sl
+    chunks = ids[:n].reshape(-1, sl)
+    ds = ChunkDataset_cls(chunks)
     loader = DataLoader(ds, batch_size=2, shuffle=False, drop_last=True)
     model.eval()
     losses = []
@@ -690,20 +754,96 @@ def main():
         with open(f"{cfg['results_dir']}/attn_dist.json", "w") as f:
             json.dump(dist_results, f, indent=2)
 
-    # ── Summary ───────────────────────────────────────────────────────────────
-    print("\n" + "═"*56)
-    print("SUMMARY")
-    print("═"*56)
-    print(f"{'PE':<14} {'PPL@512':<10} {'PPL@2K':<10} {'Δ%':<8} {'LitM@50%':<10}")
-    print("-"*52)
-    for pe in cfg["pe_variants"]:
-        p512 = ppl_results.get(pe, {}).get(512, float("nan"))
-        p2k  = ppl_results.get(pe, {}).get(2048, float("nan"))
-        delta = (p2k/p512 - 1)*100 if not math.isnan(p512) and p512 > 0 else float("nan")
-        mid  = litm_results.get(pe, {}).get(0.5, float("nan"))
-        print(f"{pe:<14} {p512:<10.1f} {p2k:<10.1f} {delta:<8.1f} {mid:<10.1%}")
+    # ── Summary: Degradation Ratio Table ─────────────────────────────────────
+    print("\n" + "═"*72)
+    print("  DEGRADATION RATIO TABLE")
+    print("═"*72)
 
-    print(f"\nResults → {cfg['results_dir']}/")
+    # Separate additive and rotary PE results
+    additive_pes = [pe for pe in cfg["pe_variants"] if "rope" not in pe]
+    rotary_pes = [pe for pe in cfg["pe_variants"] if "rope" in pe]
+
+    if additive_pes:
+        print(f"\n  Additive PE:")
+        print(f"  {'PE':<18} ", end="")
+        eval_lens = cfg["eval_seq_lens"]
+        for sl in eval_lens:
+            print(f" {'ctx='+str(sl):<9}", end="")
+        print(f"  {'Degrad':>8}  {'LitM@50%':>8}")
+        print(f"  " + "-" * (18 + 10 * len(eval_lens) + 20))
+        for pe in additive_pes:
+            ppls = ppl_results.get(pe, {})
+            litm = litm_results.get(pe, {})
+            mid = litm.get(0.5, float("nan"))
+            row = f"  {pe:<18} "
+            first_ppl = None
+            last_ppl = None
+            for sl in eval_lens:
+                ppl = ppls.get(sl, float("nan"))
+                row += f" {ppl:<9.1f}"
+                if not math.isnan(ppl):
+                    if first_ppl is None: first_ppl = ppl
+                    last_ppl = ppl
+            if first_ppl and last_ppl and first_ppl > 0:
+                deg = (last_ppl / first_ppl - 1) * 100
+                sign = "+" if deg > 0 else ""
+                row += f"  {sign}{deg:>6.1f}%"
+                if deg < 0:
+                    row += " !!"
+            else:
+                row += f"  {'---':>8}"
+            if not math.isnan(mid):
+                row += f"  {mid:>7.1%}"
+            print(row)
+
+    # ── Rotary Comparison Block ──
+    if rotary_pes:
+        print(f"\n  Rotary PE (RoPE variants):")
+        print(f"  {'PE':<18} ", end="")
+        for sl in eval_lens:
+            print(f" {'ctx='+str(sl):<9}", end="")
+        print(f"  {'Degrad':>8}")
+        print(f"  " + "-" * (18 + 10 * len(eval_lens) + 10))
+        for pe in rotary_pes:
+            ppls = ppl_results.get(pe, {})
+            row = f"  {pe:<18} "
+            first_ppl = None
+            last_ppl = None
+            for sl in eval_lens:
+                ppl = ppls.get(sl, float("nan"))
+                row += f" {ppl:<9.1f}"
+                if not math.isnan(ppl):
+                    if first_ppl is None: first_ppl = ppl
+                    last_ppl = ppl
+            if first_ppl and last_ppl and first_ppl > 0:
+                deg = (last_ppl / first_ppl - 1) * 100
+                sign = "+" if deg > 0 else ""
+                row += f"  {sign}{deg:>6.1f}%"
+                if deg < 0:
+                    row += " !!"
+            else:
+                row += f"  {'---':>8}"
+            print(row)
+
+        # Verdict: does zeta_rope beat standard rope?
+        rope_ppl = ppl_results.get("rope", {})
+        zeta_rope_ppl = ppl_results.get("zeta_rope", {})
+        if rope_ppl and zeta_rope_ppl:
+            max_sl = max(eval_lens)
+            rp = rope_ppl.get(max_sl)
+            zp = zeta_rope_ppl.get(max_sl)
+            if rp and zp:
+                diff = (zp - rp) / rp * 100
+                print(f"\n  Verdict: zeta_rope vs rope at ctx={max_sl}: {diff:+.1f}%", end="")
+                if diff < -1:
+                    print(" — zeta rotation frequencies help")
+                elif diff > 1:
+                    print(" — geometric rotation frequencies better")
+                else:
+                    print(" — no significant difference")
+
+    print(f"\n  Results saved to {cfg['results_dir']}/")
+    print()
 
 
 if __name__ == "__main__":
