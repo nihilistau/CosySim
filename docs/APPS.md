@@ -69,7 +69,12 @@ python apps/account.py list
 | | `models` | List available models |
 | | `chat "prompt"` | Quick one-shot inference |
 | | `bench` | Run latency benchmark (5 prompts) |
-| | `proxy` | Start OpenAI-compatible proxy (:5800) |
+| | `proxy` | Multi-protocol AI gateway (:5800) |
+| `lmstudio` | `python apps/lmstudio.py status` | Check LMStudio health + loaded models |
+| | `models` | List available models |
+| | `chat "prompt"` | Quick one-shot inference |
+| | `bench` | Run latency benchmark (5 prompts) |
+| | `proxy` | Start multi-protocol gateway (:5800) |
 
 ### Analysis
 
@@ -151,6 +156,39 @@ python apps/account.py list
 
 ---
 
+## Model Proxy — Multi-Protocol AI Gateway
+
+`scripts/model_proxy.py` serves three API protocols simultaneously on port 5800:
+
+| Protocol | Endpoint | Tool Calling |
+|----------|----------|-------------|
+| OpenAI | `POST /v1/chat/completions` | Emulated (Copilot) / Native (LMStudio) |
+| Anthropic | `POST /v1/messages` | `tool_use` content blocks |
+| Gemini | `POST /v1beta/models/{model}:generateContent` | `functionCall` parts |
+
+**21 models** across Anthropic (6), OpenAI (8), Google (3), xAI (1), NotebookLM (1), LMStudio (1).
+
+```bash
+python scripts/model_proxy.py                           # All protocols on :5800
+python scripts/model_proxy.py --default opus            # Default model
+python scripts/model_proxy.py --account nihilistcod     # Copilot account
+python scripts/model_proxy.py --lmstudio-url http://X:1234/v1  # Remote LMStudio
+python scripts/model_proxy.py --list-models             # Print full catalog
+python scripts/model_proxy.py --port 8080               # Custom port
+```
+
+**Configure your tool:**
+```
+Base URL:  http://localhost:5800/v1    (OpenAI/Anthropic)
+           http://localhost:5800       (Gemini)
+API Key:   anything (not checked)
+Model:     opus, sonnet, haiku, gpt5, codex, gemini, flash, grok, nlm, lmstudio
+```
+
+**Tool calling flow (Copilot):** Tools are injected as system prompt instructions. Model outputs `<tool_call>` JSON blocks. Proxy parses them and returns protocol-native tool calls (OpenAI `tool_calls`, Anthropic `tool_use`, Gemini `functionCall`).
+
+---
+
 ## Architecture
 
 ```
@@ -212,4 +250,4 @@ use it for code-grounded queries instead.
 
 | Version | Date | Description |
 |---------|------|-------------|
-| v1.57.2 | 2026-03-27 | Initial CLI + 15 standalone apps |
+| v1.57.2 | 2026-03-27 | Initial CLI + 15 standalone apps + multi-protocol model proxy |
