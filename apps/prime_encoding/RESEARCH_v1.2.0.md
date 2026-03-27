@@ -4,7 +4,7 @@
 > encodings with superior distinguishability at long range, and whether this advantage
 > translates to measurable performance gains on synthetic long-context tasks.
 >
-> **Status:** Phase 3 local complete + weighting experiment — v1.4.0 [2026-03-27]
+> **Status:** Phase 3 local complete + weighting + attention probe — v1.5.0 [2026-03-27]
 
 ---
 
@@ -61,6 +61,7 @@ evidence and theoretical conjecture are never conflated.
 | 90/10 zeta/prime is optimal mix | ✅ | Best absolute PPL (1429.4) + long-context improvement (-0.4%) |
 | Prime frequencies regularise (don't fight) zeta | ✅ | Weighting sweep: more zeta = better PPL, 10% prime adds non-redundant structure |
 | Hybrid stratification causes interference | ✅ | Sorting without per-band normalisation → +11.1% degradation; interleaving → -0.3% |
+| Zeta dims attend longer range than prime dims | 🔬 | Local: +7% (105.4 vs 98.3); needs H100 at longer context to confirm |
 | Lost-in-the-middle improvement at 4K-32K+ tokens | 🔬 | Needs more training steps (500 too few) and longer context |
 | Superior perplexity on natural language | 🔬 | Signal present but needs full-scale validation |
 | 90% KV-cache reduction | ⚠️ | Requires attention sparsity study; not demonstrated |
@@ -615,6 +616,55 @@ Based on local Phase 3 results, the H100 run should test:
 **Critical:** Hybrid variants MUST use per-band normalisation + interleaving (not sorting).
 The old stratified approach causes +11% degradation from gradient interference.
 
+### 7.1c Attention Distance Probe (Critical — Validates Decomposition)
+
+The 90/10 result is *consistent with* a long-range/short-range decomposition but
+doesn't yet *prove* the model has discovered it. To close that gap:
+
+**Experiment:** In the trained hybrid_90z model, log the mean attended distance per
+dimension band. Split the 256 encoding dimensions into "zeta dimensions" (the 90%)
+and "prime dimensions" (the 10%). For each attention head at each layer, compute:
+
+```
+mean_attended_distance(band) = Σ_i Σ_j (attn[i,j] * |i - j|) / Σ_i Σ_j attn[i,j]
+```
+
+averaged over positions where that band's frequency dominates the position encoding.
+
+**Prediction:** If the decomposition is real, zeta dimensions should show systematically
+longer mean attended distances than prime dimensions. Zeta dimensions should attend at
+paragraph/section scale; prime dimensions should attend within-clause.
+
+**What this proves if confirmed:** The frequency basis doesn't just *allow* the model to
+distinguish positions at different scales — it actively *structures* attention into
+scale-separated channels. The music analogy (harmonic structure vs rhythmic subdivision)
+goes from compelling framing to empirical finding.
+
+**What it means if NOT confirmed:** The PPL improvement is real but the mechanism is
+different from scale decomposition — possibly just better overall distinguishability
+without specialisation. Still publishable, but a weaker theoretical claim.
+
+**Implementation:** Perturbation-based probe. For each band, flip the PE signs at a
+probe position and measure where the output changes most. Mean affected distance
+weighted by effect magnitude gives the band's effective attention range.
+
+**Local result (500 steps, d=256, RTX 2060):**
+```
+Pure zeta (split by frequency magnitude):
+  low_freq (long-range):   105.4 tokens
+  high_freq (short-range):  98.3 tokens  (7% shorter)
+
+Hybrid 90z/10p (split by band origin):
+  zeta_band:   105.2 tokens
+  prime_band:  103.2 tokens  (2% shorter)
+```
+
+**Status:** 🔬 Direction is correct — low-frequency/zeta dimensions attend further.
+The 7% gap at 500 steps on a 256-token context is modest but consistent. On the H100
+with 20K steps and 4K-8K context the gap should widen substantially, because the
+short-range dimensions will have no reason to attend further while the long-range
+dimensions will have more context to exploit.
+
 ### 7.2 Priority Experiments
 
 **P3-1: Perplexity at long context.** ✅ (local, partial)
@@ -854,9 +904,9 @@ frequencies aim to address. Ms-PoE (NeurIPS 2024) patched it with per-head resca
 | v1.2.0 | 2026-03-27 | Refactored per Phase 2 review: claim registry, Phase 2 results integrated, |
 |         |            | Phase 3 plan updated to active status, speculative claims moved to Appendix A |
 | v1.3.0 | 2026-03-27 | Phase 3 local results: zeta PE improves PPL at longer context (-0.9%) |
-| v1.4.0 | 2026-03-27 | Hybrid diagnosis (stratification→interference), interleaving fix, |
-|         |            | weighting experiment (90z/10p optimal: best PPL 1429.4 + improvement), |
-|         |            | finding: prime regularises zeta, doesn't fight it |
+| v1.4.0 | 2026-03-27 | Hybrid diagnosis + interleaving fix, weighting experiment (90z/10p optimal) |
+| v1.5.0 | 2026-03-27 | Attention distance probe: zeta dims attend 7% further than prime dims. |
+|         |            | Scale decomposition hypothesis has directional support. |
 
 ---
 

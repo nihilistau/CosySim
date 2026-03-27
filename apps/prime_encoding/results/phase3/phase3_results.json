@@ -42,7 +42,11 @@
         "0.9": 0.0
       }
     },
-    "train_time_secs": 69.26156783103943,
+    "attention_probe": {
+      "zeta_band": 105.18954414367676,
+      "prime_band": 103.17344665527344
+    },
+    "train_time_secs": 105.30529689788818,
     "params": 1536
   }
 }
