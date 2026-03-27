@@ -35,9 +35,20 @@ from .tasks import (
 # ──── Device Selection ──────────────────────────────────────────────────────
 
 def get_device() -> torch.device:
-    """Get the best available device (CUDA > CPU)."""
+    """Get the best available device (CUDA > CPU).
+
+    Set PRIME_PE_CPU=1 to force CPU (useful when CUDA has version issues).
+    """
+    import os
+    if os.environ.get("PRIME_PE_CPU"):
+        return torch.device("cpu")
     if torch.cuda.is_available():
-        return torch.device("cuda")
+        try:
+            # Quick sanity check — some CUDA installs are broken
+            torch.zeros(1, device="cuda")
+            return torch.device("cuda")
+        except RuntimeError:
+            return torch.device("cpu")
     return torch.device("cpu")
 
 
@@ -145,9 +156,17 @@ def train_and_evaluate(
 
         # Compute loss
         if is_classification:
-            # Use the last position's logits to predict the target
-            last_logits = logits[:, -1, :]  # (batch, vocab_size)
-            loss = F.cross_entropy(last_logits, targets)
+            if task_name == "needle":
+                # Needle: target is a position index (0..seq_len-1), not a token ID
+                # Use all logits projected down to seq_len classes
+                # We use a simple approach: take the mean of all position logits
+                # and classify which position the needle is at
+                last_logits = logits[:, -1, :seq_len]  # (batch, seq_len)
+                loss = F.cross_entropy(last_logits, targets)
+            else:
+                # First-last: target is a token ID (within vocab)
+                last_logits = logits[:, -1, :]  # (batch, vocab_size)
+                loss = F.cross_entropy(last_logits, targets)
         else:
             # Sequence prediction: flatten and compute cross-entropy
             # Only compute loss on non-zero target positions
@@ -238,7 +257,10 @@ def evaluate(
         logits = model(inputs)
 
         if is_classification:
-            preds = logits[:, -1, :].argmax(dim=-1)  # (batch,)
+            if task_name == "needle":
+                preds = logits[:, -1, :seq_len].argmax(dim=-1)
+            else:
+                preds = logits[:, -1, :].argmax(dim=-1)
             correct += (preds == targets).sum().item()
             total += targets.shape[0]
         else:
