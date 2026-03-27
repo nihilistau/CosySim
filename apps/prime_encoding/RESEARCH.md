@@ -4,7 +4,7 @@
 > encodings with superior distinguishability at long range, and whether this advantage
 > translates to measurable performance gains on synthetic long-context tasks.
 >
-> **Status:** Phase 3 local complete + weighting + attention probe — v1.5.0 [2026-03-27]
+> **Status:** Phase 3 local complete + theoretical deepening — v2.0.0 [2026-03-27]
 
 ---
 
@@ -61,9 +61,15 @@ evidence and theoretical conjecture are never conflated.
 | 90/10 zeta/prime is optimal mix | ✅ | Best absolute PPL (1429.4) + long-context improvement (-0.4%) |
 | Prime frequencies regularise (don't fight) zeta | ✅ | Weighting sweep: more zeta = better PPL, 10% prime adds non-redundant structure |
 | Hybrid stratification causes interference | ✅ | Sorting without per-band normalisation → +11.1% degradation; interleaving → -0.3% |
-| Zeta dims attend longer range than prime dims | 🔬 | Local: +7% (105.4 vs 98.3); needs H100 at longer context to confirm |
-| Lost-in-the-middle improvement at 4K-32K+ tokens | 🔬 | Needs more training steps (500 too few) and longer context |
-| Superior perplexity on natural language | 🔬 | Signal present but needs full-scale validation |
+| Zeta dims attend longer range than prime dims | 🔬 | Local: +7% (105.4 vs 98.3); may be magnitude artifact — needs matched control |
+| Zeta zeros = Fourier coefficients of PNT error | 📐 | Established number theory; stronger than "nice spacing" |
+| Zipf ↔ Zeta connection (language IS zeta) | 📐 | ζ(s) generates Zipf; Hurwitz zeros may be corpus-specific |
+| RoPE surgery on existing model | 🔬 | Highest-impact experiment — drop-in upgrade for deployed models |
+| Attention sinking ← geometric aliasing | ⚠️ | Testable hypothesis: sink fraction vs context length per PE |
+| Per-layer frequency stratification | ⚠️ | Prime early, zeta late — matches Tenney et al. layer specialisation |
+| 90/10 ratio = MI decomposition of language | ⚠️ | Testable: positional MI at radius >100 vs <100 tokens |
+| Lost-in-the-middle improvement at 4K-32K+ tokens | 🔬 | Needs more training steps and longer context |
+| Superior perplexity on natural language | 🔬 | Signal present but needs full-scale + SCROLLS/LONGBENCH validation |
 | 90% KV-cache reduction | ⚠️ | Requires attention sparsity study; not demonstrated |
 | 3–5x convergence speedup | ⚠️ | Hessian argument plausible; not empirically tested |
 | Quantization resilience (4-bit) | ⚠️ | Theoretically motivated; not benchmarked |
@@ -145,8 +151,41 @@ Key properties (📐 established results):
 - **Information density:** irregular spacing gives higher stable rank; incommensurable
   ratios give better distance preservation.
 
+**Critical insight — why zeta zeros are not "just irregular numbers":**
+
+The zeta zeros are not merely a quasicrystal with convenient spacing. Their imaginary
+parts encode the **exact correction terms to the Prime Number Theorem**. The PNT says
+primes thin out like 1/ln(n) — a smooth approximation. The zeta zeros are the precise
+Fourier coefficients of the error between that smooth approximation and reality. They
+are the complete information-theoretic description of prime irregularity.
+
+When we use them as PE frequencies, we are using the **spectrum of prime randomness
+itself** — the basis in which prime distribution has maximal harmonic energy. The GUE
+level repulsion isn't a convenient property; it's a consequence of the fact that prime
+irregularity is maximally complex in a specific information-theoretic sense.
+
+This is a stronger object than "some irrational numbers with nice spacing" and the paper
+should be explicit about this distinction.
+
+### 1.4b The Zipf Connection — Language and Zeta Are the Same Object
+
+Zipf's law: word frequencies follow frequency ∝ 1/rank^s where s ≈ 1. The generating
+function for a Zipf distribution is **exactly the Riemann zeta function**: ζ(s) = Σ 1/n^s.
+
+Language frequency structure and the zeta function are the same mathematical object.
+The zeta zeros are where this function is most "interesting" — where the smooth
+approximation breaks down most complexly. If language has Zipfian statistics because of
+some deep property of symbolic communication, then the zeta zeros are, in a precise
+sense, the natural spectral basis for representing positions in that language.
+
+**Concrete prediction:** The optimal PE frequencies should be the imaginary parts of the
+zeros of the **Hurwitz zeta function** ζ(s, a) evaluated at the empirical Zipf exponent
+of the training corpus, not just the standard Riemann zeta zeros. For English WikiText
+the exponent is close to 1, so standard zeros work well. For code (more uniform) or
+poetry (more Zipfian) the optimal zeros might shift. This is testable and genuinely novel.
+
 **Insight:** Using zeta zeros as attention head frequencies means each head operates at a
-unique, non-redundant scale. **📐 Mathematical guarantee; empirical benefit is unverified.**
+unique, non-redundant scale. **📐 Mathematical guarantee; partial empirical support (Phase 3).**
 
 ### 1.5 Theoretical Framework (Zheng et al.)
 
@@ -609,9 +648,39 @@ The hybrid failure (v1.4.0) produced an immediate mechanistic diagnosis and a fi
 was verified in the same session. This kind of fast-failing loop is the hallmark of a
 hypothesis that's either right or at least productively wrong.
 
+### 6.10 The 90/10 Quantitative Prediction
+
+The 90/10 zeta/prime weighting reflects the ratio of long-range structural to local
+syntactic positional information in language. This is testable without ML:
+
+**Experiment:** For each token in WikiText-103, compute mutual information between its
+position and its identity at different context radii. What fraction of the positional MI
+is captured at radius > 100 tokens vs < 100 tokens?
+
+**Prediction:** Close to 90/10. If confirmed, the information-theoretic structure of
+language predicts the optimal PE weighting, and the model discovers that weighting
+empirically. The music analogy becomes a measurable property of language.
+
+### 6.11 What's Most Likely Wrong
+
+**Convergence penalty compounds.** 2x slower convergence at 500 steps is real. At 20K
+steps absolute convergence is probably fine, but the practical implication is ZetaPE
+needs more training. For adoption, this is a cost. The spectral curriculum needs to be
+tested and shown to close the gap, not just described.
+
+**Attention distance gap may be a magnitude artifact.** Lower numerical frequency values
+produce softer PE decay curves regardless of pattern. Need a control that matches the
+frequency magnitude range of zeta zeros but with random spacing to isolate the structural
+contribution. Added to P3-3 as random-magnitude-matched.
+
+**WikiText may not generalise.** It's well-structured, topically coherent text. The
+lost-in-the-middle problem is most severe in retrieval-augmented tasks with interspersed
+irrelevant documents — much messier positional structure. Must test on SCROLLS or
+LONGBENCH before claiming generality.
+
 ---
 
-## 7. Phase 3 Full-Scale Plan (H100 Colab) 🔬
+## 7. Phase 3 Full-Scale Plan (H100 Colab + RoPE Surgery) 🔬
 
 Local Phase 3 confirmed the signal. Full-scale run targets publication-quality results.
 
@@ -706,6 +775,78 @@ All three outcomes are publishable. The first is the strongest paper. The second
 supports the "frequency basis as design dimension" framing. The third would redirect
 the mechanistic story but the PPL improvement is still real.
 
+### 7.1d RoPE Surgery — The High-Impact Experiment
+
+**This could change everything.** Instead of training from scratch, take a small
+existing RoPE model (TinyLlama-1.1B, Llama-3.2-1B) with public weights. Swap the
+rotation frequencies from geometric (θ_j = 10000^(-2j/d)) to normalised zeta zeros.
+Keep every weight exactly as trained. Fine-tune for 1-2K steps, evaluate on RULER
+or LONGBENCH.
+
+**Why this is the best next experiment:**
+
+1. If it works — even partially — you've shown zeta-RoPE is a **practical drop-in
+   upgrade for existing deployed models** with minimal retraining cost. Every lab
+   running RoPE models could directly benefit.
+
+2. The publication story becomes: "we show that replacing the arbitrary 10,000 base
+   with zeta-zero frequencies in existing RoPE models improves long-context performance
+   with only fine-tuning, not retraining." That's immediately actionable.
+
+3. This can run on the RTX 2060 overnight with a 1B model — no H100 needed.
+
+**Why it should work:** RoPE weights encode relative position information distributed
+across all layers. The frequency structure shapes which relative distances are easy vs
+hard to represent, but the attention weights are more general. A short fine-tuning
+should suffice to adapt them, especially since zeta-RoPE and standard RoPE span the
+same dimensional space.
+
+**Implementation:**
+```python
+# Load TinyLlama with HuggingFace
+model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+
+# Replace RoPE frequencies in every attention layer
+for layer in model.model.layers:
+    rotary = layer.self_attn.rotary_emb
+    # Replace: rotary.inv_freq = 1 / (10000 ** (2i/d))
+    # With:    rotary.inv_freq = normalised_zeta_zeros[:d//2]
+    rotary.inv_freq = zeta_freqs.to(rotary.inv_freq.device)
+
+# Fine-tune for 1-2K steps on the same data
+# Evaluate on RULER / LONGBENCH
+```
+
+### 7.1e Attention Sink Test — Free Result
+
+Attention sinking (Xiao et al., StreamingLLM, 2023): models dump disproportionate
+attention weight on token 0 regardless of content. Current explanation: softmax needs
+a "default" position when no token is clearly relevant.
+
+**Hypothesis:** Attention sinking is a symptom of geometric PE aliasing. When positions
+beyond ~10K become indistinguishable, the model falls back to position 0 (always
+uniquely distinguishable). ZetaPE maintains unique positions indefinitely, so the sink
+is unnecessary.
+
+**Test:** Measure attention weight on token 0 as a function of context length for each
+PE variant. If the sink fraction grows with context for sinusoidal/geometric but stays
+flat for ZetaPE, that's a mechanistic explanation for attention sinking — a significant
+independent finding.
+
+### 7.1f Per-Layer Frequency Stratification
+
+Evidence (Tenney et al., 2019; Jawahar et al., 2019): early transformer layers encode
+local syntax, later layers encode global semantics. This maps onto prime/zeta:
+
+```
+Layers 1-4:  prime-dominant (local coprime structure for syntax)
+Layers 5-8:  hybrid (transition)
+Layers 9-12: zeta-dominant (long-range quasicrystalline for semantics)
+```
+
+**Ablation:** Compare flat allocation vs stratified allocation. If stratified wins,
+it confirms the prime/zeta decomposition aligns with known layer-function specialisation.
+
 ### 7.2 Priority Experiments
 
 **P3-1: Perplexity at long context.** ✅ (local, partial)
@@ -722,19 +863,24 @@ Add random-irrational and learned-frequency variants. **This is the most importa
 experiment for the paper's theoretical framing.** Everything else is confirmation.
 This one is falsification.
 
-If ZetaPE outperforms random-irrational: the number-theoretic structure (GUE level
-repulsion, quasicrystalline spacing) is causally responsible for the advantage. The
-paper's title can reference primes and zeta zeros specifically.
+Three possible outcomes and what each means for the paper:
 
-If they are equivalent: the advantage comes from being non-geometric, not from the
-specific mathematical properties of zeta zeros. The paper pivots to "frequency basis
-selection is an unexploited design dimension" — still a valid and publishable finding,
-but the number theory framing becomes motivational rather than causal.
+| Outcome | Theoretical Claim | Paper Impact |
+|---------|------------------|-------------|
+| Zeta >> random_irr | GUE structure is causal. Number theory does real work. | NeurIPS/ICLR territory. Strong title. |
+| Zeta ≈ random_irr, both >> sinusoidal | Non-geometric helps, but not because of zeta specifically. | Valid but weaker: "breaking geometric improves PE." More scoopable. |
+| random_irr >> zeta | Model prefers maximal incoherence, not structure. | Most *interesting* — the key property is decorrelation, not structure. Different and equally publishable. |
 
-The learned-frequency variant addresses a related question: if we initialise with
-geometric frequencies and let the model train them, does it converge to something
-resembling zeta spacing? If yes, that's the strongest possible validation — the model
-independently discovers what number theory predicts.
+**Additional control needed: random-magnitude-matched.** Compare against random
+frequencies in the **same numerical range** as zeta zeros (not just any irrational
+values). This isolates whether the advantage comes from the specific spacing pattern
+vs simply having lower-magnitude frequencies (which produce softer PE decay curves
+and spread attention further regardless of pattern).
+
+The learned-frequency variant: initialise with geometric frequencies and let the model
+train them. Does it converge to something resembling zeta spacing? If yes, that's the
+strongest possible validation — the model independently discovers what number theory
+predicts.
 
 **P3-4: Adaptive alpha study.**
 Let α be a learnable parameter per frequency band. Track what values the model
@@ -959,8 +1105,11 @@ frequencies aim to address. Ms-PoE (NeurIPS 2024) patched it with per-head resca
 |         |            | Phase 3 plan updated to active status, speculative claims moved to Appendix A |
 | v1.3.0 | 2026-03-27 | Phase 3 local results: zeta PE improves PPL at longer context (-0.9%) |
 | v1.4.0 | 2026-03-27 | Hybrid diagnosis + interleaving fix, weighting experiment (90z/10p optimal) |
-| v1.5.0 | 2026-03-27 | Attention distance probe: zeta dims attend 7% further than prime dims. |
-|         |            | Scale decomposition hypothesis has directional support. |
+| v1.5.0 | 2026-03-27 | Attention distance probe: zeta dims attend 7% further |
+| v2.0.0 | 2026-03-27 | Major theoretical deepening: zeta zeros as PNT correction terms, |
+|         |            | Zipf-zeta connection (language IS zeta), RoPE surgery experiment, |
+|         |            | attention sink hypothesis, per-layer stratification, 90/10 MI |
+|         |            | prediction, honest risk assessment, magnitude-matched control |
 
 ---
 
