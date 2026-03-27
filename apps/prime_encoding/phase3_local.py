@@ -68,7 +68,8 @@ def get_config(quick: bool = False, steps: int = 0) -> Dict[str, Any]:
         "eval_batches":  10 if quick else 30,
 
         # PE variants to test
-        "pe_variants": ["sinusoidal", "prime_05", "prime_10", "zeta", "hybrid"],
+        "pe_variants": ["sinusoidal", "prime_05", "prime_10", "zeta", "hybrid",
+                        "hybrid_70z", "hybrid_90z"],
 
         # Lost-in-the-middle
         "litm_ctx_lens": [512, 1024, 2048] if quick else [512, 1024, 2048, 4096],
@@ -142,6 +143,41 @@ def make_frequencies(pe_type: str, d_model: int) -> torch.Tensor:
                 combined[idx] = zeta_f[i]
                 idx += 1
 
+        return combined
+
+    elif pe_type.startswith("hybrid_") and pe_type[-1] == "z":
+        # Weighted hybrid: hybrid_70z = 70% zeta, 30% prime
+        # Tests whether prime is contributing or fighting
+        zeta_pct = int(pe_type.replace("hybrid_", "").replace("z", "")) / 100.0
+        prime_pct = 1.0 - zeta_pct
+        n_zeta = int(half * zeta_pct)
+        n_prime = half - n_zeta
+
+        primes = first_n_primes(n_prime)
+        prime_f = torch.tensor([1.0 / (p ** 0.8) for p in primes])
+        prime_f = prime_f / prime_f.max()
+
+        zeros = list(ZETA_ZEROS_IMAGINARY[:n_zeta])
+        if len(zeros) < n_zeta:
+            extra = first_n_primes(n_zeta - len(zeros))
+            last = zeros[-1] if zeros else 100.0
+            zeros.extend([last + p for p in extra])
+        zeta_f = torch.tensor([1.0 / z for z in zeros[:n_zeta]])
+        zeta_f = zeta_f / zeta_f.max()
+
+        # Interleave: distribute the minority band evenly across the majority
+        combined = torch.zeros(half)
+        pi, zi = 0, 0
+        for i in range(half):
+            # Decide which band to pull from based on target ratio
+            prime_target = (i + 1) * prime_pct
+            zeta_target = (i + 1) * zeta_pct
+            if pi < n_prime and (zi >= n_zeta or pi < prime_target):
+                combined[i] = prime_f[pi]
+                pi += 1
+            elif zi < n_zeta:
+                combined[i] = zeta_f[zi]
+                zi += 1
         return combined
 
     elif pe_type == "hybrid_v1":
