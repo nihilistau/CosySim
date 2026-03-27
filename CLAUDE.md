@@ -52,6 +52,21 @@ python -m pytest tests/test_bedroom_game.py -v    # Single file
 python -m pytest -m "unit" tests/                 # By marker
 python -m pytest -n auto tests/                   # Parallel (6x faster)
 
+# Unified CLI (preferred — auto-handles venv)
+python cli.py ask "prompt"                                # AI query (38 models)
+python cli.py oracle --health                             # System diagnostics
+python cli.py account list                                # Account pool
+python cli.py har list                                    # HAR files
+python cli.py nexus search "query"                        # Nexus KMS
+python cli.py filestore bootstrap-all                     # Gemini File Search RAG
+python cli.py nlm upload FILE                             # NLM (auto-renames .py)
+python cli.py test --smoke                                # Smart test runner
+
+# Standalone apps (same commands, independent entry points)
+python apps/nexus.py search "query"
+python apps/argus.py har file.har
+python apps/lmstudio.py status
+
 # Oracle — system diagnostics (use BEFORE and AFTER debugging)
 python scripts/oracle.py                          # Full health + errors + performance
 python scripts/oracle.py --health                 # Service health only

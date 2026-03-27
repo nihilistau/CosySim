@@ -1,6 +1,6 @@
 # CosySim — Complete System Context
 
-> v1.57.2 [2026-03-26] — Everything an agent needs to understand and work with CosySim.
+> v1.57.2 [2026-03-27] — Everything an agent needs to understand and work with CosySim.
 >
 > Read this file to gain full context on architecture, conventions, systems, tools,
 > protocols, and workflows. After reading, you should be able to modify any part of
@@ -1117,3 +1117,45 @@ char_id = wizard.finalize(state.wizard_id)
 python scripts/oracle.py          # Health + errors + perf
 python scripts/smart_test.py      # Tests for changes
 ```
+
+---
+
+## 25. Unified CLI & Standalone Apps
+
+> v1.57.2 [2026-03-27] — All tools accessible via `cli.py` or `apps/*.py`.
+> No venv activation needed — auto-re-execs into `.venv/Scripts/python.exe`.
+
+### Main CLI
+
+```bash
+python cli.py <command> [args...]       # Unified entry point
+python cli.py --help                    # Show all 16 command groups
+```
+
+### Standalone Apps (`apps/`)
+
+```bash
+python apps/nexus.py search "query"     # Nexus KMS
+python apps/argus.py har file.har       # ARGUS analysis
+python apps/oracle.py --health          # System diagnostics
+python apps/ask.py "prompt" --model X   # AI query (38 models)
+python apps/cdp.py tabs                 # Chrome DevTools
+python apps/nlm.py upload FILE          # NLM (auto-renames .py)
+python apps/account.py list             # Account pool
+python apps/har.py list                 # HAR file ops
+python apps/heap.py all                 # V8 heap mining
+python apps/test.py --smoke             # Smart test runner
+python apps/lmstudio.py status          # LMStudio management
+python apps/training.py datasets        # Training pipeline
+python apps/filestore.py bootstrap-all  # Gemini File Search RAG
+python apps/launch.py --core            # Scene launcher
+python apps/cleanup.py --execute        # Disk cleanup
+```
+
+### Architecture
+
+All apps share `apps/_bootstrap.py` which handles venv detection, sys.path setup,
+and CWD normalization. Each app delegates to existing scripts/modules via subprocess
+— no logic duplication.
+
+Full reference: [docs/APPS.md](docs/APPS.md)
