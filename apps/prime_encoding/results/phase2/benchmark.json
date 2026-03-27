@@ -1,125 +1,186 @@
 {
-  "timestamp": "2026-03-27T18:04:55",
+  "timestamp": "2026-03-27T20:48:16",
   "device": "cpu",
   "runs": [
     {
       "pe_type": "sinusoidal",
-      "task_name": "copy",
-      "seq_len": 32,
+      "task_name": "first_last",
+      "seq_len": 64,
       "final_accuracy": 1.0,
-      "final_loss": 0.0895,
+      "final_loss": 0.0004,
       "best_accuracy": 1.0,
-      "train_steps": 500,
-      "train_time_secs": 15.1,
+      "train_steps": 1000,
+      "train_time_secs": 112.1,
       "pe_kwargs": {}
     },
     {
       "pe_type": "prime(a=0.5)",
-      "task_name": "copy",
-      "seq_len": 32,
-      "final_accuracy": 0.9258,
-      "final_loss": 0.7857,
-      "best_accuracy": 0.9258,
-      "train_steps": 500,
-      "train_time_secs": 15.1,
+      "task_name": "first_last",
+      "seq_len": 64,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0004,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 114.0,
       "pe_kwargs": {
         "alpha": 0.5
       }
     },
     {
       "pe_type": "prime(a=1.0)",
-      "task_name": "copy",
-      "seq_len": 32,
-      "final_accuracy": 0.7577,
-      "final_loss": 1.3129,
-      "best_accuracy": 0.7577,
-      "train_steps": 500,
-      "train_time_secs": 15.1,
+      "task_name": "first_last",
+      "seq_len": 64,
+      "final_accuracy": 0.998,
+      "final_loss": 0.0009,
+      "best_accuracy": 0.998,
+      "train_steps": 1000,
+      "train_time_secs": 120.5,
       "pe_kwargs": {
         "alpha": 1.0
       }
     },
     {
       "pe_type": "zeta",
-      "task_name": "copy",
-      "seq_len": 32,
-      "final_accuracy": 0.9958,
-      "final_loss": 0.3107,
-      "best_accuracy": 0.9958,
-      "train_steps": 500,
-      "train_time_secs": 15.2,
+      "task_name": "first_last",
+      "seq_len": 64,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0004,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 125.3,
       "pe_kwargs": {}
     },
     {
       "pe_type": "hybrid",
-      "task_name": "copy",
-      "seq_len": 32,
+      "task_name": "first_last",
+      "seq_len": 64,
       "final_accuracy": 1.0,
-      "final_loss": 0.1059,
+      "final_loss": 0.0005,
       "best_accuracy": 1.0,
-      "train_steps": 500,
-      "train_time_secs": 15.2,
+      "train_steps": 1000,
+      "train_time_secs": 121.1,
       "pe_kwargs": {
         "prime_ratio": 0.5
       }
     },
     {
       "pe_type": "sinusoidal",
-      "task_name": "copy",
-      "seq_len": 64,
+      "task_name": "first_last",
+      "seq_len": 128,
       "final_accuracy": 1.0,
-      "final_loss": 0.1083,
+      "final_loss": 0.0004,
       "best_accuracy": 1.0,
-      "train_steps": 500,
-      "train_time_secs": 29.9,
+      "train_steps": 1000,
+      "train_time_secs": 273.1,
       "pe_kwargs": {}
     },
     {
       "pe_type": "prime(a=0.5)",
-      "task_name": "copy",
-      "seq_len": 64,
-      "final_accuracy": 0.7715,
-      "final_loss": 1.1711,
-      "best_accuracy": 0.7715,
-      "train_steps": 500,
-      "train_time_secs": 30.1,
+      "task_name": "first_last",
+      "seq_len": 128,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0002,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 214.2,
       "pe_kwargs": {
         "alpha": 0.5
       }
     },
     {
       "pe_type": "prime(a=1.0)",
-      "task_name": "copy",
-      "seq_len": 64,
-      "final_accuracy": 0.8071,
-      "final_loss": 1.3408,
-      "best_accuracy": 0.8071,
-      "train_steps": 500,
-      "train_time_secs": 30.1,
+      "task_name": "first_last",
+      "seq_len": 128,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0008,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 213.4,
       "pe_kwargs": {
         "alpha": 1.0
       }
     },
     {
       "pe_type": "zeta",
-      "task_name": "copy",
-      "seq_len": 64,
-      "final_accuracy": 0.9529,
-      "final_loss": 0.6572,
-      "best_accuracy": 0.9529,
-      "train_steps": 500,
-      "train_time_secs": 29.9,
+      "task_name": "first_last",
+      "seq_len": 128,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0001,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 219.1,
       "pe_kwargs": {}
     },
     {
       "pe_type": "hybrid",
-      "task_name": "copy",
-      "seq_len": 64,
-      "final_accuracy": 0.978,
-      "final_loss": 0.5193,
-      "best_accuracy": 0.978,
-      "train_steps": 500,
-      "train_time_secs": 30.1,
+      "task_name": "first_last",
+      "seq_len": 128,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0003,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 219.6,
+      "pe_kwargs": {
+        "prime_ratio": 0.5
+      }
+    },
+    {
+      "pe_type": "sinusoidal",
+      "task_name": "first_last",
+      "seq_len": 256,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0005,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 616.3,
+      "pe_kwargs": {}
+    },
+    {
+      "pe_type": "prime(a=0.5)",
+      "task_name": "first_last",
+      "seq_len": 256,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0001,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 635.9,
+      "pe_kwargs": {
+        "alpha": 0.5
+      }
+    },
+    {
+      "pe_type": "prime(a=1.0)",
+      "task_name": "first_last",
+      "seq_len": 256,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0035,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 631.6,
+      "pe_kwargs": {
+        "alpha": 1.0
+      }
+    },
+    {
+      "pe_type": "zeta",
+      "task_name": "first_last",
+      "seq_len": 256,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0005,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 632.2,
+      "pe_kwargs": {}
+    },
+    {
+      "pe_type": "hybrid",
+      "task_name": "first_last",
+      "seq_len": 256,
+      "final_accuracy": 1.0,
+      "final_loss": 0.0002,
+      "best_accuracy": 1.0,
+      "train_steps": 1000,
+      "train_time_secs": 618.6,
       "pe_kwargs": {
         "prime_ratio": 0.5
       }
