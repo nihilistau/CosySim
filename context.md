@@ -1188,3 +1188,23 @@ python apps/proxy.py --list-models                     # Print catalog
 
 **Configure any tool:** Base URL `http://localhost:5801/v1`, API key `anything`.
 Works with OpenCode, aider, Cursor, Continue, Anthropic SDK, google-genai SDK.
+
+### 25.2 Prime-Harmonic Positional Encoding Research
+
+`apps/prime_encoding/` — self-contained research exploring whether prime numbers and
+Riemann zeta zeros can improve transformer positional encodings for long contexts.
+
+**Results so far (Phases 1-3):**
+- Phase 1: Zeta PE decorrelates 5x faster than sinusoidal (math confirmed)
+- Phase 2: Matches 100% accuracy on all synthetic tasks (84 tests passing)
+- Phase 3: **Zeta PE is the only encoding where perplexity improves at longer
+  context (-0.9% from 512 to 2048 tokens on WikiText-103)**
+
+```bash
+python apps/prime_encoding/run.py demo           # Key properties demo
+python apps/prime_encoding/run.py analyze        # Phase 1 math comparison
+python apps/prime_encoding/run.py benchmark      # Phase 2 synthetic tasks
+python apps/prime_encoding/phase3_local.py       # Phase 3 real LM (CUDA)
+```
+
+Full research document: `apps/prime_encoding/RESEARCH.md` (v1.3.0)

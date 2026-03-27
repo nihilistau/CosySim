@@ -4,10 +4,21 @@ All notable changes to CosySim are documented here.
 
 ---
 
-## [1.57.2] — "RPC SYSTEM OVERHAUL + UNIFIED CLI + MULTI-PROTOCOL PROXY" — 2026-03-27
+## [1.57.2] — "RPC SYSTEM OVERHAUL + UNIFIED CLI + MULTI-PROTOCOL PROXY + PRIME PE RESEARCH" — 2026-03-27
 
 Complete NLM rpcid system rebuild, unified CLI framework with 15 standalone apps,
-and multi-protocol model proxy (OpenAI + Anthropic + Gemini on one port).
+multi-protocol model proxy, and prime-harmonic positional encoding research.
+
+### Prime-Harmonic PE Research (NEW)
+- `apps/prime_encoding/` — self-contained research project (84 tests, 10 modules)
+- Phase 1: mathematical analysis — zeta PE decorrelates 5x faster than sinusoidal
+- Phase 2: synthetic benchmarks — zeta PE matches 100% accuracy on all 4 tasks
+- Phase 3 (local): real language modelling on WikiText-103 (RTX 2060)
+  - **Zeta PE is the ONLY encoding where perplexity improves at longer context (-0.9%)**
+  - Sinusoidal: flat (+0.1%), prime(a=1.0): degrades (+47.3%)
+  - First empirical signal that quasicrystalline frequencies handle long-range better
+- H100 notebook ready for full-scale run: `PrimePE_Phase3_H100.ipynb`
+- Full research document: `apps/prime_encoding/RESEARCH.md` (v1.3.0, 12 references)
 
 ### Multi-Protocol Model Proxy (NEW)
 - Two proxy variants:
