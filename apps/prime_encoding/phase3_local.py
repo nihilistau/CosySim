@@ -113,19 +113,50 @@ def make_frequencies(pe_type: str, d_model: int) -> torch.Tensor:
         return freqs / freqs.max()  # normalize
 
     elif pe_type == "hybrid":
+        # Fix: normalise each band to [0,1] BEFORE merging, then interleave
+        # so prime and zeta frequencies cover the same magnitude range
+        quarter = half // 2
+        primes = first_n_primes(quarter)
+        prime_f = torch.tensor([1.0 / (p ** 0.8) for p in primes])
+        prime_f = prime_f / prime_f.max()  # normalise to [0, 1]
+
+        n_zeta = half - quarter
+        zeros = list(ZETA_ZEROS_IMAGINARY[:n_zeta])
+        if len(zeros) < n_zeta:
+            extra = first_n_primes(n_zeta - len(zeros))
+            last = zeros[-1] if zeros else 100.0
+            zeros.extend([last + p for p in extra])
+        zeta_f = torch.tensor([1.0 / z for z in zeros[:n_zeta]])
+        zeta_f = zeta_f / zeta_f.max()  # normalise to [0, 1]
+
+        # Interleave: alternate prime and zeta at each scale
+        combined = torch.zeros(half)
+        for i in range(quarter):
+            combined[2 * i] = prime_f[i]
+            if i < n_zeta:
+                combined[2 * i + 1] = zeta_f[i]
+        # Fill any remaining slots
+        idx = 2 * quarter
+        for i in range(quarter, n_zeta):
+            if idx < half:
+                combined[idx] = zeta_f[i]
+                idx += 1
+
+        return combined
+
+    elif pe_type == "hybrid_v1":
+        # Original stratified hybrid (kept for comparison — shows +11.1% degradation)
         quarter = half // 2
         primes = first_n_primes(quarter)
         prime_f = [1.0 / (p ** 0.8) for p in primes]
         n_zeta = half - quarter
         zeros = list(ZETA_ZEROS_IMAGINARY[:n_zeta])
-        # Extend with scaled primes if we need more frequencies
         if len(zeros) < n_zeta:
             extra = first_n_primes(n_zeta - len(zeros))
             last = zeros[-1] if zeros else 100.0
             zeros.extend([last + p for p in extra])
         zeta_f = [1.0 / z for z in zeros[:n_zeta]]
         combined = sorted(prime_f + zeta_f, reverse=True)
-        # Pad if still short
         while len(combined) < half:
             combined.append(combined[-1] * 0.9)
         max_f = max(combined)
