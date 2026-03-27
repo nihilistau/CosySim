@@ -99,7 +99,7 @@ The framework features a **unified cyberpunk aesthetic** (NeonCity theme), **cha
 | Service | Port | Purpose |
 |---------|-----:|---------|
 | LMStudio | 1234 | Local LLM inference (v1 API, CUDA, bearer auth) |
-| Model Proxy | 5800 | Multi-protocol gateway (OpenAI + Anthropic + Gemini) — routes to Copilot/LMStudio/NLM |
+| Model Proxy | 5800/5801 | Multi-protocol gateway (OpenAI + Anthropic + Gemini) — normalized (:5800) or direct/fast (:5801) |
 | Nexus KMS | 8700 | Knowledge management REST API (auto-managed) |
 | Gemini APIs | cloud | File Search, structured output, context caching, embeddings (API key) |
 | ComfyUI | 8188 | Image/video generation (optional) |
