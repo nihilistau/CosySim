@@ -63,5 +63,44 @@
     "final_val_ppl": 842.5483310852729,
     "time_s": 171.1417200565338,
     "ckpt": "./results/ckpt_hybrid_50z.pt"
+  },
+  "prime_05": {
+    "pe": "prime_05",
+    "steps": [
+      2999
+    ],
+    "val_loss": [
+      6.639860492944718
+    ],
+    "final_val_loss": 6.648076409620863,
+    "final_val_ppl": 771.2992338533661,
+    "time_s": 171.26526713371277,
+    "ckpt": "./results/ckpt_prime_05.pt"
+  },
+  "random_irr": {
+    "pe": "random_irr",
+    "steps": [
+      2999
+    ],
+    "val_loss": [
+      6.730630880594253
+    ],
+    "final_val_loss": 6.738519848629647,
+    "final_val_ppl": 844.3101037598802,
+    "time_s": 169.89297938346863,
+    "ckpt": "./results/ckpt_random_irr.pt"
+  },
+  "learned": {
+    "pe": "learned",
+    "steps": [
+      2999
+    ],
+    "val_loss": [
+      6.712504267692566
+    ],
+    "final_val_loss": 6.721709777705402,
+    "final_val_ppl": 830.2358173327938,
+    "time_s": 170.38839483261108,
+    "ckpt": "./results/ckpt_learned.pt"
   }
 }
