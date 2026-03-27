@@ -153,6 +153,17 @@ def cmd_primorial(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    """Run Phase 2 training benchmark."""
+    import subprocess
+    bench = ROOT / "apps" / "prime_encoding" / "benchmark.py"
+    cmd = [sys.executable, str(bench)]
+    if args.quick:
+        cmd.append("--quick")
+    result = subprocess.run(cmd, cwd=str(ROOT))
+    return result.returncode
+
+
 def cmd_test(args: argparse.Namespace) -> int:
     """Run the test suite."""
     import subprocess
@@ -182,6 +193,10 @@ def main() -> int:
     # primorial
     sub.add_parser("primorial", help="Show primorial growth table")
 
+    # benchmark
+    bench_p = sub.add_parser("benchmark", help="Run Phase 2 training benchmark")
+    bench_p.add_argument("--quick", action="store_true", help="Quick mode (500 steps)")
+
     # test
     sub.add_parser("test", help="Run test suite")
 
@@ -194,6 +209,7 @@ def main() -> int:
         "analyze": cmd_analyze,
         "demo": cmd_demo,
         "primorial": cmd_primorial,
+        "benchmark": cmd_benchmark,
         "test": cmd_test,
     }
     return commands[args.command](args)
