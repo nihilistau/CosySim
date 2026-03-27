@@ -4,10 +4,10 @@ Version: v0.2.0 | Author: Knack | 2026-03-27
 
 Change Log:
     v0.1.0 — Initial local test harness
-    v0.2.0 — zeta_rope + random_irr_rope (apples-to-apples rotary comparison),
-              fixed LitM needle task (vocab frequency artifacts removed),
-              dense loss tracking, degradation ratio table, rotary comparison block,
-              position shuffle experiment
+    v0.2.0 — zeta_rope + random_irr_rope, fixed LitM needle, dense loss,
+              degradation ratio table, rotary comparison, position shuffle
+    v0.3.0 — Prime resonance probe (PRS), fixed data loading for Windows
+              (ChunkDataset module-level, num_workers=0, 4M token cap)
     v0.2.1 — Fixed data loading: ChunkDataset at module level (pickling),
               num_workers=0 (Windows), 4M token cap (OOM prevention),
               row-by-row tokenization (no 8GB string join)
@@ -621,10 +621,88 @@ def position_shuffle_test(model, cfg, n_samples=200, swap_distance=50):
     return {"mean_kl": float(np.mean(kls)), "median_kl": float(np.median(kls)),
             "swap_dist": swap_distance, "n_samples": len(kls)}
 
+# ─── Section: Prime Resonance Probe ──────────────────────────────────────────
+# v0.3.0 — THE critical mechanistic test. If PRS > 1.0 at prime-multiple
+# distances, the model has learned arithmetic positional grammar.
+
+PRIME_SET = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+
+@torch.no_grad()
+def prime_resonance_probe(model, cfg: dict, n_batches: int = 100) -> dict:
+    """
+    Measures whether attention weight is elevated at distances that are
+    multiples of each prime in the frequency set.
+
+    Prime Resonance Score (PRS): ratio of mean attention at prime-multiple
+    distances vs non-prime-multiple distances. PRS > 1.0 = resonance present.
+    """
+    model.eval()
+    T = cfg["train_seq_len"]
+
+    dist_sum   = torch.zeros(T, device=cfg["device"])
+    dist_count = torch.zeros(T, device=cfg["device"])
+    hooks = []
+
+    def make_hook(li):
+        def hook(module, inp, out):
+            x = inp[0]; B, Tl, C = x.shape
+            with torch.no_grad():
+                qkv     = module.qkv(x).reshape(B, Tl, 3, module.n_heads, module.head_dim)
+                q, k, _ = qkv.permute(2, 0, 3, 1, 4).unbind(0)
+                scores  = (q @ k.transpose(-2, -1)) * module.scale
+                mask    = torch.triu(torch.ones(Tl, Tl, device=x.device, dtype=torch.bool), diagonal=1)
+                weights = scores.masked_fill(mask, float("-inf")).softmax(-1)
+                w_mean  = weights.mean(dim=(0, 1))  # (T, T)
+                for delta in range(1, Tl):
+                    diag = w_mean.diagonal(offset=-delta)
+                    dist_sum[delta]   += diag.sum()
+                    dist_count[delta] += diag.numel()
+        return hook
+
+    for li, block in enumerate(model.blocks):
+        hooks.append(block.attn.register_forward_hook(make_hook(li)))
+
+    ds     = _make_chunk_dataset("test", T + 1)
+    loader = DataLoader(ds, batch_size=2, shuffle=False, drop_last=True, num_workers=0)
+    for i, (x, _) in enumerate(loader):
+        if i >= n_batches: break
+        with torch.autocast(device_type="cuda", dtype=cfg["dtype"]):
+            model(x.to(cfg["device"]))
+
+    for h in hooks: h.remove()
+
+    mask_valid   = dist_count > 0
+    attn_by_dist = torch.zeros(T)
+    attn_by_dist[mask_valid] = (dist_sum[mask_valid] / dist_count[mask_valid]).cpu()
+
+    prs_by_prime = {}
+    for p in PRIME_SET:
+        pm = torch.zeros(T - 1, dtype=torch.bool)
+        for k in range(1, T // p + 1):
+            if k * p < T:
+                pm[k * p - 1] = True
+        nm = ~pm
+        if pm.sum() == 0 or nm.sum() == 0:
+            prs_by_prime[p] = float("nan")
+            continue
+        ma  = attn_by_dist[1:][pm].mean().item()
+        mna = attn_by_dist[1:][nm].mean().item()
+        prs_by_prime[p] = ma / mna if mna > 0 else float("nan")
+
+    valid     = [v for v in prs_by_prime.values() if not math.isnan(v)]
+    prs_total = float(sum(valid) / len(valid)) if valid else float("nan")
+
+    return {
+        "attn_by_dist": attn_by_dist[:200].tolist(),  # truncate for JSON
+        "prs_by_prime": prs_by_prime,
+        "prs_total":    prs_total,
+    }
+
 # ─── Section: Summary ─────────────────────────────────────────────────────────
 
 def print_summary(cfg, all_results, ppl_results, litm_results,
-                  dist_results=None, shuffle_results=None):
+                  dist_results=None, shuffle_results=None,
+                  resonance_results=None):
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70)
@@ -680,6 +758,15 @@ def print_summary(cfg, all_results, ppl_results, litm_results,
             else:
                 print(f"  {pe:<22} {r.get('note','')}")
 
+    if resonance_results:
+        print(f"\nPRIME RESONANCE (PRS > 1.0 = attention peaks at prime-multiple distances)")
+        for pe, r in sorted(resonance_results.items(),
+                            key=lambda x: -x[1].get("prs_total", 0)):
+            prs = r.get("prs_total", float("nan"))
+            if not math.isnan(prs):
+                flag = " <-- RESONANCE" if prs > 1.05 else ""
+                print(f"  {pe:<22} PRS={prs:.4f}{flag}")
+
     print(f"\nResults -> {cfg['results_dir']}/")
 
 # ─── Section: Main ────────────────────────────────────────────────────────────
@@ -688,7 +775,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--quick",    action="store_true")
     parser.add_argument("--variants", nargs="+", default=None)
-    parser.add_argument("--test",     choices=["all", "ppl", "litm", "attn", "shuffle"],
+    parser.add_argument("--test",     choices=["all", "ppl", "litm", "attn", "shuffle", "resonance"],
                         default="all")
     args = parser.parse_args()
 
@@ -786,8 +873,31 @@ def main():
         with open(f"{cfg['results_dir']}/shuffle.json", "w") as f:
             json.dump(shuffle_results, f, indent=2)
 
+    resonance_results = {}
+    if args.test in ("all", "resonance"):
+        print(f"\n-- Prime Resonance Probe --")
+        print(f"  Primes: {PRIME_SET}")
+        print(f"  PRS > 1.0 = attention elevated at prime-multiple distances\n")
+        for pe in cfg["pe_variants"]:
+            ckpt = all_results[pe].get("ckpt")
+            if not ckpt: continue
+            model = PrimePEModel(cfg, pe).to(cfg["device"])
+            model.load_state_dict(torch.load(ckpt, map_location=cfg["device"]))
+            model.eval()
+            result = prime_resonance_probe(model, cfg)
+            resonance_results[pe] = result
+            prs  = result["prs_total"]
+            pprs = " ".join(f"p{p}:{v:.3f}" for p, v in list(result["prs_by_prime"].items())[:5])
+            flag = " <-- RESONANCE" if prs > 1.05 else ""
+            print(f"  {pe:<22} PRS={prs:.4f}  [{pprs}]{flag}")
+            del model; gc.collect(); torch.cuda.empty_cache()
+        with open(f"{cfg['results_dir']}/resonance.json", "w") as f:
+            json.dump({k: {kk: vv for kk, vv in v.items() if kk != "attn_by_dist"}
+                       for k, v in resonance_results.items()}, f, indent=2)
+
     print_summary(cfg, all_results, ppl_results, litm_results,
-                  dist_results or None, shuffle_results or None)
+                  dist_results or None, shuffle_results or None,
+                  resonance_results or None)
 
 
 if __name__ == "__main__":
