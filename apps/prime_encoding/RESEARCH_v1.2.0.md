@@ -589,6 +589,28 @@ a few regular subdivisions to anchor the local groove.
 
 ---
 
+### 6.9 Evidence Assessment
+
+Three independent signals, all pointing the same direction at small scale, before
+the regime they're designed for:
+
+| Signal | Result | Independence |
+|--------|--------|-------------|
+| PPL improvement at longer context | -0.9% (zeta), -0.4% (90z/10p) | Measures output quality directly |
+| Weighting sweep | 90/10 optimal, prime regularises | Measures frequency basis composition |
+| Attention distance probe | +7% gap, correct direction | Measures internal mechanism |
+
+Any one of these could be noise. All three pointing the same direction is a meaningful
+pattern. The random_irrational control (P3-3) is the outstanding falsification test
+that determines whether the explanation is "number theory" or "non-geometric."
+
+The research arc across six versions has been clean — no retractions, only refinements.
+The hybrid failure (v1.4.0) produced an immediate mechanistic diagnosis and a fix that
+was verified in the same session. This kind of fast-failing loop is the hallmark of a
+hypothesis that's either right or at least productively wrong.
+
+---
+
 ## 7. Phase 3 Full-Scale Plan (H100 Colab) 🔬
 
 Local Phase 3 confirmed the signal. Full-scale run targets publication-quality results.
@@ -660,10 +682,29 @@ Hybrid 90z/10p (split by band origin):
 ```
 
 **Status:** 🔬 Direction is correct — low-frequency/zeta dimensions attend further.
-The 7% gap at 500 steps on a 256-token context is modest but consistent. On the H100
-with 20K steps and 4K-8K context the gap should widen substantially, because the
-short-range dimensions will have no reason to attend further while the long-range
-dimensions will have more context to exploit.
+
+**Honest interpretation:** At 500 steps on a 256-token context, the model hasn't
+learned real long-range dependencies yet. What the probe is measuring is closer to
+the **initial geometric bias** the frequency structure imposes on attention — lower
+frequencies produce softer position-decay curves, naturally spreading attention
+further — rather than learned functional specialisation.
+
+This is actually the **stronger version** of the claim. If the frequency structure
+geometrically biases attention toward different scales *without training*, that's
+exactly what a positional encoding should do. You're not asking the model to learn
+the decomposition; the decomposition is built in by construction.
+
+**The H100 run at 4K-8K with 20K steps will distinguish three outcomes:**
+
+| Gap at 4K-8K | Interpretation |
+|--------------|----------------|
+| Widens to 20-30% | Strong mechanistic claim: frequencies organise attention into scale-separated channels |
+| Stays at ~7% | Decomposition is real but shallow — a prior, not a learned feature. Still valuable. |
+| Collapses to 0% | The bias is overridden during training. Mechanism is different from scale separation. |
+
+All three outcomes are publishable. The first is the strongest paper. The second still
+supports the "frequency basis as design dimension" framing. The third would redirect
+the mechanistic story but the PPL improvement is still real.
 
 ### 7.2 Priority Experiments
 
@@ -676,11 +717,24 @@ Place key information at positions 0.1L, 0.25L, 0.5L, 0.75L, 0.9L. Measure retri
 accuracy. The flatter the curve across positions, the better. This is the direct test
 of the core hypothesis.
 
-**P3-3: Critical controls (deferred from Phase 2).**
-Add random-irrational and learned-frequency variants. If ZetaPE outperforms
-random-irrational, the number-theoretic motivation is empirically supported.
-If they are equivalent, the framing shifts to "non-geometric frequencies help" —
-still a valid result.
+**P3-3: Critical controls — the falsification test.**
+Add random-irrational and learned-frequency variants. **This is the most important
+experiment for the paper's theoretical framing.** Everything else is confirmation.
+This one is falsification.
+
+If ZetaPE outperforms random-irrational: the number-theoretic structure (GUE level
+repulsion, quasicrystalline spacing) is causally responsible for the advantage. The
+paper's title can reference primes and zeta zeros specifically.
+
+If they are equivalent: the advantage comes from being non-geometric, not from the
+specific mathematical properties of zeta zeros. The paper pivots to "frequency basis
+selection is an unexploited design dimension" — still a valid and publishable finding,
+but the number theory framing becomes motivational rather than causal.
+
+The learned-frequency variant addresses a related question: if we initialise with
+geometric frequencies and let the model train them, does it converge to something
+resembling zeta spacing? If yes, that's the strongest possible validation — the model
+independently discovers what number theory predicts.
 
 **P3-4: Adaptive alpha study.**
 Let α be a learnable parameter per frequency band. Track what values the model
