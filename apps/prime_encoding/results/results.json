@@ -1,0 +1,67 @@
+{
+  "sinusoidal": {
+    "pe": "sinusoidal",
+    "steps": [
+      2999
+    ],
+    "val_loss": [
+      6.683433580398559
+    ],
+    "final_val_loss": 6.693086301637388,
+    "final_val_ppl": 806.8084678600923,
+    "time_s": 165.58282661437988,
+    "ckpt": "./results/ckpt_sinusoidal.pt"
+  },
+  "rope": {
+    "pe": "rope",
+    "steps": [
+      2999
+    ],
+    "val_loss": [
+      6.3998621761798855
+    ],
+    "final_val_loss": 6.40744042693332,
+    "final_val_ppl": 606.3397223518396,
+    "time_s": 179.26182508468628,
+    "ckpt": "./results/ckpt_rope.pt"
+  },
+  "zeta": {
+    "pe": "zeta",
+    "steps": [
+      2999
+    ],
+    "val_loss": [
+      6.786640053987503
+    ],
+    "final_val_loss": 6.796469862530341,
+    "final_val_ppl": 894.6833551352655,
+    "time_s": 170.39032292366028,
+    "ckpt": "./results/ckpt_zeta.pt"
+  },
+  "hybrid_90z": {
+    "pe": "hybrid_90z",
+    "steps": [
+      2999
+    ],
+    "val_loss": [
+      6.730933409929276
+    ],
+    "final_val_loss": 6.739089451390183,
+    "final_val_ppl": 844.7911621188085,
+    "time_s": 170.46691942214966,
+    "ckpt": "./results/ckpt_hybrid_90z.pt"
+  },
+  "hybrid_50z": {
+    "pe": "hybrid_50z",
+    "steps": [
+      2999
+    ],
+    "val_loss": [
+      6.727629739046097
+    ],
+    "final_val_loss": 6.736431026854456,
+    "final_val_ppl": 842.5483310852729,
+    "time_s": 171.1417200565338,
+    "ckpt": "./results/ckpt_hybrid_50z.pt"
+  }
+}
