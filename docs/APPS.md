@@ -158,7 +158,12 @@ python apps/account.py list
 
 ## Model Proxy — Multi-Protocol AI Gateway
 
-`scripts/model_proxy.py` serves three API protocols simultaneously on port 5800:
+Two proxy variants serve OpenAI, Anthropic, and Gemini simultaneously:
+
+| Variant | File | Port | Approach |
+|---------|------|------|----------|
+| **Normalized** | `scripts/model_proxy.py` | :5800 | All protocols convert through OpenAI intermediate format |
+| **Direct** | `scripts/model_proxy_direct.py` | :5801 | Each protocol serializes straight to/from Copilot text (~7x faster) |
 
 | Protocol | Endpoint | Tool Calling |
 |----------|----------|-------------|
@@ -169,18 +174,22 @@ python apps/account.py list
 **21 models** across Anthropic (6), OpenAI (8), Google (3), xAI (1), NotebookLM (1), LMStudio (1).
 
 ```bash
-python scripts/model_proxy.py                           # All protocols on :5800
-python scripts/model_proxy.py --default opus            # Default model
-python scripts/model_proxy.py --account nihilistcod     # Copilot account
-python scripts/model_proxy.py --lmstudio-url http://X:1234/v1  # Remote LMStudio
-python scripts/model_proxy.py --list-models             # Print full catalog
-python scripts/model_proxy.py --port 8080               # Custom port
+# Normalized proxy (original)
+python apps/proxy.py                                    # All protocols on :5800
+python apps/proxy.py --default opus --list-models
+
+# Direct proxy (zero-conversion, ~7x faster)
+python apps/multi_proxy.py                              # All protocols on :5801
+python apps/multi_proxy.py --default opus --list-models
+
+# Both accept the same args
+--port PORT --default MODEL --account ACCOUNT --lmstudio-url URL --list-models
 ```
 
 **Configure your tool:**
 ```
-Base URL:  http://localhost:5800/v1    (OpenAI/Anthropic)
-           http://localhost:5800       (Gemini)
+Base URL:  http://localhost:5801/v1    (direct, recommended)
+           http://localhost:5800/v1    (normalized, original)
 API Key:   anything (not checked)
 Model:     opus, sonnet, haiku, gpt5, codex, gemini, flash, grok, nlm, lmstudio
 ```

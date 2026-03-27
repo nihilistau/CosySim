@@ -10,7 +10,10 @@ Complete NLM rpcid system rebuild, unified CLI framework with 15 standalone apps
 and multi-protocol model proxy (OpenAI + Anthropic + Gemini on one port).
 
 ### Multi-Protocol Model Proxy (NEW)
-- `scripts/model_proxy.py` — serves OpenAI, Anthropic, and Gemini protocols simultaneously on :5800
+- Two proxy variants:
+  - `scripts/model_proxy.py` (:5800) — normalized: all protocols convert through OpenAI intermediate format
+  - `scripts/model_proxy_direct.py` (:5801) — zero-conversion: each protocol serializes directly to/from Copilot text (~7x faster)
+- `apps/proxy.py` + `apps/multi_proxy.py` — standalone CLI apps for both variants
 - OpenAI: `POST /v1/chat/completions` with full tool/function calling support
 - Anthropic: `POST /v1/messages` with `tool_use` content blocks
 - Gemini: `POST /v1beta/models/{model}:generateContent` with `functionCall` parts

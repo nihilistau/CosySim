@@ -67,10 +67,10 @@ python apps/nexus.py search "query"
 python apps/argus.py har file.har
 python apps/lmstudio.py status
 
-# Model Proxy — multi-protocol AI gateway (OpenAI + Anthropic + Gemini on :5800)
-python scripts/model_proxy.py                          # All protocols on :5800
-python scripts/model_proxy.py --default opus           # Default model
-python scripts/model_proxy.py --list-models            # Print model catalog
+# Model Proxy — multi-protocol AI gateway (OpenAI + Anthropic + Gemini)
+python apps/multi_proxy.py                             # Direct/fast on :5801 (recommended)
+python apps/proxy.py                                   # Normalized on :5800 (original)
+python apps/multi_proxy.py --default opus --list-models
 
 # Oracle — system diagnostics (use BEFORE and AFTER debugging)
 python scripts/oracle.py                          # Full health + errors + performance

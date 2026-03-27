@@ -1162,7 +1162,12 @@ Full reference: [docs/APPS.md](docs/APPS.md)
 
 ### 25.1 Model Proxy — Multi-Protocol AI Gateway
 
-`scripts/model_proxy.py` serves OpenAI, Anthropic, and Gemini protocols **simultaneously** on one port. All three coexist on different URL paths:
+Two proxy variants serve OpenAI, Anthropic, and Gemini protocols **simultaneously**:
+
+| Variant | Port | Speed | File |
+|---------|------|-------|------|
+| Normalized | :5800 | Baseline | `scripts/model_proxy.py` |
+| Direct | :5801 | ~7x faster | `scripts/model_proxy_direct.py` |
 
 ```
 OpenAI:    POST /v1/chat/completions           # Tool calling via emulation
@@ -1172,12 +1177,14 @@ Gemini:    POST /v1beta/models/{model}:generateContent  # functionCall parts
 
 **21 models** across Anthropic, OpenAI, Google, xAI, and local LMStudio. Tool calling works across all protocols — Copilot models use system prompt emulation, LMStudio uses native passthrough.
 
+The **direct** proxy serializes each protocol straight to/from Copilot text with no intermediate conversion. The **normalized** proxy converts everything through OpenAI format first.
+
 ```bash
-python scripts/model_proxy.py                          # All protocols on :5800
-python scripts/model_proxy.py --default opus           # Default model
-python scripts/model_proxy.py --list-models            # Print catalog
-python scripts/model_proxy.py --lmstudio-url http://X:1234/v1  # Remote LMStudio
+python apps/multi_proxy.py                             # Direct (recommended, :5801)
+python apps/multi_proxy.py --default opus              # Default model
+python apps/proxy.py                                   # Normalized (original, :5800)
+python apps/proxy.py --list-models                     # Print catalog
 ```
 
-**Configure any tool:** Base URL `http://localhost:5800/v1`, API key `anything`.
+**Configure any tool:** Base URL `http://localhost:5801/v1`, API key `anything`.
 Works with OpenCode, aider, Cursor, Continue, Anthropic SDK, google-genai SDK.
