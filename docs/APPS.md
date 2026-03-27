@@ -245,6 +245,25 @@ use it for code-grounded queries instead.
 
 ---
 
+## Research: Prime-Harmonic Positional Encoding
+
+Self-contained research project in `apps/prime_encoding/` exploring whether prime
+numbers and Riemann zeta zeros can improve transformer positional encodings.
+
+```bash
+python apps/prime_encoding/run.py demo           # Key properties demo
+python apps/prime_encoding/run.py analyze        # Phase 1 math comparison
+python apps/prime_encoding/run.py benchmark      # Phase 2 synthetic tasks
+python apps/prime_encoding/run.py test           # 84 tests
+python apps/prime_encoding/phase3_local.py       # Phase 3 real LM (CUDA)
+```
+
+**Key result:** Zeta PE is the only encoding where perplexity improves at longer
+context (-0.9%) on WikiText-103. See `apps/prime_encoding/RESEARCH.md` for the
+full research document (v1.3.0, 3 phases, 12 references).
+
+---
+
 ## See Also
 
 - [Operations](OPERATIONS.md) - Launcher, TUI, ports, logging
@@ -259,4 +278,4 @@ use it for code-grounded queries instead.
 
 | Version | Date | Description |
 |---------|------|-------------|
-| v1.57.2 | 2026-03-27 | Initial CLI + 15 standalone apps + multi-protocol model proxy |
+| v1.57.2 | 2026-03-27 | Initial CLI + 15 apps + multi-protocol proxy + prime PE research |
