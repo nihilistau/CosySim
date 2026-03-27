@@ -37,7 +37,7 @@ All targets defined in `engine/control_plane_registry.py`:
 | 8501–8504 | Streamlit apps (dashboard, admin, assets, creator) | Auto |
 | 8600 | TTS Server | Launcher |
 | 8700 | Nexus KMS (auto-start, priority 0) | Auto |
-| 5800 | Model Proxy (OpenAI-compat, FastAPI) | Manual |
+| 5800 | Model Proxy (OpenAI + Anthropic + Gemini, 21 models) | Manual |
 | 5593 | Advanced Assistant (chat UI + proxy) | Manual |
 | 8800 | NLM Proxy | Auto |
 

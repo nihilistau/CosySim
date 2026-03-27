@@ -1159,3 +1159,25 @@ and CWD normalization. Each app delegates to existing scripts/modules via subpro
 — no logic duplication.
 
 Full reference: [docs/APPS.md](docs/APPS.md)
+
+### 25.1 Model Proxy — Multi-Protocol AI Gateway
+
+`scripts/model_proxy.py` serves OpenAI, Anthropic, and Gemini protocols **simultaneously** on one port. All three coexist on different URL paths:
+
+```
+OpenAI:    POST /v1/chat/completions           # Tool calling via emulation
+Anthropic: POST /v1/messages                   # tool_use content blocks
+Gemini:    POST /v1beta/models/{model}:generateContent  # functionCall parts
+```
+
+**21 models** across Anthropic, OpenAI, Google, xAI, and local LMStudio. Tool calling works across all protocols — Copilot models use system prompt emulation, LMStudio uses native passthrough.
+
+```bash
+python scripts/model_proxy.py                          # All protocols on :5800
+python scripts/model_proxy.py --default opus           # Default model
+python scripts/model_proxy.py --list-models            # Print catalog
+python scripts/model_proxy.py --lmstudio-url http://X:1234/v1  # Remote LMStudio
+```
+
+**Configure any tool:** Base URL `http://localhost:5800/v1`, API key `anything`.
+Works with OpenCode, aider, Cursor, Continue, Anthropic SDK, google-genai SDK.

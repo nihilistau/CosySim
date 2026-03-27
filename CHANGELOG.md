@@ -4,9 +4,23 @@ All notable changes to CosySim are documented here.
 
 ---
 
-## [1.57.2] — "RPC SYSTEM OVERHAUL + UNIFIED CLI" — 2026-03-27
+## [1.57.2] — "RPC SYSTEM OVERHAUL + UNIFIED CLI + MULTI-PROTOCOL PROXY" — 2026-03-27
 
-Complete NLM rpcid system rebuild plus unified CLI framework with 15 standalone apps.
+Complete NLM rpcid system rebuild, unified CLI framework with 15 standalone apps,
+and multi-protocol model proxy (OpenAI + Anthropic + Gemini on one port).
+
+### Multi-Protocol Model Proxy (NEW)
+- `scripts/model_proxy.py` — serves OpenAI, Anthropic, and Gemini protocols simultaneously on :5800
+- OpenAI: `POST /v1/chat/completions` with full tool/function calling support
+- Anthropic: `POST /v1/messages` with `tool_use` content blocks
+- Gemini: `POST /v1beta/models/{model}:generateContent` with `functionCall` parts
+- Tool calling emulation for Copilot (38 frontier models) via system prompt injection + `<tool_call>` parsing
+- LMStudio native passthrough (tool calling supported natively)
+- Protocol normalization: all incoming requests converted to internal format, responses converted back
+- 21 models across 5 vendors (Anthropic, OpenAI, Google, xAI, Local)
+- Full alias map: legacy OpenAI/Anthropic/Gemini model IDs resolve to current versions
+- CLI: `--default`, `--account`, `--lmstudio-url`, `--list-models`, `--port`
+- Works with: OpenCode, aider, Cursor, Continue, Anthropic SDK, google-genai SDK
 
 ### Unified CLI & Standalone Apps (NEW)
 - `cli.py` — single entry point with 16 command groups (ask, oracle, account, har, heap, argus, cdp, nlm, filestore, test, scene, nexus, launch, cleanup, proxy, lmstudio)
