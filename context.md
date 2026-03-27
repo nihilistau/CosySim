@@ -1201,10 +1201,12 @@ Riemann zeta zeros can improve transformer positional encodings for long context
   context (-0.9% from 512 to 2048 tokens on WikiText-103)**
 
 ```bash
-python apps/prime_encoding/run.py demo           # Key properties demo
-python apps/prime_encoding/run.py analyze        # Phase 1 math comparison
-python apps/prime_encoding/run.py benchmark      # Phase 2 synthetic tasks
-python apps/prime_encoding/phase3_local.py       # Phase 3 real LM (CUDA)
+python apps/prime_encoding/cli.py demo                       # Key properties demo
+python apps/prime_encoding/cli.py train --pe zeta --steps 2000  # Train single variant
+python apps/prime_encoding/cli.py train --pe all --quick     # Train all (quick)
+python apps/prime_encoding/cli.py compare                    # Compare saved results
+python apps/prime_encoding/cli.py sweep --param zeta_ratio   # Find optimal mix
+python apps/prime_encoding/cli.py probe --pe hybrid_90z      # Attention distance probe
 ```
 
 Full research document: `apps/prime_encoding/RESEARCH.md` (v1.3.0)

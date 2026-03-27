@@ -251,11 +251,15 @@ Self-contained research project in `apps/prime_encoding/` exploring whether prim
 numbers and Riemann zeta zeros can improve transformer positional encodings.
 
 ```bash
-python apps/prime_encoding/run.py demo           # Key properties demo
-python apps/prime_encoding/run.py analyze        # Phase 1 math comparison
-python apps/prime_encoding/run.py benchmark      # Phase 2 synthetic tasks
-python apps/prime_encoding/run.py test           # 84 tests
-python apps/prime_encoding/phase3_local.py       # Phase 3 real LM (CUDA)
+python apps/prime_encoding/cli.py demo                       # Key properties demo
+python apps/prime_encoding/cli.py analyze                    # Phase 1 math comparison
+python apps/prime_encoding/cli.py train --pe zeta --steps 2000  # Train single variant
+python apps/prime_encoding/cli.py train --pe all --quick     # Train all variants
+python apps/prime_encoding/cli.py compare                    # Compare saved results
+python apps/prime_encoding/cli.py sweep --param zeta_ratio   # Find optimal mix
+python apps/prime_encoding/cli.py probe --pe hybrid_90z      # Attention distance probe
+python apps/prime_encoding/cli.py freqs --pe zeta --dim 512  # Show frequency values
+python apps/prime_encoding/cli.py test                       # 84 tests
 ```
 
 **Key result:** Zeta PE is the only encoding where perplexity improves at longer

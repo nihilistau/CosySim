@@ -17,8 +17,12 @@ multi-protocol model proxy, and prime-harmonic positional encoding research.
   - **Zeta PE is the ONLY encoding where perplexity improves at longer context (-0.9%)**
   - Sinusoidal: flat (+0.1%), prime(a=1.0): degrades (+47.3%)
   - First empirical signal that quasicrystalline frequencies handle long-range better
+- Weighting experiment: 90% zeta / 10% prime optimal (best absolute PPL 1429.4)
+- Attention distance probe: zeta dims attend 7% further (scale decomposition signal)
+- Hybrid fix: per-band normalisation + interleaving (reordering alone: +11% → -0.3%)
+- `apps/prime_encoding/cli.py` — full research CLI (train, compare, sweep, probe, freqs)
 - H100 notebook ready for full-scale run: `PrimePE_Phase3_H100.ipynb`
-- Full research document: `apps/prime_encoding/RESEARCH.md` (v1.3.0, 12 references)
+- Full research document: `apps/prime_encoding/RESEARCH.md` (v1.5.1, 12 references)
 
 ### Multi-Protocol Model Proxy (NEW)
 - Two proxy variants:
