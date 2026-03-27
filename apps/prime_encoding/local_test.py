@@ -639,8 +639,8 @@ def prime_resonance_probe(model, cfg: dict, n_batches: int = 100) -> dict:
     model.eval()
     T = cfg["train_seq_len"]
 
-    dist_sum   = torch.zeros(T, device=cfg["device"])
-    dist_count = torch.zeros(T, device=cfg["device"])
+    dist_sum   = torch.zeros(T + 1, device=cfg["device"])
+    dist_count = torch.zeros(T + 1, device=cfg["device"])
     hooks = []
 
     def make_hook(li):
@@ -662,7 +662,7 @@ def prime_resonance_probe(model, cfg: dict, n_batches: int = 100) -> dict:
     for li, block in enumerate(model.blocks):
         hooks.append(block.attn.register_forward_hook(make_hook(li)))
 
-    ds     = _make_chunk_dataset("test", T + 1)
+    ds     = _make_eval_dataset("test", T + 1)
     loader = DataLoader(ds, batch_size=2, shuffle=False, drop_last=True, num_workers=0)
     for i, (x, _) in enumerate(loader):
         if i >= n_batches: break
@@ -672,21 +672,27 @@ def prime_resonance_probe(model, cfg: dict, n_batches: int = 100) -> dict:
     for h in hooks: h.remove()
 
     mask_valid   = dist_count > 0
-    attn_by_dist = torch.zeros(T)
+    attn_by_dist = torch.zeros(T + 1)
     attn_by_dist[mask_valid] = (dist_sum[mask_valid] / dist_count[mask_valid]).cpu()
 
     prs_by_prime = {}
+    ad = attn_by_dist[1:T+1]  # distances 1..T, indexed 0..T-1
     for p in PRIME_SET:
-        pm = torch.zeros(T - 1, dtype=torch.bool)
+        pm = torch.zeros(T, dtype=torch.bool)
         for k in range(1, T // p + 1):
-            if k * p < T:
+            if k * p <= T:
                 pm[k * p - 1] = True
+        # Fix: exclude distances < p from the non-multiple baseline.
+        # Distance 1 is never a prime multiple for p>1 but always has
+        # highest attention (proximity bias), inflating the denominator
+        # and making PRS < 1.0 structurally regardless of learned structure.
         nm = ~pm
+        nm[:p - 1] = False  # exclude distances shorter than the prime itself
         if pm.sum() == 0 or nm.sum() == 0:
             prs_by_prime[p] = float("nan")
             continue
-        ma  = attn_by_dist[1:][pm].mean().item()
-        mna = attn_by_dist[1:][nm].mean().item()
+        ma  = ad[pm].mean().item()
+        mna = ad[nm].mean().item()
         prs_by_prime[p] = ma / mna if mna > 0 else float("nan")
 
     valid     = [v for v in prs_by_prime.values() if not math.isnan(v)]
