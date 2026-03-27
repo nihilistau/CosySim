@@ -420,6 +420,15 @@ def train_variant(pe_type: str, cfg: Dict) -> Dict[str, Any]:
         summary = ", ".join(f"{f:.1f}:{a:.3f}" for f, a in sorted(fracs.items()))
         print(f"    ctx={ctx_len}: {summary}")
 
+    # ── Attention Distance Probe ──
+    # Measures mean attended distance per frequency band (zeta vs prime dims)
+    # This is the experiment that validates the scale decomposition hypothesis
+    print(f"\n  Running attention distance probe...")
+    probe_results = attention_distance_probe(model, cfg, device)
+    if probe_results:
+        for band, dist in sorted(probe_results.items()):
+            print(f"    {band}: mean_dist={dist:.1f} tokens")
+
     elapsed = time.time() - t0
     print(f"\n  Total time: {elapsed:.0f}s")
 
@@ -436,9 +445,145 @@ def train_variant(pe_type: str, cfg: Dict) -> Dict[str, Any]:
         "final_loss": loss_history[-1] if loss_history else 0,
         "ppl_by_ctx": ppl_results,
         "litm": litm_results,
+        "attention_probe": probe_results,
         "train_time_secs": elapsed,
         "params": cfg["d_model"] * cfg["n_layers"],  # rough
     }
+
+
+# ──── Attention Distance Probe ───────────────────────────────────────────────
+# The critical experiment: do zeta-frequency dimensions attend at longer range
+# than prime-frequency dimensions? If yes, the scale decomposition is real.
+
+@torch.no_grad()
+def attention_distance_probe(
+    model: nn.Module,
+    cfg: Dict,
+    device: torch.device,
+    n_batches: int = 50,
+    seq_len: int = 512,
+) -> Dict[str, float]:
+    """Measure mean attended distance per frequency band.
+
+    For hybrid models: splits dimensions into "zeta band" and "prime band"
+    based on which frequency generator produced them. Computes the average
+    distance each band attends to.
+
+    For non-hybrid models: splits dimensions into "low freq" (bottom half)
+    and "high freq" (top half) to see if frequency magnitude correlates
+    with attention distance.
+
+    Args:
+        model: Trained model to probe.
+        cfg: Config dict.
+        device: Compute device.
+        n_batches: Number of batches to average over.
+        seq_len: Sequence length for probing.
+
+    Returns:
+        Dict mapping band name → mean attended distance.
+    """
+    model.eval()
+    pe_type = model.pe_type
+
+    # We need attention weights — hook into the transformer layers
+    attn_distances: Dict[str, List[float]] = {}
+    hooks = []
+
+    def make_hook(layer_idx: int):
+        def hook_fn(module, input, output):
+            # nn.TransformerEncoderLayer doesn't directly expose attention weights
+            # So we compute attention from the self_attn sublayer
+            pass
+        return hook_fn
+
+    # Alternative approach: compute attention manually from the model
+    # by running a forward pass and extracting Q, K from the self-attention layers
+    try:
+        train_data = load_data(seq_len, "test", max_tokens=500_000)
+    except Exception:
+        return {}
+
+    d_model = cfg["d_model"]
+    half = d_model // 2
+
+    # Determine band assignments based on PE type
+    if "hybrid" in pe_type or pe_type in ("hybrid_70z", "hybrid_90z"):
+        # For hybrid: determine which dimensions are zeta vs prime
+        # In the interleaved scheme, even indices are prime, odd are zeta (for 50/50)
+        # For weighted: we know the ratio from the pe_type
+        if "90z" in pe_type:
+            n_prime = int(half * 0.1)
+        elif "70z" in pe_type:
+            n_prime = int(half * 0.3)
+        else:
+            n_prime = half // 2
+        n_zeta = half - n_prime
+        # In interleaved layout, prime and zeta alternate
+        prime_dims = list(range(0, min(2 * n_prime, half), 2))  # even positions up to n_prime
+        zeta_dims = [i for i in range(half) if i not in prime_dims]
+        band_map = {"zeta_band": zeta_dims, "prime_band": prime_dims}
+    else:
+        # For non-hybrid: split by frequency magnitude (low = long range, high = short range)
+        band_map = {
+            "low_freq (long-range)": list(range(half // 2, half)),
+            "high_freq (short-range)": list(range(0, half // 2)),
+        }
+
+    # Compute mean attended distance by examining model output sensitivity
+    # Use a perturbation approach: for each position, measure how much the
+    # output at other positions changes when we perturb this position's
+    # PE in a specific band
+    all_band_distances: Dict[str, List[float]] = {b: [] for b in band_map}
+
+    for batch_idx in range(min(n_batches, len(train_data))):
+        chunk = train_data[batch_idx].unsqueeze(0).to(device)
+        x = chunk[:, :-1]
+        T = x.shape[1]
+
+        # Get baseline output
+        with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+            base_logits = model(x)
+
+        # For each band, perturb PE at a probe position and measure effect range
+        probe_pos = T // 2  # probe from the middle
+        pe_original = model._make_pe(T).clone()
+
+        for band_name, dim_indices in band_map.items():
+            # Perturb the PE at probe_pos for this band's dimensions
+            pe_perturbed = pe_original.clone()
+            for d in dim_indices:
+                pe_perturbed[probe_pos, 2 * d] *= -1      # flip sin
+                pe_perturbed[probe_pos, 2 * d + 1] *= -1  # flip cos
+
+            # Forward with perturbed PE
+            h = model.tok_emb(x) * math.sqrt(model.d_model)
+            h = h + pe_perturbed.unsqueeze(0)
+            h = model.drop(h)
+            mask = nn.Transformer.generate_square_subsequent_mask(T, device=device)
+
+            with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+                h = model.transformer(h, mask=mask, is_causal=True)
+                h = model.ln_f(h)
+                perturbed_logits = model.lm_head(h)
+
+            # Measure where the perturbation has the most effect
+            diff = (perturbed_logits - base_logits).abs().mean(dim=-1).squeeze(0)  # (T,)
+
+            # Compute mean affected distance from probe_pos, weighted by effect magnitude
+            distances = torch.arange(T, device=device, dtype=torch.float) - probe_pos
+            distances = distances.abs()
+            if diff.sum() > 1e-8:
+                mean_dist = (diff * distances).sum() / diff.sum()
+                all_band_distances[band_name].append(mean_dist.item())
+
+    # Average across batches
+    results = {}
+    for band_name, dists in all_band_distances.items():
+        if dists:
+            results[band_name] = sum(dists) / len(dists)
+
+    return results
 
 
 # ──── Lost-in-the-Middle ────────────────────────────────────────────────────
