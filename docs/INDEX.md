@@ -1,12 +1,12 @@
 # CosySim Documentation Index
 
-> v1.57.0 — Gemini Native (File Search, structured output, context caching), 7-tier query pipeline, 91 scheduler tasks, Three-Pillar Architecture + ARGUS Recon Framework, 1,040+ Skills.
+> v1.57.2 — Gemini Native + Unified CLI. 16 CLI commands, 15 standalone apps, 7-tier query pipeline, 92 scheduler tasks, Three-Pillar Architecture + ARGUS Recon Framework, 1,040+ Skills.
 
 ## Quick Reference
 
 | Metric | Value |
 |--------|-------|
-| Version | v1.57.0 [2026-03-26] |
+| Version | v1.57.2 [2026-03-27] |
 | Targets | 35 (18 game + 11 service + 6 creation) |
 | Skills | ~1,040 across 99 packs via @skill decorator |
 | Interceptors | 36 pipeline hooks in the agent governance layer |
@@ -85,6 +85,7 @@ All targets defined in `engine/control_plane_registry.py`:
 
 | Doc | Description |
 |-----|-------------|
+| [Apps & CLI](APPS.md) | Unified CLI (cli.py), 15 standalone apps, venv auto-bootstrap, command reference |
 | [Operations](OPERATIONS.md) | Launcher, TUI, ports, logging, monitoring, scheduler, admin panels |
 | [TTS](TTS.md) | Qwen3-TTS server, voice design, streaming audio |
 | [Asset Studio](ASSET_STUDIO.md) | ComfyUI integration, workflows, tuning engine |

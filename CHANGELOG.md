@@ -4,8 +4,23 @@ All notable changes to CosySim are documented here.
 
 ---
 
-## [1.57.2] — "RPC SYSTEM OVERHAUL" — 2026-03-26
+## [1.57.2] — "RPC SYSTEM OVERHAUL + UNIFIED CLI" — 2026-03-27
 
+Complete NLM rpcid system rebuild plus unified CLI framework with 15 standalone apps.
+
+### Unified CLI & Standalone Apps (NEW)
+- `cli.py` — single entry point with 16 command groups (ask, oracle, account, har, heap, argus, cdp, nlm, filestore, test, scene, nexus, launch, cleanup, proxy, lmstudio)
+- 15 standalone apps in `apps/` — each independently runnable with venv auto-bootstrap
+- `apps/_bootstrap.py` — shared venv detection, sys.path setup, subprocess helpers
+- Auto venv re-exec: `python cli.py` works from system Python (no manual activation)
+- `apps/nlm.py upload` — auto-renames .py/.js/.yaml to .py.txt for NLM compatibility
+- `apps/filestore.py` — Gemini File Search CLI (create stores, upload, query, bootstrap)
+- `apps/lmstudio.py` — LMStudio management (status, models, chat, benchmark)
+- `apps/training.py` — Training pipeline CLI (status, datasets, bench, curate)
+- `engine/integrations/github_account_importer.py` — added CLI with auto-detect username
+- Full reference: `docs/APPS.md`
+
+### RPC System Overhaul
 Complete NLM rpcid system rebuild. Operations now use call-time registry lookups
 instead of import-time constants. Auto-recovery on rpcid rotation.
 

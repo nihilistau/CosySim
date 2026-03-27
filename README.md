@@ -119,6 +119,19 @@ python launcher.py --core           # Auto-start core scenes + services
 python launcher.py --all            # Everything
 python launcher.py --list           # Show all targets with port status
 
+# Unified CLI (auto-handles venv — no activation needed)
+python cli.py ask "prompt"          # AI query (38 frontier models)
+python cli.py oracle --health       # System diagnostics
+python cli.py account list          # Account pool management
+python cli.py nexus search "query"  # Knowledge management
+python cli.py filestore bootstrap   # Gemini File Search RAG
+python cli.py test --smoke          # Smart test runner
+
+# Standalone apps (same thing, separate entry points)
+python apps/nexus.py search "query"
+python apps/argus.py har file.har   # Web app analysis
+python apps/lmstudio.py status      # LMStudio management
+
 # Run tests
 python scripts/smart_test.py        # Smart runner — tests for uncommitted changes
 python scripts/smart_test.py --smoke # ~15 files, ~53s
@@ -144,11 +157,13 @@ CosySim/
 │   ├── shared/                # Shared templates (navbar_v2, neon_hud), CSS, JS
 │   └── simulation/            # SQLite persistence, character services
 ├── config/                    # default.yaml, development.yaml, voices.yaml, mcp.json
+├── apps/                      # 15 standalone CLI apps (venv auto-bootstrap)
 ├── scripts/                   # Smart test runner, browser tests, ARGUS tools
 ├── tests/                     # 417 test files
 ├── training/                  # Fine-tuning pipelines, datasets, model registry
 ├── docs/                      # 34 documentation files (INDEX.md entry point)
 ├── tui.py                     # Terminal UI launcher (Textual framework)
+├── cli.py                     # Unified CLI (16 commands, venv auto-exec)
 ├── launcher.py                # CLI scene launcher
 └── main.py                    # Application entry point
 ```
@@ -162,7 +177,7 @@ All documentation lives in `docs/` with **[INDEX.md](./docs/INDEX.md)** as the c
 | **Architecture** | [ARCHITECTURE.md](./docs/ARCHITECTURE.md) · [MCP_FRAMEWORK.md](./docs/MCP_FRAMEWORK.md) · [INTERCEPTORS.md](./docs/INTERCEPTORS.md) |
 | **Scenes** | [SCENES.md](./docs/SCENES.md) · [SKILLS.md](./docs/SKILLS.md) · [NEON_HUD.md](./docs/NEON_HUD.md) · [OPENROOM_FEATURES.md](./docs/OPENROOM_FEATURES.md) |
 | **Knowledge** | [NEXUS.md](./docs/NEXUS.md) · [LMSTUDIO.md](./docs/LMSTUDIO.md) |
-| **Operations** | [OPERATIONS.md](./docs/OPERATIONS.md) · [CONFIGURATION.md](./docs/CONFIGURATION.md) · [API.md](./docs/API.md) |
+| **Operations** | [OPERATIONS.md](./docs/OPERATIONS.md) · [CONFIGURATION.md](./docs/CONFIGURATION.md) · [API.md](./docs/API.md) · [APPS.md](./docs/APPS.md) |
 | **Development** | [CONTRIBUTING.md](./docs/CONTRIBUTING.md) · [TESTING.md](./docs/TESTING.md) |
 
 ## License
