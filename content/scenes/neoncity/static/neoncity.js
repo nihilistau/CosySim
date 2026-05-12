@@ -1,5 +1,5 @@
 /**
- * NeonCity — v1.52 "Three Pillars"
+ * NeonCity — v1.57.3 "Polish Pass"
  * Living World Hub client-side controller.
  *
  * Handles Socket.IO state sync, district navigation, faction bars,
@@ -7,8 +7,10 @@
  * crew operations, inventory context menu, heat warnings,
  * and rich event feed with color-coded cards.
  *
- * Version: v1.52.0 [2026-03-22]
+ * Version: v1.57.3 [2026-05-12]
  * Change Log:
+ *   v1.57.3 [2026-05-12] — animateBarFill helper, stat/faction bar fill
+ *                            animations on load, border-trace on district select
  *   v1.52.0 [2026-03-22] — Three Pillars: district online/offline detection,
  *                            exchange_credits result handler, credit flash
  *                            animations, NPC typing indicator, enhanced
@@ -24,6 +26,27 @@
  */
 
 'use strict';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Utility helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+// v1.57.3 [2026-05-12] — Animate bar from 0 to target
+/**
+ * Smoothly animate a bar element from 0% to a target percentage.
+ * @param {HTMLElement|null} el - The bar fill element.
+ * @param {number} targetPct - Target width as a percentage (0–100).
+ * @param {number} [delayMs=0] - Optional stagger delay in milliseconds.
+ */
+function animateBarFill(el, targetPct, delayMs = 0) {
+  if (!el) return;
+  el.style.width = '0%';
+  el.style.transition = 'none';
+  setTimeout(() => {
+    el.style.transition = `width 0.8s cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms`;
+    el.style.width = targetPct + '%';
+  }, 20);
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // NeonCityScene class
@@ -238,6 +261,16 @@ class NeonCityScene {
         // Update chat header
         const chatLabel = document.getElementById('chat-district-label');
         if (chatLabel) chatLabel.textContent = `— ${districtKey.replace('_', ' ').toUpperCase()}`;
+
+        // v1.57.3 [2026-05-12] — Border trace on selected card
+        document.querySelectorAll('.nc-district').forEach(el => el.classList.remove('tracing'));
+        const card = document.querySelector(`.nc-district[data-district="${districtKey}"]`);
+        if (card) {
+            card.classList.add('anim-border-trace');
+            card.classList.remove('tracing');
+            void card.offsetWidth;
+            card.classList.add('tracing');
+        }
 
         if (this.socket) this.socket.emit('visit_district', { district: districtKey });
     }
@@ -544,11 +577,12 @@ class NeonCityScene {
      */
     _renderFactionBars(factions) {
         const standings = (this._districtStatus || {}).faction_standings || {};
-        factions.forEach(f => {
+        // v1.57.3 [2026-05-12] — Animate faction bars in with stagger
+        factions.forEach((f, idx) => {
             const bar = document.getElementById(`bar-${f.name}`);
             if (bar) {
-                bar.style.width = `${f.power}%`;
                 bar.style.background = f.color || '#06b6d4';
+                animateBarFill(bar, f.power, idx * 100);
             }
             const powerEl = document.getElementById(`power-${f.name}`);
             if (powerEl) powerEl.textContent = f.power;
@@ -872,13 +906,14 @@ class NeonCityScene {
             { key: 'heat',       id: 'heat',       max: 100 },
             { key: 'reputation', id: 'reputation', max: 100 },
         ];
-        for (const s of stats) {
+        // v1.57.3 [2026-05-12] — Animate bars in with stagger on each load
+        stats.forEach((s, index) => {
             const val = ps[s.key] ?? 0;
             const bar = document.getElementById(`stat-${s.id}`);
             const txt = document.getElementById(`val-${s.id}`);
-            if (bar) bar.style.width = `${Math.min(100, Math.max(0, val))}%`;
+            animateBarFill(bar, Math.min(100, Math.max(0, val)), index * 80);
             if (txt) txt.textContent = Math.round(val);
-        }
+        });
 
         // Player skills chips
         const skillsEl = document.getElementById('player-skills');
