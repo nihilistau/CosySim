@@ -1,5 +1,5 @@
 /*
- * CosySim Component Library — v0.68 "Dark Renaissance"
+ * CosySim Component Library — v1.57.3 [2026-05-12]
  * =====================================================
  * Reusable UI components for all scenes.
  * Requires: design_tokens.css · cosysim-animations.css
@@ -9,6 +9,9 @@
  *   Voice Toggle · Bench HUD · Arena Cards · Hacker Panel ·
  *   Economy Ticker · Agent Tag · Pixel Card · Scene Header ·
  *   Sidebar · Chip Badge · Online Dot · Investigation Board
+ *
+ * Change Log:
+ *   v1.57.3 [2026-05-12] — Add glass-subtle/medium/deep depth tiers + cs-btn-scene standardized button
  */
 
 /* ══════════════════════════════════════════════════════════════
@@ -1158,7 +1161,6 @@
     background: rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.9);
     border-color: var(--cs-scene-accent, var(--cs-accent));
     color: #fff;
-    font-weight: 700;
     box-shadow: 0 0 20px rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.5);
 }
 .cs-btn-scene:focus-visible {
