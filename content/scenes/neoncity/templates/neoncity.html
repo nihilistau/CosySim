@@ -13,8 +13,12 @@
   for JS compatibility. v1.52 adds district online/offline indicators
   and enhanced faction data flow.
 
-  Version: v1.52.0 [2026-03-22]
+  Version: v1.57.3 [2026-05-12]
   Author:  CosySim Team
+
+  Change Log:
+    v1.57.3 [2026-05-12] — anim-stagger-in on districts container,
+                            anim-scan-sweep on each district card
 
   Layout:
     ┌─────────────────────────────────────────────────────┐
@@ -142,7 +146,8 @@
     <!-- Districts -->
     <section id="district-grid">
       <h2 class="nc-section-title">&#9672; DISTRICTS</h2>
-      <div class="nc-districts district-cards">
+      {# v1.57.3 [2026-05-12] — Stagger-in animation on district cards container #}
+      <div class="nc-districts district-cards anim-stagger-in">
         {% for d in [
           {'key':'black_market',     'color':'#f97316','icon':'&#128299;','name':'BLACK MARKET',     'faction':'BlackMarket', 'desc':'Contraband, fixers, shadows.',           'activity':'busy',     'npcs':['FIXER','ARMORER','INFO_BROKER']},
           {'key':'corporate_tower',  'color':'#3b82f6','icon':'&#127970;','name':'CORPORATE TOWER',  'faction':'OmniCorp',    'desc':'Espionage, reputation quests.',          'activity':'quiet',    'npcs':['EXEC','SEC_AGENT','CORP_LIAISON']},
@@ -150,7 +155,8 @@
           {'key':'hacker_den',       'color':'#22c55e','icon':'&#128187;','name':'HACKER DEN',       'faction':'Ghost_Net',   'desc':'0xGH0ST base. Netrunning.',             'activity':'dangerous','npcs':['0xGH0ST','NETRUNNER','SYSOP']},
           {'key':'street_level',     'color':'#facc15','icon':'&#127750;','name':'STREET LEVEL',     'faction':'DeepState',   'desc':'Rumors, events, the pulse of the city.','activity':'dangerous','npcs':['STREET_KID','GANGER','INFORMANT']}
         ] %}
-        <div class="nc-district district-card" data-district="{{ d.key }}" style="--dc:{{ d.color }}" onclick="NeonCityApp.visitDistrict('{{ d.key }}')">
+        {# v1.57.3 [2026-05-12] — Scan-sweep animation on each district card #}
+        <div class="nc-district district-card anim-scan-sweep" data-district="{{ d.key }}" style="--dc:{{ d.color }}" onclick="NeonCityApp.visitDistrict('{{ d.key }}')">
           <div class="nc-district__icon">{{ d.icon | safe }}</div>
           <div class="nc-district__body">
             <div class="nc-district__name">{{ d.name }}</div>

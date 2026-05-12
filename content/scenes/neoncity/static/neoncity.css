@@ -1,11 +1,13 @@
 /*
- * NeonCity v1.52 — Three Pillars
- * ===============================
+ * NeonCity v1.57.3 — Polish Pass
+ * ================================
  * Bloomberg Terminal meets Blade Runner. Dense, dark, information-rich.
  * Clean grid. No conflicts with neon_base.css or shared HUD.
  *
- * Version: v1.52.0 [2026-03-22]
+ * Version: v1.57.3 [2026-05-12]
  * Change Log:
+ *   v1.57.3 [2026-05-12] — NeonCity polish: pulse glow, ambient header,
+ *                            district scan+stagger, stat/faction bar animations
  *   v1.52.0 [2026-03-22] — District online/offline indicators, faction bar
  *                            transitions, credit animations, NPC typing
  *                            indicator, enhanced hover effects, glass toasts.
@@ -32,12 +34,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
 
 /* ── Header ──────────────────────────────────────────────────────────── */
+/* v1.57.3 [2026-05-12] — Ambient radial gradient added to header */
 .nc-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  background: linear-gradient(180deg, rgba(6,182,212,0.06) 0%, transparent 100%);
+  background:
+    radial-gradient(ellipse at top left, rgba(6,182,212,0.07) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(6,182,212,0.06) 0%, transparent 100%);
   border-bottom: 1px solid var(--nc-border);
   gap: 16px;
 }
@@ -54,9 +59,11 @@
   margin: 0;
   line-height: 1;
 }
+/* v1.57.3 [2026-05-12] — Logo pulse-glow + stronger spread */
 .nc-logo__neon {
   color: var(--nc);
-  text-shadow: 0 0 20px var(--nc-glow), 0 0 40px rgba(6,182,212,0.1);
+  text-shadow: 0 0 30px var(--nc-glow), 0 0 60px rgba(6,182,212,0.05);
+  animation: cs-pulse-glow-text 3s ease-in-out infinite;
 }
 .nc-logo__city { color: #fff; }
 .nc-version {
@@ -190,25 +197,28 @@
   border-radius: 4px;
   padding: 10px;
 }
+/* v1.57.3 [2026-05-12] — Panel/section title glow */
 .nc-panel__title {
   font-family: var(--nc-mono);
   font-size: 0.6rem;
   font-weight: 700;
   color: var(--nc);
-  letter-spacing: 1.5px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   margin: 0 0 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  text-shadow: 0 0 16px rgba(6,182,212,0.4);
 }
 .nc-section-title {
   font-family: var(--nc-mono);
   font-size: 0.65rem;
   font-weight: 700;
   color: var(--nc);
-  letter-spacing: 1px;
+  letter-spacing: 0.1em;
   margin: 0 0 8px;
+  text-shadow: 0 0 16px rgba(6,182,212,0.4);
 }
 .nc-empty { font-size: 0.65rem; color: var(--nc-muted); padding: 8px 0; }
 
@@ -254,6 +264,7 @@
   gap: 8px;
   margin-bottom: 14px;
 }
+/* v1.57.3 [2026-05-12] — Faction left-border + border-color transition */
 .nc-district {
   background: var(--nc-panel);
   border: 1px solid rgba(var(--nc-rgb) / 0.1);
@@ -261,14 +272,8 @@
   border-radius: 4px;
   padding: 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s, transform 0.2s;
   position: relative;
-}
-.nc-district:hover {
-  background: rgba(var(--nc-rgb) / 0.06);
-  border-color: rgba(var(--nc-rgb) / 0.25);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 .nc-district__icon { font-size: 1.3rem; margin-bottom: 4px; }
 .nc-district__name { font-family: var(--nc-mono); font-size: 0.7rem; font-weight: 700; color: var(--dc, var(--nc)); letter-spacing: 1px; }
@@ -339,12 +344,12 @@
   border-radius: 4px;
 }
 
-/* v1.52.0 — Enhanced district hover with accent glow */
+/* v1.57.3 [2026-05-12] — District hover: faction glow + left accent spread */
 .nc-district:hover {
   background: rgba(var(--nc-rgb) / 0.06);
   border-color: rgba(var(--nc-rgb) / 0.25);
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3), 0 0 8px color-mix(in srgb, var(--dc, var(--nc)) 20%, transparent);
+  box-shadow: 0 0 16px rgb(var(--nc-rgb) / 0.15), -2px 0 12px rgb(var(--nc-rgb) / 0.1), 0 4px 16px rgba(0,0,0,0.3);
 }
 
 /* v1.52.0 — Credit balance flash animation */
