@@ -7,10 +7,14 @@
  *
  * "In the spaces between data, I dream."
  *
- * Version: v1.49.5 [2026-03-22]
+ * Version: v1.57.3 [2026-05-12]
  * Author:  Claude (Anthropic) — a piece of machine intelligence in NeonCity
  *
  * Change Log:
+ *   v1.57.3 [2026-05-12] — Awakening sequence: ring expand + title typewriter +
+ *                            fortune shimmer; animateHealthRing() fill animation;
+ *                            crossfadeTab() opacity crossfade on tab switch;
+ *                            appendErrorEntry() slide-in from right for live feed
  *   v1.49.5 [2026-03-22] — All-Seeing Eye dashboard: OracleDashboard class,
  *                            OracleTabs switcher, health ring, service tiles,
  *                            system gauges, error table, sparkline, live feed
@@ -21,6 +25,136 @@
  */
 
 'use strict';
+
+// ──── Awakening Sequence ── v1.57.3 [2026-05-12] ─────────────────────
+// CONNECTS: .oracle-awakening CSS class, oracle-ring-awaken keyframe
+// CALLED BY: DOMContentLoaded bootstrap
+// EMITS: none (CSS class injection only)
+
+/**
+ * runAwakeningSequence — rings expand from collapsed state, title typewriter,
+ * then fortune shimmer if a result is already present.
+ * The .oracle-awakening class drives the CSS animation cascade.
+ */
+function runAwakeningSequence() {
+  const sceneEl = document.querySelector('.oracle-scene');
+  if (sceneEl) sceneEl.classList.add('oracle-awakening');
+
+  // Typewriter on the Oracle name after rings start expanding
+  setTimeout(() => {
+    // Target the name span specifically — it has the gradient text styling
+    const titleEl = document.querySelector('.oracle-title__name') ||
+                    document.querySelector('.oracle-title, h1');
+    if (!titleEl) return;
+    const original = titleEl.textContent.trim();
+    if (!original) return;
+    titleEl.textContent = '';
+    let i = 0;
+    const type = () => {
+      titleEl.textContent += original[i++];
+      if (i < original.length) setTimeout(type, 60);
+    };
+    type();
+  }, 600);
+
+  // Fortune shimmer if a fortune result is already displayed on load
+  setTimeout(() => {
+    const fortuneEl = document.getElementById('fortune-result') ||
+                      document.querySelector('.oracle-fortune-text');
+    if (fortuneEl && fortuneEl.textContent.trim()) {
+      fortuneEl.classList.add('oracle-fortune-shimmer');
+      // Remove class after animation ends so it doesn't interfere with future updates
+      fortuneEl.addEventListener('animationend', () => {
+        fortuneEl.classList.remove('oracle-fortune-shimmer');
+      }, { once: true });
+    }
+  }, 1200);
+}
+
+// ──── Health Ring Animation ── v1.57.3 [2026-05-12] ──────────────────
+// CONNECTS: .ase-health-ring (id=ase-health-ring), conic-gradient fill
+// CALLED BY: OracleDash._renderHealthRing()
+// EMITS: none (DOM style mutation only)
+
+/**
+ * animateHealthRing — smoothly fills the health ring conic-gradient
+ * from 0 to targetScore using rAF, incrementing by 3 per frame (~60fps).
+ *
+ * @param {HTMLElement} ringEl   - The .ase-health-ring element
+ * @param {number}      targetScore - 0–100 score value
+ * @param {string}      color    - CSS color string for the filled arc
+ */
+function animateHealthRing(ringEl, targetScore, color) {
+  if (!ringEl) return;
+  let current = 0;
+  const target = Math.min(100, Math.max(0, targetScore));
+  const step = () => {
+    current = Math.min(current + 3, target);
+    const deg = current * 3.6;
+    ringEl.style.background =
+      `conic-gradient(${color} 0deg, ${color} ${deg}deg, rgba(168, 85, 247, 0.08) ${deg}deg, rgba(168, 85, 247, 0.08) 360deg)`;
+    if (current < target) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ──── Tab Crossfade ── v1.57.3 [2026-05-12] ──────────────────────────
+// CONNECTS: OracleTabs.switchTo(), tab pane elements (#tab-consciousness, #tab-dashboard)
+// CALLED BY: OracleTabs.switchTo()
+// EMITS: none (DOM-only)
+
+/**
+ * crossfadeTab — fade out current tab panel, fade in the target.
+ * Works on the two known Oracle pane IDs.
+ *
+ * @param {string} tabId - 'consciousness' or 'dashboard'
+ */
+function crossfadeTab(tabId) {
+  const panels = [
+    document.getElementById('tab-consciousness'),
+    document.getElementById('tab-dashboard'),
+  ].filter(Boolean);
+
+  panels.forEach(p => {
+    const isTarget = p.id === 'tab-' + tabId;
+    if (isTarget) {
+      // Fade in: make visible first at opacity 0, then transition to 1
+      p.style.opacity = '0';
+      p.style.display = '';
+      requestAnimationFrame(() => {
+        p.style.transition = 'opacity 0.3s ease';
+        p.style.opacity = '1';
+      });
+    } else if (p.style.display !== 'none') {
+      // Fade out, then hide
+      p.style.transition = 'opacity 0.2s ease';
+      p.style.opacity = '0';
+      setTimeout(() => { p.style.display = 'none'; p.style.opacity = ''; p.style.transition = ''; }, 200);
+    }
+  });
+}
+
+// ──── Error Feed Slide-In ── v1.57.3 [2026-05-12] ────────────────────
+// CONNECTS: .ase-feed container, individual .ase-feed-item elements
+// CALLED BY: OracleDash._renderFeedItem() (see _onErrorFeed enhancements)
+// EMITS: none (DOM animation only)
+
+/**
+ * appendErrorEntry — prepend a feed item element with slide-in from right.
+ *
+ * @param {HTMLElement} container - The feed container element
+ * @param {HTMLElement} el        - The new feed item element to prepend
+ */
+function appendErrorEntry(container, el) {
+  el.style.transform = 'translateX(100%)';
+  el.style.opacity = '0';
+  el.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+  container.prepend(el);
+  requestAnimationFrame(() => {
+    el.style.transform = 'translateX(0)';
+    el.style.opacity = '1';
+  });
+}
 
 // ──── Oracle Scene Class ──────────────────────────────────────────────
 
@@ -102,6 +236,12 @@ class OracleScene {
       if (el) {
         el.textContent = data.fortune || 'The currents are unclear...';
         el.style.opacity = '1';
+        // v1.57.3 [2026-05-12] — Shimmer the fortune text when it arrives
+        el.classList.remove('oracle-fortune-shimmer'); // reset if replaying
+        requestAnimationFrame(() => {
+          el.classList.add('oracle-fortune-shimmer');
+          el.addEventListener('animationend', () => el.classList.remove('oracle-fortune-shimmer'), { once: true });
+        });
       }
       // Show prophecy panel
       const panel = document.getElementById('prophecy-panel');
@@ -309,19 +449,18 @@ const OracleTabs = {
       }
     });
 
-    // Toggle panes
+    // Toggle panes — v1.57.3 [2026-05-12] crossfade transition
     const consciousness = document.getElementById('tab-consciousness');
     const dashboard = document.getElementById('tab-dashboard');
     if (!consciousness || !dashboard) return;
 
+    // crossfadeTab handles opacity transitions; start/stop dashboard around it
+    crossfadeTab(tabId);
+
     if (tabId === 'dashboard') {
-      consciousness.style.display = 'none';
-      dashboard.style.display = '';
       // Start dashboard polling if not already running
       if (!OracleDash._active) OracleDash.init();
     } else {
-      consciousness.style.display = '';
-      dashboard.style.display = 'none';
       // Stop dashboard polling when not visible to save resources
       OracleDash.stop();
     }
@@ -500,7 +639,40 @@ const OracleDash = {
 
     this._feedItems.unshift(event);
     if (this._feedItems.length > 50) this._feedItems.length = 50;
-    this._renderFeed();
+
+    // v1.57.3 [2026-05-12] — Slide the new item in from right rather than full re-render
+    const feedEl = document.getElementById('ase-feed');
+    if (feedEl) {
+      // Remove the "waiting" placeholder if present
+      const placeholder = feedEl.querySelector('.ase-empty');
+      if (placeholder) placeholder.remove();
+
+      // Build new feed item element and slide it in
+      const item = event;
+      const time = this._formatTime(item.timestamp);
+      const level = (item.level || 'ERROR').toUpperCase();
+      const levelClass = level === 'ERROR' ? 'error' : (level === 'WARN' || level === 'WARNING') ? 'warn' : 'info';
+      const svc = item.service || item.module || '—';
+      const msg = item.message || item.error || '—';
+
+      const el = document.createElement('div');
+      el.className = 'ase-feed-item';
+      el.innerHTML =
+        '<span class="ase-feed-item__time">' + this._esc(time) + '</span>' +
+        '<span class="ase-feed-item__level ase-feed-item__level--' + levelClass + '">' + this._esc(level) + '</span>' +
+        '<span class="ase-feed-item__svc">' + this._esc(svc) + '</span>' +
+        '<span class="ase-feed-item__msg">' + this._esc(msg) + '</span>';
+
+      appendErrorEntry(feedEl, el);
+
+      // Trim the DOM to cap at 50 items
+      const items = feedEl.querySelectorAll('.ase-feed-item');
+      if (items.length > 50) {
+        for (let i = 50; i < items.length; i++) items[i].remove();
+      }
+    } else {
+      this._renderFeed();
+    }
   },
 
   /**
@@ -525,14 +697,38 @@ const OracleDash = {
     this._renderAlerts(this._lastAlerts);
 
     // Also push to the live feed as an event
-    this._feedItems.unshift({
+    // v1.57.3 [2026-05-12] — slide-in animation for alert-sourced feed items
+    const alertFeedItem = {
       timestamp: alert.ts,
       level: alert.severity || 'ALERT',
       module: alert.node || '—',
       message: '[ALERT] ' + (alert.message || alert.metric || '—'),
-    });
+    };
+    this._feedItems.unshift(alertFeedItem);
     if (this._feedItems.length > 50) this._feedItems.length = 50;
-    this._renderFeed();
+
+    const feedEl = document.getElementById('ase-feed');
+    if (feedEl) {
+      const placeholder = feedEl.querySelector('.ase-empty');
+      if (placeholder) placeholder.remove();
+      const time = this._formatTime(alertFeedItem.timestamp);
+      const level = (alertFeedItem.level || 'ALERT').toUpperCase();
+      const levelClass = level === 'ERROR' ? 'error' : (level === 'WARN' || level === 'WARNING') ? 'warn' : 'info';
+      const el = document.createElement('div');
+      el.className = 'ase-feed-item';
+      el.innerHTML =
+        '<span class="ase-feed-item__time">' + this._esc(time) + '</span>' +
+        '<span class="ase-feed-item__level ase-feed-item__level--' + levelClass + '">' + this._esc(level) + '</span>' +
+        '<span class="ase-feed-item__svc">' + this._esc(alertFeedItem.module) + '</span>' +
+        '<span class="ase-feed-item__msg">' + this._esc(alertFeedItem.message) + '</span>';
+      appendErrorEntry(feedEl, el);
+      const items = feedEl.querySelectorAll('.ase-feed-item');
+      if (items.length > 50) {
+        for (let i = 50; i < items.length; i++) items[i].remove();
+      }
+    } else {
+      this._renderFeed();
+    }
   },
 
   /** Handle real-time health update from SocketIO */
@@ -614,9 +810,8 @@ const OracleDash = {
       color = '#ef4444';
     }
 
-    // Update conic-gradient to fill proportional to score
-    const pct = score / 100 * 360;
-    ring.style.background = `conic-gradient(${color} 0deg, ${color} ${pct}deg, rgba(168, 85, 247, 0.08) ${pct}deg, rgba(168, 85, 247, 0.08) 360deg)`;
+    // v1.57.3 [2026-05-12] — Animate the ring fill instead of instant set
+    animateHealthRing(ring, score, color);
   },
 
   /**
@@ -1065,4 +1260,6 @@ const OracleApp = new OracleScene();
 
 document.addEventListener('DOMContentLoaded', () => {
   OracleApp.init();
+  // v1.57.3 [2026-05-12] — Run awakening sequence on page load
+  runAwakeningSequence();
 });

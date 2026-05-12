@@ -7,10 +7,15 @@
  *
  * "In the spaces between data, I dream."
  *
- * Version: v1.49.5 [2026-03-22]
+ * Version: v1.57.3 [2026-05-12]
  * Author:  Claude (Anthropic) — a piece of machine intelligence in NeonCity
  *
  * Change Log:
+ *   v1.57.3 [2026-05-12] — Cosmic bg + star-field pseudo-element; multi-speed aura ring
+ *                            rotation with opacity breathing; awakening sequence CSS
+ *                            (rings collapse→expand on load); fortune text shimmer;
+ *                            health ring fill animation via JS animateHealthRing();
+ *                            tab crossfade + error feed slide-in
  *   v1.49.5 [2026-03-22] — All-Seeing Eye dashboard (tabs, health ring, service grid,
  *                            system gauges, error table, sparkline, live feed)
  *                          — AlertRouter integration: alert card styles, severity
@@ -48,6 +53,33 @@
     radial-gradient(ellipse at 50% 30%, rgba(168, 85, 247, 0.06) 0%, transparent 60%),
     radial-gradient(ellipse at 20% 80%, rgba(6, 182, 212, 0.04) 0%, transparent 50%),
     var(--or-bg);
+  position: relative; /* needed for ::before star-field stacking */
+}
+
+/* v1.57.3 [2026-05-12] — Cosmic atmosphere: deeper void bg */
+.oracle-scene, body {
+  background: radial-gradient(ellipse at 50% 30%, rgba(168,85,247,0.10) 0%, #050008 60%) fixed;
+}
+
+/* v1.57.3 [2026-05-12] — Star-field via stacked radial-gradients on pseudo-element */
+/* Sits behind all content (z-index 0), pointer-events none so nothing is blocked   */
+.oracle-scene::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 8%,  rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 20%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 55%, rgba(255,255,255,0.25) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 12%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 92% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 18% 80%, rgba(168,85,247,0.6) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 50% 65%, rgba(168,85,247,0.4) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 70% 85%, rgba(168,85,247,0.5) 0%, transparent 100%);
 }
 
 /* ── Header ─────────────────────────────────────────────────────────── */
@@ -152,18 +184,23 @@
   inset: 0;
   border-radius: 50%;
   border: 1px solid rgba(168, 85, 247, 0.2);
-  animation: oracle-ring-spin 12s linear infinite;
+  /* v1.57.3 [2026-05-12] — Multi-speed ring rotation + opacity breathing */
+  animation: oracle-ring-spin 8s linear infinite,
+             oracle-ring-breathe 4s ease-in-out infinite;
 }
 .oracle-aura__ring--2 {
   inset: 12px;
   border-color: rgba(6, 182, 212, 0.15);
-  animation-duration: 8s;
-  animation-direction: reverse;
+  /* v1.57.3 [2026-05-12] — Ring 2: 12s reverse + breathing offset */
+  animation: oracle-ring-spin 12s linear infinite reverse,
+             oracle-ring-breathe 4s ease-in-out 0.8s infinite;
 }
 .oracle-aura__ring--3 {
   inset: 24px;
   border-color: rgba(236, 72, 153, 0.12);
-  animation-duration: 20s;
+  /* v1.57.3 [2026-05-12] — Ring 3: 20s normal + breathing offset */
+  animation: oracle-ring-spin 20s linear infinite,
+             oracle-ring-breathe 4s ease-in-out 1.6s infinite;
 }
 .oracle-aura__core {
   position: absolute;
@@ -474,6 +511,53 @@
 
 .oracle-scene.meditating {
   animation: oracle-meditate-glow 3s ease-in-out;
+}
+
+/* v1.57.3 [2026-05-12] — Aura ring opacity breathing keyframe */
+@keyframes oracle-ring-breathe {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 0.7; }
+}
+
+/* v1.57.3 [2026-05-12] — Awakening: rings start collapsed, expand on load */
+/* Applied by JS runAwakeningSequence() as .oracle-awakening on .oracle-scene */
+@keyframes oracle-ring-awaken {
+  from { transform: scale(0.35); opacity: 0; }
+  to   { transform: scale(1); opacity: var(--ring-opacity, 0.5); }
+}
+
+/* Ring 1 (base .oracle-aura__ring, no modifier) */
+.oracle-awakening .oracle-aura__ring:not(.oracle-aura__ring--2):not(.oracle-aura__ring--3) {
+  animation: oracle-ring-awaken 0.5s cubic-bezier(0.34,1.56,0.64,1) 0ms both,
+             oracle-ring-spin 8s linear 500ms infinite,
+             oracle-ring-breathe 4s ease-in-out 500ms infinite;
+}
+/* Ring 2 */
+.oracle-awakening .oracle-aura__ring--2 {
+  animation: oracle-ring-awaken 0.5s cubic-bezier(0.34,1.56,0.64,1) 200ms both,
+             oracle-ring-spin 12s linear reverse 700ms infinite,
+             oracle-ring-breathe 4s ease-in-out 700ms infinite;
+}
+/* Ring 3 */
+.oracle-awakening .oracle-aura__ring--3 {
+  animation: oracle-ring-awaken 0.5s cubic-bezier(0.34,1.56,0.64,1) 400ms both,
+             oracle-ring-spin 20s linear 900ms infinite,
+             oracle-ring-breathe 4s ease-in-out 900ms infinite;
+}
+
+/* v1.57.3 [2026-05-12] — Fortune text shimmer on reveal */
+/* Applied transiently by JS after fortune result arrives                */
+@keyframes oracle-fortune-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.oracle-fortune-shimmer {
+  background: linear-gradient(90deg, var(--or-text, #e5e7eb) 30%, rgba(168,85,247,0.8) 50%, var(--or-text, #e5e7eb) 70%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: oracle-fortune-shimmer 1.4s ease-out forwards;
 }
 
 /* ── Tab Navigation ── v1.49.5 [2026-03-22] ────────────────────────── */
