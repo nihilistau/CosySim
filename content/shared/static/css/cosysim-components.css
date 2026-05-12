@@ -1101,3 +1101,75 @@
     opacity: 0.5;
     transform: translateX(4px);
 }
+
+/* ── Glass Depth Levels — v1.57.3 [2026-05-12] — subtle/medium/deep backdrop tiers ── */
+/* Three standardized depth tiers replacing ad-hoc backdrop-filter values.
+   Use glass-subtle for receding panels, glass-medium as default, glass-deep for focus/modal. */
+
+.glass-subtle {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: var(--cs-shadow-sm);
+}
+
+.glass-medium {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: var(--cs-shadow-md);
+}
+
+.glass-deep {
+    background: rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: var(--cs-shadow-lg);
+}
+
+/* ── Standardized Scene Button — v1.57.3 [2026-05-12] — accent-aware button variant ── */
+/* Uses --cs-scene-accent-rgb for colors. Additive variant alongside existing .cs-btn. */
+
+.cs-btn-scene {
+    font-size: var(--cs-text-sm);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.4);
+    border-radius: var(--cs-radius-sm);
+    color: var(--cs-scene-accent, var(--cs-accent));
+    cursor: pointer;
+    transition: background var(--cs-duration-fast) var(--cs-ease),
+                border-color var(--cs-duration-fast) var(--cs-ease),
+                box-shadow var(--cs-duration-fast) var(--cs-ease);
+    white-space: nowrap;
+}
+.cs-btn-scene:hover {
+    background: rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.15);
+    border-color: rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.6);
+}
+.cs-btn-scene:active,
+.cs-btn-scene.active {
+    background: rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.9);
+    border-color: var(--cs-scene-accent, var(--cs-accent));
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 0 20px rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.5);
+}
+.cs-btn-scene:focus-visible {
+    outline: 2px solid var(--cs-scene-accent, var(--cs-accent));
+    outline-offset: 2px;
+}
+.cs-btn-scene:disabled,
+.cs-btn-scene[disabled] {
+    color: var(--cs-text-dim);
+    border-color: rgba(255, 255, 255, 0.08);
+    cursor: not-allowed;
+    background: transparent;
+    box-shadow: none;
+}
