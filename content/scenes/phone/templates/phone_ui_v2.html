@@ -9,6 +9,7 @@
        SIGNAL OS — v1.52 NeonCity Cyberdeck
        Cyberpunk overhaul: neon green/cyan/magenta on deep void
        v1.51.1 [2026-03-25] — Desktop mode tab bar + 5-col dock
+       v1.57.3 [2026-05-12] — Phone polish: gallery featured layout, unread threads, bubble contrast, ghost-signal, wave typing
     ══════════════════════════════════════════════════════════ */
     :root {
       --bg:        #050710;
@@ -144,8 +145,15 @@
        MESSAGES APP
     ══════════════════════════════════════════════════════════ */
     .thread-list{padding:0;overflow-y:auto;max-height:calc(100vh - var(--status-h) - var(--bar-h) - 20px);-webkit-overflow-scrolling:touch}
-    .thread-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg2);border-bottom:.5px solid var(--sep);cursor:pointer;transition:background .15s}
+    /* v1.57.3 [2026-05-12] — Unread thread differentiation + per-contact accent */
+    .thread-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg2);border-bottom:.5px solid var(--sep);cursor:pointer;transition:background .15s;border-left:3px solid transparent}
     .thread-item:active{background:var(--bg3)}
+    .thread-item.unread{background:rgba(var(--contact-accent-rgb,16 185 129),.06);border-left-color:var(--contact-accent,var(--accent))}
+    .thread-item.unread .thread-name{font-weight:700}
+    .thread-item:not(.unread) .thread-name{font-weight:500;color:var(--label2,var(--label))}
+    .thread-item.unread .thread-preview{color:rgba(192,216,204,.75)}
+    .thread-item:not(.unread) .thread-preview{color:var(--label3,rgba(192,216,204,.4))}
+    .thread-item.unread .avatar{border:1px solid rgba(var(--contact-accent-rgb,16 185 129),.45);box-shadow:0 0 8px rgba(var(--contact-accent-rgb,16 185 129),.15)}
     .avatar{width:52px;height:52px;border-radius:4px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:20px;font-weight:600;flex-shrink:0;overflow:hidden}
     .avatar img{width:100%;height:100%;object-fit:cover}
     .avatar-sm{width:32px;height:32px;font-size:13px}
@@ -169,11 +177,15 @@
     .msg-row.out{justify-content:flex-end}
     .msg-row.in{justify-content:flex-start}
     .msg-row.sys{justify-content:center}
-    .bubble{max-width:75%;padding:8px 12px;border-radius:3px;font-size:14px;line-height:1.5;word-break:break-word;position:relative;border:1px solid transparent}
-    .msg-row.out .bubble{background:var(--bubble-out);color:var(--label);border-color:rgba(16,185,129,.25);border-bottom-right-radius:0;box-shadow:0 0 6px rgba(16,185,129,.1)}
-    .msg-row.in .bubble{background:var(--bubble-in);color:var(--label);border-color:rgba(6,182,212,.2);border-bottom-left-radius:0;box-shadow:0 0 6px rgba(6,182,212,.08)}
-    .msg-row.sys .bubble{background:rgba(168,85,247,.06);color:var(--label2);font-size:12px;max-width:85%;border-radius:3px;text-align:center;border-color:rgba(168,85,247,.12)}
+    /* v1.57.3 [2026-05-12] — Stronger contrast + rounded tails */
+    .bubble{max-width:75%;padding:8px 12px;font-size:14px;line-height:1.5;word-break:break-word;position:relative;border:1px solid transparent}
+    .msg-row.out .bubble{background:rgba(16,185,129,.18);color:#d1fae5;border-color:rgba(16,185,129,.35);border-radius:12px 12px 2px 12px;box-shadow:0 0 12px rgba(16,185,129,.1)}
+    .msg-row.in  .bubble{background:rgba(6,182,212,.12);color:#cffafe;border-color:rgba(6,182,212,.28);border-radius:12px 12px 12px 2px;box-shadow:0 0 10px rgba(6,182,212,.08)}
+    .msg-row.sys .bubble{background:rgba(168,85,247,.08);color:rgba(168,85,247,.75);font-size:12px;max-width:85%;border-radius:10px;text-align:center;border-color:rgba(168,85,247,.2)}
     .msg-row.game .bubble{background:linear-gradient(135deg,rgba(168,85,247,.12),rgba(236,72,153,.12));color:var(--label);max-width:80%;border-radius:3px;border-color:rgba(168,85,247,.2)}
+    /* v1.57.3 [2026-05-12] — Incoming message avatar */
+    .msg-row.in{display:flex;align-items:flex-end;gap:6px}
+    .msg-avatar{width:24px;height:24px;border-radius:50%;background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#67e8f9;flex-shrink:0;text-transform:uppercase}
     .bubble-time{display:block;font-size:11px;opacity:.5;margin-top:3px;text-align:right}
     .media-bubble{max-width:220px;padding:4px}
     .media-bubble img,.media-bubble video{width:100%;border-radius:14px;display:block}
@@ -181,15 +193,19 @@
     .voice-play-btn{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:14px}
     .voice-waveform{flex:1;height:20px;background:rgba(255,255,255,.15);border-radius:10px}
     .typing-indicator{display:flex;gap:4px;align-items:center;padding:10px 14px}
-    .typing-dot{width:7px;height:7px;border-radius:50%;background:var(--label3);animation:tdot 1.2s infinite}
+    /* v1.57.3 [2026-05-12] — Wave animation replaces scale bounce */
+    @keyframes wave-dot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}
+    .typing-dot{width:7px;height:7px;border-radius:50%;background:var(--label3);animation:wave-dot 1.2s infinite}
+    .typing-dot:nth-child(1){animation-delay:0s}
     .typing-dot:nth-child(2){animation-delay:.2s}
     .typing-dot:nth-child(3){animation-delay:.4s}
-    @keyframes tdot{0%,80%,100%{transform:scale(.6)}40%{transform:scale(1)}}
 
     /* Chat input */
     #chat-input-bar{background:var(--glass);backdrop-filter:blur(20px);border-top:.5px solid var(--sep);padding:8px 8px calc(var(--safe-b) - 16px);display:flex;align-items:flex-end;gap:8px;flex-shrink:0}
     .input-plus{width:32px;height:32px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--accent);flex-shrink:0}
-    #chat-input-wrap{flex:1;background:var(--bg3);border-radius:20px;border:.5px solid var(--sep);display:flex;align-items:flex-end;padding:6px 12px}
+    /* v1.57.3 [2026-05-12] — Input focus glow */
+    #chat-input-wrap{flex:1;background:var(--bg3);border-radius:20px;border:.5px solid var(--sep);display:flex;align-items:flex-end;padding:6px 12px;transition:border-color .2s,box-shadow .2s}
+    #chat-input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px rgba(16,185,129,.15)}
     #chat-text-input{flex:1;background:none;border:none;outline:none;font-size:16px;color:var(--label);max-height:120px;resize:none;line-height:1.4;min-height:22px;overflow-y:hidden}
     #chat-text-input::placeholder{color:var(--label3)}
     #chat-send{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0;transition:opacity .15s}
@@ -209,8 +225,15 @@
     /* ══════════════════════════════════════════════════════════
        GALLERY APP
     ══════════════════════════════════════════════════════════ */
-    .gallery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px;overflow-y:auto;max-height:calc(100vh - 160px)}
-    .gallery-item{aspect-ratio:1;overflow:hidden;cursor:pointer;background:var(--bg3);position:relative}
+    /* v1.57.3 [2026-05-12] — Featured-first gallery layout */
+    .gallery-grid{overflow-y:auto;max-height:calc(100vh - 160px);padding:6px;display:flex;flex-direction:column;gap:6px}
+    .gallery-featured-row{display:grid;grid-template-columns:2fr 1fr;gap:6px}
+    .gallery-featured-main{height:130px;overflow:hidden}
+    .gallery-featured-side{display:flex;flex-direction:column;gap:6px}
+    .gallery-featured-sm{flex:1;overflow:hidden}
+    .gallery-grid-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .gallery-item{aspect-ratio:1;overflow:hidden;cursor:pointer;background:var(--bg3);position:relative;border-radius:6px;border:1px solid rgba(16,185,129,0.12);transition:border-color 0.2s}
+    .gallery-item:hover{border-color:rgba(16,185,129,0.4)}
     .gallery-item img,.gallery-item video{width:100%;height:100%;object-fit:cover;transition:transform .2s}
     .gallery-item:active img,.gallery-item:active video{transform:scale(.95)}
     .gallery-item .vid-badge{position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:1px 6px;border-radius:6px;pointer-events:none}
@@ -382,6 +405,10 @@
     @keyframes scaleIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
     .anim-fadeIn{animation:fadeIn .3s ease}
     .anim-scaleIn{animation:scaleIn .25s ease}
+    /* v1.57.3 [2026-05-12] — Ghost-signal typewriter scan effect */
+    @keyframes signal-scan{0%{transform:translateY(-100%);opacity:.6}100%{transform:translateY(200%);opacity:0}}
+    .typing-in{position:relative;overflow:hidden}
+    .typing-in::after{content:'';position:absolute;left:0;right:0;top:0;height:40%;background:linear-gradient(180deg,transparent,rgba(16,185,129,.1),transparent);animation:signal-scan .8s ease-out;pointer-events:none}
 
     /* ══════════════════════════════════════════════════════════
        GHOST / WORLD INTEGRATION
@@ -641,6 +668,214 @@
     const wired = _wireSocket();
     if ((patched && wired) || _attempts > 50) clearInterval(_poll);
   }, 100);
+})();
+</script>
+<script>
+/* ── v1.57.3 [2026-05-12] — Phone / SIGNAL Visual Polish ──────────────────
+   CONNECTS: gallery app, messages app, chat bubbles, typing indicator
+   CALLED BY: poll loop — patches CosyPhone.apps after phone_v2.js loads
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+
+  // ──── Helpers ────────────────────────────────────────────────
+
+  // v1.57.3 [2026-05-12] — Hex colour to RGB component object
+  function hexToRgb(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : null;
+  }
+
+  // v1.57.3 [2026-05-12] — Ghost-signal typewriter on incoming messages
+  function typewriterAppend(bubbleEl, text, speedMs) {
+    speedMs = speedMs || 22;
+    bubbleEl.textContent = '';
+    bubbleEl.classList.add('typing-in');
+    let i = 0;
+    const tick = () => {
+      bubbleEl.textContent += text[i++];
+      if (i < text.length) setTimeout(tick, speedMs);
+      else bubbleEl.classList.remove('typing-in');
+    };
+    setTimeout(tick, 0);
+  }
+
+  // ──── Gallery: featured-first layout helpers ──────────────────
+
+  // v1.57.3 [2026-05-12] — Featured-first gallery layout
+  function _makeGalleryItemEl(item, clickFn) {
+    const div = document.createElement('div');
+    div.className = 'gallery-item';
+    div.onclick = clickFn;
+    const media = (item.type === 'video')
+      ? Object.assign(document.createElement('video'), { src: item.url, muted: true })
+      : Object.assign(document.createElement('img'), { src: item.url, alt: '', loading: 'lazy' });
+    media.style.cssText = 'width:100%;height:100%;object-fit:cover';
+    div.appendChild(media);
+    if (item.type === 'video') {
+      const badge = document.createElement('span');
+      badge.className = 'vid-badge';
+      badge.textContent = '▶ VID';
+      div.appendChild(badge);
+    }
+    return div;
+  }
+
+  function renderGalleryItems(container, items, clickFn) {
+    container.innerHTML = '';
+    if (!items || items.length === 0) return;
+    // Featured row — first item large, items 2–3 in side column
+    const featRow = document.createElement('div');
+    featRow.className = 'gallery-featured-row';
+    const mainEl = _makeGalleryItemEl(items[0], () => clickFn(0));
+    mainEl.classList.add('gallery-featured-main');
+    featRow.appendChild(mainEl);
+    if (items.length >= 2) {
+      const side = document.createElement('div');
+      side.className = 'gallery-featured-side';
+      const sm1 = _makeGalleryItemEl(items[1], () => clickFn(1));
+      sm1.classList.add('gallery-featured-sm');
+      side.appendChild(sm1);
+      if (items.length >= 3) {
+        const sm2 = _makeGalleryItemEl(items[2], () => clickFn(2));
+        sm2.classList.add('gallery-featured-sm');
+        side.appendChild(sm2);
+      }
+      featRow.appendChild(side);
+    }
+    container.appendChild(featRow);
+    // Remaining items in 3-col grid
+    const remaining = items.slice(Math.min(3, items.length));
+    if (remaining.length > 0) {
+      const gridRow = document.createElement('div');
+      gridRow.className = 'gallery-grid-row';
+      remaining.forEach((item, ri) => {
+        const idx = Math.min(3, items.length) + ri;
+        gridRow.appendChild(_makeGalleryItemEl(item, () => clickFn(idx)));
+      });
+      container.appendChild(gridRow);
+    }
+  }
+
+  // ──── Patch Functions ────────────────────────────────────────
+
+  // v1.57.3 [2026-05-12] — Patch gallery app to use featured-first layout
+  function _patchGalleryApp() {
+    const galleryApp = window.CosyPhone && window.CosyPhone.apps && window.CosyPhone.apps.gallery;
+    if (!galleryApp) return false;
+    if (galleryApp._polished) return true;
+    galleryApp._polished = true;
+
+    // Wrap _load to use renderGalleryItems after data fetch
+    const orig_load = galleryApp._load.bind(galleryApp);
+    galleryApp._load = async function () {
+      const grid = document.querySelector('#gallery-grid');
+      if (!grid) { await orig_load(); return; }
+      try {
+        // Re-implement load with featured layout; mirrors orig but uses renderGalleryItems
+        const qs = (s) => document.querySelector(s);
+        const data = await fetch('/api/gallery').then(r => r.json());
+        this._images = data.images || [];
+        if (!this._images.length) {
+          grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No media yet</h3><p>Photos and videos will appear here</p></div>';
+          return;
+        }
+        renderGalleryItems(grid, this._images, (i) => {
+          this._idx = i;
+          this._showMedia();
+          const viewer = qs('#gallery-viewer');
+          if (viewer) viewer.style.display = 'flex';
+        });
+      } catch (e) {
+        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">📷</div><h3>No photos yet</h3></div>';
+      }
+    };
+    return true;
+  }
+
+  // v1.57.3 [2026-05-12] — Patch thread rendering for unread state + per-contact accent
+  function _patchMessagesPolish() {
+    const msgsApp = window.CosyPhone && window.CosyPhone.apps && window.CosyPhone.apps.messages;
+    if (!msgsApp) return false;
+    if (msgsApp._polished) return true;
+    msgsApp._polished = true;
+
+    // ── Thread list: unread + accent ──────────────────────────
+    const origRenderThreads = msgsApp._renderThreads.bind(msgsApp);
+    msgsApp._renderThreads = function () {
+      origRenderThreads();
+      const list = document.querySelector('#msg-thread-list');
+      if (!list) return;
+      const items = list.querySelectorAll('.thread-item');
+      const threads = this.threads || [];
+      items.forEach((el, i) => {
+        const t = threads[i];
+        if (!t) return;
+        // Unread class based on t.unread (external JS uses t.unread, not t.unread_count)
+        if ((t.unread || t.unread_count || 0) > 0) {
+          el.classList.add('unread');
+        }
+        // Per-contact accent colour
+        const accentHex = t.accent_color || '#10b981';
+        const accentRgb = hexToRgb(accentHex);
+        if (accentRgb) {
+          el.style.setProperty('--contact-accent', accentHex);
+          el.style.setProperty('--contact-accent-rgb', accentRgb.r + ' ' + accentRgb.g + ' ' + accentRgb.b);
+        }
+      });
+    };
+
+    // ── Bubble: typewriter for live incoming socket msgs ──────
+    // NOTE: phone_v2.js already inserts .avatar.avatar-xs for incoming rows;
+    // we skip re-adding an avatar to avoid duplication and only apply typewriter.
+    const origAppendMsg = msgsApp._appendMsg.bind(msgsApp);
+    msgsApp._appendMsg = function (msg, batch) {
+      origAppendMsg(msg, batch);
+      // Typewriter only for new live incoming text messages (not history batch)
+      const isOut = msg.sender_id === 'user';
+      const isSys = msg.sender_id === 'system' || msg.msg_type === 'system';
+      if (batch || isOut || isSys) return;
+      if (msg.msg_type === 'voice' || msg.msg_type === 'photo' || msg.msg_type === 'video') return;
+      const box = document.querySelector('#chat-messages');
+      if (!box) return;
+      const rows = box.querySelectorAll('.msg-row.in');
+      if (!rows.length) return;
+      const lastRow = rows[rows.length - 1];
+      const bubble = lastRow.querySelector('.bubble');
+      // Only apply typewriter to text bubbles (those with a .bubble-time timestamp span)
+      if (!bubble || !bubble.querySelector('.bubble-time')) return;
+      // Extract text and timestamp
+      const timeSpan = bubble.querySelector('.bubble-time');
+      // Get text node content (textContent of all non-span children)
+      let text = '';
+      bubble.childNodes.forEach(n => {
+        if (n.nodeType === Node.TEXT_NODE) text += n.textContent;
+      });
+      text = text.trim();
+      if (!text || text.length < 2) return;
+      // Clear and rebuild with typewriter
+      bubble.textContent = '';
+      const frag = document.createElement('span');
+      frag.className = '_tw-wrap';
+      bubble.appendChild(frag);
+      typewriterAppend(frag, text);
+      if (timeSpan) {
+        setTimeout(() => { bubble.appendChild(timeSpan); }, text.length * 22 + 50);
+      }
+    };
+
+    return true;
+  }
+
+  // ──── Poll until CosyPhone is ready ─────────────────────────
+
+  let _polishAttempts = 0;
+  const _polishPoll = setInterval(() => {
+    _polishAttempts++;
+    const g = _patchGalleryApp();
+    const m = _patchMessagesPolish();
+    if ((g && m) || _polishAttempts > 80) clearInterval(_polishPoll);
+  }, 100);
+
 })();
 </script>
 </body>
