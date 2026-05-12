@@ -6,8 +6,13 @@
  * Adds: drink ordering, dice rolling (d4-d100), quest board,
  * rumor investigation, NPC chat wiring, atmosphere meter, stats.
  *
- * Version: v1.50.0 [2026-03-22]
+ * Version: v1.57.3 [2026-05-12]
  * Change Log:
+ *   v1.57.3 [2026-05-12] — Visual polish: stat bars use CSS var approach
+ *                            (--cs-bar-target + --bar-delay for staggered fill
+ *                            animation), dice wow moment (screen shake +
+ *                            amber bloom + dice-visual spring-pop), rumor
+ *                            cards stagger-in with cs-slide-up animation.
  *   v1.50.0 [2026-03-22] — Initial extension module, refactored from tavern.js.
  *                            TavernScene.prototype methods, _initExtensions hook.
  *                            Full implementations: drinks, dice, quests, rumors,
@@ -165,8 +170,9 @@ TavernScene.prototype._rollDice = function() {
   }, 5000);
 };
 
-// v1.50.0 [2026-03-22] — Animate and display dice result
-// CONNECTS: dice DOM elements, chat feed
+// v1.57.3 [2026-05-12] — Animate and display dice result + wow moment
+// (screen shake, amber bloom, dice-visual spring-pop)
+// CONNECTS: dice DOM elements, chat feed, body (bloom overlay)
 // CALLED BY: dice_result socket handler
 TavernScene.prototype._showDiceResult = function(data) {
   this._diceRolling = false;
@@ -189,8 +195,8 @@ TavernScene.prototype._showDiceResult = function(data) {
   if (resultEl) {
     resultEl.classList.remove('hidden');
     const rollsStr = rolls ? `[${rolls.join(', ')}] ` : '';
-    const suffix = critical ? ' -- CRITICAL!' : fumble ? ' -- FUMBLE!' : '';
-    resultEl.textContent = `${rollsStr}d${sides}: ${total}${suffix}`;
+    const sfxLabel = critical ? ' -- CRITICAL!' : fumble ? ' -- FUMBLE!' : '';
+    resultEl.textContent = `${rollsStr}d${sides}: ${total}${sfxLabel}`;
     resultEl.className = 'dice-result-text';
     if (critical) resultEl.classList.add('dice-text-critical');
     if (fumble) resultEl.classList.add('dice-text-fumble');
@@ -200,6 +206,31 @@ TavernScene.prototype._showDiceResult = function(data) {
     void resultEl.offsetWidth;
     resultEl.style.animation = '';
   }
+
+  // v1.57.3 [2026-05-12] — Dice wow: screen shake + amber bloom + value pop
+  // Screen shake on body
+  document.body.classList.add('tavern-roll-shake');
+  document.body.addEventListener('animationend', () => {
+    document.body.classList.remove('tavern-roll-shake');
+  }, { once: true });
+
+  // Amber bloom overlay — created, fades out, self-removes
+  const bloom = document.createElement('div');
+  bloom.className = 'tavern-bloom-overlay';
+  document.body.appendChild(bloom);
+  bloom.addEventListener('animationend', () => bloom.remove(), { once: true });
+
+  // Spring-pop on dice-visual after spin completes (650ms)
+  setTimeout(() => {
+    if (diceVisual) {
+      diceVisual.classList.remove('dice-result-pop');
+      void diceVisual.offsetWidth;
+      diceVisual.classList.add('dice-result-pop');
+      diceVisual.addEventListener('animationend', () => {
+        diceVisual.classList.remove('dice-result-pop');
+      }, { once: true });
+    }
+  }, 650);
 
   // Chat output
   const suffix = critical ? ' CRITICAL!' : fumble ? ' FUMBLE!' : '';
@@ -373,8 +404,9 @@ TavernScene.prototype._loadRumors = function() {
     });
 };
 
-// v1.50.0 [2026-03-22] — Render rumor cards into event feed
+// v1.57.3 [2026-05-12] — Render rumor cards into event feed with stagger-in
 // CONNECTS: #rumor-stack DOM element
+// v1.50.0 [2026-03-22] — Original implementation
 TavernScene.prototype._renderRumors = function(rumors) {
   const feed = document.getElementById('rumor-stack');
   if (!feed) return;
@@ -385,15 +417,26 @@ TavernScene.prototype._renderRumors = function(rumors) {
   }
 
   this._rumorsData = rumors;
-  feed.innerHTML = rumors.map((r, i) => `
-    <div class="ck-event-item" data-rumor-id="${r.id || 'rumor_' + i}" data-index="${i}">
-      <em>${r.text || r.content || 'A whispered rumor...'}</em>
-      <span class="ck-event-source">-- ${r.source || 'Unknown'}</span>
-    </div>
-  `).join('');
+  feed.innerHTML = '';
+
+  rumors.forEach((r, i) => {
+    const el = document.createElement('div');
+    el.className = 'ck-event-item';
+    el.dataset.rumorId = r.id || `rumor_${i}`;
+    el.dataset.index = i;
+    el.innerHTML = `<em>${r.text || r.content || 'A whispered rumor...'}</em>
+      <span class="ck-event-source">-- ${r.source || 'Unknown'}</span>`;
+
+    // v1.57.3 [2026-05-12] — Stagger rumor entries with cs-slide-up
+    el.style.opacity = '0';
+    el.style.animation = `cs-slide-up 0.4s cubic-bezier(0.4,0,0.2,1) ${i * 150}ms both`;
+
+    feed.appendChild(el);
+  });
 };
 
-// v1.50.0 [2026-03-22] — Default rumors when API is unavailable
+// v1.57.3 [2026-05-12] — Default rumors when API is unavailable, with stagger-in
+// v1.50.0 [2026-03-22] — Original fallback implementation
 TavernScene.prototype._renderDefaultRumors = function() {
   const defaults = [
     { id: 'rumor_lighthouse', text: 'The old lighthouse blinks three times at midnight. No keeper lives there.', source: 'A fisherman' },
@@ -404,12 +447,22 @@ TavernScene.prototype._renderDefaultRumors = function() {
 
   const feed = document.getElementById('rumor-stack');
   if (!feed) return;
-  feed.innerHTML = defaults.map((r, i) => `
-    <div class="ck-event-item" data-rumor-id="${r.id}" data-index="${i}">
-      <em>${r.text}</em>
-      <span class="ck-event-source">-- ${r.source}</span>
-    </div>
-  `).join('');
+
+  feed.innerHTML = '';
+  defaults.forEach((r, i) => {
+    const el = document.createElement('div');
+    el.className = 'ck-event-item';
+    el.dataset.rumorId = r.id;
+    el.dataset.index = i;
+    el.innerHTML = `<em>${r.text}</em>
+      <span class="ck-event-source">-- ${r.source}</span>`;
+
+    // v1.57.3 [2026-05-12] — Stagger rumor entries with cs-slide-up
+    el.style.opacity = '0';
+    el.style.animation = `cs-slide-up 0.4s cubic-bezier(0.4,0,0.2,1) ${i * 150}ms both`;
+
+    feed.appendChild(el);
+  });
 };
 
 // v1.50.0 [2026-03-22] — Investigate the topmost rumor
@@ -604,18 +657,28 @@ TavernScene.prototype._initTavernSocket = function() {
     this._showToast(result || 'Drink served!');
 
     // Apply stat effects if provided
+    // v1.57.3 [2026-05-12] — Use CSS var approach for cs-bar-fill animation
     if (effects && typeof effects === 'object') {
-      for (const [stat, delta] of Object.entries(effects)) {
+      const statEntries = Object.entries(effects);
+      statEntries.forEach(([stat, delta], index) => {
         const barEl = document.getElementById(`stat-${stat}`);
-        if (!barEl) continue;
+        if (!barEl) return;
         const fill = barEl.querySelector('.ck-stat-fill, .stat-fill');
         const valEl = barEl.querySelector('.ck-stat-val, .stat-val');
         const current = this.state?.[stat] ?? 50;
         const newVal = Math.min(100, Math.max(0, current + delta));
         if (this.state) this.state[stat] = newVal;
-        if (fill) fill.style.width = `${newVal}%`;
+        if (fill) {
+          // CSS var approach: triggers cs-bar-fill animation via ck-stat-fill rule
+          fill.style.setProperty('--cs-bar-target', `${newVal}%`);
+          fill.style.setProperty('--bar-delay', `${index * 120}ms`);
+          // Force animation retrigger
+          fill.style.animation = 'none';
+          void fill.offsetWidth;
+          fill.style.animation = '';
+        }
         if (valEl) valEl.textContent = Math.round(newVal);
-      }
+      });
     }
 
     // Re-fetch full state to sync
@@ -630,18 +693,26 @@ TavernScene.prototype._initTavernSocket = function() {
   });
 
   // ── Stat update (individual stat changes) ─────────────────────
+  // v1.57.3 [2026-05-12] — CSS var approach for cs-bar-fill animation
   this.socket.on('stat_update', (data) => {
     if (!data) return;
-    for (const [stat, val] of Object.entries(data)) {
-      if (typeof val !== 'number') continue;
+    const statEntries = Object.entries(data).filter(([, v]) => typeof v === 'number');
+    statEntries.forEach(([stat, val], index) => {
       const barEl = document.getElementById(`stat-${stat}`);
-      if (!barEl) continue;
+      if (!barEl) return;
       const fill = barEl.querySelector('.ck-stat-fill, .stat-fill');
       const valEl = barEl.querySelector('.ck-stat-val, .stat-val');
-      if (fill) fill.style.width = `${Math.min(100, Math.max(0, val))}%`;
-      if (valEl) valEl.textContent = Math.round(val);
+      const clamped = Math.min(100, Math.max(0, val));
+      if (fill) {
+        fill.style.setProperty('--cs-bar-target', `${clamped}%`);
+        fill.style.setProperty('--bar-delay', `${index * 120}ms`);
+        fill.style.animation = 'none';
+        void fill.offsetWidth;
+        fill.style.animation = '';
+      }
+      if (valEl) valEl.textContent = Math.round(clamped);
       if (this.state) this.state[stat] = val;
-    }
+    });
   });
 
   // ── HUD update (gold, etc.) ───────────────────────────────────
