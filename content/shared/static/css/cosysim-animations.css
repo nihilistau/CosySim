@@ -509,3 +509,103 @@
 .cs-anim-glow-pulse     { animation: glow-pulse 2s ease-in-out infinite; }
 .cs-anim-slide-up-fade  { animation: slide-up-fade 0.3s var(--cs-ease) both; }
 .cs-anim-neon-text-glow { animation: neon-text-glow 3s ease-in-out infinite; }
+
+/* ── Polish Additions — v1.57.3 [2026-05-12] — stagger-in, pulse-glow, scan-sweep, border-trace ── */
+
+/* Stagger-in: apply to container; children animate in sequence */
+.anim-stagger-in > * {
+    opacity: 0;
+    animation: cs-slide-up 0.4s var(--cs-ease, cubic-bezier(0.4,0,0.2,1)) var(--stagger-delay, 0ms) both;
+}
+.anim-stagger-in > *:nth-child(1)  { --stagger-delay: 0ms;   }
+.anim-stagger-in > *:nth-child(2)  { --stagger-delay: 60ms;  }
+.anim-stagger-in > *:nth-child(3)  { --stagger-delay: 120ms; }
+.anim-stagger-in > *:nth-child(4)  { --stagger-delay: 180ms; }
+.anim-stagger-in > *:nth-child(5)  { --stagger-delay: 240ms; }
+.anim-stagger-in > *:nth-child(6)  { --stagger-delay: 300ms; }
+.anim-stagger-in > *:nth-child(7)  { --stagger-delay: 360ms; }
+.anim-stagger-in > *:nth-child(8)  { --stagger-delay: 420ms; }
+.anim-stagger-in > *:nth-child(9)  { --stagger-delay: 480ms; }
+.anim-stagger-in > *:nth-child(10) { --stagger-delay: 540ms; }
+
+/* Pulse-glow: breathing glow on text elements (reuses existing cs-pulse-glow-text keyframe) */
+.anim-pulse-glow {
+    animation: cs-pulse-glow-text 2.4s ease-in-out infinite;
+}
+
+/* Scan-sweep: light band sweeps top→bottom on hover or .scanning class */
+@keyframes cs-scan-sweep-anim {
+    0%   { transform: translateY(-100%); opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { transform: translateY(300%);  opacity: 0; }
+}
+
+.anim-scan-sweep {
+    position: relative;
+    overflow: hidden;
+}
+.anim-scan-sweep::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 35%;
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.14) 40%,
+        rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.07) 70%,
+        transparent 100%
+    );
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+}
+.anim-scan-sweep:hover::after,
+.anim-scan-sweep.scanning::after {
+    animation: cs-scan-sweep-anim 0.6s ease-in-out forwards;
+}
+
+/* Border-trace: top edge then right edge draws itself on .tracing class */
+@keyframes cs-border-h {
+    from { width: 0; }
+    to   { width: 100%; }
+}
+@keyframes cs-border-v {
+    from { height: 0; }
+    to   { height: 100%; }
+}
+
+.anim-border-trace {
+    position: relative;
+}
+/* Top edge */
+.anim-border-trace.tracing::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    height: 1.5px;
+    width: 0;
+    background: var(--cs-scene-accent, #3b82f6);
+    pointer-events: none;
+    z-index: 2;
+    animation: cs-border-h 0.2s ease-out 0s forwards;
+    box-shadow: 0 0 6px var(--cs-scene-accent, #3b82f6);
+}
+/* Right edge */
+.anim-border-trace.tracing::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 1.5px;
+    height: 0;
+    background: var(--cs-scene-accent, #3b82f6);
+    pointer-events: none;
+    z-index: 2;
+    animation: cs-border-v 0.2s ease-out 0.2s forwards;
+    box-shadow: 0 0 6px var(--cs-scene-accent, #3b82f6);
+}
