@@ -1,10 +1,17 @@
 /**
- * THE PENTHOUSE — PenthouseScene JS  v0.68 "Dark Renaissance"
- * ==========================================================
+ * THE PENTHOUSE — PenthouseScene JS  v1.57.3 "Luxury Polish"
+ * ===========================================================
  * Manages all client-side logic for the Penthouse UI:
  *   Socket.IO connection · Chat rendering · Emotion bars ·
  *   Scenario selection · Scene Director · Economy · Memories ·
  *   ParticleSystem3D · VoiceManager integration
+ *
+ * Version: v1.57.3 [2026-05-12]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.57.3 [2026-05-12] — Elevator reveal animation on page load
+ *   v0.68   [prior]      — Dark Renaissance: full overlay UI + 3D canvas
  */
 
 'use strict';
@@ -69,9 +76,37 @@ class PenthouseScene {
     this._setupSocket();
     this._setupDOM();
     this._initParticles();
+    this._runElevatorReveal();  // v1.57.3 [2026-05-12] — Luxury entrance animation
 
     // Request initial economy balance
     setTimeout(() => this.socket && this.socket.emit('get_economy', {}), 1500);
+  }
+
+  /* ── Elevator Reveal ────────────────────────────────────────────── */
+
+  // v1.57.3 [2026-05-12] — Elevator reveal on page load
+  // CALLED BY: init() on DOMContentLoaded
+  // CONNECTS: ph-elevator-reveal CSS keyframe, ph-elevator-rise animation
+  _runElevatorReveal() {
+    // Animate the main character panel rising in
+    const mainPanel = document.querySelector('.ph-character-panel') ||
+                      document.querySelector('#penthouse-main, .ph-main');
+    if (mainPanel) mainPanel.classList.add('ph-elevator-reveal');
+
+    // Stagger-animate all model cards with the same keyframe
+    const cards = document.querySelectorAll('.ph-mi-card, .ph-char-card');
+    cards.forEach((card, i) => {
+      card.style.opacity = '0';
+      card.style.animation =
+        `ph-elevator-rise 0.5s cubic-bezier(0.16,1,0.3,1) ${200 + i * 80}ms both`;
+    });
+
+    // Also reveal the chat dock and activity feed with a slight delay
+    const chatDock = document.querySelector('.ph-chat-dock');
+    if (chatDock) {
+      chatDock.style.animation =
+        'ph-elevator-rise 0.6s cubic-bezier(0.16,1,0.3,1) 100ms both';
+    }
   }
 
   /* ── Content Gate ───────────────────────────────────────────────── */

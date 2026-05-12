@@ -1,9 +1,95 @@
 /*
- * THE PENTHOUSE — Scene CSS  v0.70 "Overlay Renaissance"
- * ======================================================
+ * THE PENTHOUSE — Scene CSS  v1.57.3 "Luxury Polish"
+ * ====================================================
  * Full overlay layout: all UI panels float over the interactive 3D canvas.
  * Requires: design_tokens.css · cosysim-components.css · cosysim-animations.css
+ *
+ * Version: v1.57.3 [2026-05-12]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.57.3 [2026-05-12] — Warmer luxury purple accent, dark skyline+rain bg,
+ *                           luxury glass panels, card hover lift, elevator reveal
+ *   v0.70   [prior]      — Overlay Renaissance: all UI panels float over 3D canvas
  */
+
+/* ══════════════════════════════════════════════════════════════
+   ACCENT OVERRIDES — Warmer luxury purple
+   ══════════════════════════════════════════════════════════════ */
+
+/* v1.57.3 [2026-05-12] — Warmer luxury purple (replaces neon violet) */
+:root,
+[data-scene="penthouse"],
+[data-scene="bedroom"] {
+  --cs-scene-accent:     #9d71ea;
+  --cs-scene-glow:       rgba(157, 113, 234, 0.35);
+  --cs-scene-accent-rgb: 157 113 234;
+  --ph-accent:           #9d71ea;
+  --ph-accent-rgb:       157 113 234;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DARK SKYLINE BACKGROUND + RAIN STREAKS
+   ══════════════════════════════════════════════════════════════ */
+
+/* v1.57.3 [2026-05-12] — Penthouse dark skyline body background */
+body {
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(157, 113, 234, 0.06) 0%, transparent 60%),
+    linear-gradient(180deg, #070510 0%, #0a0818 60%, #0d0c1a 100%);
+}
+
+/* SVG skyline silhouette at bottom */
+/* v1.57.3 [2026-05-12] — City skyline pseudo-element */
+body::before {
+  content: '';
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 35vh;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 200' preserveAspectRatio='xMidYMax meet'%3E%3Cpath fill='rgba(10,8,24,0.85)' d='M0,200 L0,140 L40,140 L40,100 L60,100 L60,80 L80,80 L80,120 L120,120 L120,60 L140,60 L140,40 L160,40 L160,60 L180,60 L180,100 L220,100 L220,70 L240,70 L240,50 L260,50 L260,70 L280,70 L280,110 L320,110 L320,80 L350,80 L350,40 L370,40 L370,80 L400,80 L400,120 L440,120 L440,90 L460,90 L460,60 L480,60 L480,90 L520,90 L520,130 L560,130 L560,100 L580,100 L580,70 L600,70 L600,50 L620,50 L620,70 L640,70 L640,100 L680,100 L680,120 L720,120 L720,80 L750,80 L750,50 L770,50 L770,80 L800,80 L800,110 L840,110 L840,130 L880,130 L880,90 L900,90 L900,60 L920,60 L920,90 L960,90 L960,120 L1000,120 L1000,80 L1020,80 L1020,40 L1040,40 L1040,80 L1060,80 L1060,100 L1100,100 L1100,130 L1140,130 L1140,100 L1160,100 L1160,70 L1180,70 L1180,100 L1200,100 L1200,130 L1240,130 L1240,110 L1260,110 L1260,80 L1280,80 L1280,110 L1320,110 L1320,140 L1360,140 L1360,120 L1400,120 L1400,140 L1440,140 L1440,200 Z'/%3E%3C/svg%3E") bottom/cover no-repeat;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Rain streaks pseudo-element */
+/* v1.57.3 [2026-05-12] — Animated rain overlay */
+@keyframes ph-rain {
+  from { transform: translateY(-100vh); }
+  to   { transform: translateY(100vh); }
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    repeating-linear-gradient(
+      175deg,
+      transparent 0px, transparent 40px,
+      rgba(255, 255, 255, 0.025) 40px, rgba(255, 255, 255, 0.025) 41px
+    );
+  animation: ph-rain 4s linear infinite;
+  opacity: 0.6;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ELEVATOR REVEAL ANIMATION
+   ══════════════════════════════════════════════════════════════ */
+
+/* v1.57.3 [2026-05-12] — Elevator reveal keyframe + utility class */
+@keyframes ph-elevator-rise {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.ph-elevator-reveal {
+  animation: ph-elevator-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
 
 /* ══════════════════════════════════════════════════════════════
    3D CANVAS — fullscreen, always interactive behind overlays
@@ -105,25 +191,27 @@
    FLOATING CHARACTER PANEL (left side)
    ══════════════════════════════════════════════════════════════ */
 
+/* v1.57.3 [2026-05-12] — Luxury glass-deep panels */
 .ph-character-panel {
   position: fixed;
   left: 16px;
   top: 80px;
   width: 200px;
   z-index: 100;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 30px rgba(157, 113, 234, 0.04), 0 8px 32px rgba(0, 0, 0, 0.7);
   border-radius: 16px;
-  padding: 14px;
+  padding: 20px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: auto;
   max-height: calc(100vh - 100px);
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(244, 63, 94, 0.3) transparent;
+  scrollbar-color: rgba(157, 113, 234, 0.3) transparent;
 }
 
 .ph-character-panel.collapsed {
@@ -183,8 +271,11 @@
   gap: 6px;
 }
 
+/* v1.57.3 [2026-05-12] — Portrait vignette border */
 .ph-portrait-wrap .cs-portrait-frame {
   border-radius: 50%;
+  border: 2px solid rgba(157, 113, 234, 0.3);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
 .ph-portrait-wrap .cs-portrait-frame img {
@@ -569,6 +660,7 @@
 }
 
 /* Model card */
+/* v1.57.3 [2026-05-12] — Card hover lift */
 .ph-mi-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -577,10 +669,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: border-color 0.2s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .ph-mi-card:hover {
-  border-color: rgba(168, 85, 247, 0.3);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(157, 113, 234, 0.25), 0 4px 16px rgba(0, 0, 0, 0.5);
+  border-color: rgba(157, 113, 234, 0.4);
 }
 
 .ph-mi-preview-wrap {
