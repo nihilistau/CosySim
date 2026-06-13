@@ -1,0 +1,417 @@
+/*
+ * THE COLOSSEUM — Dark Renaissance v2 Layer
+ * ==========================================
+ * Loaded AFTER arena_kit.css + arena.css so it wins the cascade.
+ * Extrapolated from docs/DESIGN_SYSTEM_V2.md (no ui_kits_v2 kit for arena):
+ * 4-layer background stack, Orbitron display voice, glass tiers,
+ * blood-red glow + gold victory accents, broadcast-frame "wow".
+ *
+ * Accent: #dc2626 blood red · Victory gold: #fbbf24
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial Dark Renaissance layer: bg stack,
+ *                           typography, glass tiers, thick HP bars,
+ *                           broadcast frame + clash shockwave wow.
+ */
+
+/* ──── Local palette tokens ───────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — gold victory accent + composed glow values */
+body[data-scene="arena"] {
+  --arena-gold: #fbbf24;
+  --arena-gold-rgb: 251 191 36;
+  --arena-blood-deep: #450a0a;
+}
+
+/* ──── 1 · 4-Layer Background Stack ───────────────────────────────────
+   black #02030a → 80px drift grid → radial blood glow → CRT scanlines.
+   Recipe from artifacts/new-assets/styles.css (.cs-scene-bg).
+   CONNECTS: neon_base.html .neon-grid-bg / .neon-scanlines layers     */
+body[data-scene="arena"] {
+  background: #02030a;
+}
+
+/* Layer 3 — radial blood glow rising from the arena pit + faint gold
+   crown light from above (the crowd's torches) */
+body[data-scene="arena"] .neon-grid-bg {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 100%, rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.16) 0%, transparent 62%),
+    radial-gradient(ellipse 70% 30% at 50% 0%, rgb(var(--arena-gold-rgb, 251 191 36) / 0.045) 0%, transparent 55%),
+    #02030a;
+}
+
+/* Layer 2 — 80px drift grid (valid modern rgb()/alpha syntax) */
+body[data-scene="arena"] .neon-grid-bg::before {
+  background-image:
+    repeating-linear-gradient(90deg, rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.05) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.05) 0 1px, transparent 1px 80px);
+  animation: arena-grid-drift 30s linear infinite;
+}
+
+@keyframes arena-grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 80px, 0 80px; }
+}
+
+/* Layer 4 — CRT scanlines (slightly stronger than base default) */
+body[data-scene="arena"] .neon-scanlines {
+  opacity: 0.6;
+}
+
+/* ──── 2 · Typography — Orbitron display voice ───────────────────── */
+/* v1.58.0 [2026-06-11] — blood→gold gradient wordmark */
+.ck-scene-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-size: 1.55rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  background: linear-gradient(95deg, #fca5a5 0%, var(--cs-scene-accent, #dc2626) 45%, var(--arena-gold, #fbbf24) 110%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 14px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.55));
+}
+
+.ck-scene-subtitle {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.65);
+  font-style: normal;
+}
+
+/* Panel titles — display voice with blood tick */
+.ck-glass-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.18em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ck-glass-title::before {
+  content: '';
+  width: 3px;
+  height: 0.85em;
+  background: linear-gradient(180deg, var(--cs-scene-accent, #dc2626), var(--arena-blood-deep, #450a0a));
+  box-shadow: 0 0 8px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.7);
+  flex-shrink: 0;
+}
+
+/* Fighter names + VS — gladiator broadcast lettering */
+.arena-fighter__name {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 12px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.6), 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+
+/* ──── 3 · Scene header — deep glass broadcast bar ────────────────── */
+.ck-scene-header {
+  background: rgb(8 3 5 / 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.35);
+  box-shadow:
+    0 0 24px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.18),
+    0 8px 24px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+/* Sweeping highlight across the header — broadcast lower-third feel */
+.ck-scene-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.035) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: cs-shimmer 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.ck-hud-badge {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  background: rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.07);
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.22);
+  border-radius: 4px;
+}
+
+/* ──── 4 · Glass tiers — panels get depth ─────────────────────────── */
+/* v1.58.0 [2026-06-11] — glass-medium recipe applied to kit panels   */
+.ck-glass-panel {
+  background: rgb(10 4 6 / 0.62);
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.18);
+  border-radius: 10px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+.ck-glass-panel:hover {
+  border-color: rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.38);
+  box-shadow:
+    0 0 18px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.14),
+    0 6px 24px rgba(0, 0, 0, 0.5);
+}
+.ck-glass-panel--glow {
+  box-shadow:
+    0 0 18px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.16),
+    inset 0 0 12px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.05);
+}
+
+/* Portrait frame — blood ring + inner vignette */
+.arena-fighter__portrait {
+  border-color: rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.5);
+  box-shadow:
+    0 0 22px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.35),
+    inset 0 -30px 50px rgba(0, 0, 0, 0.65);
+}
+
+/* ──── 5 · Thick HP bars — heavyweight gladiator vitals ───────────── */
+/* v1.58.0 [2026-06-11] — .cs-stat-bar--thick scale on kit stat track */
+.ck-stat-track {
+  height: 16px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.55);
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.28);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
+}
+.ck-stat-fill {
+  border-radius: 7px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.45);
+}
+/* Combat shimmer band on the fill */
+.ck-stat-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.22) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: stat-shimmer 2.2s linear infinite;
+}
+.ck-stat-label {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  color: rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.8);
+  width: 34px;
+}
+.ck-stat-val {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 0.82rem;
+  color: #fff;
+  text-shadow: 0 0 8px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.6);
+}
+
+/* ──── 6 · Arena floor — broadcast frame (signature wow, part 1) ──── */
+/* v1.58.0 [2026-06-11] — corner brackets + crowd-light sweep + LIVE  */
+.arena-floor {
+  border-color: rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.4);
+  box-shadow:
+    0 0 50px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.22),
+    inset 0 0 70px rgba(0, 0, 0, 0.85);
+}
+
+/* Corner brackets — 8 gradient strokes, 4 corners */
+.arena-floor::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  z-index: 6;
+  --bk: rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.85);
+  background:
+    linear-gradient(var(--bk), var(--bk)) top left    / 20px 2px,
+    linear-gradient(var(--bk), var(--bk)) top left    / 2px 20px,
+    linear-gradient(var(--bk), var(--bk)) top right   / 20px 2px,
+    linear-gradient(var(--bk), var(--bk)) top right   / 2px 20px,
+    linear-gradient(var(--bk), var(--bk)) bottom left / 20px 2px,
+    linear-gradient(var(--bk), var(--bk)) bottom left / 2px 20px,
+    linear-gradient(var(--bk), var(--bk)) bottom right/ 20px 2px,
+    linear-gradient(var(--bk), var(--bk)) bottom right/ 2px 20px;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 6px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.6));
+  animation: corner-flash 4s ease-in-out infinite;
+}
+
+/* Crowd-light sweep across the pit grid */
+.arena-floor__grid::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -30%;
+  width: 26%;
+  background: linear-gradient(90deg, transparent, rgb(var(--arena-gold-rgb, 251 191 36) / 0.07) 45%, rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.1) 55%, transparent);
+  animation: arena-crowd-sweep 7s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes arena-crowd-sweep {
+  0%, 12%  { left: -30%; }
+  55%, 60% { left: 105%; }
+  100%     { left: 105%; }
+}
+
+/* LIVE broadcast tag (element added in arena.html v1.58.0) */
+.arena-live-tag {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  color: #fecaca;
+  background: rgb(0 0 0 / 0.6);
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.5);
+  border-radius: 3px;
+  padding: 3px 8px 3px 7px;
+  pointer-events: none;
+  user-select: none;
+}
+.arena-live-tag .arena-rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cs-scene-accent, #dc2626);
+  box-shadow: 0 0 8px var(--cs-scene-accent, #dc2626);
+  animation: lb-rec-blink 1.4s ease-in-out infinite;
+}
+@keyframes lb-rec-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+/* VS badge — breathing blood glow + gold rim */
+.arena-vs-badge {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  -webkit-text-stroke: 1px rgb(var(--arena-gold-rgb, 251 191 36) / 0.4);
+  animation: cs-pulse-glow-text 2.6s ease-in-out infinite;
+}
+
+/* ──── 7 · Clash shockwave (signature wow, part 2) ────────────────── */
+/* v1.58.0 [2026-06-11] — when arena_ext.js toggles the clash flash,
+   the whole floor shakes and a blood shockwave ring expands.
+   CONNECTS: arena_ext.js classList.add('arena-clash-flash--active')  */
+.arena-floor:has(.arena-clash-flash--active) {
+  animation: cs-shake 450ms var(--cs-ease, ease);
+}
+.arena-clash-flash--active::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 70px;
+  height: 70px;
+  margin: -35px 0 0 -35px;
+  border: 3px solid rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.8);
+  border-radius: 50%;
+  box-shadow:
+    0 0 24px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.7),
+    inset 0 0 18px rgb(var(--arena-gold-rgb, 251 191 36) / 0.4);
+  animation: cs-explosion-burst 0.55s ease-out forwards;
+}
+
+/* ──── 8 · Round tracker + gold victory accents ───────────────────── */
+.ck-step {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+.ck-step.current {
+  color: var(--arena-gold, #fbbf24);
+  border-bottom-color: var(--arena-gold, #fbbf24);
+  text-shadow: 0 0 10px rgb(var(--arena-gold-rgb, 251 191 36) / 0.7);
+  animation: cs-pulse-glow-text 1.8s ease-in-out infinite;
+}
+
+/* Victory state — gold, not green (the laurel, not the terminal) */
+.arena-match-status--complete {
+  background: rgb(var(--arena-gold-rgb, 251 191 36) / 0.12);
+  color: var(--arena-gold, #fbbf24);
+  border-color: rgb(var(--arena-gold-rgb, 251 191 36) / 0.45);
+  text-shadow: 0 0 8px rgb(var(--arena-gold-rgb, 251 191 36) / 0.5);
+}
+
+/* Leaderboard rows — rank #1 takes the gold */
+.arena-leader-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 0.74rem;
+  border-left: 2px solid rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.25);
+  background: rgb(255 255 255 / 0.02);
+  margin-bottom: 3px;
+}
+.arena-leader-rank {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  color: rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.75);
+  min-width: 18px;
+}
+.arena-leader-name { flex: 1; color: var(--cs-text-primary, #e5e7eb); }
+.arena-leader-record {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 0.66rem;
+  color: var(--cs-text-muted, #888);
+}
+.arena-leader-row:first-child {
+  border-left-color: var(--arena-gold, #fbbf24);
+  background: rgb(var(--arena-gold-rgb, 251 191 36) / 0.06);
+}
+.arena-leader-row:first-child .arena-leader-rank,
+.arena-leader-row:first-child .arena-leader-name {
+  color: var(--arena-gold, #fbbf24);
+  text-shadow: 0 0 8px rgb(var(--arena-gold-rgb, 251 191 36) / 0.4);
+}
+
+/* ──── 9 · Buttons + commentary polish ────────────────────────────── */
+.ck-btn {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-radius: 6px;
+}
+.ck-btn--accent {
+  background: linear-gradient(135deg, #991b1b, var(--cs-scene-accent, #dc2626));
+  box-shadow: 0 0 12px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.3);
+}
+.ck-btn--accent:hover {
+  box-shadow: 0 0 20px rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.55);
+}
+
+/* Commentary — announcer voice */
+.arena-commentary__line--round {
+  border-left: 2px solid rgb(var(--cs-scene-accent-rgb, 220 38 38) / 0.6);
+  padding-left: 8px;
+}
+.arena-commentary__line--special {
+  color: var(--arena-gold, #fbbf24);
+  text-shadow: 0 0 8px rgb(var(--arena-gold-rgb, 251 191 36) / 0.35);
+}
+
+/* Bet panel — deep glass tier */
+.arena-bet-panel {
+  background: rgb(8 3 5 / 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ──── 10 · Reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  body[data-scene="arena"] .neon-grid-bg::before,
+  .ck-scene-header::after,
+  .arena-floor::after,
+  .arena-floor__grid::after,
+  .ck-stat-fill::after,
+  .arena-vs-badge,
+  .arena-live-tag .arena-rec-dot,
+  .ck-step.current {
+    animation: none !important;
+  }
+}

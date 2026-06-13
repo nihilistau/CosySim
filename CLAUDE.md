@@ -341,7 +341,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.57.2** (RPC System Overhaul — call-time get_rpcid(), RpcidUpdater, 60 gRPC methods, 92 scheduler tasks)
+- Current: **v1.58.0** (Dark Renaissance — all-scene glow-up via ui_kits_v2, three.js r128→r184 ES-module migration, penthouse 3D overhaul with curtain-wall skyline, NEONCITY landing on hub `/` + catalogue at `/terminal`, TUI arrow-key/subprocess launch overhaul, lab_break/grid launch fix, scene-rules registration fixes)
 
 ### Navigational Comments
 

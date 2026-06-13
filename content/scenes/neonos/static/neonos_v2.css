@@ -1,0 +1,196 @@
+/*
+ * neonos_v2.css — NEON OS Dark Renaissance Glow-Up
+ * ==================================================
+ *
+ * v2 skin layered AFTER cosysim-desktop.css + neonos.css.
+ * Blends the `neonos` ui_kits_v2 kit (launcher grid tiles, window
+ * chrome, taskbar) with the `executive_suite` kit's panoramic
+ * NEONCITY skyline backdrop (night-sky gradient + SVG skyline that
+ * lives in neonos.html as a decorative layer).
+ *
+ * Accent: #00e5ff cyan (scene_accent — source of truth in template).
+ * Reuses shared keyframes (cs-slide-up) from cosysim-animations.css —
+ * no duplicate keyframes defined here.
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Dark Renaissance: executive-suite panoramic
+ *                           sky + skyline layer, kit launcher tile glass,
+ *                           deeper window chrome glass, kit taskbar with
+ *                           Orbitron glow clock, stagger-in launcher
+ */
+
+/* ──── Panoramic Backdrop (executive_suite sky recipe) ──────────────────── */
+/* v1.58.0 [2026-06-11] — Night gradient sky w/ amber/pink/cyan city haze.
+   CONNECTS: .neonos-skyline SVG layer (neonos.html)
+   Replaces the flat #060810 desktop background from cosysim-desktop.css. */
+
+.neon-desktop {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 100%, rgba(245, 158, 11, 0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 30% 60%, rgba(236, 72, 153, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 70% 45%, rgba(0, 229, 255, 0.08) 0%, transparent 55%),
+    linear-gradient(180deg, #050314 0%, #0a0820 35%, #160c20 70%, #1c0a18 100%);
+}
+
+/* v1.58.0 — 80px drift grid overlay (kit's .neon-desktop::before) */
+.neon-desktop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(0, 229, 255, 0.03) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg, rgba(0, 229, 255, 0.03) 0 1px, transparent 1px 80px);
+}
+
+/* ──── Skyline Layer ─────────────────────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Decorative NEONCITY skyline (SVG in template).
+   Sits under the launcher (z 1) and windows (z 100+, inline styles). */
+
+.neonos-skyline {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.neonos-skyline svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Keep interactive layers above the backdrop */
+.neon-app-launcher { z-index: 1; }
+.neon-taskbar      { z-index: 9999; }
+
+/* ──── App Launcher — kit tile glass + stagger ──────────────────────────── */
+/* v1.58.0 [2026-06-11] — Glass tiles over the skyline, kit hover lift */
+
+.neon-app-launcher__heading {
+  color: rgba(0, 229, 255, 0.65);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.12);
+  text-shadow: 0 0 14px rgba(0, 229, 255, 0.25);
+}
+
+.neon-app-tile {
+  background: rgba(8, 10, 18, 0.55);
+  border: 1px solid rgba(0, 229, 255, 0.08);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+}
+
+.neon-app-tile:hover {
+  background: rgba(0, 229, 255, 0.07);
+  border-color: rgba(0, 229, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 229, 255, 0.12), 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+/* v1.58.0 — stagger-in for JS-rendered sections/tiles.
+   Reuses the shared cs-slide-up keyframe (cosysim-animations.css);
+   sections cascade first, tiles ripple inside each grid. */
+.neon-app-launcher__section {
+  opacity: 0;
+  animation: cs-slide-up 0.45s var(--cs-ease, cubic-bezier(0.4, 0, 0.2, 1)) both;
+}
+.neon-app-launcher__section:nth-child(2) { animation-delay: 140ms; }
+.neon-app-launcher__section:nth-child(3) { animation-delay: 280ms; }
+
+.neon-app-launcher__grid > .neon-app-tile {
+  opacity: 0;
+  animation: cs-slide-up 0.4s var(--cs-ease, cubic-bezier(0.4, 0, 0.2, 1)) 480ms both;
+}
+.neon-app-launcher__grid > .neon-app-tile:nth-child(1)  { animation-delay: 0ms;   }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(2)  { animation-delay: 40ms;  }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(3)  { animation-delay: 80ms;  }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(4)  { animation-delay: 120ms; }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(5)  { animation-delay: 160ms; }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(6)  { animation-delay: 200ms; }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(7)  { animation-delay: 240ms; }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(8)  { animation-delay: 280ms; }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(9)  { animation-delay: 320ms; }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(10) { animation-delay: 360ms; }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(11) { animation-delay: 400ms; }
+.neon-app-launcher__grid > .neon-app-tile:nth-child(12) { animation-delay: 440ms; }
+
+/* ──── Window Chrome — deeper kit glass ─────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — executive_suite glass depth + kit cyan halo.
+   CALLED BY: NeonWindow._build() (cosysim-desktop.js) — class names untouched. */
+
+.neon-window {
+  background: rgba(8, 10, 18, 0.82);
+  backdrop-filter: blur(24px) saturate(1.35);
+  -webkit-backdrop-filter: blur(24px) saturate(1.35);
+  border-radius: 10px;
+  box-shadow:
+    0 0 1px rgba(0, 229, 255, 0.3),
+    0 28px 80px rgba(0, 0, 0, 0.55),
+    0 0 40px rgba(0, 229, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.neon-window:hover {
+  box-shadow:
+    0 0 1px rgba(0, 229, 255, 0.5),
+    0 32px 100px rgba(0, 0, 0, 0.7),
+    0 0 60px rgba(0, 229, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.neon-window__title {
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 14px currentColor;
+}
+
+.neon-window__btn {
+  border-radius: 5px;
+}
+
+/* ──── Taskbar — kit styling ────────────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — executive_suite gradient bar + Orbitron glow clock */
+
+.neon-taskbar {
+  background: linear-gradient(180deg, rgba(10, 12, 22, 0.85) 0%, rgba(5, 7, 15, 0.96) 100%);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-top: 1px solid rgba(0, 229, 255, 0.18);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.neon-taskbar__app-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.05);
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  color: #8ea0b8;
+}
+
+.neon-taskbar__app-btn:hover {
+  background: rgba(0, 229, 255, 0.12);
+  color: #c0e8f8;
+}
+
+.neon-taskbar__app-btn--active {
+  background: rgba(0, 229, 255, 0.1);
+  color: #00e5ff;
+  border-color: rgba(0, 229, 255, 0.3);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.12);
+}
+
+.neon-taskbar__clock {
+  font-family: 'Orbitron', 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #00e5ff;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.45);
+}

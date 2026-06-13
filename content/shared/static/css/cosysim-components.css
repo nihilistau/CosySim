@@ -11,6 +11,8 @@
  *   Sidebar · Chip Badge · Online Dot · Investigation Board
  *
  * Change Log:
+ *   v1.58.0 [2026-06-11] — Add .cs-chat-bubble / .cs-chat-log shared dialogue
+ *                           components (ported from Dark Renaissance kit)
  *   v1.57.3 [2026-05-12] — Add glass-subtle/medium/deep depth tiers + cs-btn-scene standardized button
  */
 
@@ -1174,4 +1176,66 @@
     cursor: not-allowed;
     background: transparent;
     box-shadow: none;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CHAT BUBBLES — v1.58.0 [2026-06-11]
+   Ported from the Dark Renaissance kit (artifacts/new-assets/
+   components/chat_bubble). Shared dialogue bubble so scenes stop
+   rolling their own: npc (left accent bar) · player (right accent
+   gradient) · system (dashed centered pill).
+   Container should be flex-column (.cs-chat-log provided below).
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cs-space-sm);
+}
+
+.cs-chat-bubble {
+    align-self: flex-start;
+    max-width: 80%;
+    padding: 8px 12px;
+    border-radius: var(--cs-radius-lg);
+    font-family: var(--cs-font-sans);
+    font-size: var(--cs-text-sm);
+    line-height: var(--cs-leading-normal);
+    color: var(--cs-text-primary);
+    background: rgba(20, 21, 32, 0.7);
+    border: 1px solid var(--cs-border);
+    border-left: 3px solid var(--cs-scene-accent, var(--cs-accent));
+}
+
+.cs-chat-bubble__name {
+    display: block;
+    font-family: var(--cs-font-mono);
+    font-size: 9px;
+    color: var(--cs-scene-accent, var(--cs-accent));
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.cs-chat-bubble--player {
+    align-self: flex-end;
+    background: linear-gradient(135deg,
+        rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.12),
+        rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.06));
+    border: 1px solid rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.25);
+    border-left: 1px solid rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.25);
+    border-right: 3px solid var(--cs-scene-accent, var(--cs-accent));
+}
+
+.cs-chat-bubble--system {
+    align-self: center;
+    max-width: none;
+    font-family: var(--cs-font-mono);
+    font-size: 9.5px;
+    color: var(--cs-text-muted);
+    padding: 3px 12px;
+    background: transparent;
+    border: 1px dashed var(--cs-border);
+    border-radius: var(--cs-radius-full);
+    letter-spacing: 0.04em;
 }

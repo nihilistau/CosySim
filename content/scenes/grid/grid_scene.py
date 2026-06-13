@@ -13,10 +13,11 @@ Four zones accessible via tab navigation:
 
 All zones react to the living world via Socket.IO and the EventCascade.
 
-Version: v1.49.5 [2026-03-22]
+Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.58.0 [2026-06-11] — __init__ accepts host= (fixes TUI launch crash)
     v1.49.5 [2026-03-22] — 18 tiered faction quests (3 per faction), 3 vendor NPCs with dialogue
     v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
     v1.49.2 [2026-03-22] — API-first: template is a pure structural shell
@@ -741,8 +742,10 @@ class GridScene(FlaskScene):
         "characters": ["mira", "viktor", "frankie"],
     }
 
-    def __init__(self, config: Any = None) -> None:
-        super().__init__(host="0.0.0.0", port=self.SCENE_METADATA["port"])
+    # v1.58.0 [2026-06-11] — Accept host= passthrough; constructor rejecting
+    # host= made THE GRID fail to launch from the TUI (same bug as lab_break).
+    def __init__(self, config: Any = None, host: str = "0.0.0.0") -> None:
+        super().__init__(host=host, port=self.SCENE_METADATA["port"])
         self._state = _get_grid_state()
         self._event_sub_id: Optional[str] = None
 

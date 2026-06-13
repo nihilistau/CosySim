@@ -1756,12 +1756,20 @@ function _addActivityItem(text, icon) {
 /** @type {PenthouseScene} */
 const PENTHOUSE = new PenthouseScene();
 
-document.addEventListener('DOMContentLoaded', () => {
+/* v1.58.0 [2026-06-11] — readyState guard: this file now loads via the
+   three_boot module chain AFTER DOMContentLoaded has already fired, so a
+   bare listener would never run. */
+function _penthouseBoot() {
   PENTHOUSE.init();
   _buildInteractGrid();
   setTimeout(_buildViewPresets, 2000);
   setTimeout(_refreshModelAssignList, 1500);
-});
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _penthouseBoot);
+} else {
+  _penthouseBoot();
+}
 
 // Expose globally for console debugging
 window.PENTHOUSE = PENTHOUSE;

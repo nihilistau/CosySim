@@ -264,7 +264,9 @@
   };
 
   // Auto-load on DOM ready
-  document.addEventListener('DOMContentLoaded', () => {
+  // v1.58.0 [2026-06-11] — readyState guard (file now loads post-DOMContentLoaded
+  // via the three_boot module chain; bare listener never fired in that case)
+  function _autoLoad() {
     // Small delay to ensure CharModels and penthouse3D are initialized
     setTimeout(() => {
       PenthouseConfig.load().then(data => {
@@ -275,7 +277,12 @@
         }
       });
     }, 500);
-  });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _autoLoad);
+  } else {
+    _autoLoad();
+  }
 
   window.PenthouseConfig = PenthouseConfig;
 })();

@@ -9,10 +9,12 @@ Usage:
     python launcher.py hub
     python launcher.py --core   # auto-starts hub among core scenes
 
-Version: v1.42.1 [2026-03-21]
+Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.58.0 [2026-06-11] — "/" serves the NEONCITY Dark Renaissance landing
+                            page (landing.html); catalogue moved to /terminal
     v1.42.1 [2026-03-21] — Extensive documentation, section dividers, version stamps
     v1.42.0 [2026-03-21] — Pillar wiring, hub modernization
     v0.68   [prior]      — Dark Renaissance initial implementation
@@ -340,8 +342,29 @@ class HubScene(BaseScene):
         """Register all Flask routes."""
         app = self.app
 
+        # v1.58.0 [2026-06-11] — "/" now serves the NEONCITY Dark Renaissance
+        # landing page; the scene catalogue (THE TERMINAL) moved to /terminal.
+        # CTA targets are injected server-side via port_registry (no hardcoded
+        # ports per CLAUDE.md).
         @app.route("/")
         def index() -> str:
+            try:
+                from importlib.metadata import version as _pkg_version
+                _version = f"v{_pkg_version('cosysim')}"
+            except Exception:
+                _version = "v1.58"
+            return render_template(
+                "landing.html",
+                terminal_url="/terminal",
+                neoncity_url=f"http://localhost:{get_port('neoncity')}",
+                neonos_url=f"http://localhost:{get_port('neonos')}",
+                intel_url=f"http://localhost:{get_port('intel_hub')}",
+                version=_version,
+            )
+
+        @app.route("/terminal")
+        def terminal() -> str:
+            """THE TERMINAL — full scene catalogue (was the old hub root)."""
             return render_template(
                 "hub.html",
                 **self.inject_navbar_context(),

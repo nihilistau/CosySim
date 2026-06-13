@@ -11,8 +11,13 @@
   Uses lounge_kit.js (LoungeScene) + lounge_ext.js (game logic).
   Original template archived as lounge_original.html.
 
-  Version: v1.50.0 [2026-03-22]
+  Version: v1.58.0 [2026-06-11]
   Change Log:
+    v1.58.0 [2026-06-11] — Dark Renaissance v2 glow-up: lounge_v2.css
+                             layer (pink speakeasy, velvet panels, neon
+                             sign flicker, stage spotlight cone, gold
+                             trim); trust meter gradient re-tuned to
+                             wine→pink; stagger-in on events + drinks.
     v1.50.0 [2026-03-22] — Kit rebuild. LoungeScene class,
                              lounge_ext.js extensions, new layout.
                              3-column lounge layout: seating/staff,
@@ -22,6 +27,8 @@
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='lounge_kit.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='lounge.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='lounge_v2.css') }}">
 {% endblock %}
 
 {% block scene_content %}
@@ -115,8 +122,9 @@
           <div class="ck-stat-bar">
             <span class="ck-stat-label">Trust</span>
             <div class="ck-stat-track">
+              {# v1.58.0 [2026-06-11] — trust gradient: wine → pink → rose (was amber) #}
               <div class="ck-stat-fill" id="trust-fill"
-                   style="width: 10%; background: linear-gradient(90deg, #92400e, #f59e0b, #fbbf24);"></div>
+                   style="width: 10%; background: linear-gradient(90deg, #9d174d, #ec4899, #f472b6);"></div>
             </div>
             <span class="ck-stat-val" id="trust-value">10</span>
           </div>
@@ -158,7 +166,8 @@
       <div class="ck-glass-panel" style="margin-top: 8px;">
         <div class="ck-glass-title">TONIGHT</div>
         <div class="ck-glass-body">
-          <div class="ck-event-feed" id="events-list">
+          {# v1.58.0 [2026-06-11] — shared stagger-in entrance on event cards #}
+          <div class="ck-event-feed anim-stagger-in" id="events-list">
             <div class="ck-event-item">Loading events&hellip;</div>
           </div>
         </div>
@@ -234,7 +243,8 @@
       <div class="ck-glass-panel ck-glass-panel--strong">
         <div class="ck-glass-title">BAR MENU</div>
         <div class="ck-glass-body">
-          <div class="ck-drink-menu" id="drink-menu">
+          {# v1.58.0 [2026-06-11] — shared stagger-in entrance on drink cards #}
+          <div class="ck-drink-menu anim-stagger-in" id="drink-menu">
             <!-- Cocktail cards injected by lounge_ext.js -->
           </div>
         </div>

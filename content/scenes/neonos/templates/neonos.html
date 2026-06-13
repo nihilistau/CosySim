@@ -11,6 +11,8 @@
   All CosySim scenes as apps in a desktop-like browser UI with
   draggable windows, taskbar, and an app launcher grid.
 
+  v1.58.0 [2026-06-11] — Dark Renaissance: executive_suite panoramic
+                          NEONCITY skyline backdrop + neonos_v2.css skin
   v1.51.0 [2026-03-25] — Full desktop shell with window manager
   v1.0.0  [2026-03-25] — Initial scaffold via Creation Kit
 #}
@@ -18,10 +20,93 @@
 {% block head_css %}
   <link rel="stylesheet" href="/shared/css/cosysim-desktop.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='neonos.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 skin (loads after base desktop CSS) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='neonos_v2.css') }}">
 {% endblock %}
 
 {% block scene_content %}
 <div id="neon-desktop" class="neon-desktop">
+
+  <!-- ── Panoramic NEONCITY Skyline (v1.58.0 — executive_suite kit) ──
+       Decorative layer under the launcher/windows; pointer-events:none.
+       Beacon blinks use SMIL so no extra CSS keyframes are needed. -->
+  <div class="neonos-skyline" aria-hidden="true">
+    <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax slice">
+      <defs>
+        <radialGradient id="neonos-moon" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stop-color="#fef3c7"/>
+          <stop offset="60%" stop-color="rgba(254,243,199,0.4)"/>
+          <stop offset="100%" stop-color="rgba(254,243,199,0)"/>
+        </radialGradient>
+        <linearGradient id="neonos-haze" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="rgba(0,229,255,0)"/>
+          <stop offset="100%" stop-color="rgba(0,229,255,0.10)"/>
+        </linearGradient>
+      </defs>
+
+      <!-- moon + stars -->
+      <circle cx="1480" cy="240" r="170" fill="url(#neonos-moon)" opacity="0.45"/>
+      <g fill="#fef3c7" opacity="0.4">
+        <circle cx="180" cy="140" r="0.9"/><circle cx="360" cy="220" r="0.6"/>
+        <circle cx="540" cy="90" r="0.6"/><circle cx="760" cy="170" r="0.8"/>
+        <circle cx="1000" cy="110" r="0.6"/><circle cx="1240" cy="230" r="0.5"/>
+        <circle cx="1660" cy="120" r="0.7"/><circle cx="1820" cy="320" r="0.6"/>
+      </g>
+
+      <!-- far skyline silhouettes -->
+      <g fill="#0a0a1c">
+        <rect x="0" y="640" width="130" height="440"/>
+        <rect x="150" y="560" width="100" height="520"/>
+        <rect x="270" y="690" width="160" height="390"/>
+        <rect x="450" y="500" width="110" height="580"/>
+        <rect x="580" y="620" width="140" height="460"/>
+        <rect x="740" y="430" width="120" height="650"/>
+        <rect x="880" y="580" width="170" height="500"/>
+        <rect x="1070" y="470" width="100" height="610"/>
+        <rect x="1190" y="650" width="150" height="430"/>
+        <rect x="1360" y="540" width="120" height="540"/>
+        <rect x="1500" y="610" width="160" height="470"/>
+        <rect x="1680" y="480" width="110" height="600"/>
+        <rect x="1810" y="600" width="110" height="480"/>
+        <!-- antennas -->
+        <rect x="795" y="370" width="4" height="60"/>
+        <rect x="1115" y="410" width="4" height="60"/>
+        <rect x="1730" y="420" width="4" height="60"/>
+      </g>
+
+      <!-- antenna beacons (SMIL blink) -->
+      <circle cx="797" cy="366" r="4" fill="#ef4444">
+        <animate attributeName="opacity" values="1;0.15;1" dur="2.4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="1117" cy="406" r="4" fill="#00e5ff">
+        <animate attributeName="opacity" values="0.2;1;0.2" dur="3.1s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="1732" cy="416" r="4" fill="#ec4899">
+        <animate attributeName="opacity" values="1;0.2;1" dur="2.8s" repeatCount="indefinite"/>
+      </circle>
+
+      <!-- lit windows -->
+      <g fill="#00e5ff" opacity="0.5">
+        <rect x="170" y="590" width="8" height="10"/><rect x="200" y="640" width="8" height="10"/>
+        <rect x="470" y="540" width="8" height="10"/><rect x="500" y="600" width="8" height="10"/>
+        <rect x="760" y="470" width="8" height="10"/><rect x="790" y="530" width="8" height="10"/>
+        <rect x="1090" y="510" width="8" height="10"/><rect x="1380" y="580" width="8" height="10"/>
+        <rect x="1700" y="520" width="8" height="10"/><rect x="1830" y="650" width="8" height="10"/>
+      </g>
+      <g fill="#f59e0b" opacity="0.45">
+        <rect x="300" y="720" width="8" height="10"/><rect x="610" y="660" width="8" height="10"/>
+        <rect x="920" y="620" width="8" height="10"/><rect x="1230" y="690" width="8" height="10"/>
+        <rect x="1540" y="650" width="8" height="10"/><rect x="60" y="680" width="8" height="10"/>
+      </g>
+      <g fill="#ec4899" opacity="0.4">
+        <rect x="480" y="560" width="8" height="10"/><rect x="1020" y="640" width="8" height="10"/>
+        <rect x="1410" y="620" width="8" height="10"/><rect x="1850" y="700" width="8" height="10"/>
+      </g>
+
+      <!-- street-level haze -->
+      <rect x="0" y="880" width="1920" height="200" fill="url(#neonos-haze)"/>
+    </svg>
+  </div>
 
   <!-- ── App Launcher Grid ──────────────────────────────────────── -->
   <div id="neon-app-launcher" class="neon-app-launcher"></div>

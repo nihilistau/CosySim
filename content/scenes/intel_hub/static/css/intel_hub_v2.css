@@ -1,0 +1,85 @@
+/*
+ * Intel Hub — Dark Renaissance v2 layer
+ * =====================================
+ * Briefing kit (artifacts/new-assets/ui_kits_v2/briefing): mission-control
+ * gauges, briefing cards, violet data displays. Loads AFTER intel_hub.css.
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial v2 glow-up (Orbitron headers, glass
+ *                           briefing cards, violet gauge readouts, 4-layer bg)
+ */
+
+/* ──── Background — mission-control void with violet ops glow ──── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(var(--cs-scene-accent-rgb), 0.10) 0%, transparent 55%),
+    repeating-linear-gradient(90deg, rgba(var(--cs-scene-accent-rgb), 0.03) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgba(var(--cs-scene-accent-rgb), 0.03) 0 1px, transparent 1px 80px),
+    linear-gradient(180deg, #050410 0%, #0a0814 100%);
+}
+
+/* ──── Header — Orbitron command voice ──── */
+.briefing-title {
+  font-family: var(--cs-font-display);
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 24px var(--cs-scene-glow);
+}
+.briefing-subtitle {
+  font-family: var(--cs-font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cs-text-muted);
+}
+
+/* ──── Briefing / benchmark cards — glass with hover lift ──── */
+.benchmark-card {
+  background: var(--cs-glass-bg);
+  backdrop-filter: blur(var(--cs-glass-blur));
+  -webkit-backdrop-filter: blur(var(--cs-glass-blur));
+  border: 1px solid var(--cs-glass-border);
+  border-radius: var(--cs-radius-lg);
+  transition: transform var(--cs-duration-fast) var(--cs-ease),
+              box-shadow var(--cs-duration-fast) var(--cs-ease),
+              border-color var(--cs-duration-fast) var(--cs-ease);
+}
+.benchmark-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.4);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 0 24px var(--cs-scene-glow);
+}
+.benchmark-card-name { font-family: var(--cs-font-display); letter-spacing: 0.04em; }
+
+/* mono data voice on numeric readouts */
+.benchmark-detail-header,
+.benchmark-run-btn { font-family: var(--cs-font-mono); }
+
+/* ──── Aria assistant panel — deep glass focus ──── */
+.aria-center-panel {
+  background: var(--cs-glass-bg-strong);
+  backdrop-filter: blur(var(--cs-blur-lg));
+  -webkit-backdrop-filter: blur(var(--cs-blur-lg));
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), 0.18);
+}
+.aria-send-btn { box-shadow: 0 0 18px var(--cs-scene-glow); }
+
+/* ──── Grid stagger-in on load (reuses shared cs-slide-up keyframe) ──── */
+.benchmark-grid > * {
+  animation: cs-slide-up 0.4s var(--cs-ease) var(--stagger-delay, 0ms) both;
+}
+.benchmark-grid > *:nth-child(2) { --stagger-delay: 60ms; }
+.benchmark-grid > *:nth-child(3) { --stagger-delay: 120ms; }
+.benchmark-grid > *:nth-child(4) { --stagger-delay: 180ms; }
+.benchmark-grid > *:nth-child(5) { --stagger-delay: 240ms; }
+.benchmark-grid > *:nth-child(6) { --stagger-delay: 300ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .benchmark-grid > * { animation: none; }
+}

@@ -136,7 +136,9 @@ def register_coders_rules() -> None:
         eng = get_rules_engine()
         ssm = get_scene_state_manager()
 
-        if eng.get_rules(SCENE_ID):
+        # v1.58.0 [2026-06-11] — Ignore bootstrap "*" rules in the guard (the
+        # old check always early-returned; coders rules never registered).
+        if any(r.scene == SCENE_ID for r in eng.get_rules(SCENE_ID)):
             return
 
         for r in _RULES:
@@ -146,8 +148,11 @@ def register_coders_rules() -> None:
                 character_flags=cond_data.get("character_flags", {}),
             ) if cond_data else None
             effects = [RuleEffect(**e) for e in r.get("effects", [])]
-            eng.add_rule(SCENE_ID, RuleDefinition(
-                rule_id=r["id"], label=r["label"], description=r["description"],
+            # v1.58.0 [2026-06-11] — add_rule/add_action take ONE definition
+            # (scene lives on the dataclass); old 2-arg form failed every call.
+            eng.add_rule(RuleDefinition(
+                rule_id=r["id"], scene=SCENE_ID, label=r["label"],
+                description=r["description"],
                 rule_type=r["rule_type"], condition=condition, effects=effects,
             ))
 
@@ -158,8 +163,9 @@ def register_coders_rules() -> None:
                 character_flags=cond_data.get("character_flags", {}),
             ) if cond_data else None
             effects = [RuleEffect(**e) for e in a.get("effects", [])]
-            eng.add_action(SCENE_ID, ActionDefinition(
-                action_id=a["id"], label=a["label"], description=a["description"],
+            eng.add_action(ActionDefinition(  # v1.58.0 — same signature fix
+                action_id=a["id"], scene=SCENE_ID, label=a["label"],
+                description=a["description"],
                 intimacy_level=a.get("intimacy_level", 1), condition=condition, effects=effects,
             ))
 
