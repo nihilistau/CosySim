@@ -1,0 +1,60 @@
+/*
+ * Command Center — Dark Renaissance v2 layer
+ * ==========================================
+ * Teal ops center. Loads AFTER command_center.css.
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial v2 glow-up (teal ops bg, Orbitron header,
+ *                           glass monitor panels, semantic alert nodes)
+ */
+
+/* ──── Background — dark teal ops grid ──── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(var(--cs-scene-accent-rgb), 0.09) 0%, transparent 55%),
+    repeating-linear-gradient(90deg, rgba(var(--cs-scene-accent-rgb), 0.03) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgba(var(--cs-scene-accent-rgb), 0.03) 0 1px, transparent 1px 80px),
+    linear-gradient(180deg, #04100e 0%, #060f0e 100%);
+}
+
+/* ──── Header — Orbitron command voice ──── */
+.cc-header { font-family: var(--cs-font-display); letter-spacing: 0.06em; }
+.cc-header-status { font-family: var(--cs-font-mono); letter-spacing: 0.14em; }
+
+/* ──── Monitor panels — glass-medium ──── */
+.cc-panel {
+  background: var(--cs-glass-bg);
+  backdrop-filter: blur(var(--cs-glass-blur));
+  -webkit-backdrop-filter: blur(var(--cs-glass-blur));
+  border: 1px solid var(--cs-glass-border);
+  border-radius: var(--cs-radius-lg);
+}
+
+/* ──── Feed + telemetry — mono data voice ──── */
+.feed-msg,
+.feed-msg-time { font-family: var(--cs-font-mono); }
+
+/* ──── Alert nodes — semantic status colours + scan-sweep on refresh ──── */
+.alert-node-grid > * {
+  border: 1px solid var(--cs-glass-border);
+  border-radius: var(--cs-radius-md);
+  transition: border-color var(--cs-duration-fast) var(--cs-ease),
+              box-shadow var(--cs-duration-fast) var(--cs-ease);
+}
+.alert-node-grid > *.level-green,
+.alert-node-grid > *[data-level="green"]  { border-color: rgba(34, 197, 94, 0.5);  box-shadow: 0 0 14px var(--cs-green-soft); }
+.alert-node-grid > *.level-yellow,
+.alert-node-grid > *[data-level="yellow"] { border-color: rgba(234, 179, 8, 0.5);  box-shadow: 0 0 14px var(--cs-yellow-soft); }
+.alert-node-grid > *.level-red,
+.alert-node-grid > *[data-level="red"]    { border-color: rgba(239, 68, 68, 0.6);  box-shadow: 0 0 16px var(--cs-red-soft); }
+
+/* primary action glow */
+.cc-btn { box-shadow: 0 0 14px var(--cs-scene-glow); }

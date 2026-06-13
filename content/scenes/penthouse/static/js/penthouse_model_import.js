@@ -6,8 +6,8 @@
  *   .show() / .hide()  – explicit open/close
  *   .refresh()         – reload library from server
  *
- * Depends on: Three.js r128 (window.THREE), CharacterBridge (optional).
- * GLTFLoader loaded on-demand from CDN.
+ * Depends on: Three.js r184 (window.THREE via three_boot.js — includes
+ * GLTFLoader as a vendored addon), CharacterBridge (optional).
  */
 (function () {
   'use strict';
@@ -15,7 +15,6 @@
   /* ── Constants ────────────────────────────────────────────────── */
   const ALLOWED_EXT = ['glb', 'vrm', 'gltf'];
   const MAX_MB = 50;
-  const GLTF_LOADER_URL = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
 
   /* ── State ────────────────────────────────────────────────────── */
   let panel = null;
@@ -23,35 +22,17 @@
   let library = [];       // [{id, filename, format, size_mb, uploaded_at, ...}]
   let assignments = {};   // character_id → model_id
   const previewRenderers = {};  // model_id → {renderer, scene, camera, animId}
-  let gltfLoaderReady = false;
-  let gltfLoaderLoading = false;
 
-  /* ── GLTFLoader Bootstrap ─────────────────────────────────────── */
+  /* ── GLTFLoader availability ──────────────────────────────────── */
+  // v1.58.0 [2026-06-11] — GLTFLoader is bundled on window.THREE by
+  // three_boot.js (vendored r184 addon); the old on-demand CDN bootstrap
+  // (examples/js was deleted upstream in r148) is gone.
   function ensureGLTFLoader(cb) {
-    if (gltfLoaderReady || (window.THREE && window.THREE.GLTFLoader)) {
-      gltfLoaderReady = true;
+    if (window.THREE && window.THREE.GLTFLoader) {
       if (cb) cb();
       return;
     }
-    if (gltfLoaderLoading) {
-      let iv = setInterval(function () {
-        if (gltfLoaderReady) { clearInterval(iv); if (cb) cb(); }
-      }, 100);
-      return;
-    }
-    gltfLoaderLoading = true;
-    let s = document.createElement('script');
-    s.src = GLTF_LOADER_URL;
-    s.onload = function () {
-      gltfLoaderReady = true;
-      gltfLoaderLoading = false;
-      if (cb) cb();
-    };
-    s.onerror = function () {
-      console.error('[ModelImport] Failed to load GLTFLoader from CDN');
-      gltfLoaderLoading = false;
-    };
-    document.head.appendChild(s);
+    console.error('[ModelImport] THREE.GLTFLoader missing (operation=gltf_loader) — three_boot.js not loaded?');
   }
 
   /* ── Utility ──────────────────────────────────────────────────── */
@@ -271,7 +252,10 @@
 
   /* ── 3D Preview ────────────────────────────────────────────────── */
   function createPreview(canvas, modelMeta) {
-    if (!window.THREE || !gltfLoaderReady) return;
+    // v1.58.0 [2026-06-11] — r184: GLTFLoader rides on window.THREE;
+    // outputEncoding removed (sRGB output is the default); light
+    // intensities converted to physical units (×π).
+    if (!window.THREE || !window.THREE.GLTFLoader) return;
 
     let w = canvas.clientWidth || 120;
     let h = canvas.clientHeight || 120;
@@ -279,7 +263,6 @@
     let renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
     renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.outputEncoding = THREE.sRGBEncoding;
 
     let scene = new THREE.Scene();
 
@@ -287,13 +270,13 @@
     camera.position.set(0, 1.2, 3);
     camera.lookAt(0, 0.8, 0);
 
-    // Lighting
-    let amb = new THREE.AmbientLight(0xffffff, 0.6);
+    // Lighting (physical units)
+    let amb = new THREE.AmbientLight(0xffffff, 0.6 * Math.PI);
     scene.add(amb);
-    let dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    let dir = new THREE.DirectionalLight(0xffffff, 0.8 * Math.PI);
     dir.position.set(2, 3, 2);
     scene.add(dir);
-    let rim = new THREE.DirectionalLight(0x8888ff, 0.3);
+    let rim = new THREE.DirectionalLight(0x8888ff, 0.3 * Math.PI);
     rim.position.set(-2, 1, -2);
     scene.add(rim);
 
@@ -467,7 +450,7 @@
   /* ── Apply model to character via CharacterBridge ───────────────── */
   function applyModelToCharacter(charId, modelMeta) {
     if (!window.CharacterBridge) return;
-    if (!window.THREE || !gltfLoaderReady) {
+    if (!window.THREE || !window.THREE.GLTFLoader) {  // v1.58.0 — addon on window.THREE
       ensureGLTFLoader(function () { applyModelToCharacter(charId, modelMeta); });
       return;
     }

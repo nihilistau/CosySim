@@ -675,11 +675,12 @@ class RpcidUpdater:
             data["bl"] = build_label
         data["_version"] = data.get("_version", "5.0")
 
-        # Write atomically
-        self._json_path.parent.mkdir(parents=True, exist_ok=True)
+        # v1.58.0 [2026-06-11] — Now actually atomic (tmp + os.replace); the
+        # old comment said "atomically" but used a plain truncating write,
+        # which corrupted the cache for concurrent readers ("Extra data").
         try:
-            with open(self._json_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            from engine.utils import atomic_write_json
+            atomic_write_json(self._json_path, data)
             logger.info(
                 "[RpcidUpdater] JSON cache updated: %d entries changed "
                 "(operation=update_json_cache)",

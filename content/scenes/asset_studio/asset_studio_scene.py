@@ -464,9 +464,11 @@ class AssetStudioScene(FlaskScene):
 
     def on_before_serve(self) -> None:
         """Hook: register MCP scene node and import skills."""
+        # v1.58.0 [2026-06-11] — MCPFramework has no get_or_create(); use
+        # get_scene() like FlaskScene._connect_mcp (auto-creates the node).
         try:
             fw = get_framework()
-            fw.get_or_create(f"scenes.{SCENE_ID}")
+            fw.get_scene(SCENE_ID)
         except Exception as exc:
             logger.warning("[%s] MCP framework not available (operation=mcp_wire): %s", SCENE_ID, exc)
         try:

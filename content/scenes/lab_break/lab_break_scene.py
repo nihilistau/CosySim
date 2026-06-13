@@ -9,10 +9,12 @@ the door, and communicate through a speaker.
 Uses hunger, health, emotions, and persuasion mechanics powered by the
 full MCP framework, skill system, and LMStudio inference.
 
-Version: v1.51.0 [2026-03-25]
+Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.58.0 [2026-06-11] — __init__ accepts host= (fixes TUI launch crash);
+                            set_directive call fixed to scene= kwarg
     v1.51.0 [2026-03-25] — NarrativeModEngine integration for personality arc tracking
     v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
     v1.43.1 [2026-03-21] — Rewritten to use engine.lmstudio.chat()
@@ -398,8 +400,12 @@ class LabBreakScene(FlaskScene):
          "description": "Disables electronics. Crafted from radio parts."},
     ]
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
-        super().__init__(host="0.0.0.0", port=self.SCENE_METADATA["port"])
+    # v1.58.0 [2026-06-11] — Accept host= passthrough; the TUI/launcher pass
+    # host= to every flask scene and this constructor rejecting it was why
+    # LAB BREAK never launched from the TUI ("lab break does not load" bug).
+    def __init__(self, config: Optional[Dict[str, Any]] = None,
+                 host: str = "0.0.0.0") -> None:
+        super().__init__(host=host, port=self.SCENE_METADATA["port"])
         self.config = config or {}
 
         # Game state

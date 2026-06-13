@@ -5,14 +5,21 @@
 {% set scene_accent_rgb = '129 140 248' %}
 
 {#
-  THE OBSCURA — v1.52.0 [2026-03-22] Neural Synthesis Lab
+  THE OBSCURA — Dark Art Gallery
   ========================================================
-  Rebranded from art museum to cyberpunk neural art synthesis facility.
-  Cyan/magenta palette, HUD borders, grid overlays, AI generation framing.
+  Version: v1.58.0 [2026-06-11]
+  Change Log:
+    v1.58.0 [2026-06-11] — Dark Renaissance v2: periwinkle retheme,
+                            gallery_v2.css layer (museum frames,
+                            roving spotlight wow).
+    v1.52.0 [2026-03-22] — Rebranded from art museum to cyberpunk
+                            neural art synthesis facility.
 #}
 
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='gallery.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 cascade layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='gallery_v2.css') }}">
 {% endblock %}
 
 {% block scene_content %}

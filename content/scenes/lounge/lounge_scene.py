@@ -16,6 +16,14 @@ Everything in this scene is MCP-governed:
   • Cross-agent comms → Lola ↔ Viktor via MCPFramework.cross_scene_send
   • Random events → MCPFramework.random_pick each turn
   • Response control → ResponseDirective system steers every character reply
+
+Version: v1.58.0 [2026-06-11]
+Author:  CosySim Team
+
+Change Log:
+    v1.58.0 [2026-06-11] — Fixed 5 set_directive() calls passing scene_id=
+                            (DialogSystem kwarg is scene=); these failed every
+                            stage song, drink ritual and secret reveal
 """
 from __future__ import annotations
 
@@ -399,7 +407,7 @@ class LoungeScene(FlaskScene):
             # Set a style directive for Lola during this song
             self._ds.set_directive(
                 character_id   = LOLA_ID,
-                scene_id       = SCENE_ID,
+                scene          = SCENE_ID,
                 directive_type = "mood_set",
                 value          = f"performing '{song['title']}' — {song.get('note', '')}",
                 turns          = max(2, song["duration"] // 30),
@@ -583,7 +591,7 @@ class LoungeScene(FlaskScene):
             )
             self._ds.set_directive(
                 character_id   = LOLA_ID,
-                scene_id       = SCENE_ID,
+                scene          = SCENE_ID,
                 directive_type = "must_include",
                 value          = "catches the guest's eye briefly",
                 turns          = 1,
@@ -594,7 +602,7 @@ class LoungeScene(FlaskScene):
         if cocktail.get("viktor_joins"):
             self._ds.set_directive(
                 character_id   = VIKTOR_ID,
-                scene_id       = SCENE_ID,
+                scene          = SCENE_ID,
                 directive_type = "must_include",
                 value          = "pours a glass for himself and stays at that end of the bar",
                 turns          = 1,
@@ -662,7 +670,7 @@ class LoungeScene(FlaskScene):
         char_id = LOLA_ID if character == LOLA_ID else VIKTOR_ID
         self._ds.set_directive(
             character_id   = char_id,
-            scene_id       = SCENE_ID,
+            scene          = SCENE_ID,
             directive_type = "must_include",
             value          = secret["content"][:100],
             turns          = 1,
@@ -1048,7 +1056,7 @@ class LoungeScene(FlaskScene):
                         # Lola quietly adjusts her demeanour
                         self._ds.set_directive(
                             character_id   = LOLA_ID,
-                            scene_id       = SCENE_ID,
+                            scene          = SCENE_ID,
                             directive_type = "mood_set",
                             value          = "guarded, watchful, not showing it",
                             turns          = 2,

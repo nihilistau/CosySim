@@ -1,0 +1,50 @@
+/*
+ * The Lab (coders) — Dark Renaissance v2 layer
+ * ============================================
+ * Mint-green code lab. Loads AFTER coders.css.
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial v2 glow-up (mint code-lab bg, glass agent
+ *                           feed, mono output voice, pulse-glow run CTA)
+ */
+
+/* ──── Background — matrix-mint code void ──── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 8%, rgba(var(--cs-scene-accent-rgb), 0.08) 0%, transparent 55%),
+    repeating-linear-gradient(0deg, rgba(var(--cs-scene-accent-rgb), 0.025) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(90deg, rgba(var(--cs-scene-accent-rgb), 0.025) 0 1px, transparent 1px 80px),
+    linear-gradient(180deg, #04100b 0%, #050d0a 100%);
+}
+
+/* ──── Agent feed — code-pane glass + mono voice ──── */
+.agent-feed-panel {
+  background: var(--cs-glass-bg);
+  backdrop-filter: blur(var(--cs-glass-blur));
+  -webkit-backdrop-filter: blur(var(--cs-glass-blur));
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), 0.16);
+  border-radius: var(--cs-radius-lg);
+}
+.feed-msg-body,
+.feed-msg-meta,
+.feed-msg-time { font-family: var(--cs-font-mono); }
+.feed-cursor { color: var(--cs-scene-accent); }
+
+/* ──── Lab buttons — accent glow + breathing run CTA ──── */
+.lab-btn--primary {
+  box-shadow: 0 0 16px var(--cs-scene-glow);
+  animation: cs-pulse-glow-text 2.4s ease-in-out infinite;
+}
+.lab-btn--primary:hover { transform: translateY(-1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-btn--primary { animation: none; }
+}

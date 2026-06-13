@@ -27,10 +27,13 @@ Usage:
 Auto-start flags live in config/launcher.yaml — edit that file to control
 which targets launch with --core / --services / --scenes.
 
-Version: v1.52.0 [2026-03-25]
+Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.58.0 [2026-06-11] — launch_single refuses to double-bind an occupied
+                            port (clear error instead of a Werkzeug stack
+                            trace); subprocess scene logs are line-buffered
     v1.52.1 [2026-03-25] — Fix venv Python resolution for subprocess launches
     v1.52.0 [2026-03-25] — Version stamp sync with audit remediation
     v1.49.1 [2026-03-22] — Version stamp sync with project version
@@ -224,7 +227,8 @@ def _start_in_thread(name: str, info: Dict[str, Any],
         try:
             # v1.52.1 [2026-03-25] — Log subprocess stderr to data/ for debugging
             log_path = PROJECT_ROOT / "data" / f"scene_{name}.log"
-            log_file = open(log_path, "w", encoding="utf-8")
+            # v1.58.0 [2026-06-11] — line-buffered so crashes surface immediately
+            log_file = open(log_path, "w", encoding="utf-8", buffering=1)
             proc = subprocess.Popen(
                 [PYTHON, str(PROJECT_ROOT / "launcher.py"), name],
                 stdout=subprocess.DEVNULL,
@@ -593,6 +597,12 @@ def launch_single(name: str) -> None:
         print(f"  Scenes   : {', '.join(SCENES)}")
         sys.exit(1)
     group = "service" if name in SERVICES else "scene"
+    # v1.58.0 [2026-06-11] — Refuse to double-bind: a clear one-liner beats a
+    # Werkzeug "address already in use" stack trace ten frames deep.
+    if _port_up(info["port"]):
+        print(f"  '{name}' already running on :{info['port']} — "
+              f"stop it first (TUI 'S' key or launcher --list to inspect)")
+        sys.exit(1)
     print(f"\n  Starting {group} '{info['label']}' -> http://localhost:{info['port']}")
     _run_single(name, info)
 

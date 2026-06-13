@@ -11,6 +11,9 @@
   var ROOM_W = 14, ROOM_H = 5, ROOM_D = 10;
   var TILE_SIZE = 1;
   var PI = Math.PI, TAU = PI * 2;
+  // v1.58.0 [2026-06-11] — r184 physically-correct lighting: legacy
+  // intensities convert with ×π (applied to every light + runtime write).
+  var LPI = Math.PI;
 
   // ──── State ────
   var alertLevel = 'normal';
@@ -382,7 +385,7 @@
 
   function buildLighting() {
     // Ambient — low baseline
-    var ambient = new THREE.AmbientLight(0x404860, 0.35);
+    var ambient = new THREE.AmbientLight(0x404860, 0.35 * LPI);
     scene.add(ambient);
 
     // Overhead fluorescent panels (2 rows of emissive planes + rect area approximation)
@@ -406,14 +409,14 @@
       pos(rim, fp.x, ROOM_H - 0.06, fp.z);
       scene.add(rim);
       // Point light to cast illumination
-      var pLight = new THREE.PointLight(0xeef4ff, 0.8, 12, 1.5);
+      var pLight = new THREE.PointLight(0xeef4ff, 0.8 * LPI, 12, 1.5);
       pos(pLight, fp.x, ROOM_H - 0.2, fp.z);
       scene.add(pLight);
-      fluorescentLights.push({ mat: panelMat, light: pLight, baseIntensity: 0.8, baseMat: 1.5 });
+      fluorescentLights.push({ mat: panelMat, light: pLight, baseIntensity: 0.8 * LPI, baseMat: 1.5 });
     }
 
     // Emergency red light (slow orbit)
-    emergencyLight = new THREE.PointLight(0xff2222, 0.08, 10, 1.5);
+    emergencyLight = new THREE.PointLight(0xff2222, 0.08 * LPI, 10, 1.5);
     pos(emergencyLight, 4.0, 4.5, -3.0);
     scene.add(emergencyLight);
     // Visual red bulb
@@ -445,7 +448,7 @@
     }
 
     // Blue equipment glow (near chem bench)
-    var blueGlow = new THREE.PointLight(0x4488ff, 0.3, 4, 2);
+    var blueGlow = new THREE.PointLight(0x4488ff, 0.3 * LPI, 4, 2);
     pos(blueGlow, 3.5, 1.5, -2.0);
     scene.add(blueGlow);
   }
@@ -615,13 +618,13 @@
     alertLevel = level;
     switch (level) {
       case 'critical':
-        emergencyLight.intensity = 1.5;
+        emergencyLight.intensity = 1.5 * LPI;
         emergencyLight.color.set(0xff0000);
         emergencyLight.userData.bulbMat.emissiveIntensity = 2.0;
         scene.background.set(0x120808);
         scene.fog.color.set(0x120808);
         for (var i = 0; i < fluorescentLights.length; i++) {
-          fluorescentLights[i].light.intensity = 0.3;
+          fluorescentLights[i].light.intensity = 0.3 * LPI;
           fluorescentLights[i].mat.emissiveIntensity = 0.4;
           fluorescentLights[i].mat.emissive.set(0xff4444);
         }
@@ -631,13 +634,13 @@
         }
         break;
       case 'warning':
-        emergencyLight.intensity = 0.6;
+        emergencyLight.intensity = 0.6 * LPI;
         emergencyLight.color.set(0xff6600);
         emergencyLight.userData.bulbMat.emissiveIntensity = 1.0;
         scene.background.set(0x0e0c08);
         scene.fog.color.set(0x0e0c08);
         for (var j = 0; j < fluorescentLights.length; j++) {
-          fluorescentLights[j].light.intensity = 0.5;
+          fluorescentLights[j].light.intensity = 0.5 * LPI;
           fluorescentLights[j].mat.emissiveIntensity = 0.8;
           fluorescentLights[j].mat.emissive.set(0xffcc88);
         }
@@ -647,7 +650,7 @@
         }
         break;
       default:
-        emergencyLight.intensity = 0.08;
+        emergencyLight.intensity = 0.08 * LPI;
         emergencyLight.color.set(0xff2222);
         emergencyLight.userData.bulbMat.emissiveIntensity = 0.4;
         scene.background.set(0x0a0e17);

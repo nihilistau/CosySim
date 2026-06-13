@@ -14,10 +14,18 @@
 
   Replaces the broken CosyPhone iOS UI and orphaned SIGNAL v0.68.
   Uses existing REST endpoints from phone_scene_v2.py.
+
+  Change Log:
+    v1.58.0 [2026-06-11] — Dark Renaissance: signal kit chrome via
+                           signal_v2.css, encrypted-channel badges,
+                           shared stagger-in/pulse-glow utilities.
+    v1.52.0 [2026-03-22] — Cyberdeck terminal rebuild.
 #}
 
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='signal.css') }}">
+  {# v1.58.0 [2026-06-11] — signal kit alignment layer (loads after base) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='signal_v2.css') }}">
 {% endblock %}
 
 {% block scene_overlays %}
@@ -35,6 +43,8 @@
       <span class="sig-version">CYBERDECK v1.52</span>
     </div>
     <div class="sig-header__right">
+      {# v1.58.0 [2026-06-11] — kit encrypted-relay chip (lock cue) #}
+      <span class="sig-enc" title="End-to-end encrypted via ghost_net relay">&#128274; <b>END-TO-END</b> &middot; ghost_net relay</span>
       <span class="sig-status" id="sig-status">&#9673; ONLINE</span>
     </div>
   </header>
@@ -48,7 +58,8 @@
         <span>CONTACTS</span>
         <span class="sig-contacts__count" id="contact-count">0</span>
       </div>
-      <div class="sig-contacts__list" id="contact-list">
+      {# v1.58.0 [2026-06-11] — shared stagger-in on contact rows #}
+      <div class="sig-contacts__list anim-stagger-in" id="contact-list">
         <div class="sig-empty">Scanning frequencies...</div>
       </div>
     </aside>
@@ -57,11 +68,14 @@
     <main class="sig-thread">
       <div class="sig-thread__header" id="thread-header">
         <span class="sig-thread__name" id="thread-name">SELECT A CONTACT</span>
+        {# v1.58.0 [2026-06-11] — E2E lock chip (encryption cue, non-contract) #}
+        <span class="sig-thread__lock" title="End-to-end encrypted channel">&#128274; E2E</span>
         <span class="sig-thread__status" id="thread-status">&mdash;</span>
       </div>
       <div class="sig-thread__messages" id="thread-messages">
         <div class="sig-welcome">
-          <div class="sig-welcome__icon">&#128225;</div>
+          {# v1.58.0 [2026-06-11] — shared pulse-glow on welcome beacon #}
+          <div class="sig-welcome__icon anim-pulse-glow">&#128225;</div>
           <div class="sig-welcome__text">SELECT A CONTACT TO BEGIN</div>
           <div class="sig-welcome__sub">Your cyberdeck is ready. Choose a frequency.</div>
         </div>
@@ -72,7 +86,8 @@
       </div>
       <div class="sig-thread__input">
         <input type="text" id="sig-input" placeholder="Type a message..." onkeydown="if(event.key==='Enter')SignalApp.send()">
-        <button class="sig-btn" onclick="SignalApp.send()">&#9654; SEND</button>
+        {# v1.58.0 [2026-06-11] — shared .cs-btn-scene utility alongside sig-btn #}
+        <button class="sig-btn cs-btn-scene" onclick="SignalApp.send()">&#9654; SEND</button>
       </div>
     </main>
 

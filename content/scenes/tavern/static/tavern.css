@@ -1,7 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════════════
    THE RUSTY ANCHOR — tavern.css
-   v1.52 Cyberpunk Overhaul — Neon orange dockside dive bar
-   Accent: neon orange #f97316 | secondary: cyan #06b6d4
+   Dark Renaissance v2 — amber-wood dockside dive bar
+   Accent: amber-wood #d97706 | secondary: cyan #06b6d4
+   v1.58.0 [2026-06-11] — Dark Renaissance v2 ALIGNMENT pass: palette
+                           re-pointed to var(--cs-*) tokens (#d97706
+                           amber-wood per [data-scene="tavern"]); v2
+                           typography voices (Orbitron display, Inter
+                           body, JetBrains Mono data); 4-layer background
+                           recipe (black base, drift grid, radial glow —
+                           scanlines already global via .neon-scanlines).
    v1.57.3 [2026-05-12] — Visual polish: warm vignette, amber panel borders,
                            quest parchment strip, stat bar fill animation,
                            warm chat tones, dice screen-shake + bloom wow.
@@ -10,12 +17,14 @@
 ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── CSS Custom Properties ───────────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Accent vars flow from design tokens (template
+   injection wins); raw hex retained as fallback only. */
 :root {
-  --amber:          #f97316;
-  --amber-light:    #fb923c;
-  --amber-glow:     #f97316;
-  --amber-faint:    rgba(249, 115, 22, 0.12);
-  --amber-border:   rgba(249, 115, 22, 0.30);
+  --amber:          var(--cs-scene-accent, #d97706);
+  --amber-light:    #f59e0b;
+  --amber-glow:     var(--cs-scene-accent, #d97706);
+  --amber-faint:    rgb(var(--cs-scene-accent-rgb, 217 119 6) / 0.12);
+  --amber-border:   rgb(var(--cs-scene-accent-rgb, 217 119 6) / 0.30);
 
   --bg-void:        #050710;
   --bg-deep:        #080a12;
@@ -33,14 +42,15 @@
   --green-safe:     #22c55e;
   --blue-cool:      #06b6d4;
 
-  --font-serif:     'Rajdhani', 'Segoe UI', sans-serif;
-  --font-mono:      'Orbitron', 'Share Tech Mono', monospace;
+  /* v1.58.0 [2026-06-11] — v2 typography voices (vendored woff2 via fonts.css) */
+  --font-serif:     var(--cs-font-sans, 'Inter', 'Segoe UI', sans-serif);
+  --font-mono:      var(--cs-font-display, 'Orbitron', 'Share Tech Mono', monospace);
 
   --radius-sm:      3px;
   --radius-md:      4px;
   --radius-lg:      6px;
 
-  --shadow-amber:   0 0 12px rgba(249, 115, 22, 0.25);
+  --shadow-amber:   0 0 12px rgb(var(--cs-scene-accent-rgb, 217 119 6) / 0.25); /* v1.58.0 [2026-06-11] — token alpha */
   --shadow-deep:    0 4px 24px rgba(0, 0, 0, 0.7);
 
   --transition:     0.22s ease;
@@ -859,4 +869,52 @@ body::before,
 /* Spring-pop applied to the dice result value element */
 .dice-result-pop {
   animation: dice-value-pop 0.5s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v1.58.0 DARK RENAISSANCE ALIGNMENT — v2 background recipe + typography
+   [2026-06-11] — Alignment pass ONLY. The v1.57.3 polish (vignette,
+   parchment, dice wow) is untouched; this layer adds the v2 essentials
+   the scene lacked: 4-layer background stack + display/data voices.
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. 4-layer background stack (v2 recipe, warm-tuned) ─────────────── */
+/* v1.58.0 [2026-06-11] — black #02030a base → 80px drift grid → radial
+   amber-wood hearth glow. Layer 4 (CRT scanlines) is global via the
+   .neon-scanlines overlay in neon_base.html. Grid drifts via animated
+   background-position on body itself — no extra pseudo-element, so it
+   can never paint over panel content (body::before is the vignette). */
+body {
+  background:
+    repeating-linear-gradient(90deg, rgb(var(--cs-scene-accent-rgb, 217 119 6) / 0.04) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--cs-scene-accent-rgb, 217 119 6) / 0.04) 0 1px, transparent 1px 80px),
+    radial-gradient(ellipse at 50% 90%, rgb(var(--cs-scene-accent-rgb, 217 119 6) / 0.14) 0%, transparent 60%),
+    #02030a;
+  animation: tavern-grid-drift 30s linear infinite;
+}
+@keyframes tavern-grid-drift {
+  from { background-position: 0 0,    0 0,    0 0; }
+  to   { background-position: 0 80px, 0 80px, 0 0; }
+}
+
+/* ── 2. Display voice — Orbitron on scene + panel headers ────────────── */
+/* v1.58.0 [2026-06-11] — v2 typography promotion: headers speak Orbitron */
+.ck-scene-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ck-glass-title,
+.ck-chat-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.14em;
+}
+
+/* ── 3. Data voice — gold / stat readouts in JetBrains Mono ──────────── */
+/* v1.58.0 [2026-06-11] — numbers are data: mono voice for legibility */
+.ck-economy-val,
+.ck-stat-val,
+.ck-hud-badge span,
+.gold-counter {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
 }

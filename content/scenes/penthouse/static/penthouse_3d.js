@@ -1,16 +1,30 @@
 /**
- * THE PENTHOUSE — 3D Room Background  v2.0  (AAA++ Rewrite)
- * ===========================================================
- * Premium Three.js r128 penthouse with PBR materials, neon lighting,
- * animated fireplace / city / rain, interactive raycasting, simulated
- * bloom + vignette, and smooth LERP camera transitions.
+ * THE PENTHOUSE — 3D Room Background  v3.0  (Dark Renaissance)
+ * =============================================================
+ * Premium Three.js r184 penthouse: physically-based materials with
+ * RoomEnvironment IBL, transmission glass, rose/violet luxury palette,
+ * instanced exterior skyline with rain curtain, animated fireplace,
+ * interactive raycasting, simulated bloom + vignette, and smooth LERP
+ * camera transitions.
  *
- * No external deps beyond Three.js + OrbitControls loaded in <head>.
+ * Requires window.THREE (r184 + addons) provided by three_boot.js.
  * Canvas: #penthouse-canvas  |  Container: #scene-container
  *
- * API contract:
+ * API contract (consumed by character_bridge.js, penthouse.js):
  *   window.penthouse3D.switchView(name)
  *   window.penthouse3D.getViewNames() → string[]
+ *
+ * Version: v1.58.0 [2026-06-11]
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — r128→r184 migration (physical lights, sRGB
+ *                           default); Dark Renaissance overhaul: rose
+ *                           #fb7185 accent, RoomEnvironment IBL,
+ *                           MeshPhysicalMaterial transmission glass,
+ *                           instanced exterior skyline + rain curtain,
+ *                           rose emissive furniture trim; fixed
+ *                           setCameraViews position/pos shape bug
+ *   v2.0    [2026-03-2x]  — AAA++ rewrite (8 zones, 14 lights, post-FX)
  */
 
 'use strict';
@@ -41,7 +55,10 @@
   const bloomCopies = [];
 
   const ROOM = { w: 16, h: 4, d: 14 };
-  const ACCENT = 0x667eea;  // scene neon accent
+  // v1.58.0 [2026-06-11] — Dark Renaissance palette (matches ui_kits_v2/penthouse)
+  const ACCENT = 0xfb7185;        // rose — scene neon accent
+  const ACCENT2 = 0x9d71ea;       // violet — secondary accent
+  const ROSE_HUE = 0.985;         // HSL hue for neon strip pulse
 
   // ─── Camera views ────────────────────────────────────────────────
   const CAMERA_VIEWS = {
@@ -62,22 +79,43 @@
   const MAT = {};
 
   function buildMaterials() {
-    MAT.hardwood   = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.3, metalness: 0.1 });
-    MAT.wall       = new THREE.MeshStandardMaterial({ color: 0x2a2a3d, roughness: 0.85, side: THREE.DoubleSide });
-    MAT.ceiling    = new THREE.MeshStandardMaterial({ color: 0x1e1e2e, roughness: 0.92 });
-    MAT.gold       = new THREE.MeshStandardMaterial({ color: 0xd4aa44, metalness: 0.85, roughness: 0.2 });
-    MAT.chrome     = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.12 });
-    MAT.glass      = new THREE.MeshStandardMaterial({ color: 0xaaccee, transparent: true, opacity: 0.25, metalness: 0.3, roughness: 0.05 });
-    MAT.mirror     = new THREE.MeshStandardMaterial({ color: 0xbbccdd, metalness: 0.95, roughness: 0.05 });
-    MAT.fabric     = new THREE.MeshStandardMaterial({ color: 0x3a2244, roughness: 0.92, metalness: 0.0 });
-    MAT.silk       = new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.45, metalness: 0.02 });
-    MAT.stone      = new THREE.MeshStandardMaterial({ color: 0x4a4a52, roughness: 0.88, metalness: 0.02 });
-    MAT.darkWood   = new THREE.MeshStandardMaterial({ color: 0x3a1e0e, roughness: 0.55, metalness: 0.05 });
-    MAT.granite    = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.35, metalness: 0.15 });
-    MAT.marble     = new THREE.MeshStandardMaterial({ color: 0xe8e0d8, roughness: 0.25, metalness: 0.08 });
-    MAT.whiteCeram = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.18, metalness: 0.05 });
-    MAT.rug        = new THREE.MeshStandardMaterial({ color: 0x4a2040, roughness: 0.95 });
+    // v1.58.0 [2026-06-11] — Dark Renaissance re-grade: rose/violet luxury
+    // palette tuned for RoomEnvironment IBL; window/partition glass upgraded
+    // to MeshPhysicalMaterial transmission (real refraction, r184).
+    MAT.hardwood   = new THREE.MeshStandardMaterial({ color: 0x2e1d14, roughness: 0.28, metalness: 0.08 });
+    MAT.wall       = new THREE.MeshStandardMaterial({ color: 0x262033, roughness: 0.85, side: THREE.DoubleSide });
+    MAT.ceiling    = new THREE.MeshStandardMaterial({ color: 0x1b1726, roughness: 0.92 });
+    MAT.gold       = new THREE.MeshStandardMaterial({ color: 0xd4b36a, metalness: 0.9, roughness: 0.18 });
+    MAT.chrome     = new THREE.MeshStandardMaterial({ color: 0xd5d5dd, metalness: 0.95, roughness: 0.1 });
+    MAT.glass      = new THREE.MeshPhysicalMaterial({
+      color: 0xd6e4f5, transparent: true, opacity: 1.0,
+      transmission: 0.92, roughness: 0.06, metalness: 0.0,
+      ior: 1.5, thickness: 0.08, envMapIntensity: 1.2,
+    });
+    // Cheap glass for secondary panes (railings, partitions, table tops) —
+    // transmission costs a full extra render pass, so only the curtain wall
+    // pays for it. v1.58.0 [2026-06-11]
+    MAT.glassLite  = new THREE.MeshStandardMaterial({
+      color: 0xaaccee, transparent: true, opacity: 0.22, metalness: 0.3, roughness: 0.06,
+    });
+    MAT.mirror     = new THREE.MeshStandardMaterial({ color: 0xc8d2dd, metalness: 1.0, roughness: 0.03 });
+    MAT.fabric     = new THREE.MeshStandardMaterial({ color: 0x46243f, roughness: 0.9, metalness: 0.0 });   // velvet plum-rose
+    MAT.silk       = new THREE.MeshStandardMaterial({ color: 0xf6e9e4, roughness: 0.4, metalness: 0.02 });  // blush silk
+    MAT.stone      = new THREE.MeshStandardMaterial({ color: 0x46434e, roughness: 0.88, metalness: 0.02 });
+    MAT.darkWood   = new THREE.MeshStandardMaterial({ color: 0x32190c, roughness: 0.5, metalness: 0.05 });
+    MAT.granite    = new THREE.MeshStandardMaterial({ color: 0x17151e, roughness: 0.3, metalness: 0.15 });
+    MAT.marble     = new THREE.MeshStandardMaterial({ color: 0xece2dc, roughness: 0.22, metalness: 0.06 });
+    MAT.whiteCeram = new THREE.MeshStandardMaterial({ color: 0xf2f0ee, roughness: 0.16, metalness: 0.05 });
+    MAT.rug        = new THREE.MeshStandardMaterial({ color: 0x521f3e, roughness: 0.95 });                  // deep rose
     MAT.neon       = new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.9 });
+    // Rose emissive trim for furniture accent lines (pulsed in animate())
+    MAT.roseTrim   = new THREE.MeshStandardMaterial({
+      color: 0x33121a, emissive: ACCENT, emissiveIntensity: 1.6, roughness: 0.4,
+    });
+    // Violet emissive trim (secondary accent zones: vanity, bath)
+    MAT.violetTrim = new THREE.MeshStandardMaterial({
+      color: 0x1d1430, emissive: ACCENT2, emissiveIntensity: 1.3, roughness: 0.4,
+    });
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────
@@ -109,6 +147,11 @@
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
 
+  // v1.58.0 [2026-06-11] — r184 lighting is physically correct only
+  // (useLegacyLights removed r165). LPI converts the hand-tuned legacy
+  // intensities to physical units; apply to EVERY light creation.
+  const LPI = Math.PI;
+
   // Map zone name → camera view for click navigation
   const ZONE_MAP = {
     bed: 'bed', couch: 'couch', fireplace: 'fireplace',
@@ -130,12 +173,23 @@
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.9;
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMappingExposure = 1.35;  // v1.58.0 — re-tuned for physical lights
+    // v1.58.0 [2026-06-11] — r184: outputEncoding removed; sRGB output is the
+    // default (renderer.outputColorSpace = SRGBColorSpace).
 
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x08081a);
-    scene.fog = new THREE.FogExp2(0x08081a, 0.018);
+    scene.background = new THREE.Color(0x07050f);
+    scene.fog = new THREE.FogExp2(0x07050f, 0.014);
+
+    // v1.58.0 [2026-06-11] — Image-based lighting: RoomEnvironment via PMREM
+    // gives glass/chrome/gold believable reflections and lifts the PBR
+    // materials without extra runtime lights. Big visual win, one-time cost.
+    if (THREE.RoomEnvironment) {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+      scene.environmentIntensity = 0.4;   // lifted after eye-tune (was 0.22)
+      pmrem.dispose();
+    }
 
     camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
     camera.position.set(10, 9, 10);
@@ -168,6 +222,7 @@
     buildCitySkyline();
     buildWallClock();
     buildRainEffect();
+    buildAccentTrim();  // v1.58.0 — rose/violet emissive furniture trim
     createPostFX();
 
     canvas.addEventListener('mousemove', onMouseMove, false);
@@ -241,8 +296,20 @@
     },
 
     setCameraViews: (views) => {
+      // v1.58.0 [2026-06-11] — Normalize YAML shape: config/penthouse YAML
+      // uses `position`, switchView reads `pos`. The raw assignment made
+      // every camera preset crash ("Cannot read properties of undefined
+      // (reading 'x')") once PenthouseConfig loaded — root cause of the
+      // long-standing "penthouse 3D broken" issue.
       for (const [name, view] of Object.entries(views)) {
-        CAMERA_VIEWS[name] = view;
+        const pos = view.pos || view.position;
+        if (!pos || !view.target) continue;  // skip malformed entries
+        CAMERA_VIEWS[name] = {
+          pos: { x: pos.x, y: pos.y, z: pos.z },
+          target: { x: view.target.x, y: view.target.y, z: view.target.z },
+          fov: view.fov || 55,
+          label: view.label,
+        };
       }
     },
 
@@ -265,10 +332,17 @@
   // ═══════════════════════════════════════════════════════════════════
 
   function createLighting() {
-    scene.add(new THREE.AmbientLight(0x1a1a2e, 0.25));
+    // v1.58.0 [2026-06-11] — warmer plum ambient + slight raise (physical
+    // falloff dims mid-room vs legacy), plus a rose city-glow wash from the
+    // curtain wall so the skyline tints the interior.
+    scene.add(new THREE.AmbientLight(0x2c2030, 0.6 * LPI));
+
+    const cityWash = new THREE.PointLight(0xfb7185, 0.35 * LPI, 14, 1.6);
+    cityWash.position.set(0, 2.2, 6.4);
+    scene.add(cityWash);
 
     // Key directional — only shadow caster #1
-    const dir = new THREE.DirectionalLight(0xffeedd, 0.35);
+    const dir = new THREE.DirectionalLight(0xffeedd, 0.5 * LPI);
     dir.position.set(5, 10, 5);
     dir.castShadow = true;
     dir.shadow.mapSize.set(2048, 2048);
@@ -283,44 +357,44 @@
 
     // Warm zone lights (bed, fireplace)
     const warmCfg = [
-      { x: -5, y: 2.5, z: -1,   c: 0xffaa66, i: 0.5 },
-      { x: -2, y: 1.5, z: 5.5,  c: 0xff6622, i: 0.65 },
-      { x: -5, y: 2.5, z: -4.5, c: 0xffaa44, i: 0.2 },
+      { x: -5, y: 2.5, z: -1,   c: 0xffaa66, i: 0.85 },
+      { x: -2, y: 1.5, z: 5.5,  c: 0xff6622, i: 1.0 },
+      { x: -5, y: 2.5, z: -4.5, c: 0xffaa44, i: 0.4 },
     ];
     warmCfg.forEach(p => {
-      const pl = new THREE.PointLight(p.c, p.i, 8);
+      const pl = new THREE.PointLight(p.c, p.i * LPI, 8);
       pl.position.set(p.x, p.y, p.z);
       scene.add(pl);
     });
 
     // Cool zone lights (bar, bathroom)
     const coolCfg = [
-      { x: -3,  y: 3.2, z: -5.5, c: 0x88aaff, i: 0.35 },
-      { x: 6.5, y: 1.5, z: -4.5, c: 0xaaddff, i: 0.3 },
+      { x: -3,  y: 3.2, z: -5.5, c: 0x88aaff, i: 0.6 },
+      { x: 6.5, y: 1.5, z: -4.5, c: 0xaaddff, i: 0.55 },
     ];
     coolCfg.forEach(p => {
-      const pl = new THREE.PointLight(p.c, p.i, 8);
+      const pl = new THREE.PointLight(p.c, p.i * LPI, 8);
       pl.position.set(p.x, p.y, p.z);
       scene.add(pl);
     });
 
     // Couch / living area
-    const couchPl = new THREE.PointLight(0xffd4a3, 0.3, 8);
+    const couchPl = new THREE.PointLight(0xffd4a3, 0.55 * LPI, 8);
     couchPl.position.set(5.5, 2.5, 0);
     scene.add(couchPl);
 
     // Vanity
-    const vanityPl = new THREE.PointLight(0xddaaff, 0.25, 6);
+    const vanityPl = new THREE.PointLight(0xddaaff, 0.45 * LPI, 6);
     vanityPl.position.set(3, 2.0, -5.8);
     scene.add(vanityPl);
 
     // Balcony moonlight
-    const balcPl = new THREE.PointLight(0x667eea, 0.3, 10);
+    const balcPl = new THREE.PointLight(0x9d71ea, 0.5 * LPI, 10);
     balcPl.position.set(5, 2, 5.5);
     scene.add(balcPl);
 
     // Ceiling spot lights — shadow caster #2
-    const spot = new THREE.SpotLight(0xffeedd, 0.4, 12, Math.PI / 6, 0.5, 1);
+    const spot = new THREE.SpotLight(0xffeedd, 0.65 * LPI, 12, Math.PI / 6, 0.5, 1);
     spot.position.set(0, 3.95, 0);
     spot.target.position.set(0, 0, 0);
     spot.castShadow = true;
@@ -340,7 +414,7 @@
     });
 
     // Hemisphere fill
-    const hemi = new THREE.HemisphereLight(0x2a2a4e, 0x1a0a05, 0.15);
+    const hemi = new THREE.HemisphereLight(0x2a2a4e, 0x1a0a05, 0.15 * LPI);
     scene.add(hemi);
   }
 
@@ -369,7 +443,7 @@
       const m = new THREE.Mesh(new THREE.BoxGeometry(...s.geo), mat);
       m.position.set(...s.pos);
       scene.add(m);
-      neonStrips.push({ mesh: m, baseHue: 0.64 });
+      neonStrips.push({ mesh: m, baseHue: ROSE_HUE });  // v1.58.0 — rose base
 
       // Bloom copy (additive glow)
       const glowMat = new THREE.MeshBasicMaterial({
@@ -407,11 +481,21 @@
       scene.add(spot);
     });
 
-    // Walls
+    // Walls — north + sides solid; south is a floor-to-ceiling glass
+    // curtain wall (v1.58.0 [2026-06-11]) so the skyline + rain curtain
+    // are visible from inside, matching the ui_kits_v2 panoramic window.
     _box(w, h, 0.12, MAT.wall, 0, h / 2, -hd, { cast: false });
     _box(0.12, h, d, MAT.wall, -hw, h / 2, 0, { cast: false });
     _box(0.12, h, d, MAT.wall, hw, h / 2, 0, { cast: false });
-    _box(w, h, 0.12, MAT.wall, 0, h / 2, hd, { cast: false });
+
+    // South curtain wall: transmission glass + champagne-gold mullions
+    const curtain = _box(w, h, 0.06, MAT.glass, 0, h / 2, hd, { cast: false });
+    curtain.receiveShadow = false;
+    for (let mx = -hw + 2; mx < hw; mx += 2.6) {
+      _box(0.07, h, 0.1, MAT.gold, mx, h / 2, hd, { cast: false });
+    }
+    _box(w, 0.1, 0.1, MAT.gold, 0, 0.05, hd, { cast: false });      // sill
+    _box(w, 0.08, 0.1, MAT.gold, 0, h - 0.04, hd, { cast: false }); // header
 
     // Crown moulding — gold accent
     const mouldGeo = new THREE.BoxGeometry(1, 0.06, 0.06);
@@ -645,7 +729,7 @@
     couchGroup.add(throwInst);
 
     // Glass coffee table
-    const glassTop = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 1.6), MAT.glass);
+    const glassTop = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 1.6), MAT.glassLite);
     glassTop.position.set(-1.5, 0.42, 0);
     couchGroup.add(glassTop);
 
@@ -747,11 +831,11 @@
     fpGroup.add(embers);
 
     // Fire lights
-    const fl1 = new THREE.PointLight(0xff6622, 0.8, 5);
+    const fl1 = new THREE.PointLight(0xff6622, 0.8 * LPI, 5);
     fl1.position.set(0, 0.5, 0);
     fpGroup.add(fl1);
     fireLights.push(fl1);
-    const fl2 = new THREE.PointLight(0xff4400, 0.4, 3);
+    const fl2 = new THREE.PointLight(0xff4400, 0.4 * LPI, 3);
     fl2.position.set(-0.2, 0.35, 0.05);
     fpGroup.add(fl2);
     fireLights.push(fl2);
@@ -779,7 +863,7 @@
       const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.15, 8), new THREE.MeshStandardMaterial({ color: 0xfff5e0 }));
       stick.position.set(x, 2.43, 0);
       fpGroup.add(stick);
-      const flame = new THREE.PointLight(0xff8800, 0.15, 1.5);
+      const flame = new THREE.PointLight(0xff8800, 0.15 * LPI, 1.5);
       flame.position.set(x, 2.53, 0);
       fpGroup.add(flame);
       fireLights.push(flame);
@@ -970,7 +1054,7 @@
     bathGroup.add(part);
 
     // Frosted glass panel above partition
-    const frost = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.2, 3.0), MAT.glass);
+    const frost = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.2, 3.0), MAT.glassLite);
     frost.position.set(-2.0, 2.6, 0);
     bathGroup.add(frost);
 
@@ -1011,7 +1095,7 @@
     bathGroup.add(fSpout);
 
     // Glass shower enclosure
-    const showerGlass = MAT.glass.clone();
+    const showerGlass = MAT.glassLite.clone();
     showerGlass.opacity = 0.18;
     // Two glass panels forming corner
     const sp1 = new THREE.Mesh(new THREE.BoxGeometry(0.03, 2.2, 1.2), showerGlass);
@@ -1056,7 +1140,7 @@
       const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 8), new THREE.MeshStandardMaterial({ color: 0xfff5e6 }));
       candle.position.set(ox, 0.82, oz);
       bathGroup.add(candle);
-      const glow = new THREE.PointLight(0xff8800, 0.12, 1.5);
+      const glow = new THREE.PointLight(0xff8800, 0.12 * LPI, 1.5);
       glow.position.set(ox, 0.90, oz);
       bathGroup.add(glow);
       fireLights.push(glow);
@@ -1086,7 +1170,7 @@
     balcGroup.add(balcFloor);
 
     // Glass railing panels
-    const railGlass = MAT.glass.clone();
+    const railGlass = MAT.glassLite.clone();
     railGlass.opacity = 0.2;
     // Front
     const frontPanel = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.9, 0.04), railGlass);
@@ -1135,23 +1219,8 @@
       });
     });
 
-    // City skyline silhouettes (dark flat geometry at distance)
-    const skyMat = new THREE.MeshBasicMaterial({ color: 0x0a0a18 });
-    const buildings = [
-      { w: 2, h: 4, x: -4, z: 8 },
-      { w: 1.5, h: 6, x: -1.5, z: 10 },
-      { w: 2.5, h: 5, x: 1.5, z: 9 },
-      { w: 1, h: 7, x: 4, z: 11 },
-      { w: 3, h: 3.5, x: 7, z: 10 },
-      { w: 1.2, h: 5.5, x: -6, z: 12 },
-      { w: 2, h: 8, x: 0, z: 13 },
-      { w: 1.8, h: 4.5, x: 5.5, z: 12 },
-    ];
-    buildings.forEach(b => {
-      const bldg = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, 0.3), skyMat);
-      bldg.position.set(b.x, b.h / 2, b.z);
-      scene.add(bldg);
-    });
+    // v1.58.0 [2026-06-11] — flat silhouette buildings removed; the full
+    // instanced city now lives in buildCitySkyline().
 
     balcGroup.position.set(BAX, 0, BAZ);
     scene.add(balcGroup);
@@ -1163,8 +1232,43 @@
   // ═══════════════════════════════════════════════════════════════════
 
   function buildCitySkyline() {
-    const dotGeo = new THREE.SphereGeometry(0.03, 4, 4);
-    const count = 80;
+    // v1.58.0 [2026-06-11] — Full NEONCITY exterior: two instanced building
+    // rings (near + far) below the penthouse horizon, 220 twinkling window
+    // lights, and a neon smog glow band. Visible through the south curtain
+    // wall; replaces the old 80-floating-dots placeholder.
+
+    // ── Building instances ──
+    const bldgGeo = new THREE.BoxGeometry(1, 1, 1);
+    const bldgMat = new THREE.MeshStandardMaterial({ color: 0x10131f, roughness: 0.9, metalness: 0.1, emissive: 0x131a33, emissiveIntensity: 0.55 });
+    const NEAR = 26, FAR = 38;
+    const inst = new THREE.InstancedMesh(bldgGeo, bldgMat, NEAR + FAR);
+    const m = new THREE.Object3D();
+    let bi = 0;
+    // The penthouse is high up: buildings drop BELOW floor level, tops peeking
+    // at varying heights — sells altitude + expanse.
+    for (let i = 0; i < NEAR; i++) {
+      const x = -22 + (i / NEAR) * 44 + (Math.random() - 0.5) * 1.2;
+      const hgt = 3 + Math.random() * 9;
+      const z = 10 + Math.random() * 5;
+      m.position.set(x, hgt / 2 - 7 + Math.random() * 2.5, z);
+      m.scale.set(1.4 + Math.random() * 1.8, hgt, 1.4 + Math.random() * 1.2);
+      m.updateMatrix();
+      inst.setMatrixAt(bi++, m.matrix);
+    }
+    for (let i = 0; i < FAR; i++) {
+      const x = -34 + (i / FAR) * 68 + (Math.random() - 0.5) * 1.5;
+      const hgt = 4 + Math.random() * 13;
+      const z = 18 + Math.random() * 10;
+      m.position.set(x, hgt / 2 - 8 + Math.random() * 3, z);
+      m.scale.set(2 + Math.random() * 2.4, hgt, 1.8 + Math.random() * 1.6);
+      m.updateMatrix();
+      inst.setMatrixAt(bi++, m.matrix);
+    }
+    scene.add(inst);
+
+    // ── Window lights (twinkle, animated in animate()) ──
+    const dotGeo = new THREE.SphereGeometry(0.055, 4, 4);
+    const count = 320;
     const dotInst = new THREE.InstancedMesh(
       dotGeo,
       new THREE.MeshBasicMaterial({ color: 0xffeebb }),
@@ -1172,9 +1276,9 @@
     );
     const dm = new THREE.Object3D();
     for (let i = 0; i < count; i++) {
-      const x = (Math.random() - 0.5) * 18;
-      const y = 0.5 + Math.random() * 6;
-      const z = 8 + Math.random() * 6;
+      const x = (Math.random() - 0.5) * 56;
+      const y = -7 + Math.random() * 12;
+      const z = 9.5 + Math.random() * 17;
       dm.position.set(x, y, z);
       dm.updateMatrix();
       dotInst.setMatrixAt(i, dm.matrix);
@@ -1182,6 +1286,32 @@
     }
     scene.add(dotInst);
     cityDots._inst = dotInst;
+
+    // ── Neon smog band on the horizon (rose + violet + cyan washes) ──
+    const glowColors = [0xfb7185, 0x9d71ea, 0x22d3ee];
+    glowColors.forEach((c, i) => {
+      const glow = new THREE.Mesh(
+        new THREE.PlaneGeometry(70, 7),
+        new THREE.MeshBasicMaterial({
+          color: c, transparent: true, opacity: 0.13,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+          side: THREE.DoubleSide,
+        })
+      );
+      glow.position.set((i - 1) * 18, -2.5 + i * 0.8, 30 - i * 1.5);
+      scene.add(glow);
+    });
+    // Night-sky gradient backdrop so silhouettes read against violet haze
+    const skyMat = new THREE.ShaderMaterial({
+      depthWrite: false,
+      uniforms: {},
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: 'varying vec2 vUv; void main(){ vec3 top = vec3(0.013,0.008,0.045); vec3 hor = vec3(0.16,0.05,0.14); vec3 c = mix(hor, top, smoothstep(0.0,0.55,vUv.y)); gl_FragColor = vec4(c,1.0); }',
+    });
+    const sky = new THREE.Mesh(new THREE.PlaneGeometry(160, 60), skyMat);
+    sky.position.set(0, 8, 48);
+    sky.rotation.y = Math.PI;
+    scene.add(sky);
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1233,19 +1363,94 @@
   //  RAIN EFFECT — animated drops on window glass
   // ═══════════════════════════════════════════════════════════════════
 
+  let rainCurtain = null;  // v1.58.0 — exterior GPU rain (shader uniform time)
+
   function buildRainEffect() {
-    // Rain drops on the south wall (balcony side) window area
+    // Rain drops running down the curtain-wall glass (interior side)
     const dropGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.06, 4);
     const dropMat = new THREE.MeshBasicMaterial({ color: 0x88bbee, transparent: true, opacity: 0.35 });
     for (let i = 0; i < 40; i++) {
       const drop = new THREE.Mesh(dropGeo, dropMat);
-      const x = 2 + (Math.random() - 0.5) * 6;
+      const x = (Math.random() - 0.5) * (ROOM.w - 2);
       const y = 0.5 + Math.random() * 3;
-      const z = ROOM.d / 2 - 0.04;
+      const z = ROOM.d / 2 - 0.08;
       drop.position.set(x, y, z);
       scene.add(drop);
       rainDrops.push({ mesh: drop, speed: 0.8 + Math.random() * 1.2, startX: x });
     }
+
+    // v1.58.0 [2026-06-11] — Exterior rain curtain: 600 GPU streaks falling
+    // over the city. Static LineSegments; a vertex shader wraps Y by time,
+    // so the per-frame cost is one uniform write.
+    const COUNT = 600;
+    const SPAN_Y = 18;
+    const positions = new Float32Array(COUNT * 2 * 3);
+    const seeds = new Float32Array(COUNT * 2);
+    for (let i = 0; i < COUNT; i++) {
+      const x = (Math.random() - 0.5) * 50;
+      const y = Math.random() * SPAN_Y;
+      const z = 8.5 + Math.random() * 16;
+      const len = 0.35 + Math.random() * 0.45;
+      positions.set([x, y, z, x, y - len, z], i * 6);
+      const seed = Math.random();
+      seeds[i * 2] = seed;
+      seeds[i * 2 + 1] = seed;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('seed', new THREE.BufferAttribute(seeds, 1));
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        uniform float uTime;
+        attribute float seed;
+        varying float vAlpha;
+        void main() {
+          vec3 p = position;
+          float speed = 6.0 + seed * 5.0;
+          p.y = mod(p.y - uTime * speed, ${SPAN_Y.toFixed(1)}) - 8.0;
+          vAlpha = 0.12 + seed * 0.18;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+        }`,
+      fragmentShader: `
+        varying float vAlpha;
+        void main() { gl_FragColor = vec4(0.62, 0.74, 0.95, vAlpha); }`,
+    });
+    rainCurtain = new THREE.LineSegments(geo, mat);
+    rainCurtain.frustumCulled = false;
+    scene.add(rainCurtain);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  ACCENT TRIM — v1.58.0 [2026-06-11] rose/violet emissive light-lines
+  //  on the key furniture zones (Dark Renaissance luxury signature).
+  //  Intensity breathes in animate() via MAT.roseTrim / MAT.violetTrim.
+  // ═══════════════════════════════════════════════════════════════════
+
+  function buildAccentTrim() {
+    const trims = [
+      // Bed platform underglow (zone center -5,-1; platform 3.6×4.8)
+      { mat: 'roseTrim',   size: [3.7, 0.025, 0.05], pos: [-5, 0.05, -1 + 2.42] },
+      { mat: 'roseTrim',   size: [3.7, 0.025, 0.05], pos: [-5, 0.05, -1 - 2.42] },
+      { mat: 'roseTrim',   size: [0.05, 0.025, 4.9], pos: [-5 + 1.87, 0.05, -1] },
+      { mat: 'roseTrim',   size: [0.05, 0.025, 4.9], pos: [-5 - 1.87, 0.05, -1] },
+      // Couch base glow (zone 5.5, 0)
+      { mat: 'roseTrim',   size: [3.0, 0.02, 0.04],  pos: [5.5, 0.07, 0.95] },
+      // Bar counter edge (zone -3, -5.5)
+      { mat: 'violetTrim', size: [2.6, 0.025, 0.04], pos: [-3, 1.08, -4.95] },
+      // Vanity mirror halo strips (zone 3, -5.8)
+      { mat: 'violetTrim', size: [0.04, 0.9, 0.03],  pos: [2.35, 1.7, -5.85] },
+      { mat: 'violetTrim', size: [0.04, 0.9, 0.03],  pos: [3.65, 1.7, -5.85] },
+      // Bath rim glow (zone 6.5, -4.5)
+      { mat: 'violetTrim', size: [1.7, 0.02, 0.04],  pos: [6.4, 0.62, -3.7] },
+    ];
+    trims.forEach(tr => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...tr.size), MAT[tr.mat]);
+      mesh.position.set(...tr.pos);
+      scene.add(mesh);
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1289,7 +1494,7 @@
     chanBloom.position.y = -0.05;
     chanGroup.add(chanBloom);
 
-    const chanLight = new THREE.PointLight(0xffeecc, 0.5, 10);
+    const chanLight = new THREE.PointLight(0xffeecc, 0.5 * LPI, 10);
     chanLight.position.y = -0.1;
     chanGroup.add(chanLight);
 
@@ -1323,7 +1528,7 @@
       );
       sconceBracket.position.set(side * 7.9, 2.2, -2);
       scene.add(sconceBracket);
-      const sLight = new THREE.PointLight(0xffddaa, 0.2, 4);
+      const sLight = new THREE.PointLight(0xffddaa, 0.2 * LPI, 4);
       sLight.position.set(side * 7.8, 2.3, -2);
       scene.add(sLight);
     });
@@ -1471,7 +1676,7 @@
     // ── Fireplace flicker ──
     for (let i = 0; i < fireLights.length; i++) {
       const fl = fireLights[i];
-      fl.intensity = fl.intensity * 0.85 + (0.3 + 0.5 * Math.random() + 0.2 * Math.sin(t * 10 + i * 1.7)) * 0.15;
+      fl.intensity = fl.intensity * 0.85 + (0.3 + 0.5 * Math.random() + 0.2 * Math.sin(t * 10 + i * 1.7)) * 0.15 * LPI;  // v1.58.0 — physical units
       // Slight color shift
       const warmth = 0.9 + 0.1 * Math.sin(t * 6 + i);
       fl.color.setRGB(1.0, warmth * 0.45, warmth * 0.15);
@@ -1490,15 +1695,18 @@
       em.mesh.material.opacity = 0.8 * (1.0 - em.life);
     }
 
-    // ── Neon strip pulse ──
+    // ── Neon strip pulse — v1.58.0: rose hue drifting toward violet ──
     const neonPulse = 0.75 + 0.15 * Math.sin(t * 1.2);
     for (let i = 0; i < neonStrips.length; i++) {
       const ns = neonStrips[i];
       ns.mesh.material.opacity = neonPulse;
-      // Subtle hue shift
-      const hue = ns.baseHue + Math.sin(t * 0.3 + i * 0.5) * 0.03;
-      ns.mesh.material.color.setHSL(hue, 0.7, 0.55);
+      // Drift between rose (0.985) and violet (~0.78) per-strip phase
+      const hue = (ns.baseHue + Math.sin(t * 0.25 + i * 0.8) * 0.045) % 1;
+      ns.mesh.material.color.setHSL(hue, 0.78, 0.62);
     }
+    // Furniture rose trim breathing
+    if (MAT.roseTrim)   MAT.roseTrim.emissiveIntensity   = 1.4 + 0.5 * Math.sin(t * 1.6);
+    if (MAT.violetTrim) MAT.violetTrim.emissiveIntensity = 1.1 + 0.4 * Math.sin(t * 1.3 + 1.5);
     // Bloom copies track neon
     for (let i = 0; i < bloomCopies.length; i++) {
       bloomCopies[i].material.opacity = 0.08 + 0.04 * Math.sin(t * 1.2);
@@ -1528,7 +1736,7 @@
       clockHands.hour.rotation.z = -t * 0.008;
     }
 
-    // ── Rain drops ──
+    // ── Rain drops (glass) + exterior curtain ──
     for (let i = 0; i < rainDrops.length; i++) {
       const rd = rainDrops[i];
       rd.mesh.position.y -= rd.speed * dt;
@@ -1537,6 +1745,7 @@
         rd.mesh.position.x = rd.startX + (Math.random() - 0.5) * 0.5;
       }
     }
+    if (rainCurtain) rainCurtain.material.uniforms.uTime.value = t;  // v1.58.0
 
     // ── Grain flicker ──
     if (grainQuad) {

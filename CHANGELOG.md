@@ -4,6 +4,80 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.58.0] — "DARK RENAISSANCE" — 2026-06-11
+
+All-scene visual glow-up from the `artifacts/new-assets` design system, three.js
+ES-module migration with a full penthouse 3D overhaul, new NEONCITY landing page,
+and a round of launcher/TUI/runtime bug fixes.
+
+### Fixed (bugs first)
+- **TUI navigation** — ←/→ hop between target list and center panel, ↑/↓ are
+  focus-aware (services table vs target list), Enter/Space launch from either
+  panel, rows clickable/focusable; launches now run as isolated
+  `launcher.py <name>` subprocesses (Stop works for every target type)
+- **lab_break / grid never launched from TUI** — their `__init__` rejected the
+  `host=` kwarg the TUI passes; both constructors now accept it
+- **Penthouse camera presets crashed after config load** — `setCameraViews`
+  now normalizes the YAML `position` key to the runtime `pos` shape
+- **Scene rules never registered** — 2-arg `add_rule(SCENE_ID, rule)` calls in
+  neoncity/coders/command_center, nonexistent `register_action()` in
+  casino/command_center, and a wildcard-tripped idempotency guard meant NO
+  scene rules/actions had ever reached the SceneRulesEngine; rewritten to the
+  real API (neoncity 11+5, coders 8+4, casino 7, command_center 5+5)
+- **`DialogSystem.set_directive(scene_id=)`** — 5 lounge call sites fixed to
+  `scene=` (stage songs, drink rituals, secret reveals all failed silently)
+- **`MCPFramework.get_or_create()`** — asset_studio called a method that never
+  existed; now `get_scene()`; stale guidance strings in nexus_seeder and
+  generate_coder corrected
+- **NLM RPC registry corruption** — all three writers now use shared
+  `engine.utils.atomic_write_json()` (tmp + `os.replace`); corrupt files are
+  quarantined to `.corrupt` instead of erroring forever
+- **intel_hub duplicate assistant blueprint** — idempotent `mount_assistant()`
+- **launcher** — single-target launch refuses to double-bind an occupied port;
+  subprocess scene logs line-buffered; `browser_test.py --scene` accepts names
+- **Restarted a wedged Windows WMI service** that hung every Python startup at
+  `platform._wmi_query` (aiohttp import) under heavy multi-process load
+
+### three.js r128 → r184 (ES modules)
+- Vendored `three.module.min.js` + addons (OrbitControls, GLTFLoader,
+  RoomEnvironment, RoundedBoxGeometry, BufferGeometryUtils, SkeletonUtils)
+  under `content/shared/static/vendor/three/`; import-map partial at
+  `content/shared/templates/partials/three_importmap.html`
+- `content/shared/static/js/three_boot.js` — module boot exposing
+  `window.THREE` (+addons), loading the legacy chain with `async=false`
+  (parallel fetch, ordered execution)
+- Physical-light conversion (×π) across penthouse_3d.js, bedroom.js,
+  lab_3d.js, penthouse_model_import.js; `outputEncoding` removals; CDN
+  GLTFLoader bootstrap deleted
+
+### Penthouse 3D overhaul (Dark Renaissance)
+- Rose `#fb7185` / violet `#9d71ea` material re-grade, RoomEnvironment IBL,
+  transmission-glass curtain wall (south wall is now a floor-to-ceiling
+  window), instanced 64-building skyline with 320 twinkling windows, neon
+  smog bands, night-sky gradient backdrop, GPU rain curtain (600 shader
+  streaks), rose/violet emissive furniture trim, eye-tuned lighting
+- Characters rethemed to the kit identities: Mira (plum-black bob) and new
+  Rei (silver-lavender)
+- 32 FPS on RTX 2060 (headed), zero console errors, all 8 camera views
+
+### Scenes glow-up (all 24 scene keys)
+- `design_tokens_v2.css`: Orbitron display voice, Inter body, Share Tech Mono
+  terminal voice, per-scene accent-rgb fallbacks for all 24 scene keys
+- Webfonts vendored locally (`/shared/fonts/*.woff2` + `fonts.css`) —
+  offline-safe; adds Share Tech Mono + Press Start 2P
+- Shared `.cs-chat-bubble` / `.cs-chat-log` dialogue components
+- Per-scene v2 passes — kit-backed: neoncity, grid, heist, oracle, phone,
+  intel_hub, neonos, hub, asset_studio; extrapolated: tavern, lounge, casino,
+  arena, realm, gallery, lab_break chrome, auction, cyberspace, coders,
+  games, command_center, service UIs
+
+### Landing page
+- Hub `/` now serves the NEONCITY Dark Renaissance landing (skyline, rain,
+  neon title, live footer stats); THE TERMINAL catalogue moved to `/terminal`;
+  navbar/footer hub links point at the catalogue
+
+---
+
 ## [1.57.2] — "RPC SYSTEM OVERHAUL + UNIFIED CLI + MULTI-PROTOCOL PROXY + PRIME PE RESEARCH" — 2026-03-27
 
 Complete NLM rpcid system rebuild, unified CLI framework with 15 standalone apps,
