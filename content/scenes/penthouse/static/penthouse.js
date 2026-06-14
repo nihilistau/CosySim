@@ -237,6 +237,26 @@ class PenthouseScene {
       window.CharacterBridge.syncCharacters(chars, locs);
     }
 
+    // ── Sync the Director avatar from scene_state ──
+    // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+    //   scene_state carries `director_avatar` (set in penthouse_social_mixin),
+    //   but it was never applied here, so the avatar only appeared on the manual
+    //   "Place Avatar" click and vanished on reload/reconnect (and never showed
+    //   for other clients). Re-place (or remove) it from state, de-duped by a
+    //   JSON signature so we don't respawn the model on every scene_state tick.
+    if (window.CharacterBridge) {
+      const avatar = data.director_avatar || null;
+      const sig = avatar ? JSON.stringify(avatar) : null;
+      if (sig !== this._directorAvatarSig) {
+        this._directorAvatarSig = sig;
+        if (avatar) {
+          window.CharacterBridge.placeDirectorAvatar(avatar);
+        } else if (window.CharacterBridge.isDirectorPlaced()) {
+          window.CharacterBridge.removeDirectorAvatar();
+        }
+      }
+    }
+
     if (ids.length > 0) {
       const cid   = ids[0];
       const cdata = chars[cid] || {};
@@ -1232,13 +1252,20 @@ function exitScene() {
     .catch(err => console.warn('[Penthouse] Director exit scene failed:', err));
 }
 
+// v1.62.0 [2026-06-15] — director avatar render/persist fix:
+//   POST the backend's own key names (skin_tone/hair_color/location_id) so the
+//   user's selections are actually stored in scene_state.director_avatar — the
+//   old body used skin/hair/location, which the route ignored, persisting
+//   defaults. The 3D placement is now driven by the scene_state broadcast that
+//   this POST triggers (single source of truth via _onSceneState), which also
+//   makes the avatar appear for every connected client, not just this one.
 function placeDirectorAvatar() {
   const data = {
     gender: document.getElementById('dirAvatarGender')?.value || 'male',
-    skin: document.getElementById('dirAvatarSkin')?.value || 'fair',
-    hair: document.getElementById('dirAvatarHair')?.value || 'brown',
+    skin_tone: document.getElementById('dirAvatarSkin')?.value || 'fair',
+    hair_color: document.getElementById('dirAvatarHair')?.value || 'brown',
     outfit: document.getElementById('dirAvatarOutfit')?.value || 'casual',
-    location: document.getElementById('dirAvatarLocation')?.value || 'couch',
+    location_id: document.getElementById('dirAvatarLocation')?.value || 'couch',
   };
   fetch('/api/director/avatar', {
     method: 'POST',
@@ -1247,26 +1274,27 @@ function placeDirectorAvatar() {
   })
     .then(r => r.json())
     .then(() => {
-      // Spawn 3D director avatar
-      if (window.CharacterBridge) {
-        window.CharacterBridge.placeDirectorAvatar(data);
-      }
-      // Show interaction controls
+      // Show interaction controls (3D placement handled by scene_state broadcast)
       const ctrl = document.getElementById('directorInteractControls');
       if (ctrl) ctrl.style.display = 'block';
-      PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location);
+      PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location_id);
     })
     .catch(err => console.warn('[Penthouse] Place director avatar failed:', err));
 }
 
+// v1.62.0 [2026-06-15] — director avatar render/persist fix:
+//   use the implemented POST {action:'remove'} route (there is no DELETE route —
+//   the old DELETE returned 405). Removal now persists and broadcasts, so the
+//   avatar disappears via scene_state for every client.
 function removeDirectorAvatar() {
-  fetch('/api/director/avatar', { method: 'DELETE' })
+  fetch('/api/director/avatar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'remove' }),
+  })
     .then(r => r.json())
     .then(() => {
-      if (window.CharacterBridge) {
-        window.CharacterBridge.removeDirectorAvatar();
-      }
-      // Hide interaction controls
+      // Hide interaction controls (3D removal handled by scene_state broadcast)
       const ctrl = document.getElementById('directorInteractControls');
       if (ctrl) ctrl.style.display = 'none';
       PENTHOUSE._showSystemMessage('🎭 Avatar removed');
