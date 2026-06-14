@@ -12,7 +12,7 @@
   'use strict';
 
   const PHONE_PORT = 5555;
-  const PHONE_BASE = `http://localhost:${PHONE_PORT}`;
+  const PHONE_BASE = window.COSYSIM?.services?.phone || `http://localhost:${PHONE_PORT}`;
 
   const APPS = [
     { id: 'messages', name: 'SIGNAL',   icon: '💬', bg: 'rgba(0,255,160,0.12)',  glow: 'rgba(0,255,160,0.3)' },

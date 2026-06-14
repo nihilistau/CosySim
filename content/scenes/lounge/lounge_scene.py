@@ -16,6 +16,14 @@ Everything in this scene is MCP-governed:
   • Cross-agent comms → Lola ↔ Viktor via MCPFramework.cross_scene_send
   • Random events → MCPFramework.random_pick each turn
   • Response control → ResponseDirective system steers every character reply
+
+Version: v1.58.0 [2026-06-11]
+Author:  CosySim Team
+
+Change Log:
+    v1.58.0 [2026-06-11] — Fixed 5 set_directive() calls passing scene_id=
+                            (DialogSystem kwarg is scene=); these failed every
+                            stage song, drink ritual and secret reveal
 """
 from __future__ import annotations
 
@@ -28,18 +36,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, render_template, jsonify, request
-import jinja2
-from flask_socketio import SocketIO, emit
-from flask_cors import CORS
+from flask import render_template, jsonify, request
+from flask_socketio import emit
 
 import sys
 from engine.paths import ROOT as _root
 sys.path.insert(0, str(_root))
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin
+from engine.scenes.flask_scene import FlaskScene
 from content.scenes.lounge.lounge_mcp import (
     register_lounge_rules,
     SCENE_ID, LOLA_ID, VIKTOR_ID,
@@ -60,13 +64,21 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-LOUNGE_PORT = 5557
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port
+    LOUNGE_PORT = get_port("lounge", 5557)
+except Exception:
+    LOUNGE_PORT = 5557
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  LOUNGE SCENE
 # ──────────────────────────────────────────────────────────────────────────────
 
-class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class LoungeScene(FlaskScene):
     """THE VELVET PIT — v0.68 'Dark Renaissance'.
 
     Underground lounge beneath the streets. Amber-lit. Heat never drops to zero.
@@ -95,30 +107,13 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = LOUNGE_PORT) -> None:
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
-        # ── Flask app ───────────────────────────────────────────────────────
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
-        _shared_tmpl = str(Path(__file__).parent.parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.register_shop_route(self.app)
-        self.register_tts_route(self.app)
         self.app.config["SECRET_KEY"] = "velvet_lounge_secret_1920s"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
         self.register_bench_route(self.app, self.socketio)
 
         # Mount control overlay
@@ -146,7 +141,6 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         # ── Setup ────────────────────────────────────────────────────────────
         self._setup_routes()
         self._setup_socketio()
-        self._mcp_init()
         register_lounge_rules()
         self._seed_lounge_registry()
 
@@ -159,8 +153,6 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
 
         # ── Start first song ─────────────────────────────────────────────────
         self._start_next_song()
-
-        self.nexus_init("lounge")
 
         # ── EventBus subscription ────────────────────────────────────────────
         try:
@@ -282,9 +274,9 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             reg.set_state(VIKTOR_ID, mood="neutral", mood_intensity=0.3, energy=85.0)
             apply_default_skills(VIKTOR_ID)
 
-            logger.info("Lounge registry seeded: Lola Voss + Viktor Marlowe")
+            logger.info("[%s] Registry seeded: Lola Voss + Viktor Marlowe (operation=seed)", SCENE_ID)
         except Exception as exc:
-            logger.warning("_seed_lounge_registry failed: %s", exc)
+            logger.warning("[%s] Registry seeding failed (operation=seed): %s", SCENE_ID, exc)
 
     @property
     def _reg(self):
@@ -326,7 +318,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 description          = "Heat builds — someone's been watching the door too long.",
             )
         except Exception as exc:
-            logger.warning("Heat timer start failed: %s", exc)
+            logger.warning("[%s] Heat timer start failed (operation=tick): %s", SCENE_ID, exc)
 
     def _tick_heat(self, delta: int = 5) -> None:
         """Increment heat and check threshold rules via the MCP rules engine."""
@@ -415,7 +407,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             # Set a style directive for Lola during this song
             self._ds.set_directive(
                 character_id   = LOLA_ID,
-                scene_id       = SCENE_ID,
+                scene          = SCENE_ID,
                 directive_type = "mood_set",
                 value          = f"performing '{song['title']}' — {song.get('note', '')}",
                 turns          = max(2, song["duration"] // 30),
@@ -441,7 +433,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             return song
 
         except Exception as exc:
-            logger.warning("_start_next_song failed: %s", exc)
+            logger.warning("[%s] _start_next_song failed (operation=music): %s", SCENE_ID, exc)
             return {}
 
     def _finish_song(self, song_id: str) -> None:
@@ -485,7 +477,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             threading.Thread(target=_next, daemon=True).start()
 
         except Exception as exc:
-            logger.warning("_finish_song failed: %s", exc)
+            logger.warning("[%s] _finish_song failed (operation=music): %s", SCENE_ID, exc)
 
     # ══════════════════════════════════════════════════════════════════════════
     #  TRUST GATES
@@ -599,7 +591,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             )
             self._ds.set_directive(
                 character_id   = LOLA_ID,
-                scene_id       = SCENE_ID,
+                scene          = SCENE_ID,
                 directive_type = "must_include",
                 value          = "catches the guest's eye briefly",
                 turns          = 1,
@@ -610,7 +602,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         if cocktail.get("viktor_joins"):
             self._ds.set_directive(
                 character_id   = VIKTOR_ID,
-                scene_id       = SCENE_ID,
+                scene          = SCENE_ID,
                 directive_type = "must_include",
                 value          = "pours a glass for himself and stays at that end of the bar",
                 turns          = 1,
@@ -678,7 +670,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         char_id = LOLA_ID if character == LOLA_ID else VIKTOR_ID
         self._ds.set_directive(
             character_id   = char_id,
-            scene_id       = SCENE_ID,
+            scene          = SCENE_ID,
             directive_type = "must_include",
             value          = secret["content"][:100],
             turns          = 1,
@@ -806,7 +798,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             return result
 
         except Exception as exc:
-            logger.warning("_get_agent_reply(%s) failed: %s", character_id, exc)
+            logger.warning("[%s] Agent reply failed (operation=chat, agent=%s): %s", SCENE_ID, character_id, exc)
             result["degraded"] = True
             result["error"] = str(exc)
             result["text"] = self._fallback_reply(character_id, user_message)
@@ -1064,7 +1056,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                         # Lola quietly adjusts her demeanour
                         self._ds.set_directive(
                             character_id   = LOLA_ID,
-                            scene_id       = SCENE_ID,
+                            scene          = SCENE_ID,
                             directive_type = "mood_set",
                             value          = "guarded, watchful, not showing it",
                             turns          = 2,
@@ -1260,7 +1252,7 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1414,10 +1406,10 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     #  BaseScene abstract methods
     # ══════════════════════════════════════════════════════════════════════════
 
-    def stop(self) -> None:
-        """Gracefully stop the lounge scene."""
-        self.nexus_flush()
-        logger.info("The Velvet Lounge closing")
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
+
+    def on_shutdown(self) -> None:
+        """Hook: unsubscribe world events and save framework state."""
         if hasattr(self, "_event_bus") and self._event_bus:
             try:
                 self._event_bus.unsubscribe("world.tick", self._on_world_tick)
@@ -1461,16 +1453,13 @@ class LoungeScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     #  BaseScene START
     # ══════════════════════════════════════════════════════════════════════════
 
-    def start(self) -> None:
-        logger.info("THE VELVET PIT opening on port %d — Dark Renaissance v0.68", self.port)
-        # Wire up framework event bus for cross-scene events
+    def on_before_serve(self) -> None:
+        """Hook: wire framework event bus for cross-scene events."""
         try:
             self._fw.on("environment_change", lambda evt: self._on_env_event(evt))
             self._fw.on("story_beat", lambda evt: self._on_story_beat(evt))
         except Exception:
             pass
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
-                          allow_unsafe_werkzeug=True)
 
     def _on_env_event(self, evt) -> None:
         """React to environment changes from the event bus."""

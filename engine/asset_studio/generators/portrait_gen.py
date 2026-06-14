@@ -71,8 +71,8 @@ class PortraitGenerator:
                 appearance = reply.get("answer", "") or reply.get("content", "")
             elif isinstance(reply, str):
                 appearance = reply
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[PortraitGen] Nexus appearance lookup failed for %s (operation=generate): %s", character_id, e)
 
         positive, negative = builder.build_portrait_prompt(
             character_id=character_id,
@@ -99,7 +99,8 @@ class PortraitGenerator:
                 from pathlib import Path as _Path  # noqa: PLC0415
                 from engine.config import get_config as _get_config  # noqa: PLC0415
                 _cfg2 = _get_config()
-                save_dir = _Path(_cfg2.get("art.output_dir", "data/art/output"))
+                # v1.49.1 [2026-03-22] — Use comfyui.output_dir (was stale art.output_dir)
+                save_dir = _Path(_cfg2.get("comfyui.output_dir", "data/art/output"))
                 save_dir.mkdir(parents=True, exist_ok=True)
                 # Use hi-res workflow if FaceDetailer is available, else fast.
                 if wm.has_node("FaceDetailer") and wm.has_node("UltralyticsDetectorProvider"):
@@ -124,8 +125,8 @@ class PortraitGenerator:
                         try:
                             from engine.art.portrait_cache import get_portrait_cache  # noqa: PLC0415
                             get_portrait_cache().set_url(character_id, mood, url)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[PortraitGen] Failed to cache portrait URL for %s/%s (operation=portrait_cache): %s", character_id, mood, e)
                     duration_ms = int((time.monotonic() - t_start) * 1000)
                     return {
                         "url": url,

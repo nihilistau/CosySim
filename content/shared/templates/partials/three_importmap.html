@@ -1,0 +1,31 @@
+{#
+  three_importmap.html — ES-module import map for three.js r184
+  ===============================================================
+  Include from a scene template's {% block head_scripts %} BEFORE any
+  <script type="module"> that imports 'three' or 'three/addons/...':
+
+      {% block head_scripts %}
+        {% include 'partials/three_importmap.html' %}
+        <script type="module" src="...your 3D module..."></script>
+      {% endblock %}
+
+  Files are vendored locally (v0.184.0, local-first rule) under
+  content/shared/static/vendor/three/ — served at /shared/vendor/three/.
+  Vendored addons: OrbitControls, GLTFLoader, RoomEnvironment,
+  RoundedBoxGeometry, BufferGeometryUtils, SkeletonUtils.
+
+  Version: v1.58.0 [2026-06-11]
+  Change Log:
+      v1.58.0 [2026-06-11] — Initial import map (three.js r128 CDN globals →
+                              vendored r184 ES modules)
+
+  CONNECTS: penthouse.html, penthouse_ui.html, lab_break.html
+#}
+<script type="importmap">
+{
+  "imports": {
+    "three": "/shared/vendor/three/three.module.min.js",
+    "three/addons/": "/shared/vendor/three/addons/"
+  }
+}
+</script>

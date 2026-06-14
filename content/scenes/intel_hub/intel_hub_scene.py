@@ -1,4 +1,5 @@
 """THE BRIEFING ROOM — Mission control above the hacker loft.
+=============================================================
 
 CosySim v0.68 "Dark Renaissance" — unified intelligence command center
 exposing every subsystem through a cyan/blue mission-control dashboard:
@@ -18,6 +19,13 @@ exposing every subsystem through a cyan/blue mission-control dashboard:
 
 Port: 5580
 Accent: #06b6d4 (cyan/blue hybrid)
+
+Version: v1.51.0 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
+    v0.68   [2026-03-21] — Initial Intelligence Hub scene
 """
 from __future__ import annotations
 
@@ -32,26 +40,21 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from queue import Empty, Queue
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Response, jsonify, render_template, request
 
 from engine.config import get_config
 from engine.port_registry import ALL_SCENE_TARGETS, build_target_listing, get_port, get_service_url
-from engine.scenes.base_scene import BaseScene
+from engine.scenes.flask_scene import FlaskScene
 
 try:
-    from flask_socketio import SocketIO, emit
+    from flask_socketio import emit
 except ImportError:
-    SocketIO = None  # type: ignore
     emit = None  # type: ignore
-
-try:
-    from content.shared import register_shared_assets
-except ImportError:
-    register_shared_assets = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "intel_hub"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 DEFAULT_PORT = get_port(SCENE_ID)
 
 SCENE_METADATA = {
@@ -84,103 +87,79 @@ def _default_whisper_url() -> str:
 # ──── Scene ───────────────────────────────────────────────────────────────────
 
 
-class IntelHubScene(BaseScene):
-    """Intelligence Hub — unified system control panel."""
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class IntelHubScene(FlaskScene):
+    """Intelligence Hub — unified system control panel.
+
+    CONNECTS: FlaskScene, NexusKMS, LMStudio, Scheduler, WorldSim
+    CALLED BY: launcher.py, TUI
+    EMITS: metrics_update, activity_item, librarian_response,
+           search_results Socket.IO events
+    """
 
     SCENE_METADATA = SCENE_METADATA
 
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
+        # v1.51.0 — Allow config override for port before FlaskScene init
         cfg = get_config()
-        self._host = host
-        self._port = cfg.get("scenes.intel_hub.port", port)
-        self._app = Flask(
-            __name__,
-            template_folder="templates",
-            static_folder="static",
-            static_url_path="/intel_hub/static",
-        )
-        if register_shared_assets:
-            register_shared_assets(self._app)
-        self._socketio: Optional[Any] = None
+        resolved_port = cfg.get("scenes.intel_hub.port", port)
+        super().__init__(host=host, port=resolved_port)
+
+        # Custom static URL path
+        self.app.static_url_path = "/intel_hub/static"
+
+        # Scene-specific state
         self._activity: deque = deque(maxlen=200)
         self._notification_subscribers: List[Queue] = []
-        self._stop_event = threading.Event()
         self._push_thread: Optional[threading.Thread] = None
+
+        # Scene-specific route and socketio registrations
         self._register_routes()
-        self._register_socketio()
-        # Register bench, TTS, and world events routes
-        self.register_bench_route(self._app, None)
-        self.register_tts_route(self._app)
-        self.register_world_events_route(self._app)
-        self.register_health_route(self._app)
-        self.register_hud_route(self._app)
-        self.register_announcer_route(self._app)
-        self.register_inventory_route(self._app)
+        self._register_socketio_handlers()
 
-    # ── BaseScene interface────────────────────────────────────────────────────
+        # Additional shared routes beyond what FlaskScene provides
+        self.register_bench_route(self.app, self.socketio)
+        self.register_world_events_route(self.app)
 
-    def start(self) -> None:
-        """Start THE BRIEFING ROOM Flask server."""
+    # ── FlaskScene Lifecycle Hooks ────────────────────────────────────────────
+    # v1.51.0 [2026-03-22] — FlaskScene handles start()/stop(); use hooks
+
+    def on_before_serve(self) -> None:
+        """Start the metrics push thread before the server begins."""
         self._stop_event.clear()
         self._push_thread = threading.Thread(
             target=self._push_loop, daemon=True, name="briefing-room-push"
         )
         self._push_thread.start()
-        # Re-register bench with socketio now available for real-time HUD
-        self.register_bench_route(self._app, self._socketio)
-        logger.info("THE BRIEFING ROOM starting on %s:%d", self._host, self._port)
-        if self._socketio:
-            self._socketio.run(
-                self._app, host=self._host, port=self._port,
-                debug=False, use_reloader=False, log_output=False,
-                allow_unsafe_werkzeug=True,
-            )
-        else:
-            self._app.run(host=self._host, port=self._port, debug=False)
 
-    def stop(self) -> None:
+    def on_shutdown(self) -> None:
+        """Stop the metrics push thread."""
         self._stop_event.set()
-
-    def get_plugin_info(self) -> Dict[str, Any]:
-        return {
-            "id": SCENE_ID,
-            "title": SCENE_METADATA["display_name"],
-            "description": SCENE_METADATA["description"],
-            "port": self._port,
-            "url": f"http://localhost:{self._port}",
-            "type": SCENE_METADATA["type"],
-            "icon": "◆",
-        }
 
     # ── Routes ─────────────────────────────────────────────────────────────────
 
     def _register_routes(self) -> None:
-        app = self._app
+        app = self.app
 
         # Mount the assistant blueprint (chat, voice, listen endpoints)
+        # v1.58.0 [2026-06-11] — Use the idempotent mount_assistant() helper;
+        # direct register_blueprint raised "name 'assistant' already registered"
+        # whenever the blueprint was mounted elsewhere first.
         try:
-            from engine.assistant.assistant_bp import assistant_bp
-            app.register_blueprint(assistant_bp)
+            from engine.assistant.assistant_bp import mount_assistant
+            mount_assistant(app)
         except Exception as _e:
-            logger.warning("Could not register assistant blueprint: %s", _e)
+            logger.warning("[%s] Could not register assistant blueprint (operation=lifecycle): %s", SCENE_ID, _e)
 
         @app.route("/")
         def index():
             return render_template(
                 "intel_hub.html",
-                port=self._port,
+                port=self.port,
                 **self.inject_navbar_context(),
             )
 
-        @app.route("/health")
-        @app.route("/api/health")
-        def health():
-            try:
-                return jsonify({"status": "ok", "scene": SCENE_ID, "port": self._port,
-                                "display_name": SCENE_METADATA["display_name"]})
-            except Exception:
-                logger.exception("Health check failed")
-                return jsonify({"status": "error", "scene": SCENE_ID, "reason": "health check raised"}), 500
+        # v1.51.0 — Custom /health removed; FlaskScene provides /api/health
 
         # ── TTS control ───────────────────────────────────────────────────────
 
@@ -635,12 +614,12 @@ class IntelHubScene(BaseScene):
             try:
                 metrics = get_metrics_collector().get_summary(window_seconds=3600)
             except Exception as exc:
-                logger.warning("MetricsCollector unavailable: %s", exc)
+                logger.warning("[%s] MetricsCollector unavailable (operation=metrics): %s", SCENE_ID, exc)
                 metrics = {"llm": {}, "scenes": {}, "errors": {}}
             try:
                 router_status = get_router_v3_client().get_status()
             except Exception as exc:
-                logger.warning("RouterV3Client unavailable: %s", exc)
+                logger.warning("[%s] RouterV3Client unavailable (operation=metrics): %s", SCENE_ID, exc)
                 router_status = {"available": False, "predict_count": 0}
             return jsonify({"metrics": metrics, "router": router_status})
 
@@ -704,10 +683,10 @@ class IntelHubScene(BaseScene):
                 except Exception as nexus_exc:
                     logger.debug("Nexus rating store skipped: %s", nexus_exc)
 
-                logger.info("News rating stored: %s → %s [%s]", title[:50], label_str, source)
+                logger.info("[%s] News rating stored (operation=news_rate): %s → %s [%s]", SCENE_ID, title[:50], label_str, source)
                 return jsonify({"status": "ok", "label": label_str})
             except Exception as exc:
-                logger.error("api_news_rate error: %s", exc)
+                logger.error("[%s] api_news_rate error (operation=news_rate): %s", SCENE_ID, exc)
                 return jsonify({"status": "error", "message": str(exc)}), 500
 
         @app.route("/api/news/ratings/stats")
@@ -754,7 +733,7 @@ class IntelHubScene(BaseScene):
                     })
                 return jsonify({"status": "ok", "items": items, "count": len(items)})
             except Exception as e:
-                logger.warning("News ticker error: %s", e)
+                logger.warning("[%s] News ticker error (operation=news_ticker): %s", SCENE_ID, e)
                 return jsonify({"status": "ok", "items": [], "count": 0, "error": str(e)})
 
         @app.route("/api/news/feed")
@@ -800,7 +779,7 @@ class IntelHubScene(BaseScene):
 
                 return jsonify({"status": "ok", "workflows": workflows})
             except Exception as e:
-                logger.warning("Benchmark workflows error: %s", e)
+                logger.warning("[%s] Benchmark workflows error (operation=benchmark): %s", SCENE_ID, e)
                 return jsonify({"status": "error", "workflows": [], "error": str(e)})
 
         @app.route("/api/benchmark/run", methods=["POST"])
@@ -819,7 +798,7 @@ class IntelHubScene(BaseScene):
                     try:
                         engine.benchmark_workflow(workflow_name)
                     except Exception as e:
-                        logger.warning("Background benchmark error: %s", e)
+                        logger.warning("[%s] Background benchmark error (operation=benchmark): %s", SCENE_ID, e)
 
                 threading.Thread(target=run_benchmark, daemon=True).start()
                 return jsonify({"status": "ok", "message": f"Benchmark started for {workflow_name}"})
@@ -839,14 +818,12 @@ class IntelHubScene(BaseScene):
 
     # ── Socket.IO ──────────────────────────────────────────────────────────────
 
-    def _register_socketio(self) -> None:
-        if SocketIO is None:
+    # v1.51.0 [2026-03-22] — SocketIO created by FlaskScene; only register handlers
+    def _register_socketio_handlers(self) -> None:
+        """Register scene-specific Socket.IO event handlers."""
+        if self.socketio is None:
             return
-        self._socketio = SocketIO(
-            self._app, cors_allowed_origins="*",
-            async_mode="threading", logger=False, engineio_logger=False,
-        )
-        sio = self._socketio
+        sio = self.socketio
 
         @sio.on("connect")
         def on_connect():
@@ -877,11 +854,11 @@ class IntelHubScene(BaseScene):
     def _push_loop(self) -> None:
         """Push system metrics every 5 seconds via Socket.IO."""
         while not self._stop_event.wait(5.0):
-            if self._socketio is None:
+            if self.socketio is None:
                 continue
             try:
                 metrics = self._get_overview()
-                self._socketio.emit("metrics_update", metrics)
+                self.socketio.emit("metrics_update", metrics)
             except Exception:
                 pass
 
@@ -912,13 +889,16 @@ class IntelHubScene(BaseScene):
                 }
         except Exception:
             pass
+        # v1.43.1 [2026-03-21] — Use unified client for model listing
         try:
-            from engine.lmstudio.lms_client import get_lms_client
-            client = get_lms_client()
-            lms_models = client.get_models(loaded_only=False, raw=True)
-            overview["lmstudio"] = {"available": True, "models": [m.get("id") for m in lms_models]}
+            from engine.lmstudio.chat import is_ready, get_models
+            models = get_models(loaded_only=False)
+            overview["lmstudio"] = {
+                "available": is_ready(),
+                "models": [getattr(m, "key", str(m)) for m in models],
+            }
         except Exception as exc:
-            logger.warning("LMStudio model check failed: %s", exc)
+            logger.warning("[%s] LMStudio model check failed (operation=health): %s", SCENE_ID, exc)
         try:
             from engine.nexus.scheduler_daemon import get_scheduler_daemon
             daemon = get_scheduler_daemon()
@@ -941,9 +921,9 @@ class IntelHubScene(BaseScene):
     def _log_activity(self, category: str, message: str) -> None:
         entry = {"ts": _now(), "cat": category, "msg": message}
         self._activity.appendleft(entry)
-        if self._socketio:
+        if self.socketio:
             try:
-                self._socketio.emit("activity_item", entry)
+                self.socketio.emit("activity_item", entry)
             except Exception:
                 pass
         self._push_notification(category, message)
@@ -1019,7 +999,7 @@ def _call_nexus(action: str, **kwargs) -> Dict[str, Any]:
             return {"categories": cats or []}
         return {"error": f"Unknown action: {action}"}
     except Exception as exc:
-        logger.error("Nexus call %s failed: %s", action, exc)
+        logger.error("[%s] Nexus call failed (operation=nexus, action=%s): %s", SCENE_ID, action, exc)
         return {"error": str(exc)}
 
 
@@ -1048,7 +1028,7 @@ def _call_nlm(action: str, **kwargs) -> Dict[str, Any]:
             ) or {}
         return {"error": f"Unknown NLM action: {action}"}
     except Exception as exc:
-        logger.warning("NLM call %s failed: %s", action, exc)
+        logger.warning("[%s] NLM call failed (operation=nlm, action=%s): %s", SCENE_ID, action, exc)
         return {"error": str(exc)}
 
 
@@ -1538,7 +1518,7 @@ def _get_operator_queue(status: str = "", limit: int = 20) -> Dict[str, Any]:
             "tasks": [task.to_dict() for task in tasks],
         }
     except Exception as exc:
-        logger.error("Failed to get operator queue: %s", exc)
+        logger.error("[%s] Failed to get operator queue (operation=operator): %s", SCENE_ID, exc)
         return {"summary": {}, "tasks": [], "error": str(exc)}
 
 
@@ -1558,7 +1538,7 @@ def _get_operator_inbox_items(
             "items": [item.to_dict() for item in items],
         }
     except Exception as exc:
-        logger.error("Failed to get operator inbox: %s", exc)
+        logger.error("[%s] Failed to get operator inbox (operation=operator): %s", SCENE_ID, exc)
         return {"summary": {}, "items": [], "error": str(exc)}
 
 
@@ -1610,7 +1590,7 @@ def _dispatch_operator_command(data: Dict[str, Any]) -> Dict[str, Any]:
             "response": body,
         }
     except Exception as exc:
-        logger.error("Operator live dispatch failed: %s", exc)
+        logger.error("[%s] Operator live dispatch failed (operation=operator): %s", SCENE_ID, exc)
         return {"ok": False, "mode": dispatch_mode, "error": str(exc)}
 
 
@@ -1670,7 +1650,7 @@ def _submit_operator_inbox_item(data: Dict[str, Any]) -> Dict[str, Any]:
         result["item"] = latest.to_dict() if latest else item.to_dict()
         return result
     except Exception as exc:
-        logger.error("Failed to submit operator inbox item: %s", exc)
+        logger.error("[%s] Failed to submit operator inbox item (operation=operator): %s", SCENE_ID, exc)
         return {"ok": False, "error": str(exc)}
 
 
@@ -1681,7 +1661,7 @@ def _process_operator_inbox(limit: int = 10) -> Dict[str, Any]:
 
         return get_operator_inbox().process_items(limit=limit)
     except Exception as exc:
-        logger.error("Failed to process operator inbox: %s", exc)
+        logger.error("[%s] Failed to process operator inbox (operation=operator): %s", SCENE_ID, exc)
         return {"ok": False, "error": str(exc), "processed": 0}
 
 

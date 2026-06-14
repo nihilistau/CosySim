@@ -1,5 +1,12 @@
 """NotebookLM control flywheel for the Copilot/Nexus control plane.
 
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Structured output path for Q&A extraction via Gemini;
+                             _extract_qa_from_response() with regex fallback
+    v1.50.2 [2026-03-24] — Add _poll_previous_tasks() for execution tracking, clear failed fingerprints
+
 This module turns the dedicated control notebook into a repeatable orchestration
 surface:
 
@@ -194,9 +201,14 @@ class NotebookLMFlywheel:
             return {"status": "skipped", "reason": "disabled"}
 
         state = self._load_state()
+
+        # v1.50.2 [2026-03-24] — Poll previous task execution before creating new ones
+        task_tracking = self._poll_previous_tasks(state)
+
         if not force:
             interval_skip = self._should_skip_for_interval(state)
             if interval_skip:
+                interval_skip["task_tracking"] = task_tracking
                 return interval_skip
 
         resolved_url = notebook_url.strip() or self._resolve_control_notebook_url()
@@ -313,6 +325,7 @@ class NotebookLMFlywheel:
             "task_skips": task_skips,
             "distilled_pairs": distilled_pairs,
             "training": training_stats,
+            "task_tracking": task_tracking,  # v1.50.2 — execution status of prior tasks
             "warnings": warnings,
             "reason": reason,
         }
@@ -323,6 +336,95 @@ class NotebookLMFlywheel:
             artifact_hash=artifact_hash,
         )
         return result
+
+    # v1.50.2 [2026-03-24] — Poll execution status of tasks from previous runs
+    # CONNECTS: TaskScheduler.get_task_statuses(), TaskScheduler.fail_task()
+    # CALLED BY: run() before creating new tasks
+    def _poll_previous_tasks(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Check execution status of tasks created in previous flywheel runs.
+
+        - Identifies stuck tasks (PENDING beyond timeout) and resets them
+        - Removes fingerprints for FAILED tasks so they can be re-created
+        - Returns a summary of task execution status
+
+        Args:
+            state: Flywheel state dict (mutated in place).
+
+        Returns:
+            Summary dict with counts by status.
+        """
+        fingerprints = state.get("task_fingerprints", {})
+        if not fingerprints:
+            return {"total": 0}
+
+        task_ids = [
+            fp["task_id"] for fp in fingerprints.values()
+            if isinstance(fp, dict) and "task_id" in fp
+        ]
+        if not task_ids:
+            return {"total": 0}
+
+        try:
+            scheduler = get_task_scheduler()
+            statuses = scheduler.get_task_statuses(task_ids)
+        except Exception as exc:
+            logger.debug("[Flywheel] Could not poll task statuses: %s", exc)
+            return {"total": len(task_ids), "error": str(exc)}
+
+        stuck_timeout_h = self._config.get(
+            "notebooklm.flywheel.stuck_task_timeout_hours", 48.0
+        )
+        import time as _time
+        cutoff = _time.time() - (stuck_timeout_h * 3600)
+
+        summary = {"total": len(task_ids), "completed": 0, "pending": 0,
+                    "stuck_reset": 0, "failed": 0, "claimed": 0, "unknown": 0}
+
+        fingerprints_to_remove: List[str] = []
+
+        for fp_key, fp_data in list(fingerprints.items()):
+            if not isinstance(fp_data, dict):
+                continue
+            tid = fp_data.get("task_id", "")
+            status = statuses.get(tid, "unknown")
+
+            if status == "completed":
+                summary["completed"] += 1
+            elif status == "failed":
+                summary["failed"] += 1
+                # Remove fingerprint so task can be re-created on next run
+                fingerprints_to_remove.append(fp_key)
+            elif status == "pending":
+                summary["pending"] += 1
+                # Check if stuck
+                created_at = fp_data.get("created_at", "")
+                if created_at:
+                    try:
+                        from datetime import datetime, timezone
+                        dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        if dt.timestamp() < cutoff:
+                            try:
+                                scheduler.fail_task(tid, "stuck_pending", retry=True)
+                                summary["stuck_reset"] += 1
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+            elif status == "claimed":
+                summary["claimed"] += 1
+            else:
+                summary["unknown"] += 1
+
+        # Remove fingerprints for failed tasks
+        for fp_key in fingerprints_to_remove:
+            fingerprints.pop(fp_key, None)
+
+        if summary["stuck_reset"] > 0 or summary["failed"] > 0:
+            logger.info(
+                "[Flywheel] Task poll (operation=poll_tasks): %s", summary,
+            )
+
+        return summary
 
     def _load_state(self) -> Dict[str, Any]:
         """Load flywheel state from disk."""
@@ -515,6 +617,60 @@ class NotebookLMFlywheel:
         if parsed is not None:
             return parsed, "chat_report_fallback", raw_text
 
+        # v1.57.0 [2026-03-26] — Try Gemini structured output as last resort
+        try:
+            from engine.integrations.aistudio_client import generate_structured
+            from engine.nexus.schemas import GROUNDED_ANSWER_SCHEMA
+
+            structured = generate_structured(
+                f"Parse this NLM response into structured JSON:\n\n{raw_text[:5000]}",
+                {
+                    "type": "OBJECT",
+                    "properties": {
+                        "summary": {"type": "STRING"},
+                        "system_state": {"type": "ARRAY", "items": {"type": "STRING"}},
+                        "priorities": {"type": "ARRAY", "items": {"type": "STRING"}},
+                        "keepalive_actions": {"type": "ARRAY", "items": {"type": "STRING"}},
+                        "distillation_topics": {"type": "ARRAY", "items": {"type": "STRING"}},
+                        "context_packet": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "immediate_summary": {"type": "STRING"},
+                                "startup_focus": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                "watch_surfaces": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            },
+                        },
+                        "tasks": {
+                            "type": "ARRAY",
+                            "items": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "title": {"type": "STRING"},
+                                    "template": {"type": "STRING"},
+                                    "description": {"type": "STRING"},
+                                    "target_files": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "tags": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                    "priority": {"type": "STRING"},
+                                    "complexity": {"type": "STRING"},
+                                },
+                                "required": ["title", "description"],
+                            },
+                        },
+                    },
+                    "required": ["summary"],
+                },
+            )
+            if isinstance(structured, dict) and structured.get("summary"):
+                logger.info(
+                    "[NLMFlywheel] Report parsed via Gemini structured output (operation=report_chain)"
+                )
+                return structured, "gemini_structured_fallback", raw_text
+        except Exception as exc:
+            logger.debug(
+                "[NLMFlywheel] Gemini structured report fallback failed (operation=report_chain): %s",
+                exc,
+            )
+
         raise ValueError("NotebookLM report prompt did not return valid JSON")
 
     def _build_artifact(
@@ -626,6 +782,119 @@ class NotebookLMFlywheel:
             if entry_id:
                 stored += 1
         return stored
+
+    # v1.57.0 [2026-03-26] — Prefer Gemini structured output for Q&A extraction
+    # CONNECTS: engine.integrations.aistudio_client.generate_structured, engine.nexus.schemas
+    # CALLED BY: _run_report_chain() and any future code needing Q&A from raw text
+    def _extract_qa_from_response(
+        self, raw_text: str, topic: str = ""
+    ) -> List[Dict[str, str]]:
+        """Extract Q&A pairs from NLM response, preferring structured output.
+
+        Tries Gemini structured output first for guaranteed valid JSON,
+        then falls back to the existing regex-based JSON extraction.
+
+        Args:
+            raw_text: Raw text from an NLM response.
+            topic: Optional topic hint for extraction context.
+
+        Returns:
+            List of dicts with 'question' and 'answer' keys.
+        """
+        try:
+            from engine.integrations.aistudio_client import generate_structured
+            from engine.nexus.schemas import QA_BATCH_SCHEMA
+
+            prompt = f"Extract all Q&A pairs from this text:\n\n{raw_text[:5000]}"
+            if topic:
+                prompt = f"Extract Q&A pairs about {topic} from:\n\n{raw_text[:5000]}"
+
+            pairs = generate_structured(prompt, QA_BATCH_SCHEMA)
+            if pairs and isinstance(pairs, list):
+                # Normalize to ensure consistent keys
+                normalized = []
+                for p in pairs:
+                    if isinstance(p, dict) and p.get("question") and p.get("answer"):
+                        normalized.append({
+                            "question": str(p["question"]).strip(),
+                            "answer": str(p["answer"]).strip(),
+                        })
+                if normalized:
+                    logger.info(
+                        "[NLMFlywheel] Extracted %d Q&A via structured output (operation=extract_qa)",
+                        len(normalized),
+                    )
+                    return normalized
+        except Exception as exc:
+            logger.debug(
+                "[NLMFlywheel] Structured extraction failed, using regex (operation=extract_qa): %s",
+                exc,
+            )
+
+        return self._extract_qa_regex(raw_text)
+
+    # v1.57.0 [2026-03-26] — Regex fallback for Q&A extraction from raw NLM text
+    def _extract_qa_regex(self, raw_text: str) -> List[Dict[str, str]]:
+        """Extract Q&A pairs from raw text using regex and JSON fence parsing.
+
+        Searches for JSON arrays of Q&A objects inside code fences, then
+        falls back to ``Q:`` / ``A:`` line-pair parsing.
+
+        Args:
+            raw_text: Raw NLM response text.
+
+        Returns:
+            List of dicts with 'question' and 'answer' keys.
+        """
+        # Strategy 1: Try to find a JSON array of Q&A objects in fences
+        for match in _JSON_FENCE_PATTERN.finditer(raw_text):
+            body = match.group("body").strip()
+            parsed = _try_parse_json(body)
+            if isinstance(parsed, list):
+                pairs = []
+                for item in parsed:
+                    if isinstance(item, dict) and item.get("question") and item.get("answer"):
+                        pairs.append({
+                            "question": str(item["question"]).strip(),
+                            "answer": str(item["answer"]).strip(),
+                        })
+                if pairs:
+                    return pairs
+
+        # Strategy 2: Line-pair parsing for Q: / A: format
+        pairs: List[Dict[str, str]] = []
+        lines = raw_text.splitlines()
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.startswith("Q:") or line.startswith("**Q:"):
+                question = line.lstrip("*").lstrip("Q:").strip().rstrip("*").strip()
+                # Collect answer lines
+                answer_lines: List[str] = []
+                i += 1
+                while i < len(lines):
+                    aline = lines[i].strip()
+                    if aline.startswith("A:") or aline.startswith("**A:"):
+                        answer_lines.append(
+                            aline.lstrip("*").lstrip("A:").strip().rstrip("*").strip()
+                        )
+                        i += 1
+                        # Continue collecting until next Q: or blank section
+                        while i < len(lines):
+                            nline = lines[i].strip()
+                            if nline.startswith("Q:") or nline.startswith("**Q:") or not nline:
+                                break
+                            answer_lines.append(nline)
+                            i += 1
+                        break
+                    i += 1
+                answer = " ".join(answer_lines).strip()
+                if question and answer:
+                    pairs.append({"question": question, "answer": answer})
+            else:
+                i += 1
+
+        return pairs
 
     def _store_artifacts(
         self,

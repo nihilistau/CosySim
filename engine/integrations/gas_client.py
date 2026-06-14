@@ -1435,7 +1435,7 @@ class GASClient:
         return deployment
 
     def create_cosysim_bridge(
-        self, cosysim_url: str = "http://localhost:8700"
+        self, cosysim_url: str = ""
     ) -> Optional[GASDeployment]:
         """Deploy a GAS script that bridges HTTP events to CosySim.
 
@@ -1448,6 +1448,9 @@ class GASClient:
         Returns:
             GASDeployment with the public web app URL, or None on failure.
         """
+        if not cosysim_url:
+            from engine.port_registry import get_service_url
+            cosysim_url = get_service_url("nexus")
         bridge_code = (
             "function doPost(e) {\n"
             "  var payload = JSON.parse(e.postData.contents);\n"

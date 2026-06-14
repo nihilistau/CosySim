@@ -1,7 +1,10 @@
 # THE GRID
 
+> CosySim Documentation — v1.52.0 [2026-03-26]
+>
+> THE GRID is Neon City's central hub — a four-zone underground marketplace for commerce,
+> travel, faction politics, and intelligence gathering.
 > Scene: `content/scenes/grid/` · Port **5569** · Accent `#00ff88`
-> CosySim v0.75 "NEON CITY" — added as scene #15.
 
 ---
 
@@ -14,13 +17,13 @@ and the `world` skill pack.
 
 ```
 THE GRID
-├── MARKET    — buy / sell items from three vendors
-├── STATION   — SVG city map, fast-travel to 15 nodes
-├── DEN       — faction HQ, pledge allegiance, accept quests
-└── BROKER    — intel feed, ghost terminal
++-- MARKET    -- buy / sell items from three vendors
++-- STATION   -- SVG city map, fast-travel to 15 nodes
++-- DEN       -- faction HQ, pledge allegiance, accept quests
++-- BROKER    -- intel feed, ghost terminal
 ```
 
-**Key stats:** 7 GridSkills · 4 zones · 3 vendors · 15 travel nodes · 6 factions
+**Key stats:** 7 GridSkills / 4 zones / 3 vendors / 15 travel nodes / 6 factions
 
 ---
 
@@ -36,20 +39,20 @@ shift faction standings or heat depending on item category.
 
 | Vendor | Specialty | Price range | Faction alignment |
 |--------|-----------|-------------|------------------|
-| **Mira** | Street tech, stims, data chips | ₵50–₵800 | `blackmarket` |
-| **Viktor** | Military surplus, weapons mods | ₵200–₵2,000 | `synthsec` |
-| **Frankie** | Rare intel, forged IDs, ghosts | ₵100–₵3,000 | `ghost_net` |
+| **Mira** | Street tech, stims, data chips | C50–C800 | `blackmarket` |
+| **Viktor** | Military surplus, weapons mods | C200–C2,000 | `synthsec` |
+| **Frankie** | Rare intel, forged IDs, ghosts | C100–C3,000 | `ghost_net` |
 
 Item categories: `hardware`, `consumable`, `intel`, `weapon_mod`, `identity`.
 
 Price modifier formula:
 
 ```
-final_price = base_price × (1 − faction_discount)
+final_price = base_price x (1 - faction_discount)
 faction_discount = clamp(faction_standing / 200, 0, 0.25)
 ```
 
-Selling returns 40–60 % of base price depending on item condition.
+Selling returns 40–60% of base price depending on item condition.
 
 ---
 
@@ -79,8 +82,8 @@ districts. Clicking a node calls `grid_get_travel_map` and then initiates fast-t
 | 14 | SynthSec Grid Point | Shadow | `synthsec` |
 | 15 | THE COLOSSEUM | Arena | neutral |
 
-Fast-travel to faction-controlled nodes requires a standing of ≥ −30 for that faction; nodes
-in `deepstate` territory additionally require heat ≤ 40.
+Fast-travel to faction-controlled nodes requires a standing of >= -30 for that faction; nodes
+in `deepstate` territory additionally require heat <= 40.
 
 ---
 
@@ -89,7 +92,7 @@ in `deepstate` territory additionally require heat ≤ 40.
 The DEN is the faction political centre. Six faction banners line the walls. The player can:
 
 1. **View standings** — live faction_standings from `PlayerState`.
-2. **Pledge allegiance** — requires standing ≥ 50 with target faction; sets that faction as
+2. **Pledge allegiance** — requires standing >= 50 with target faction; sets that faction as
    `active_faction` and grants a bonus quest slot.
 3. **Accept quests** — each faction offers one active quest at a time drawn from
    `FACTION_EVENTS_RICH` templates in `neon_city_events.py`.
@@ -101,12 +104,12 @@ triggers a standing penalty across rival factions.
 
 | Faction | Credits | Rep | Standing delta |
 |---------|---------|-----|---------------|
-| OmniCorp | ₵800 | +5 | `omnicorp` +20 |
-| NeoTech | ₵600 | +8 | `neotech` +20 |
-| BlackMarket | ₵1,200 | +3 | `blackmarket` +20, heat +10 |
-| Ghost\_Net | ₵400 | +12 | `ghost_net` +20 |
-| SynthSec | ₵700 | +6 | `synthsec` +20, heat −5 |
-| DeepState | ₵1,500 | −2 | `deepstate` +20, heat +5 |
+| OmniCorp | C800 | +5 | `omnicorp` +20 |
+| NeoTech | C600 | +8 | `neotech` +20 |
+| BlackMarket | C1,200 | +3 | `blackmarket` +20, heat +10 |
+| Ghost\_Net | C400 | +12 | `ghost_net` +20 |
+| SynthSec | C700 | +6 | `synthsec` +20, heat -5 |
+| DeepState | C1,500 | -2 | `deepstate` +20, heat +5 |
 
 ---
 
@@ -117,7 +120,7 @@ The BROKER zone is an intel clearinghouse. Two panels:
 **Intel Feed** — a live scrolling ticker drawing from `FACTION_EVENTS_RICH` and
 `WORLD_EVENTS_RICH`. Updates every 30 seconds via Socket.IO `world_event` broadcast.
 
-**Ghost Terminal** — a locked terminal that opens when `ghost_net` standing ≥ 20 or when
+**Ghost Terminal** — a locked terminal that opens when `ghost_net` standing >= 20 or when
 the 0xGH0ST mystery arc is active (Phone scene). The terminal accepts freeform input and
 routes through `ghost_net` NPC dialogue with elevated mystery context. Outputs are logged
 to the Nexus `ghost_terminal` namespace.
@@ -126,14 +129,14 @@ to the Nexus `ghost_terminal` namespace.
 
 ## Skills Reference
 
-Pack: `"grid"` · File: `content/scenes/grid/grid_skills.py`
+Pack: `"grid"` / File: `content/scenes/grid/grid_skills.py`
 
 | Skill | Description | Key params |
 |-------|-------------|-----------|
 | `grid_buy_item` | Purchase an item from a vendor. Deducts credits, adjusts faction standing. | `vendor: str`, `item_id: str` |
 | `grid_sell_item` | Sell an item for credits. | `item_id: str`, `condition: str` |
 | `grid_get_market_prices` | Return current catalogue for all three vendors. | — |
-| `grid_faction_pledge` | Pledge allegiance to a faction (requires standing ≥ 50). | `faction: str` |
+| `grid_faction_pledge` | Pledge allegiance to a faction (requires standing >= 50). | `faction: str` |
 | `grid_accept_quest` | Accept the current quest for a faction. | `faction: str` |
 | `grid_get_travel_map` | Return the 15-node SVG map and current node standings. | — |
 | `grid_broker_intel` | Fetch latest intel feed entries. | `count: int = 5` |
@@ -179,15 +182,15 @@ All routes are registered on the `GridScene` Flask app.
 | Method | Route | Description |
 |--------|-------|-------------|
 | `GET` | `/api/grid/market` | Full vendor catalogue |
-| `POST` | `/api/grid/buy` | `{vendor, item_id}` → buy result |
-| `POST` | `/api/grid/sell` | `{item_id, condition}` → sell result |
+| `POST` | `/api/grid/buy` | `{vendor, item_id}` -> buy result |
+| `POST` | `/api/grid/sell` | `{item_id, condition}` -> sell result |
 | `GET` | `/api/grid/factions` | Current faction standings + active quests |
-| `POST` | `/api/grid/faction/pledge` | `{faction}` → pledge result |
-| `POST` | `/api/grid/faction/quest/accept` | `{faction}` → quest details |
+| `POST` | `/api/grid/faction/pledge` | `{faction}` -> pledge result |
+| `POST` | `/api/grid/faction/quest/accept` | `{faction}` -> quest details |
 | `GET` | `/api/grid/map` | SVG map + 15 travel nodes |
-| `POST` | `/api/grid/travel` | `{node_id}` → fast-travel result, updates `active_location` |
+| `POST` | `/api/grid/travel` | `{node_id}` -> fast-travel result, updates `active_location` |
 | `GET` | `/api/grid/broker/intel` | Latest intel feed entries |
-| `POST` | `/api/grid/broker/ghost` | `{message}` → ghost terminal response |
+| `POST` | `/api/grid/broker/ghost` | `{message}` -> ghost terminal response |
 | `GET` | `/api/hud/state` | Universal HUD state (inherited from BaseScene) |
 | `GET` | `/api/world/status` | WorldSim status + active events |
 
@@ -197,11 +200,11 @@ All routes are registered on the `GridScene` Flask app.
 
 | Event | Direction | Payload |
 |-------|-----------|---------|
-| `hud_update` | server → client | Full `PlayerState.to_dict()` |
-| `world_event` | server → client | `{type, description, faction, intensity}` |
-| `market_update` | server → client | Updated catalogue after buy/sell |
-| `quest_complete` | server → client | `{faction, reward, standing_delta}` |
-| `ghost_message` | server → client | `{message, intensity, heat_impact}` from `GHOST_MESSAGES_RICH` |
+| `hud_update` | server -> client | Full `PlayerState.to_dict()` |
+| `world_event` | server -> client | `{type, description, faction, intensity}` |
+| `market_update` | server -> client | Updated catalogue after buy/sell |
+| `quest_complete` | server -> client | `{faction, reward, standing_delta}` |
+| `ghost_message` | server -> client | `{message, intensity, heat_impact}` from `GHOST_MESSAGES_RICH` |
 
 ---
 
@@ -224,8 +227,20 @@ __all__ = ["GridScene"]
 
 ---
 
-## See Also
+## Cross-References
 
-- [NEON\_HUD.md](./NEON_HUD.md) — PlayerState API, HUD strip, faction standings
-- [GAME\_SYSTEMS.md](./GAME_SYSTEMS.md) — WorldSim, economy, factions, NPCs, events
-- [SKILLS.md](./SKILLS.md) — `world` pack (10 shared world skills)
+- [Scenes](SCENES.md) — Full scene listing and port assignments
+- [Economy Guide](ECONOMY_GUIDE.md) — EconomyManager, market system, territory bonuses
+- [Game Systems](GAME_SYSTEMS.md) — WorldSim, economy, factions, NPCs, events
+- [Neon HUD](NEON_HUD.md) — PlayerState API, HUD strip, faction standings
+- [Skills](SKILLS.md) — `world` pack (10 shared world skills)
+
+---
+
+## Change Log
+
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Updated header to v1.50, fixed cross-references |
+| v1.04 | 2026-03-15 | Added Ghost Terminal 0xGH0ST integration |
+| v0.75 | 2026-03-10 | Initial THE GRID documentation — 4 zones, 7 skills, 15 travel nodes |

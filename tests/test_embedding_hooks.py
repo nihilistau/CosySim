@@ -320,13 +320,15 @@ class TestBatchEmbedQA:
 class TestSchedulerCallback:
     """Tests for the auto-embedding scheduler callback."""
 
+    @patch("engine.nexus.embedding_hooks.process_retry_queue")
     @patch("engine.nexus.embedding_hooks.batch_embed_qa_entries")
     @patch("engine.nexus.embedding_hooks.batch_embed_nexus_entries")
-    def test_auto_embedding_callback(self, mock_batch_entries, mock_batch_qa):
+    def test_auto_embedding_callback(self, mock_batch_entries, mock_batch_qa, mock_retry):
         from engine.nexus.scheduler_daemon import _auto_embedding_callback
 
         mock_batch_entries.return_value = {"embedded": 10, "skipped": 5}
         mock_batch_qa.return_value = {"embedded": 3, "skipped": 2}
+        mock_retry.return_value = {"succeeded": 2, "failed": 1}
 
         result = _auto_embedding_callback()
 
@@ -334,6 +336,8 @@ class TestSchedulerCallback:
         assert result["entries_skipped"] == 5
         assert result["qa_embedded"] == 3
         assert result["qa_skipped"] == 2
+        assert result["retry_succeeded"] == 2
+        assert result["retry_failed"] == 1
 
     def test_scheduler_task_registered(self):
         from engine.nexus.scheduler_daemon import get_scheduler_daemon

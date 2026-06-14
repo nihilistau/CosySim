@@ -1,7 +1,29 @@
-"""GitHub account cookie importer.
+"""
+GitHub Account Cookie Importer
+===============================
 
 Utilities for importing GitHub browser cookies into the GoogleAccountPool so
 they can be used by GithubCopilotClient.
+
+Version: v1.57.2 [2026-03-27]
+Author:  CosySim Team
+
+Change Log:
+    v1.57.2 [2026-03-27] — Added CLI with auto-detect account name, --analyze, --name
+    v1.57.1 [2026-03-26] — Initial implementation
+
+Usage:
+    # Import cookies from HAR (auto-detects GitHub username)
+    python -m engine.integrations.github_account_importer path/to/github.har
+
+    # Import with explicit account name
+    python -m engine.integrations.github_account_importer path/to/github.har --name nihilistau
+
+    # Analyze HAR without importing (dry-run)
+    python -m engine.integrations.github_account_importer path/to/github.har --analyze
+
+    # Import from JSON cookies file
+    python -m engine.integrations.github_account_importer cookies.json --json --name nihilistau
 """
 from __future__ import annotations
 
@@ -160,3 +182,197 @@ def _register_account(account_name: str, cookies: Dict[str, str]) -> Dict[str, A
         "services": pool.get_by_name(account_name).services,  # type: ignore[union-attr]
         "cookies": {k: v[:8] + "..." for k, v in list(cookies.items())[:5]},
     }
+
+
+# ──── Auto-detect helpers ────────────────────────────────────────────────────
+
+
+def _detect_github_username(har_path: str) -> Optional[str]:
+    """Try to detect the GitHub username from HAR cookies or URLs.
+
+    Looks for the ``dotcom_user`` cookie first, then falls back to
+    matching authenticated GitHub profile URLs.
+
+    Args:
+        har_path: Path to the HAR file.
+
+    Returns:
+        Detected username or None.
+    """
+    with open(har_path, "r", encoding="utf-8") as fh:
+        har = json.load(fh)
+
+    entries = har.get("log", {}).get("entries", [])
+    for entry in entries:
+        req = entry.get("request", {})
+        url = req.get("url", "")
+        if "github.com" not in url:
+            continue
+
+        # Check cookies array for dotcom_user
+        for cookie in req.get("cookies", []):
+            if cookie.get("name") == "dotcom_user":
+                return cookie.get("value", "")
+
+        # Check Cookie header for dotcom_user
+        for header in req.get("headers", []):
+            if header.get("name", "").lower() == "cookie":
+                for part in header.get("value", "").split(";"):
+                    part = part.strip()
+                    if part.startswith("dotcom_user="):
+                        return part.split("=", 1)[1].strip()
+
+    return None
+
+
+def _analyze_har(har_path: str) -> Dict[str, Any]:
+    """Quick analysis of GitHub content in a HAR file (dry-run).
+
+    Args:
+        har_path: Path to the HAR file.
+
+    Returns:
+        Summary dict with entry counts, detected username, cookie names.
+    """
+    with open(har_path, "r", encoding="utf-8") as fh:
+        har = json.load(fh)
+
+    entries = har.get("log", {}).get("entries", [])
+    github_entries = [
+        e for e in entries
+        if "github.com" in e.get("request", {}).get("url", "")
+    ]
+
+    # Collect all cookie names from github entries
+    cookie_names: set = set()
+    for entry in github_entries:
+        for cookie in entry.get("request", {}).get("cookies", []):
+            name = cookie.get("name", "")
+            if name:
+                cookie_names.add(name)
+        for header in entry.get("request", {}).get("headers", []):
+            if header.get("name", "").lower() == "cookie":
+                for part in header.get("value", "").split(";"):
+                    part = part.strip()
+                    if "=" in part:
+                        cookie_names.add(part.split("=", 1)[0].strip())
+
+    username = _detect_github_username(har_path)
+
+    # Unique github domains
+    domains: set = set()
+    for e in github_entries:
+        url = e.get("request", {}).get("url", "")
+        if "://" in url:
+            domains.add(url.split("://")[1].split("/")[0])
+
+    return {
+        "total_entries": len(entries),
+        "github_entries": len(github_entries),
+        "detected_username": username,
+        "cookie_names": sorted(cookie_names),
+        "cookie_count": len(cookie_names),
+        "github_domains": sorted(domains),
+        "has_session": "user_session" in cookie_names,
+        "has_logged_in": "logged_in" in cookie_names,
+    }
+
+
+# ──── CLI ─────────────────────────────────────────────────────────────────────
+# v1.57.2 [2026-03-27] — CLI with auto-detect, --analyze, --name, --json
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+    from pathlib import Path
+
+    # Ensure project root is on sys.path so engine imports work
+    _ROOT = Path(__file__).resolve().parent.parent.parent
+    if str(_ROOT) not in sys.path:
+        sys.path.insert(0, str(_ROOT))
+    # Also ensure CWD is project root for relative pool.json paths
+    os.chdir(_ROOT)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(message)s",
+    )
+
+    parser = argparse.ArgumentParser(
+        description="Import GitHub cookies from HAR/JSON into the account pool.",
+        epilog="Examples:\n"
+               "  python -m engine.integrations.github_account_importer github.har\n"
+               "  python -m engine.integrations.github_account_importer github.har --name nihilistau\n"
+               "  python -m engine.integrations.github_account_importer github.har --analyze\n"
+               "  python -m engine.integrations.github_account_importer cookies.json --json --name myaccount\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("file", help="Path to .har or .json file")
+    parser.add_argument("--name", "-n", help="Account name (auto-detected from HAR if omitted)")
+    parser.add_argument("--json", "-j", action="store_true", help="Import from JSON cookies file instead of HAR")
+    parser.add_argument("--analyze", "-a", action="store_true", help="Analyze HAR without importing (dry-run)")
+
+    args = parser.parse_args()
+    filepath = args.file
+
+    # Resolve relative paths
+    if not os.path.isabs(filepath):
+        filepath = str(_ROOT / filepath)
+
+    if not os.path.exists(filepath):
+        print(f"ERROR: File not found: {filepath}")
+        sys.exit(1)
+
+    # ── Analyze mode (dry-run) ──
+    if args.analyze:
+        info = _analyze_har(filepath)
+        print(f"\n  GitHub HAR Analysis: {os.path.basename(filepath)}")
+        print(f"  {'-' * 50}")
+        print(f"  Total entries:      {info['total_entries']}")
+        print(f"  GitHub entries:     {info['github_entries']}")
+        print(f"  Detected username:  {info['detected_username'] or '(none)'}")
+        print(f"  Cookies found:      {info['cookie_count']}")
+        print(f"  Has user_session:   {'yes' if info['has_session'] else 'no'}")
+        print(f"  Has logged_in:      {'yes' if info['has_logged_in'] else 'no'}")
+        print(f"  GitHub domains:     {', '.join(info['github_domains'])}")
+        print(f"\n  Cookies: {', '.join(info['cookie_names'])}")
+        print()
+        sys.exit(0)
+
+    # ── Determine account name ──
+    account_name = args.name
+    if not account_name and not args.json:
+        account_name = _detect_github_username(filepath)
+        if account_name:
+            print(f"  Auto-detected GitHub username: {account_name}")
+        else:
+            print("ERROR: Could not detect GitHub username from HAR. Use --name <account>")
+            sys.exit(1)
+    elif not account_name:
+        print("ERROR: --name is required for JSON imports")
+        sys.exit(1)
+
+    # ── Import ──
+    try:
+        if args.json:
+            result = import_github_cookies_json(filepath, account_name)
+        else:
+            result = import_github_har(filepath, account_name)
+
+        print(f"\n  GitHub Cookie Import: SUCCESS")
+        print(f"  {'-' * 50}")
+        print(f"  Account:    {result['name']}")
+        print(f"  Cookies:    {result['cookie_count']}")
+        print(f"  Services:   {', '.join(result['services'])}")
+        print(f"  Preview:    {json.dumps(result['cookies'], indent=2)}")
+        print()
+
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+    except Exception as exc:
+        print(f"ERROR: {exc}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

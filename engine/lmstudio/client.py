@@ -102,15 +102,10 @@ class LMStudioManager:
         except (LMStudioCLIError, json.JSONDecodeError):
             logger.debug("Suppressed exception", exc_info=True)
 
-        # Fallback: direct HTTP probe
+        # v1.44.0 [2026-03-21] — Fallback via LMSClient singleton
         try:
-            import urllib.request
-            from engine.utils import get_lmstudio_headers  # noqa: PLC0415
-            req = urllib.request.Request(f"{self._base_url}/models")
-            for k, v in get_lmstudio_headers().items():
-                req.add_header(k, v)
-            urllib.request.urlopen(req, timeout=3)
-            return True
+            from engine.lmstudio.lms_client import get_lms_client
+            return get_lms_client().is_available()
         except Exception:
             return False
 

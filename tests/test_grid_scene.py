@@ -86,13 +86,16 @@ def test_grid_scene_metadata():
 
 
 def test_grid_get_plugin_info():
+    """get_plugin_info() comes from FlaskScene and uses SCENE_METADATA."""
     from content.scenes.grid.grid_scene import GridScene
+    # v1.51.0 — FlaskScene.get_plugin_info() needs self.port and self.scene_name
     scene = object.__new__(GridScene)
     scene.scene_name = "grid"
+    scene.port = 5569
     scene.SCENE_METADATA = GridScene.SCENE_METADATA
     info = scene.get_plugin_info()
     assert info["port"] == 5569
-    assert info["scene_key"] == "grid"
+    assert info["name"] == "THE GRID"
     assert info["accent_color"] == "#00ff88"
 
 
@@ -195,8 +198,12 @@ def test_accept_quest_success(grid_state):
     assert result["quest"]["faction"] == "OmniCorp"
 
 
+# v1.49.5 [2026-03-22] — Updated for tiered quest chain system (quest IDs, not faction IDs)
 def test_accept_quest_already_complete(grid_state):
-    grid_state._quest_complete["OmniCorp"] = True
+    # Mark all OmniCorp quests as complete (quest IDs: omni_t1, omni_t2, omni_t3)
+    grid_state._quest_complete["omni_t1"] = True
+    grid_state._quest_complete["omni_t2"] = True
+    grid_state._quest_complete["omni_t3"] = True
     result = grid_state.accept_quest("OmniCorp")
     assert result["success"] is False
 
@@ -208,7 +215,8 @@ def test_complete_quest_success(grid_state):
         result = grid_state.complete_quest("OmniCorp")
     assert result["success"] is True
     assert result["rewards_applied"] is True
-    assert grid_state._quest_complete.get("OmniCorp") is True
+    # Quest completion now stored by quest ID (omni_t1), not faction ID
+    assert grid_state._quest_complete.get("omni_t1") is True
 
 
 def test_complete_quest_wrong_faction(grid_state):

@@ -1,0 +1,68 @@
+{
+  "id": "template_game_board",
+  "name": "Game Board Template",
+  "scene_key": "game_board",
+  "accent_color": "#ffd54f",
+  "description": "Interactive game board with scoreboard, dice roller, action menu, and chat.",
+  "components": [
+    {
+      "id": "header_1",
+      "type": "scene_header",
+      "props": {
+        "title": "GAME BOARD",
+        "subtitle": "Roll the dice",
+        "show_clock": false,
+        "show_credits": true
+      },
+      "children": {}
+    },
+    {
+      "id": "main_layout",
+      "type": "column_layout",
+      "props": { "columns": 2, "ratio": "2:1" },
+      "children": {
+        "left": [
+          {
+            "id": "board_area",
+            "type": "glass_panel",
+            "props": { "title": "Game Area", "variant": "default" },
+            "children": {}
+          },
+          {
+            "id": "action_bar",
+            "type": "button_group",
+            "props": {
+              "buttons": [
+                { "label": "Roll Dice", "action": "roll" },
+                { "label": "Draw Card", "action": "draw" },
+                { "label": "End Turn", "action": "end_turn" }
+              ]
+            },
+            "children": {}
+          }
+        ],
+        "right": [
+          {
+            "id": "scoreboard",
+            "type": "leaderboard",
+            "props": { "title": "Scores", "max_entries": 8 },
+            "children": {}
+          },
+          {
+            "id": "dice",
+            "type": "dice_roller",
+            "props": { "sides": 6, "count": 2 },
+            "children": {}
+          },
+          {
+            "id": "chat",
+            "type": "glass_panel",
+            "props": { "title": "Game Chat", "variant": "default", "scrollable": true },
+            "children": {}
+          }
+        ]
+      }
+    }
+  ],
+  "updated_at": "2026-03-22T00:00:00Z"
+}

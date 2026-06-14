@@ -1,16 +1,17 @@
 {% extends 'neon_base.html' %}
 {% set scene_key = 'penthouse' %}
 {% set scene_display_name = 'THE PENTHOUSE' %}
-{% set scene_accent = '#f43f5e' %}
-{% set scene_accent_rgb = '244 63 94' %}
+{% set scene_accent = '#fb7185' %}
+{% set scene_accent_rgb = '251 113 133' %}
 
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='penthouse.css') }}">
 {% endblock %}
 
 {% block head_scripts %}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  {# v1.58.0 [2026-06-11] — three.js r128 CDN globals → vendored r184 ES
+     modules. Import map must precede any module script. #}
+  {% include 'partials/three_importmap.html' %}
 {% endblock %}
 
 {% block scene_background %}
@@ -685,18 +686,25 @@
 
 {% block body_scripts %}
   <script src="/shared/js/cosysim-particles3d.js"></script>
-  <script src="/shared/js/cosysim-bench.js"></script>
+  <!-- v1.53.0 [2026-03-26] — BenchHUD removed; replaced by cs-footer in neon_base -->
   <script src="/shared/js/cosysim-voice.js"></script>
 
-  <script src="{{ url_for('static', filename='penthouse_3d.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/character_models.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/penthouse_anim.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/character_bridge.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/penthouse_config.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/penthouse_customizer.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/penthouse_model_import.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/penthouse_anim_studio.js') }}"></script>
-  <script src="{{ url_for('static', filename='penthouse.js') }}"></script>
+  <!-- v1.58.0 [2026-06-11] — 3D stack loads through the three_boot module:
+       window.THREE (r184 + addons) is set first, then these run in order. -->
+  <script>
+    window.__THREE_LEGACY_SCRIPTS__ = [
+      "{{ url_for('static', filename='penthouse_3d.js') }}",
+      "{{ url_for('static', filename='js/character_models.js') }}",
+      "{{ url_for('static', filename='js/penthouse_anim.js') }}",
+      "{{ url_for('static', filename='js/character_bridge.js') }}",
+      "{{ url_for('static', filename='js/penthouse_config.js') }}",
+      "{{ url_for('static', filename='js/penthouse_customizer.js') }}",
+      "{{ url_for('static', filename='js/penthouse_model_import.js') }}",
+      "{{ url_for('static', filename='js/penthouse_anim_studio.js') }}",
+      "{{ url_for('static', filename='penthouse.js') }}",
+    ];
+  </script>
+  <script type="module" src="/shared/js/three_boot.js"></script>
   <script>window.SCENE_PARTICLE_CONFIG = { scene: 'penthouse' };</script>
 
   <!-- Overlay panel wiring -->

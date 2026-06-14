@@ -75,7 +75,8 @@ class DialogueGateInterceptor(InterceptorBase):
         try:
             fw = get_framework()
             return int(fw.get(f"characters.{char_id}.reputation.{player_id}", 0))
-        except Exception:
+        except Exception as e:
+            logger.debug("[DialogueGate] Failed to get reputation (operation=get_reputation): %s", e)
             return 0
 
     def _get_tone(self, reputation: int) -> Optional[str]:

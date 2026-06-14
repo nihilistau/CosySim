@@ -1,5 +1,12 @@
 """ChromaDB-backed vector store for Nexus semantic search.
 
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Native ChromaDB Gemini EF (GoogleGenerativeAiEmbeddingFunction)
+                            with automatic fallback to _ServiceEmbeddingFunction bridge
+    v1.50.2 [2026-03-24] — Add health() method, is_vector_store_enabled() feature flag guard
+
 Provides persistent vector storage and similarity search for all Nexus content
 using the unified EmbeddingService (Gemini Embedding 2 or local fallback).
 
@@ -46,7 +53,52 @@ COLLECTION_MAP: Dict[str, str] = {
 DEFAULT_PERSIST_DIR = "data/nexus_vectors"
 
 
-# ──── Custom ChromaDB embedding function ─────────────────────────────────────
+# ──── Native ChromaDB Gemini embedding function ──────────────────────────────
+
+# v1.57.0 [2026-03-26] — Native ChromaDB Gemini embedding function
+# CONNECTS: ChromaDB GoogleGenerativeAiEmbeddingFunction, AI Studio API keys
+# CALLED BY: NexusVectorStore._get_collection() (preferred over _ServiceEmbeddingFunction)
+def _create_gemini_native_ef(
+    api_key: str,
+    model: str = "models/gemini-embedding-2-preview",
+) -> Any:
+    """Create ChromaDB's native Gemini embedding function.
+
+    Uses ChromaDB's built-in GoogleGenerativeAiEmbeddingFunction for direct
+    Gemini API integration, bypassing our EmbeddingService bridge. This is
+    faster and avoids double-normalization since ChromaDB handles the vectors
+    directly.
+
+    Args:
+        api_key: Google AI Studio API key.
+        model: Gemini embedding model name (must include 'models/' prefix).
+
+    Returns:
+        GoogleGenerativeAiEmbeddingFunction instance, or None on failure.
+    """
+    try:
+        from chromadb.utils.embedding_functions import GoogleGenerativeAiEmbeddingFunction
+        ef = GoogleGenerativeAiEmbeddingFunction(
+            api_key=api_key,
+            model_name=model,
+            task_type="RETRIEVAL_DOCUMENT",
+        )
+        logger.info(
+            "[VectorStore] Native Gemini EF created (operation=init_ef, model=%s)",
+            model,
+        )
+        return ef
+    except ImportError:
+        logger.debug("[VectorStore] chromadb GoogleGenerativeAiEmbeddingFunction not available")
+        return None
+    except Exception as exc:
+        logger.warning(
+            "[VectorStore] Native Gemini EF unavailable (operation=init_ef): %s", exc
+        )
+        return None
+
+
+# ──── Custom ChromaDB embedding function (fallback bridge) ────────────────────
 
 class _ServiceEmbeddingFunction:
     """ChromaDB-compatible embedding function backed by EmbeddingService.
@@ -117,6 +169,19 @@ class NexusVectorStore:
         self._collections: Dict[str, Any] = {}
         self._lock = threading.Lock()
 
+        # v1.57.0 [2026-03-26] — Try native Gemini EF first, fall back to service bridge
+        # The native EF is faster (no double-normalization) and uses ChromaDB's
+        # built-in Google integration directly.
+        self._embedding_fn: Any = None
+        try:
+            from engine.integrations.aistudio_client import API_KEYS
+            self._embedding_fn = _create_gemini_native_ef(API_KEYS[0])
+        except Exception as exc:
+            logger.debug("[VectorStore] Could not load API_KEYS for native EF: %s", exc)
+        if self._embedding_fn is None:
+            self._embedding_fn = _ServiceEmbeddingFunction()
+            logger.info("[VectorStore] Using _ServiceEmbeddingFunction bridge (operation=init)")
+
         # Stats
         self._adds = 0
         self._searches = 0
@@ -151,10 +216,13 @@ class NexusVectorStore:
         client = self._get_client()
         collection_name = COLLECTION_MAP.get(collection_key, f"nexus_{collection_key}")
 
-        # Create embedding function that routes through our EmbeddingService
-        # The purpose determines the task type (RETRIEVAL_DOCUMENT vs RETRIEVAL_QUERY)
-        purpose = "knowledge" if collection_key != "qa" else "qa_answer"
-        embed_fn = _ServiceEmbeddingFunction(purpose=purpose)
+        # v1.57.0 [2026-03-26] — Use native Gemini EF if available, otherwise
+        # fall back to _ServiceEmbeddingFunction bridge with purpose-specific
+        # task type (RETRIEVAL_DOCUMENT vs RETRIEVAL_QUERY)
+        embed_fn = self._embedding_fn
+        if embed_fn is None or isinstance(embed_fn, _ServiceEmbeddingFunction):
+            purpose = "knowledge" if collection_key != "qa" else "qa_answer"
+            embed_fn = _ServiceEmbeddingFunction(purpose=purpose)
 
         try:
             collection = client.get_or_create_collection(
@@ -168,7 +236,8 @@ class NexusVectorStore:
             self._collections[collection_key] = collection
             return collection
         except Exception as exc:
-            logger.error("Failed to get/create collection %s: %s", collection_name, exc)
+            # v1.49.3 [2026-03-22] — Structured logging context
+            logger.error("[VectorStore] Failed to get/create collection (operation=get_collection, collection=%s): %s", collection_name, exc)
             raise
 
     # ──── Core operations ─────────────────────────────────────────────────
@@ -200,7 +269,7 @@ class NexusVectorStore:
         embeddings = svc.embed_batch([text], purpose=collection)
         if len(embeddings) != 1:
             logger.warning(
-                "Vector store add skipped for %s: embedding unavailable (got %s)",
+                "[VectorStore] Add skipped — embedding unavailable (operation=add, entry_id=%s, got=%d)",
                 entry_id,
                 len(embeddings),
             )
@@ -216,7 +285,7 @@ class NexusVectorStore:
             self._adds += 1
             logger.debug("Vector store: added %s to %s", entry_id, collection)
         except Exception as exc:
-            logger.warning("Vector store add failed for %s: %s", entry_id, exc)
+            logger.warning("[VectorStore] Add failed (operation=add, entry_id=%s): %s", entry_id, exc)
             raise
 
     def add_batch(
@@ -267,7 +336,7 @@ class NexusVectorStore:
             embeddings = svc.embed_batch(chunk_docs, purpose=collection)
             if len(embeddings) != len(chunk_ids):
                 logger.warning(
-                    "Batch add skipped for chunk %d-%d: embedding len %d != ids %d",
+                    "[VectorStore] Batch add skipped — embedding mismatch (operation=add_batch, chunk=%d-%d, embed_len=%d, ids_len=%d)",
                     i,
                     i + len(chunk_ids),
                     len(embeddings),
@@ -284,12 +353,12 @@ class NexusVectorStore:
                 added += len(chunk_ids)
             except Exception as exc:
                 logger.warning(
-                    "Batch add failed for chunk %d-%d: %s",
+                    "[VectorStore] Batch add failed (operation=add_batch, chunk=%d-%d): %s",
                     i, i + len(chunk_ids), exc,
                 )
 
         self._adds += added
-        logger.info("Vector store: batch added %d/%d to %s", added, len(entries), collection)
+        logger.info("[VectorStore] Batch added (operation=add_batch, added=%d, total=%d, collection=%s)", added, len(entries), collection)
         return added
 
     def search(
@@ -362,7 +431,7 @@ class NexusVectorStore:
             return search_results
 
         except Exception as exc:
-            logger.warning("Vector search failed in %s: %s", collection, exc)
+            logger.warning("[VectorStore] Search failed (operation=search, collection=%s): %s", collection, exc)
             return []
 
     def search_multi(
@@ -453,6 +522,33 @@ class NexusVectorStore:
             "total_vectors": sum(collection_stats.values()),
         }
 
+    # v1.50.2 [2026-03-24] — Health check for Oracle observability
+    def health(self) -> Dict[str, Any]:
+        """Return vector store health status for Oracle monitoring.
+
+        Returns:
+            Dict with status, collection count, persist_dir, and stats.
+        """
+        try:
+            client = self._get_client()
+            collections = client.list_collections()
+            st = self.stats()
+            return {
+                "status": "healthy",
+                "chromadb_collections": len(collections),
+                "persist_dir": str(self._persist_dir),
+                "total_vectors": st.get("total_vectors", 0),
+                "total_adds": st.get("total_adds", 0),
+                "total_searches": st.get("total_searches", 0),
+                "collections": st.get("collections", {}),
+            }
+        except Exception as exc:
+            return {
+                "status": "unhealthy",
+                "error": str(exc),
+                "persist_dir": str(self._persist_dir),
+            }
+
     def list_collections(self) -> List[str]:
         """List available collection keys."""
         return list(COLLECTION_MAP.keys())
@@ -465,9 +561,9 @@ class NexusVectorStore:
             client.delete_collection(name=collection_name)
             if collection in self._collections:
                 del self._collections[collection]
-            logger.info("Reset collection: %s", collection_name)
+            logger.info("[VectorStore] Reset collection (operation=reset, collection=%s)", collection_name)
         except Exception as exc:
-            logger.warning("Reset collection %s failed: %s", collection_name, exc)
+            logger.warning("[VectorStore] Reset collection failed (operation=reset, collection=%s): %s", collection_name, exc)
 
 
 # ──── Helpers ────────────────────────────────────────────────────────────────
@@ -491,8 +587,26 @@ _store_instance: Optional[NexusVectorStore] = None
 _store_lock = threading.Lock()
 
 
+# v1.50.2 [2026-03-24] — Feature flag guard: respect nexus.vector_store.enabled config
+def is_vector_store_enabled() -> bool:
+    """Check if the vector store is enabled in config."""
+    try:
+        return bool(get_config().get("nexus.vector_store.enabled", True))
+    except Exception:
+        return True
+
+
 def get_vector_store(**kwargs: Any) -> NexusVectorStore:
-    """Get or create the singleton NexusVectorStore."""
+    """Get or create the singleton NexusVectorStore.
+
+    Raises:
+        RuntimeError: If vector store is disabled via config.
+    """
+    if not is_vector_store_enabled():
+        raise RuntimeError(
+            "Vector store is disabled (nexus.vector_store.enabled=false). "
+            "Enable it in config/default.yaml to use semantic search."
+        )
     global _store_instance
     if _store_instance is None:
         with _store_lock:

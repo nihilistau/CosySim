@@ -98,12 +98,13 @@ def _check_http(
         return {"ok": False, "latency_ms": -1, "error": str(exc)}
 
 
+# v1.43.1 [2026-03-21] — Get auth from unified client
 def _get_lmstudio_headers() -> Dict[str, str]:
-    """Build LMStudio request headers with Bearer auth from config."""
+    """Build LMStudio request headers with Bearer auth from LMSClient."""
     headers: Dict[str, str] = {}
     try:
-        from engine.config import get_config
-        token = get_config().get("lmstudio.api_token", "")
+        from engine.lmstudio.lms_client import get_lms_client
+        token = get_lms_client()._api_token
         if token:
             headers["Authorization"] = f"Bearer {token}"
     except Exception:
@@ -361,23 +362,22 @@ def _collect_model_metrics() -> Dict[str, Any]:
     Returns:
         Dict with loaded models, avg latency/TPS from pipeline_metrics.
     """
-    # Loaded models from LMStudio API
+    # v1.43.1 [2026-03-21] — Loaded models via unified client
     models: List[Dict[str, Any]] = []
-    lms_headers = _get_lmstudio_headers()
-    probe = _check_http(
-        "http://localhost:1234/api/v1/models",
-        headers=lms_headers,
-    )
-    if probe.get("ok") and probe.get("data"):
-        raw = probe["data"]
-        model_list = raw.get("data", raw) if isinstance(raw, dict) else raw
-        if isinstance(model_list, list):
-            for m in model_list:
+    lms_online = False
+    try:
+        from engine.lmstudio.lms_client import get_lms_client
+        client = get_lms_client()
+        lms_online = client.is_available()
+        if lms_online:
+            for m in client.get_models(loaded_only=True):
                 models.append({
-                    "id": m.get("id", "unknown"),
-                    "type": m.get("type", ""),
-                    "owned_by": m.get("owned_by", ""),
+                    "id": getattr(m, "key", str(m)),
+                    "type": getattr(m, "type", ""),
+                    "owned_by": getattr(m, "publisher", ""),
                 })
+    except Exception:
+        pass
 
     # Pipeline metrics: avg latency and TPS per model (last 100 rows)
     perf_rows = _query_metrics_db(
@@ -396,7 +396,7 @@ def _collect_model_metrics() -> Dict[str, Any]:
         "loaded_models": models,
         "model_count": len(models),
         "performance": perf_rows,
-        "lmstudio_online": probe.get("ok", False),
+        "lmstudio_online": lms_online,
     }
 
 

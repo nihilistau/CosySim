@@ -66,9 +66,12 @@ class TrainingPipeline:
 
     def __init__(
         self,
-        nexus_url: str = "http://127.0.0.1:8700",
+        nexus_url: str = "",
         auto_capture: bool = True,
     ) -> None:
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self._url = nexus_url
         self._auto_capture = auto_capture
         self._buffer: List[Dict[str, Any]] = []

@@ -1,0 +1,232 @@
+/**
+ * signal_v2.css — SIGNAL Encrypted-Messenger Chrome (Dark Renaissance)
+ * =====================================================================
+ * v2 alignment layer for the SIGNAL cyberdeck terminal. Adopts the
+ * ui_kits_v2/signal kit language: emerald terminal accents, 80px drift
+ * grid + radial glow background, panel chrome with "▸" terminal titles,
+ * message list/thread styling and lock/encryption visual cues.
+ *
+ * Loaded AFTER signal.css — overrides only, no contract changes.
+ * All kit hex values rewritten to var(--cs-*) tokens (neon_base injects
+ * --cs-scene-accent / --cs-scene-accent-rgb at :root).
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *     v1.58.0 [2026-06-11] — Initial v2 layer: kit background recipe,
+ *                            Orbitron header, encrypted badges, kit panel
+ *                            chrome, bubble contrast, tokenized accents.
+ *
+ * CONNECTS: signal.html (template), signal.css (base layer), design_tokens_v2.css
+ * CALLED BY: phone scene /signal route (phone_scene_v2.py)
+ */
+
+/* ──── Background — kit 4-layer recipe (glow → drift grid → scanlines) ──── */
+/* v1.58.0 [2026-06-11] — signal kit body::before background, tokenized */
+.signal-scene {
+  position: relative;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.05) 0%, transparent 70%),
+    repeating-linear-gradient(90deg, rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.02) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.02) 0 1px, transparent 1px 80px),
+    var(--sig-bg, #04080e);
+}
+/* CRT scanlines overlay (kit .scanlines) — pure CSS, no extra element */
+.signal-scene::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.3;
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, 0.06) 2px 4px);
+}
+
+/* ──── Header — kit sig-header (Orbitron voice + encrypted status) ──────── */
+/* v1.58.0 [2026-06-11] — display-tier title, terminal-tier meta */
+.sig-header {
+  border-bottom: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.15);
+  padding: 10px 6px;
+}
+.sig-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  color: var(--cs-scene-accent, #10b981);
+  text-shadow: 0 0 14px var(--cs-scene-glow, rgba(16, 185, 129, 0.3));
+}
+.sig-version {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--cs-text-muted, #5a6c7e);
+}
+.sig-header__right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.sig-status {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--cs-scene-accent, #10b981);
+  text-shadow: 0 0 6px var(--cs-scene-glow, rgba(16, 185, 129, 0.3));
+}
+/* Lock / encryption cue — kit "● ENCRYPTED" relay chip */
+/* v1.58.0 [2026-06-11] — new element added alongside contract IDs */
+.sig-enc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  color: var(--cs-text-secondary, #a3b1c1);
+  padding: 3px 10px;
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.30);
+  border-radius: 9999px;
+  background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.06);
+}
+.sig-enc b {
+  color: var(--cs-scene-accent, #10b981);
+  font-weight: 600;
+}
+
+/* ──── Panels — kit .panel chrome (glass + accent hairline) ─────────────── */
+/* v1.58.0 [2026-06-11] — kit panel surface on contacts / thread / info */
+.sig-contacts,
+.sig-thread,
+.sig-panel {
+  background: rgba(8, 14, 22, 0.85);
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.15);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+/* Terminal "▸" prefix on panel titles (kit .panel__title) */
+.sig-panel__title {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--cs-scene-accent, #10b981);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px var(--cs-scene-glow, rgba(16, 185, 129, 0.3));
+}
+.sig-contacts__header {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--cs-scene-accent, #10b981);
+  text-shadow: 0 0 8px var(--cs-scene-glow, rgba(16, 185, 129, 0.3));
+  background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.04);
+}
+.sig-contacts__header > span:first-child::before,
+.sig-panel__title::before {
+  content: '▸ ';
+  opacity: 0.6;
+}
+
+/* ──── Contacts — kit msg-row hover / selected states ───────────────────── */
+/* v1.58.0 [2026-06-11] — kit message-list interaction states */
+.sig-contact {
+  border-bottom: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.10);
+  transition: background 0.12s;
+}
+.sig-contact:hover { background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.06); }
+.sig-contact.active {
+  background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.12);
+  border-left: 2px solid var(--cs-scene-accent, #10b981);
+}
+.sig-contact.active .sig-contact__name { color: var(--cs-scene-accent, #10b981); }
+/* Mood badge → kit unread pill (solid accent, dark text) */
+.sig-contact__badge {
+  background: var(--cs-scene-accent, #10b981);
+  color: #04080e;
+  font-weight: 700;
+  font-size: 8.5px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  letter-spacing: 0.06em;
+}
+
+/* ──── Thread — encrypted channel cues + bubble contrast ────────────────── */
+/* v1.58.0 [2026-06-11] — kit thread header + E2E lock chip */
+.sig-thread__header {
+  background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.04);
+  border-bottom: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.15);
+}
+.sig-thread__lock {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  color: var(--cs-scene-accent, #10b981);
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.30);
+  border-radius: 9999px;
+  padding: 1px 7px;
+  margin-left: 8px;
+  margin-right: auto;  /* keep chip beside thread name in space-between header */
+  background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.08);
+}
+/* Bubble contrast — outbound emerald glass vs inbound neutral glass */
+.sig-msg--user .sig-msg__bubble {
+  background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.14);
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.28);
+  border-radius: 8px 8px 2px 8px;
+  color: var(--cs-text-primary, #e2e8f0);
+}
+.sig-msg--other .sig-msg__bubble {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.45);
+  border-radius: 8px 8px 8px 2px;
+  color: var(--cs-text-body, #d1d5db);
+}
+.sig-msg__meta {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+/* Typing dots — accent glow */
+.sig-typing__dot { box-shadow: 0 0 4px var(--cs-scene-glow, rgba(16, 185, 129, 0.3)); }
+
+/* ──── Input + send — kit focus glow ────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — kit aria-input focus treatment */
+.sig-thread__input input {
+  background: rgba(2, 5, 16, 0.6);
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.14);
+}
+.sig-thread__input input:focus {
+  border-color: var(--cs-scene-accent, #10b981);
+  box-shadow: 0 0 8px rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.20);
+}
+
+/* ──── Info column — map links + empty states ───────────────────────────── */
+/* v1.58.0 [2026-06-11] — kit fs-tree row hover on map links */
+.sig-map-links a {
+  border-bottom: 1px solid rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.10);
+  padding: 4px 6px;
+  border-radius: 3px;
+  transition: background 0.12s, color 0.12s;
+}
+.sig-map-links a:hover {
+  background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.06);
+  color: var(--cs-scene-accent, #10b981);
+}
+.sig-map-links a::before { content: '▸ '; opacity: 0.6; }
+.sig-empty { color: var(--cs-text-muted, #5a6c7e); }
+
+/* ──── Welcome splash ────────────────────────────────────────────────────── */
+.sig-welcome__text {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.12em;
+  color: var(--cs-text-primary, #e2e8f0);
+}
+
+/* ──── Scrollbars — accent thumbs ───────────────────────────────────────── */
+.sig-contacts__list::-webkit-scrollbar-thumb,
+.sig-thread__messages::-webkit-scrollbar-thumb {
+  background: rgb(var(--cs-scene-accent-rgb, 16 185 129) / 0.25);
+}

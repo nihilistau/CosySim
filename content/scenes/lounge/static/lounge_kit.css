@@ -1,0 +1,614 @@
+/* ============================================================
+   THE VELVET PIT — Kit Scene Styles
+   ==================================
+   Generated from lounge_rebuild.json layout.
+   Accent: #f59e0b (amber) — derived from existing lounge.css palette.
+
+   Version: v1.50.0 [2026-03-22]
+   Change Log:
+     v1.50.0 [2026-03-22] — Initial Kit-generated palette + component styles.
+                              Amber-based scene palette, Kit column layout,
+                              glass panels, stat bars, chat, buttons, toasts,
+                              economy panel, progress tracker, overlays.
+   ============================================================ */
+
+/* ── Scene palette (derived from accent #f59e0b) ──────────── */
+:root {
+  --scene-accent: #f59e0b;
+  --scene-accent-rgb: 245 158 11;
+  --scene-accent-dim: #d97706;
+  --scene-accent-light: #fbbf24;
+  --scene-accent-faint: rgba(245, 158, 11, 0.08);
+  --scene-accent-glow: rgba(245, 158, 11, 0.25);
+  --scene-accent-border: rgba(245, 158, 11, 0.3);
+  --scene-bg: #0b0907;
+  --scene-panel: #141008;
+  --scene-border: #2d2218;
+  --scene-text: #c4a97a;
+  --scene-muted: #87714e;
+}
+
+/* ── Kit Column Layout ────────────────────────────────────── */
+.ck-columns {
+  display: grid;
+  gap: 16px;
+  padding: 12px;
+}
+.ck-columns[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+.ck-columns[data-cols="3"] { grid-template-columns: 240px 1fr 300px; }
+
+/* ── Scene Header ─────────────────────────────────────────── */
+.ck-scene-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: linear-gradient(90deg, var(--scene-panel) 0%, #100c06 100%);
+  border-bottom: 2px solid rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.18);
+}
+.ck-scene-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--scene-accent);
+  font-style: italic;
+  text-shadow: 0 0 18px rgba(245, 158, 11, 0.6);
+}
+.ck-scene-subtitle {
+  font-size: 0.72rem;
+  color: var(--scene-muted);
+  font-style: italic;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.ck-scene-hud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Alert Banner (heat warning) ──────────────────────────── */
+.ck-alert-banner {
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  color: var(--scene-text);
+  border-left: 3px solid var(--scene-accent);
+  background: var(--scene-accent-faint);
+}
+.ck-alert-banner[data-severity="info"]    { border-left-color: var(--scene-accent-dim); background: rgba(245, 158, 11, 0.04); }
+.ck-alert-banner[data-severity="warning"] { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.08); }
+.ck-alert-banner[data-severity="danger"]  { border-left-color: #dc2626; background: rgba(220, 38, 38, 0.06); }
+
+/* ── Glass Panel ──────────────────────────────────────────── */
+.ck-glass-panel {
+  background: rgba(20, 16, 8, 0.85);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+.ck-glass-panel--glow {
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.15), inset 0 0 8px rgba(245, 158, 11, 0.05);
+}
+.ck-glass-panel--strong {
+  background: rgba(45, 34, 24, 0.92);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+.ck-glass-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--scene-accent-light);
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+.ck-glass-body {
+  padding: 12px;
+}
+
+/* ── Stat Bars (trust, heat inline) ───────────────────────── */
+.ck-stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.ck-stat-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+  width: 60px;
+  flex-shrink: 0;
+}
+.ck-stat-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ck-stat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.ck-stat-val {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--scene-text);
+  min-width: 24px;
+  text-align: right;
+}
+
+/* ── Chat Log ─────────────────────────────────────────────── */
+.ck-chat-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--scene-bg);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ck-chat-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--scene-accent-light);
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+.ck-chat-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  min-height: 220px;
+  max-height: 400px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scene-accent) var(--scene-bg);
+}
+.chat-line { padding: 3px 0; border-bottom: 1px solid rgba(245, 158, 11, 0.08); }
+.chat-line.system   { color: var(--scene-accent-light); font-style: italic; }
+.chat-line.action   { color: #fbbf24; }
+.chat-line.result   { color: var(--scene-text); }
+.chat-line.user     { color: var(--scene-muted); font-style: italic; }
+.chat-line.from-lola   { color: #f0e4c8; }
+.chat-line.from-viktor { color: var(--scene-accent-dim); }
+.ck-chat-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--scene-accent-border);
+  background: var(--scene-panel);
+}
+.ck-chat-input {
+  flex: 1;
+  background: var(--scene-bg);
+  border: 1px solid var(--scene-muted);
+  border-radius: 4px;
+  color: #f0e4c8;
+  font-size: 0.82rem;
+  padding: 6px 10px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.22s ease;
+}
+.ck-chat-input:focus { border-color: var(--scene-accent-light); }
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.ck-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  background: var(--scene-panel);
+  color: var(--scene-text);
+  font-family: inherit;
+}
+.ck-btn:hover {
+  background: var(--scene-accent);
+  color: var(--scene-bg);
+  border-color: var(--scene-accent-light);
+}
+.ck-btn--accent {
+  background: var(--scene-accent-dim);
+  color: #fff;
+  border-color: var(--scene-accent);
+}
+.ck-btn--accent:hover {
+  background: var(--scene-accent);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+}
+.ck-btn--danger {
+  border-color: rgba(220, 38, 38, 0.4);
+  color: #fca5a5;
+}
+.ck-btn--danger:hover {
+  background: #7f1d1d;
+  border-color: #dc2626;
+  color: #fff;
+}
+.ck-btn--secret {
+  border-color: rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
+}
+.ck-btn--secret:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: #8b5cf6;
+}
+.ck-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.ck-btn:disabled:hover {
+  background: var(--scene-panel);
+  color: var(--scene-text);
+  border-color: var(--scene-accent-border);
+}
+
+/* ── Target Selector (NPC buttons) ────────────────────────── */
+.ck-target-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--scene-accent-border);
+}
+.btn-target {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: var(--scene-panel);
+  border: 1px solid var(--scene-accent-border);
+  color: var(--scene-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 4px;
+  font-family: inherit;
+}
+.btn-target.active,
+.btn-target:hover {
+  border-color: var(--scene-accent-light);
+  color: var(--scene-accent-light);
+  background: var(--scene-accent-faint);
+}
+
+/* ── Staff Cards ──────────────────────────────────────────── */
+.ck-staff-card {
+  padding: 8px 12px;
+  border: 1px solid var(--scene-accent-border);
+  background: var(--scene-accent-faint);
+  border-radius: 6px;
+}
+.ck-staff-name {
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  color: var(--scene-accent-light);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.ck-staff-role {
+  font-size: 0.62rem;
+  color: var(--scene-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+.ck-staff-mood {
+  font-size: 0.72rem;
+  color: var(--scene-text);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* ── Drink Menu ───────────────────────────────────────────── */
+.ck-drink-menu {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scene-accent-dim) var(--scene-panel);
+}
+.ck-drink-card {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--scene-accent-border);
+  background: var(--scene-accent-faint);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  border-radius: 6px;
+}
+.ck-drink-card:hover {
+  border-color: var(--scene-accent-light);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+}
+.ck-drink-card.locked {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.ck-drink-card-name {
+  font-size: 0.72rem;
+  color: #f0e4c8;
+  font-weight: 600;
+}
+.ck-drink-card-price {
+  font-size: 0.62rem;
+  color: var(--scene-accent-dim);
+  margin-top: 1px;
+}
+
+/* ── Event Feed (scene log) ───────────────────────────────── */
+.ck-event-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.ck-event-item {
+  background: var(--scene-panel);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  color: var(--scene-muted);
+  font-style: italic;
+  line-height: 1.5;
+  position: relative;
+}
+.ck-event-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--scene-accent), transparent);
+  border-radius: 6px 6px 0 0;
+}
+.ck-event-item strong {
+  color: var(--scene-accent-light);
+}
+
+/* ── Legacy Event Feed (inline scene log) ─────────────────── */
+.event-entry { padding: 3px 0; border-bottom: 1px solid rgba(245, 158, 11, 0.06); font-size: 0.72rem; }
+.event-entry.type-drink_served { color: var(--scene-accent); }
+.event-entry.type-random       { color: var(--scene-text); }
+.event-entry.type-rule         { color: var(--scene-accent-dim); }
+.event-entry.type-reply        { color: #f0e4c8; }
+
+/* ── Economy Panel ────────────────────────────────────────── */
+.ck-economy-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--scene-panel);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 6px;
+}
+.ck-economy-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+}
+.ck-economy-val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--scene-accent-light);
+}
+
+/* ── Progress Tracker (song / trust) ──────────────────────── */
+.ck-progress-tracker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.ck-step {
+  flex: 1;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+  padding: 6px 4px;
+  border-bottom: 2px solid rgba(245, 158, 11, 0.15);
+  transition: all 0.3s ease;
+}
+.ck-step.active {
+  color: var(--scene-accent-light);
+  border-bottom-color: var(--scene-accent);
+}
+.ck-step.current {
+  color: #fbbf24;
+  border-bottom-color: #fbbf24;
+}
+.ck-step-connector {
+  width: 16px;
+  height: 1px;
+  background: rgba(245, 158, 11, 0.2);
+  flex-shrink: 0;
+}
+
+/* ── Divider Line ─────────────────────────────────────────── */
+.ck-divider {
+  border: none;
+  height: 1px;
+  background: var(--scene-accent);
+  opacity: 0.3;
+  margin: 8px 12px;
+}
+
+/* ── HUD Badges ───────────────────────────────────────────── */
+.ck-hud-badges {
+  display: flex;
+  gap: 12px;
+  padding: 6px 12px;
+  background: rgba(245, 158, 11, 0.04);
+  border: 1px solid rgba(245, 158, 11, 0.12);
+  border-radius: 4px;
+  margin: 6px 0;
+}
+.ck-hud-badge {
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--scene-text);
+}
+.ck-hud-badge span {
+  font-weight: 600;
+  color: var(--scene-accent-light);
+}
+
+/* ── Toast Container ──────────────────────────────────────── */
+.ck-toast-container {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.ck-toast--bottom-center {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+}
+.ck-toast--bottom-right {
+  bottom: 20px;
+  right: 20px;
+  align-items: flex-end;
+}
+.ck-toast {
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid var(--scene-accent-border);
+  border-left: 3px solid var(--scene-accent);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--scene-text);
+  pointer-events: all;
+  animation: ck-toast-in 0.3s ease-out;
+  max-width: 420px;
+  text-align: center;
+  white-space: pre-line;
+}
+@keyframes ck-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Overlay (back room, secret) ──────────────────────────── */
+.ck-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(3px);
+}
+.ck-overlay.hidden { display: none; }
+.ck-overlay-box {
+  background: var(--scene-panel);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  padding: 32px 36px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.18);
+  border-radius: 8px;
+}
+.ck-overlay-title {
+  font-size: 1rem;
+  letter-spacing: 0.2em;
+  color: var(--scene-accent-light);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  font-style: italic;
+}
+.ck-overlay-text {
+  font-size: 0.82rem;
+  color: var(--scene-text);
+  line-height: 1.7;
+  margin-bottom: 20px;
+}
+
+/* ── Stage Area ───────────────────────────────────────────── */
+.ck-stage-area {
+  padding: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(20, 16, 8, 0.9) 0%, var(--scene-bg) 100%);
+  position: relative;
+}
+.ck-stage-spotlight {
+  width: 80px;
+  height: 4px;
+  background: radial-gradient(ellipse, var(--scene-accent-light), transparent 80%);
+  margin-bottom: 8px;
+  opacity: 0.7;
+}
+.ck-stage-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.35em;
+  color: var(--scene-accent-dim);
+  text-transform: uppercase;
+}
+.ck-stage-song {
+  font-size: 0.88rem;
+  color: #f0e4c8;
+  font-style: italic;
+  margin: 6px 0;
+  min-height: 20px;
+}
+.ck-song-progress {
+  height: 2px;
+  background: rgba(45, 34, 24, 0.8);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.ck-song-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--scene-accent-dim), var(--scene-accent-light));
+  transition: width 1s linear;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--scene-bg); }
+::-webkit-scrollbar-thumb { background: var(--scene-accent-dim); border-radius: 2px; }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ck-columns { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 600px) {
+  .ck-columns { grid-template-columns: 1fr !important; }
+  .ck-scene-header { flex-direction: column; align-items: flex-start; }
+}

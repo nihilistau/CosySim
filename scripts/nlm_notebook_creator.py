@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # ──── Constants ──────────────────────────────────────────────────────────────
 
 NLM_URL = "https://notebooklm.google.com"
-CDP_URL = "http://localhost:9222"
+CDP_URL = "http://localhost:9223"
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # Selectors — verified against NLM DOM as of 2026-03

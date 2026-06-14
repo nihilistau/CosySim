@@ -26,20 +26,28 @@ class SignalScene {
     this._setupSocket();
     this.loadContacts();
     this._autoResizeInput();
-    console.log('[SIGNAL] Scene initialised');
+    console.debug('[SIGNAL] Scene initialised');
   }
 
   _setupSocket() {
     this.socket = io({ transports: ['websocket', 'polling'] });
 
     this.socket.on('connect', () => {
-      console.log('[SIGNAL] Socket connected:', this.socket.id);
+      console.debug('[SIGNAL] Socket connected:', this.socket.id);
       this.socket.emit('get_contacts');
       this.socket.emit('get_0xgh0st_status');
     });
 
     this.socket.on('disconnect', () => {
       console.warn('[SIGNAL] Socket disconnected');
+    });
+
+    // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', (attempt) => {
+      console.debug('[Phone] Reconnected after ' + attempt + ' attempt(s)');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) console.debug('[Phone] Reconnecting... (attempt ' + attempt + ')');
     });
 
     // Contact list

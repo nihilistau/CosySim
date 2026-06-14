@@ -70,21 +70,37 @@ register_core_tools(mcp)
 register_advanced_tools(mcp)
 
 # ── Re-export tool functions for backward compatibility ───────────────
+# v1.51.1 [2026-03-25] — Updated for FastMCP v3 (list_tools is async, returns FunctionTool)
 # Tests and other modules access tools as ``cosysim_server.search_memory`` etc.
-# Pull the underlying functions from the mcp tool registry.
-import types as _types
-for _tool in mcp._tool_manager._tools.values():
-    _fn = getattr(_tool, "fn", None)
-    if _fn and hasattr(_fn, "__name__"):
-        globals()[_fn.__name__] = _fn
+import asyncio as _asyncio
 
-# Also re-export resource functions (resources + templates)
-_rm = getattr(mcp, "_resource_manager", None)
-if _rm is not None:
-    for _res in list(_rm._resources.values()) + list(_rm._templates.values()):
-        _fn = getattr(_res, "fn", None)
-        if _fn and hasattr(_fn, "__name__"):
-            globals()[_fn.__name__] = _fn
+def _re_export_tools():
+    """Pull underlying functions from the MCP tool/resource registry into module globals."""
+    try:
+        loop = _asyncio.new_event_loop()
+        # Re-export tools
+        tools = loop.run_until_complete(mcp.list_tools())
+        for _tool in tools:
+            _fn = getattr(_tool, "fn", None)
+            if _fn and hasattr(_fn, "__name__"):
+                globals()[_fn.__name__] = _fn
+        # Re-export resources and resource templates
+        for _method_name in ("list_resources", "list_resource_templates"):
+            _method = getattr(mcp, _method_name, None)
+            if _method:
+                try:
+                    items = loop.run_until_complete(_method())
+                    for _res in items:
+                        _fn = getattr(_res, "fn", None)
+                        if _fn and hasattr(_fn, "__name__"):
+                            globals()[_fn.__name__] = _fn
+                except Exception:
+                    pass
+        loop.close()
+    except Exception:
+        pass  # Non-fatal — tools still work via MCP, just not as module-level imports
+
+_re_export_tools()
 
 
 # ── Entry point ────────────────────────────────────────────────────────

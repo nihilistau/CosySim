@@ -1,8 +1,10 @@
 """
 AlertRouter — Route alerts to handlers based on severity and category.
+======================================================================
 
 Implements escalation chains: log → Nexus → operator inbox → Socket.IO.
 Provides deduplication, suppression windows, and configurable routing rules.
+Supports real-time alert callbacks for dashboard integration (Oracle ASE).
 
 Usage::
 
@@ -17,6 +19,16 @@ Usage::
 
     # Add custom handler
     router.add_handler("slack", my_slack_handler, min_severity="high")
+
+    # Register a real-time callback (e.g. for Oracle dashboard)
+    router.register_alert_callback(my_callback)
+
+Version: v1.49.5 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.49.5 [2026-03-22] — Added register_alert_callback() + _alert_callbacks for
+                             Oracle All-Seeing Eye dashboard real-time alert feed
 """
 from __future__ import annotations
 
@@ -163,6 +175,8 @@ class AlertRouter:
         self._custom_handlers: Dict[str, _CustomHandler] = {}
         self._cooldowns: Dict[str, float] = {}       # "rule::node::metric" → ts
         self._suppressions: Dict[str, float] = {}     # "node::metric" → expiry ts
+        # v1.49.5 [2026-03-22] — Real-time alert callbacks for Oracle ASE dashboard
+        self._alert_callbacks: List[Callable[[Dict[str, Any]], None]] = []
 
         if default_rules:
             self._rules.extend(self._default_rules())
@@ -286,6 +300,33 @@ class AlertRouter:
         if removed:
             logger.debug("Custom handler removed: %s", name)
         return removed
+
+    # ── Alert Callbacks ── v1.49.5 [2026-03-22] ────────────────────────
+    # CONNECTS: Oracle ASE dashboard, any external listener
+    # CALLED BY: _dispatch() after routing completes
+    # EMITS: RoutedAlert.to_dict() to each registered callback
+
+    def register_alert_callback(self, fn: Callable[[Dict[str, Any]], None]) -> None:
+        """Register a callback fired on every routed (non-suppressed) alert.
+
+        The callback receives a dict with: source_type, node, metric,
+        level, severity, message, channels_routed, suppressed, ts.
+
+        Used by the Oracle dashboard to emit real-time alert_feed SocketIO events.
+
+        Args:
+            fn: Callback function accepting a dict.
+        """
+        with self._lock:
+            if fn not in self._alert_callbacks:
+                self._alert_callbacks.append(fn)
+        logger.debug("Alert callback registered (%d total)", len(self._alert_callbacks))
+
+    def unregister_alert_callback(self, fn: Callable) -> None:
+        """Remove a previously registered alert callback."""
+        with self._lock:
+            if fn in self._alert_callbacks:
+                self._alert_callbacks.remove(fn)
 
     # ── Suppression ─────────────────────────────────────────────────────
 
@@ -471,6 +512,17 @@ class AlertRouter:
 
         routed.channels_routed = channels_fired
         self._persist(routed)
+
+        # v1.49.5 [2026-03-22] — Fire real-time alert callbacks (Oracle ASE dashboard)
+        with self._lock:
+            cbs = list(self._alert_callbacks)
+        if cbs:
+            payload = routed.to_dict()
+            for cb in cbs:
+                try:
+                    cb(payload)
+                except Exception:
+                    pass  # Never crash the dispatch pipeline
 
     def _dispatch_to_channel(
         self,

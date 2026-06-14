@@ -1,7 +1,7 @@
 """HAR Capture — automated Google cookie refresh via CDP.
 
 THREE modes, tried in order:
-  1. CDP direct  — connect to already-running Chrome (port 9222),
+  1. CDP direct  — connect to already-running Chrome (port 9223),
                    use Network.getCookies() to pull cookies silently
   2. CDP launch  — spawn a new Chrome with --remote-debugging-port,
                    navigate to notebooklm.google.com, pull cookies
@@ -45,7 +45,7 @@ from engine.integrations.google_service_profiles import normalize_google_service
 
 logger = logging.getLogger("har_capture")
 
-CDP_PORT = 9222
+CDP_PORT = 9223
 NLM_URL = "https://notebooklm.google.com"
 POOL_PATH = PROJECT_ROOT / "data" / "accounts" / "pool.json"
 HARS_DIR = PROJECT_ROOT / "data" / "hars"
@@ -342,7 +342,7 @@ async def mode_cdp(account_name: str) -> Optional[Dict[str, Any]]:
     """Pull cookies from already-running Chrome instance."""
     tabs = _get_cdp_tabs()
     if not tabs:
-        print("  No Chrome with CDP on port 9222")
+        print("  No Chrome with CDP on port 9223")
         return None
 
     best_ws, best_url = _select_cdp_tab(tabs, preferred_patterns=["notebooklm.google.com"])

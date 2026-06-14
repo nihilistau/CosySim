@@ -1,0 +1,634 @@
+/* ============================================================
+   THE RUSTY ANCHOR — Kit Scene Styles
+   ====================================
+   Generated from tavern_rebuild.json layout.
+   Accent: #d97706 (amber-wood — Dark Renaissance v2)
+
+   Version: v1.58.0 [2026-06-11]
+   Change Log:
+     v1.58.0 [2026-06-11] — Dark Renaissance v2 alignment: scene palette
+                              re-pointed to var(--cs-scene-accent) tokens
+                              (#d97706 amber-wood, matching the template
+                              injection + [data-scene="tavern"] block);
+                              #92400e kept as the wood-dark dim tone.
+     v1.50.0 [2026-03-22] — Initial Kit-generated palette + component styles.
+   ============================================================ */
+
+/* ── Scene palette (v2 tokens, amber-wood #d97706) ────────── */
+/* v1.58.0 [2026-06-11] — Accent flows from design tokens; raw hex kept
+   only as fallback. Alpha tints compose via rgb(var() / a). */
+:root {
+  --scene-accent: var(--cs-scene-accent, #d97706);
+  --scene-accent-rgb: var(--cs-scene-accent-rgb, 217 119 6);
+  --scene-accent-dim: #92400e;
+  --scene-accent-light: #f59e0b;
+  --scene-accent-faint: rgb(var(--scene-accent-rgb) / 0.08);
+  --scene-accent-glow: rgb(var(--scene-accent-rgb) / 0.25);
+  --scene-accent-border: rgb(var(--scene-accent-rgb) / 0.3);
+  --scene-bg: #0d0905;
+  --scene-panel: #1a110a;
+  --scene-border: #2e1c10;
+  --scene-text: #e8d5b5;
+  --scene-muted: #6b4c30;
+}
+
+/* ── Kit Column Layout ────────────────────────────────────── */
+.ck-columns {
+  display: grid;
+  gap: 16px;
+  padding: 12px;
+}
+.ck-columns[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+.ck-columns[data-cols="3"] { grid-template-columns: 1fr 1.4fr 1fr; }
+
+/* ── Scene Header ─────────────────────────────────────────── */
+.ck-scene-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--scene-bg) 0%, var(--scene-panel) 100%);
+  border-bottom: 2px solid var(--scene-accent-border);
+  box-shadow: 0 0 12px rgba(146, 64, 14, 0.35);
+}
+.ck-scene-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--scene-accent-light);
+  text-shadow: 0 0 18px rgba(180, 83, 9, 0.6);
+}
+.ck-scene-subtitle {
+  font-size: 0.75rem;
+  color: var(--scene-muted);
+  font-style: italic;
+  margin-top: 2px;
+}
+.ck-scene-hud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Alert Banner (atmosphere) ────────────────────────────── */
+.ck-alert-banner {
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  color: var(--scene-text);
+  border-left: 3px solid var(--scene-accent);
+  background: var(--scene-accent-faint);
+}
+.ck-alert-banner[data-severity="info"] { border-left-color: #3b82f6; background: rgba(59, 130, 246, 0.06); }
+.ck-alert-banner[data-severity="warning"] { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.06); }
+.ck-alert-banner[data-severity="danger"] { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.06); }
+
+/* ── Glass Panel ──────────────────────────────────────────── */
+.ck-glass-panel {
+  background: rgba(26, 17, 10, 0.85);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+.ck-glass-panel--glow {
+  box-shadow: 0 0 16px rgba(146, 64, 14, 0.2), inset 0 0 8px rgba(146, 64, 14, 0.05);
+}
+.ck-glass-panel--strong {
+  background: rgba(46, 28, 16, 0.92);
+  border-color: rgba(146, 64, 14, 0.5);
+}
+.ck-glass-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--scene-accent-light);
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid rgba(146, 64, 14, 0.15);
+}
+.ck-glass-body {
+  padding: 12px;
+}
+
+/* ── Stat Bars ────────────────────────────────────────────── */
+.ck-stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.ck-stat-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+  width: 60px;
+  flex-shrink: 0;
+}
+.ck-stat-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(146, 64, 14, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ck-stat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.ck-stat-val {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--scene-text);
+  min-width: 24px;
+  text-align: right;
+}
+
+/* ── Chat Log ─────────────────────────────────────────────── */
+.ck-chat-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--scene-bg);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ck-chat-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--scene-accent-light);
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(146, 64, 14, 0.15);
+}
+.ck-chat-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  min-height: 220px;
+  max-height: 400px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scene-accent) var(--scene-bg);
+}
+.chat-line { padding: 3px 0; border-bottom: 1px solid rgba(146, 64, 14, 0.08); }
+.chat-line.system { color: var(--scene-accent-light); font-style: italic; }
+.chat-line.action { color: #fbbf24; }
+.chat-line.result { color: var(--scene-text); }
+.chat-line.user { color: #93c5fd; }
+.ck-chat-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--scene-accent-border);
+  background: var(--scene-panel);
+}
+.ck-chat-input {
+  flex: 1;
+  background: var(--scene-bg);
+  border: 1px solid var(--scene-muted);
+  border-radius: 4px;
+  color: var(--scene-text);
+  font-size: 0.82rem;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color 0.22s ease;
+}
+.ck-chat-input:focus { border-color: var(--scene-accent-light); }
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.ck-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  background: var(--scene-panel);
+  color: var(--scene-text);
+}
+.ck-btn:hover {
+  background: var(--scene-accent);
+  color: var(--scene-bg);
+  border-color: var(--scene-accent-light);
+}
+.ck-btn--accent {
+  background: var(--scene-accent);
+  color: #fff;
+  border-color: var(--scene-accent-light);
+}
+.ck-btn--accent:hover {
+  background: var(--scene-accent-light);
+  box-shadow: 0 0 12px rgba(146, 64, 14, 0.5);
+}
+.ck-btn--danger {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+.ck-btn--danger:hover {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fff;
+}
+.ck-btn--hack {
+  border-color: rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
+}
+.ck-btn--hack:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: #8b5cf6;
+}
+
+/* ── Mission Board (Quest Board) ──────────────────────────── */
+.ck-mission-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+}
+.ck-mission-card {
+  background: var(--scene-panel);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.22s ease;
+}
+.ck-mission-card:hover {
+  border-color: var(--scene-accent-light);
+  box-shadow: 0 0 10px rgba(146, 64, 14, 0.3);
+  transform: translateY(-2px);
+}
+.ck-mission-tag {
+  display: inline-block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--scene-accent);
+  color: var(--scene-bg);
+  margin-bottom: 4px;
+}
+.ck-mission-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--scene-accent-light);
+  margin-bottom: 2px;
+}
+.ck-mission-reward {
+  font-size: 0.72rem;
+  color: #fbbf24;
+}
+.ck-mission-empty {
+  font-size: 0.78rem;
+  color: var(--scene-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+
+/* ── Event Feed (Rumor Stack) ─────────────────────────────── */
+.ck-event-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.ck-event-item {
+  background: var(--scene-panel);
+  border: 1px solid rgba(146, 64, 14, 0.15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  color: var(--scene-muted);
+  font-style: italic;
+  line-height: 1.5;
+  position: relative;
+}
+.ck-event-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--scene-accent), transparent);
+  border-radius: 6px 6px 0 0;
+}
+.ck-event-source {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--scene-accent);
+  margin-top: 4px;
+  text-align: right;
+  font-style: normal;
+}
+
+/* ── Economy Panel ────────────────────────────────────────── */
+.ck-economy-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--scene-panel);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 6px;
+}
+.ck-economy-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+}
+.ck-economy-val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+/* ── Progress Tracker ─────────────────────────────────────── */
+.ck-progress-tracker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.ck-step {
+  flex: 1;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--scene-muted);
+  padding: 6px 4px;
+  border-bottom: 2px solid rgba(146, 64, 14, 0.15);
+  transition: all 0.3s ease;
+}
+.ck-step.active {
+  color: var(--scene-accent-light);
+  border-bottom-color: var(--scene-accent);
+}
+.ck-step.current {
+  color: #fbbf24;
+  border-bottom-color: #fbbf24;
+}
+.ck-step-connector {
+  width: 16px;
+  height: 1px;
+  background: rgba(146, 64, 14, 0.2);
+  flex-shrink: 0;
+}
+
+/* ── Divider Line ─────────────────────────────────────────── */
+.ck-divider {
+  border: none;
+  height: 1px;
+  background: var(--scene-accent);
+  opacity: 0.3;
+  margin: 8px 12px;
+}
+
+/* ── HUD Badges ───────────────────────────────────────────── */
+.ck-hud-badges {
+  display: flex;
+  gap: 12px;
+  padding: 6px 12px;
+  background: rgba(146, 64, 14, 0.04);
+  border: 1px solid rgba(146, 64, 14, 0.12);
+  border-radius: 4px;
+  margin: 6px 0;
+}
+.ck-hud-badge {
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--scene-text);
+}
+.ck-hud-badge span {
+  font-weight: 600;
+  color: var(--scene-accent-light);
+}
+
+/* ── Toast Container ──────────────────────────────────────── */
+.ck-toast-container {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.ck-toast--bottom-center {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+}
+.ck-toast {
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid var(--scene-accent-border);
+  border-left: 3px solid var(--scene-accent);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--scene-text);
+  pointer-events: all;
+  animation: ck-toast-in 0.3s ease-out;
+  max-width: 420px;
+  text-align: center;
+  white-space: pre-line;
+}
+@keyframes ck-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Dice Table ───────────────────────────────────────────── */
+.dice-table-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.dice-visual-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.dice-visual {
+  width: 72px;
+  height: 72px;
+  background: var(--scene-panel);
+  border: 2px solid var(--scene-accent);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: var(--scene-accent-light);
+  box-shadow: 0 0 12px rgba(146, 64, 14, 0.35);
+  user-select: none;
+  transition: transform 0.1s;
+}
+.dice-visual.rolling {
+  animation: dice-spin 0.6s ease-in-out;
+}
+.dice-visual.dice-critical {
+  color: #fbbf24;
+  text-shadow: 0 0 30px rgba(251, 191, 36, 0.9);
+  border-color: #fbbf24;
+}
+.dice-visual.dice-fumble {
+  color: #ef4444;
+  text-shadow: 0 0 25px rgba(239, 68, 68, 0.8);
+  border-color: #ef4444;
+}
+@keyframes dice-spin {
+  0%   { transform: rotateX(0) rotateY(0) rotateZ(0); }
+  25%  { transform: rotateX(180deg) rotateY(90deg); }
+  50%  { transform: rotateX(360deg) rotateY(180deg) rotateZ(90deg); }
+  75%  { transform: rotateX(180deg) rotateY(270deg); }
+  100% { transform: rotateX(360deg) rotateY(360deg) rotateZ(360deg); }
+}
+.dice-result-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--scene-text);
+  text-align: center;
+  animation: ck-pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.dice-result-text.hidden { display: none; }
+.dice-text-critical { color: #fbbf24; }
+.dice-text-fumble { color: #ef4444; }
+@keyframes ck-pop-in {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.dice-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.ck-dice-select,
+.ck-dice-reason {
+  background: var(--scene-bg);
+  border: 1px solid var(--scene-muted);
+  border-radius: 4px;
+  color: var(--scene-text);
+  font-size: 0.78rem;
+  padding: 5px 8px;
+  outline: none;
+}
+.ck-dice-select { width: 64px; }
+.ck-dice-reason { flex: 1; min-width: 100px; }
+.ck-dice-select:focus,
+.ck-dice-reason:focus { border-color: var(--scene-accent-light); }
+
+/* ── Drink Menu Grid ──────────────────────────────────────── */
+.drink-menu-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.drink-menu-grid .ck-btn {
+  flex: 1 1 auto;
+  min-width: 80px;
+}
+
+/* ── Quest Modal (reused from original tavern.css) ────────── */
+.quest-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(3px);
+}
+.quest-modal.hidden { display: none; }
+.quest-modal-inner {
+  background: var(--scene-panel);
+  border: 1px solid var(--scene-accent-border);
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90vw;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7), 0 0 12px rgba(146, 64, 14, 0.35);
+  position: relative;
+  animation: ck-pop-in 0.25s ease;
+}
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--scene-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.modal-close:hover { color: var(--scene-text); }
+.quest-type-tag {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--scene-accent);
+  color: var(--scene-bg);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.modal-title {
+  font-size: 1.1rem;
+  color: var(--scene-accent-light);
+  margin: 8px 0;
+}
+.modal-description {
+  font-size: 0.82rem;
+  color: var(--scene-muted);
+  line-height: 1.6;
+  margin: 8px 0;
+}
+.modal-reward {
+  font-size: 0.8rem;
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--scene-bg); }
+::-webkit-scrollbar-thumb { background: var(--scene-accent); border-radius: 2px; }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ck-columns { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 600px) {
+  .ck-columns { grid-template-columns: 1fr !important; }
+  .ck-scene-header { flex-direction: column; align-items: flex-start; }
+}

@@ -1,11 +1,19 @@
 """
-The Coders Room — AI Agent Idle Code Simulation
-================================================
+The Coders Room
+================
+
+AI Agent Idle Code Simulation.
 
 A 2D office where AI agents write, review, and test real Python code.
 Showcases the v3.x pipeline with multi-agent collaboration through
 stateful and stateless LMS calls, sandboxed code execution, and
 live terminal output.
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 from __future__ import annotations
 
@@ -17,13 +25,11 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
+from flask import jsonify, render_template, request
 from flask_socketio import SocketIO
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry, TagDef
 from content.scenes.coders.coders_rules import register_coders_rules
@@ -39,10 +45,17 @@ from .coders_state import (
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "coders"
-DEFAULT_PORT = 5564
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("coders", 5564)
+except Exception:
+    DEFAULT_PORT = 5564
 
 
-class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="coders"):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class CodersRoomScene(FlaskScene):
     """The Coders Room — AI Agent Idle Code Simulation."""
 
     SCENE_METADATA = {
@@ -60,28 +73,16 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
                      "sandboxed_execution", "multi_agent_collab"],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
-        self._mcp_init()
+        super().__init__(host=host, port=port)
 
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
         self.app.config["SECRET_KEY"] = "coders_room_v3"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
-        register_shared_assets(self.app)
 
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
         self.state: Optional[CodersRoomState] = None
         self._state_mgr = get_scene_state_manager()
@@ -94,27 +95,25 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
         self._tick_thread: Optional[threading.Thread] = None
         self._running = False
 
-        self.nexus_init("coders")
-
         self._setup_routes()
         self._setup_socketio()
 
+    # v1.43.1 [2026-03-21] — Use unified chat()
     def _llm_call(self, system: str, user: str, max_tokens: int = 1500, agent_id: str = "coders_agent") -> str:
         """Stateless LLM call with governance context."""
         try:
-            from engine.lmstudio.lms_client import get_lms_client
+            from engine.lmstudio.chat import chat
             from engine.mcp.comms_framework import build_governance_context
-            client = get_lms_client()
             gov_ctx = build_governance_context(agent_id, "coders", user)
             full_system = f"{system}\n\n{gov_ctx}" if gov_ctx else system
-            messages = [
-                {"role": "system", "content": full_system},
-                {"role": "user", "content": user},
-            ]
-            resp = client.chat(messages, temperature=0.7, max_tokens=max_tokens, store=False)
-            return resp.content if hasattr(resp, "content") else str(resp)
+            return chat(
+                [{"role": "user", "content": user}],
+                system=full_system,
+                temperature=0.7,
+                max_tokens=max_tokens,
+            )
         except Exception as e:
-            logger.warning("Coders LLM call failed: %s", e)
+            logger.warning("[%s] LLM call failed (operation=chat): %s", SCENE_ID, e)
             return ""
 
     def _extract_code(self, text: str) -> str:
@@ -294,7 +293,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
             try:
                 self._tick()
             except Exception as e:
-                logger.error("Coders tick error: %s", e)
+                logger.error("[%s] Tick error (operation=tick): %s", SCENE_ID, e)
             time.sleep(interval)
 
     def _sync_to_mcp(self) -> None:
@@ -406,16 +405,13 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
 
     # ── BaseScene contract ──
 
-    def start(self) -> None:
-        logger.info("THE LAB v0.68 Dark Renaissance starting on port %d", self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-    def stop(self) -> None:
-        self.nexus_flush()
+    def on_shutdown(self) -> None:
+        """Hook: save session and stop running flag."""
         self._running = False
         if self.state:
             self._save_session()
-        self._mcp_deregister_scene()
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
@@ -452,7 +448,7 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
         data["completed_features"] = [f.to_dict() for f in self.state.completed_features]
         data["saved_at"] = time.time()
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        logger.info("Coders session saved: %s", path)
+        logger.info("[%s] Session saved (operation=session_save): %s", SCENE_ID, path)
         return str(path)
 
     def _load_session(self, session_id: str) -> bool:
@@ -474,10 +470,10 @@ class CodersRoomScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="c
                     agent.reviews_done = ad.get("reviews_done", 0)
                     agent.tests_run = ad.get("tests_run", 0)
             self.state.active = False
-            logger.info("Coders session loaded: %s", session_id)
+            logger.info("[%s] Session loaded (operation=session_load): %s", SCENE_ID, session_id)
             return True
         except Exception as exc:
-            logger.warning("Failed to load session %s: %s", session_id, exc)
+            logger.warning("[%s] Failed to load session (operation=session_load, session=%s): %s", SCENE_ID, session_id, exc)
             return False
 
     def _list_sessions(self) -> List[Dict[str, Any]]:

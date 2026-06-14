@@ -1,65 +1,48 @@
-{# ════════════════════════════════════════════════════════════════════
-   THE TERMINAL — hub.html  |  v0.68 Dark Renaissance
-   Main navigation hub connecting all CosySim scenes.
-   data-scene="hub"  |  accent: #3b82f6
-   ════════════════════════════════════════════════════════════════════ #}
-<!DOCTYPE html>
-<html lang="en" data-scene="hub">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>THE TERMINAL · CosySim v0.68</title>
-  <meta name="description" content="Every door leads somewhere. Not all of them come back." />
+{%- extends "neon_base.html" -%}
+{%- set scene_key = "hub" -%}
+{%- set scene_display_name = "THE TERMINAL" -%}
+{%- set scene_accent = "#3b82f6" -%}
+{%- set scene_accent_rgb = "59 130 246" -%}
 
-  {# ── Shared design tokens + core scripts ── #}
-  <link rel="stylesheet" href="/shared/css/design_tokens.css" />
+{#
+  THE TERMINAL — v1.52.0 [2026-03-22] Migrated to neon_base.html
+  ================================================================
+  Main navigation hub connecting all CosySim scenes.
+  v1.52.0 [2026-03-22] — Migrated from standalone HTML to neon_base template.
+  v0.68   [2026-03-20] — Original standalone hub.
+#}
 
-  {# ── Scene-level accent injection ── #}
-  <style>
-    :root {
-      --cs-scene-accent:     #3b82f6;
-      --cs-scene-accent-rgb: 59 130 246;
-    }
-  </style>
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='hub.css') }}">
+{% endblock %}
 
-  {# ── Hub stylesheet ── #}
-  <link rel="stylesheet" href="{{ url_for('static', filename='hub.css') }}" />
-</head>
+{% block scene_overlays %}
+  <canvas id="data-stream-canvas" aria-hidden="true"></canvas>
+{% endblock %}
 
-<body data-scene="hub">
-
-{# ════ Background particle canvas ════ #}
-<canvas id="data-stream-canvas" aria-hidden="true"></canvas>
-
-{# ════ Universal Navbar ════ #}
-{% include 'navbar_v2.html' %}
-
-{# ════ Hub layout wrapper ════ #}
+{% block scene_content %}
 <div class="hub-layout">
 
   {# ── Hub header ────────────────────────────────────────────────── #}
   <header class="hub-header">
     <div class="hub-title-block">
       <div class="hub-title">THE TERMINAL</div>
-      <div class="hub-subtitle">v0.68 Dark Renaissance · Navigation Hub</div>
+      <div class="hub-subtitle">v1.52 Three Pillars &middot; Navigation Hub</div>
     </div>
 
     <div class="hub-header-right">
-      {# World clock #}
       <div class="world-clock" title="Live game-time clock">
         <div class="world-clock-time" id="world-clock-time">NIGHT CYCLE 00:00:00</div>
-        <div class="world-clock-day"  id="world-clock-day">Loading…</div>
+        <div class="world-clock-day"  id="world-clock-day">Loading&hellip;</div>
       </div>
 
-      {# Credit balance #}
       <div class="credit-chip" title="Player credit balance">
-        <span class="credit-icon">◈</span>
-        <span class="credit-value" id="header-credits">¢—</span>
+        <span class="credit-icon">&#9672;</span>
+        <span class="credit-value" id="header-credits">&cent;&mdash;</span>
       </div>
 
-      {# Online scenes count #}
       <div class="scenes-badge">
-        <span class="badge-count" id="scenes-badge-count">—</span> scenes online
+        <span class="badge-count" id="scenes-badge-count">&mdash;</span> scenes online
       </div>
     </div>
   </header>
@@ -70,108 +53,101 @@
     {# ── NEONCITY pillar ── #}
     <section aria-label="NeonCity scenes">
       <div class="section-header">
-        <span class="section-icon">🏙️</span>
+        <span class="section-icon">&#127961;</span>
         <span class="section-label">NeonCity</span>
         <div  class="section-line"></div>
       </div>
       <div class="scene-grid" id="scene-grid-game">
-        <div class="loading-placeholder">SCANNING NEONCITY…</div>
+        <div class="loading-placeholder">SCANNING NEONCITY&hellip;</div>
       </div>
     </section>
 
     {# ── SERVICES pillar ── #}
     <section aria-label="Service scenes">
       <div class="section-header">
-        <span class="section-icon">🖥️</span>
+        <span class="section-icon">&#128421;</span>
         <span class="section-label">Services</span>
         <div  class="section-line"></div>
       </div>
       <div class="scene-grid" id="scene-grid-service">
-        <div class="loading-placeholder">SCANNING SERVICES…</div>
+        <div class="loading-placeholder">SCANNING SERVICES&hellip;</div>
       </div>
     </section>
 
     {# ── CREATION KIT pillar ── #}
     <section aria-label="Creation Kit scenes">
       <div class="section-header">
-        <span class="section-icon">🎨</span>
+        <span class="section-icon">&#127912;</span>
         <span class="section-label">Creation Kit</span>
         <div  class="section-line"></div>
       </div>
       <div class="scene-grid" id="scene-grid-creation">
-        <div class="loading-placeholder">SCANNING CREATION KIT…</div>
+        <div class="loading-placeholder">SCANNING CREATION KIT&hellip;</div>
       </div>
     </section>
 
     {# ── Bottom panels ── #}
     <div class="hub-panels">
-
-      {# World State panel #}
       <div class="glass-panel world-state-panel" aria-label="World state">
-        <div class="panel-title"><span>◈</span> WORLD STATE</div>
-        <div class="world-time-display" id="world-time-display">— — : — —</div>
-        <div class="world-day-display"  id="world-day-display">DAY — · —</div>
+        <div class="panel-title"><span>&#9672;</span> WORLD STATE</div>
+        <div class="world-time-display" id="world-time-display">&mdash; &mdash; : &mdash; &mdash;</div>
+        <div class="world-day-display"  id="world-day-display">DAY &mdash; &middot; &mdash;</div>
         <div class="world-events-list"  id="world-events-list">
-          <div class="loading-placeholder">Loading events…</div>
+          <div class="loading-placeholder">Loading events&hellip;</div>
         </div>
       </div>
 
-      {# Economy panel #}
       <div class="glass-panel economy-summary" aria-label="Economy summary">
-        <div class="panel-title"><span>◈</span> ECONOMY</div>
+        <div class="panel-title"><span>&#9672;</span> ECONOMY</div>
         <div class="balance-display">
-          <span class="balance-amount" id="economy-balance">¢—</span>
+          <span class="balance-amount" id="economy-balance">&cent;&mdash;</span>
           <span class="balance-label">Credits</span>
         </div>
         <div class="txn-list" id="txn-list">
-          <div class="loading-placeholder">Loading transactions…</div>
+          <div class="loading-placeholder">Loading transactions&hellip;</div>
         </div>
       </div>
-
-    </div>{# /hub-panels #}
+    </div>
 
   </main>
 
   {# ── Bench HUD ─────────────────────────────────────────────────── #}
   <footer class="bench-hud" aria-label="System status bar">
-    <div class="bench-stat">🖥️ Scenes: <span class="bench-val" id="bench-scenes">—</span></div>
-    <div class="bench-stat">🧠 Agents: <span class="bench-val" id="bench-agents">—</span></div>
-    <div class="bench-stat">💾 VRAM: <span class="bench-val" id="bench-vram">—</span></div>
-    <div class="bench-version">CosySim · THE TERMINAL · v0.68 Dark Renaissance</div>
+    <div class="bench-stat">&#128421; Scenes: <span class="bench-val" id="bench-scenes">&mdash;</span></div>
+    <div class="bench-stat">&#129504; Agents: <span class="bench-val" id="bench-agents">&mdash;</span></div>
+    <div class="bench-stat">&#128190; VRAM: <span class="bench-val" id="bench-vram">&mdash;</span></div>
+    <div class="bench-version">CosySim &middot; THE TERMINAL &middot; v1.52 Three Pillars</div>
   </footer>
 
-</div>{# /hub-layout #}
+</div>
+{% endblock %}
 
-{# ── Scripts ────────────────────────────────────────────────────── #}
-<script src="/shared/js/cosysim-core.js"></script>
-<script src="{{ url_for('static', filename='hub.js') }}"></script>
-
-{# System bench polling (agents / VRAM) #}
-<script>
-(function () {
-  async function pollSystem() {
-    try {
-      const res  = await fetch('/api/system');
-      const data = await res.json();
-      const agEl = document.getElementById('bench-agents');
-      const vmEl = document.getElementById('bench-vram');
-      const scEl = document.getElementById('bench-scenes');
-      if (agEl) agEl.textContent = data.agent_count ?? '0';
-      if (vmEl) {
-        vmEl.textContent = data.vram_total_mb
-          ? `${Math.round(data.vram_used_mb)}/${Math.round(data.vram_total_mb)} MB`
-          : 'N/A';
-      }
-      if (scEl) {
-        const active = (data.active_scenes || []).length;
-        scEl.textContent = active ? `${active} active` : '—';
-      }
-    } catch { /* silent */ }
-  }
-  pollSystem();
-  setInterval(pollSystem, 30_000);
-})();
-</script>
-
-</body>
-</html>
+{% block body_scripts %}
+  <script src="/shared/js/cosysim-core.js"></script>
+  <script src="{{ url_for('static', filename='hub.js') }}"></script>
+  <script>
+  (function () {
+    async function pollSystem() {
+      try {
+        const res  = await fetch('/api/system');
+        const data = await res.json();
+        const agEl = document.getElementById('bench-agents');
+        const vmEl = document.getElementById('bench-vram');
+        const scEl = document.getElementById('bench-scenes');
+        if (agEl) agEl.textContent = data.agent_count ?? '0';
+        if (vmEl) {
+          vmEl.textContent = data.vram_total_mb
+            ? `${Math.round(data.vram_used_mb)}/${Math.round(data.vram_total_mb)} MB`
+            : 'N/A';
+        }
+        if (scEl) {
+          const active = (data.active_scenes || []).length;
+          scEl.textContent = active ? `${active} active` : '\u2014';
+        }
+      } catch { /* silent */ }
+    }
+    pollSystem();
+    setInterval(pollSystem, 30_000);
+  })();
+  </script>
+{% endblock %}

@@ -34,7 +34,7 @@ class VelvetPitScene {
     this._loadDrinkMenu();
     this._loadEventsTonight();
     this._initEconomy();
-    console.log('[VelvetPit] Initialised — Dark Renaissance v0.68');
+    console.debug('[VelvetPit] Initialised — Dark Renaissance v0.68');
   }
 
   // ── Socket.IO ────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ class VelvetPitScene {
     this.socket = io({ transports: ['websocket', 'polling'] });
 
     this.socket.on('connect', () => {
-      console.log('[VelvetPit] connected');
+      console.debug('[VelvetPit] connected');
       this.socket.emit('get_lounge_state');
     });
 

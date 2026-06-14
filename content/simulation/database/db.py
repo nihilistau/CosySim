@@ -466,8 +466,8 @@ class Database:
                     humor=p.get("humor", 0.5),
                 )
                 inserted += 1
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[Database] Personality seed skipped (operation=seed_personalities): %s", e)
         return inserted
     
     def update_character(self, char_id: str, **kwargs) -> bool:

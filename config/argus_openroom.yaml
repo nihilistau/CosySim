@@ -1,0 +1,146 @@
+# ══════════════════════════════════════════════════════════════
+# ARGUS OpenRoom Configuration — v1.51.1 [2026-03-25]
+# ══════════════════════════════════════════════════════════════
+# Config-driven endpoint registry for OpenRoom.ai exploration.
+# Edit this file to add/remove endpoints without touching code.
+# Loaded by: scripts/argus/clients/openroom_config.py
+
+openroom:
+  base_url: "https://www.openroom.ai"
+  cdn_url: "https://cdn.openroom.ai"
+  talkie_cdn: "https://cdn.talkie-ai.com"
+  ws_url: "wss://connection.openroom.ai/connection/ws"
+
+  # ── API Base Paths ──────────────────────────────────────────
+  apis:
+    weaver: "/weaver/api/v1"
+    ugc: "/ugc/api"
+    storage: "/weaver_storage/api/v1/storage"
+
+  # ── Endpoints by Domain ─────────────────────────────────────
+  # Paths are relative to the weaver base unless prefixed with /
+  endpoints:
+    character:
+      list_sessions: "/character/list_sessions"
+      start_session: "/character/start_session"
+      send_msg: "/character/send_msg"
+      get_chat_history: "/character/get_chat_history"
+      get_app_list: "/character/get_app_list"
+      report_os_event: "/character/report_os_event"
+      get_mod_list: "/character/get_mod_list"
+      query_credits: "/character/query_credits"
+
+    chatroom:
+      get_info: "/chatroom/get_chatroom_info"
+      room_list: "/chatroom/room/list"
+
+    account:
+      get_user_status: "/account/get_user_status"
+
+    conversation:
+      poll_message: "/connection/poll_message"
+      query_sorted: "/conversation/page_query_sorted_conversation"
+      query_all_messages: "/conversation/page_query_all_message"
+      restart: "/conversation/restart_conversation"
+      accept_msg: "/conversation/accept_msg"
+      delete: "/conversation/delete_conversation"
+
+    storage:
+      list_files: "/list_files"
+      get_file: "/get_file"
+      put_text_files: "/put_text_files_by_json"
+
+    ugc:
+      mod_gen: "/mod/gen"
+      create_mod: "/create"
+      get_default_template: "/get_default_system_prompt_template"
+      ai_generate: "/generate_character"
+
+    events:
+      report: "/event/report"
+
+  # ── App Registry ────────────────────────────────────────────
+  # Discovered from get_app_list API response (2026-03-25)
+  apps:
+    1:
+      name: "OS"
+      description: "Desktop operating system — open/close apps, set wallpapers"
+      schema: "os"
+    2:
+      name: "Twitter"
+      description: "Social media — browse, post, like, comment, delete"
+      schema: "twitter"
+    3:
+      name: "Music Player"
+      description: "Songs, playlists, play modes — Cloud NAS storage"
+      schema: "musicPlayer"
+    4:
+      name: "Diary"
+      description: "Calendar navigation, mood tracking, weather tags, hand-drawn text"
+      schema: "diary"
+    8:
+      name: "Album"
+      description: "Browse pre-stored images — read-only, cloud-backed"
+      schema: "album"
+    11:
+      name: "Email"
+      description: "Browse, read, star, delete emails — Agent handles composing/sending"
+      schema: "email"
+    13:
+      name: "Evidence Vault"
+      description: "Read-only evidence/archive display — pre-stored cloud data"
+      schema: "evidencevault"
+    100:
+      name: "ChatRoom"
+      description: "Live streaming with scripts, emotions, video triggers"
+      schema: "chatroom"
+
+  # ── Known Models ────────────────────────────────────────────
+  models:
+    - "Modern"
+    - "MiniMax-M2.5"
+
+  # ── Known Characters ────────────────────────────────────────
+  characters:
+    6:
+      name: "Aoi"
+      description: "Silver-haired bounty hunter, cryo survivor, dangerous smile"
+
+  # ── Music Playlists (discovered 2026-03-25) ─────────────────
+  playlists:
+    - "ambient"
+    - "horror"
+    - "lyrical"
+    - "playful"
+    - "suspense"
+    - "tension"
+    - "urban chill"
+
+  # ── Filesystem Paths (discovered 2026-03-25) ────────────────
+  known_paths:
+    - "apps/musicPlayer/data/songs/"
+    - "apps/musicPlayer/data/playlists/"
+    - "apps/musicPlayer/data/state.json"
+    - "apps/email/data/emails/"
+    - "apps/diary/data/"
+    - "apps/twitter/data/tweets/"
+    - "apps/album/data/"
+    - "apps/evidencevault/data/"
+
+  # ── Local Settings ──────────────────────────────────────────
+  har_directory: "C:/Files/Models/HARS/openroom"
+  default_room_id: 5050
+  default_character_id: 6
+
+  # ── Telemetry (Guance RUM) ─────────────────────────────────
+  telemetry:
+    rum_endpoint: "https://us1-rum-openway.guance.com/v1/write/rum"
+    metrics_tracked:
+      - "long_task_duration"
+      - "resource_ttfb"
+      - "fcp"
+      - "lcp"
+      - "cls"
+      - "inp"
+      - "dom_interactive"
+      - "dom_content_loaded"

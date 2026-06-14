@@ -1,5 +1,19 @@
 """Unified embedding service — Gemini Embedding 2 with MRL + local fallback.
 
+Version: v1.57.1 [2026-03-26]
+
+Change Log:
+    v1.57.1 [2026-03-26] — Switch GeminiEmbeddingProvider to google.genai SDK (API key
+                            only, no cookies needed). Fixes silent provider creation
+                            failure when aistudio_client cookies are unavailable.
+                            aistudio_client REST wrapper kept as internal fallback.
+    v1.57.0 [2026-03-26] — Add embed_image() for multimodal embedding via Gemini
+                            (images → vectors using google.genai SDK inline_data)
+    v1.55.0 [2026-03-26] — Backward-compat: support old 'enable_gemini' config key
+                            with deprecation warning, migrate to 'gemini.enabled'
+    v1.50.2 [2026-03-24] — Fix Gemini config key (was enable_gemini, now reads enabled),
+                            add L2 normalization to LMStudio provider for cosine space
+
 Provides a single interface for generating text embeddings using:
   1. Gemini Embedding 2 (primary) — MRL support, 768/1536/3072 dimensions
   2. LMStudio SDK (local fallback) — offline capable, any loaded embedding model
@@ -110,6 +124,108 @@ class EmbeddingCache:
 
 # ──── Provider protocol ──────────────────────────────────────────────────────
 
+# ──── Error classification + circuit breaker ─────────────────────────────────
+# v1.49.5 [2026-03-22] — Re-applied: ProviderHealth, error classification, circuit breaker
+# (Previously lost when a background agent overwrote the file during logging edits)
+
+class EmbeddingUnavailableError(RuntimeError):
+    """Raised when all embedding providers have failed or are circuit-broken."""
+
+
+_TRANSIENT_EXCEPTIONS = (TimeoutError, ConnectionError, ConnectionRefusedError, OSError)
+
+
+# v1.50.1 [2026-03-22] — Trigger CDP auth recovery when Gemini API keys fail
+_AUTH_RECOVERY_COOLDOWN = 600.0
+_last_auth_recovery_time: float = 0.0
+
+def _trigger_auth_recovery() -> None:
+    global _last_auth_recovery_time
+    now = time.time()
+    if now - _last_auth_recovery_time < _AUTH_RECOVERY_COOLDOWN:
+        return
+    _last_auth_recovery_time = now
+    def _recover() -> None:
+        try:
+            from engine.nexus.cdp_auth_recovery import check_and_recover_if_needed
+            logger.info("[EmbeddingService] Triggering CDP auth recovery (operation=auth_recovery)")
+            status = check_and_recover_if_needed()
+            if status.healthy:
+                logger.info("[EmbeddingService] Auth recovery succeeded: %s (operation=auth_recovery)", status.summary())
+            else:
+                logger.warning("[EmbeddingService] Auth recovery failed: %s (operation=auth_recovery)", status.summary())
+        except Exception as exc:
+            logger.warning("[EmbeddingService] Auth recovery error (operation=auth_recovery): %s", exc)
+    t = threading.Thread(target=_recover, name="cdp-auth-recovery", daemon=True)
+    t.start()
+
+
+def _classify_error(exc: Exception) -> str:
+    """Classify an embedding error as 'transient' or 'permanent'."""
+    if isinstance(exc, _TRANSIENT_EXCEPTIONS):
+        return "transient"
+    status = getattr(exc, "status_code", None) or getattr(
+        getattr(exc, "response", None), "status_code", None
+    )
+    if status:
+        if status in (401, 403, 404):
+            return "permanent"
+        if status in (429, 500, 502, 503, 504):
+            return "transient"
+    msg = str(exc).lower()
+    if any(k in msg for k in ("api key", "unauthorized", "forbidden", "not found")):
+        return "permanent"
+    return "transient"
+
+
+@dataclass
+class ProviderHealth:
+    """Per-provider health tracking with circuit breaker."""
+    consecutive_failures: int = 0
+    total_failures: int = 0
+    total_successes: int = 0
+    last_error: str = ""
+    last_error_type: str = ""
+    circuit_open: bool = False
+    circuit_open_until: float = 0.0
+    PERMANENT_THRESHOLD: int = 2
+    TRANSIENT_THRESHOLD: int = 5
+    COOLDOWN_SECS: float = 300.0
+
+    def record_success(self) -> None:
+        self.consecutive_failures = 0
+        self.total_successes += 1
+        self.circuit_open = False
+
+    def record_failure(self, exc: Exception) -> None:
+        self.consecutive_failures += 1
+        self.total_failures += 1
+        self.last_error = str(exc)[:200]
+        self.last_error_type = _classify_error(exc)
+        threshold = self.PERMANENT_THRESHOLD if self.last_error_type == "permanent" else self.TRANSIENT_THRESHOLD
+        if self.consecutive_failures >= threshold:
+            self.circuit_open = True
+            self.circuit_open_until = time.time() + self.COOLDOWN_SECS
+            logger.warning("[EmbeddingService] Circuit breaker OPEN (%d failures, type=%s)",
+                           self.consecutive_failures, self.last_error_type)
+            if self.last_error_type == "permanent":
+                _trigger_auth_recovery()
+
+    def is_available(self) -> bool:
+        if not self.circuit_open:
+            return True
+        if time.time() >= self.circuit_open_until:
+            self.circuit_open = False
+            self.consecutive_failures = 0
+            return True
+        return False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"consecutive_failures": self.consecutive_failures, "total_failures": self.total_failures,
+                "total_successes": self.total_successes, "circuit_open": self.circuit_open,
+                "last_error": self.last_error, "last_error_type": self.last_error_type}
+
+
 class EmbeddingProvider(Protocol):
     """Interface for embedding providers."""
 
@@ -132,7 +248,7 @@ class GeminiEmbeddingProvider:
 
     def __init__(
         self,
-        model: str = "gemini-embedding-exp-03-07",
+        model: str = "gemini-embedding-2-preview",  # v1.56.1 [2026-03-26] — upgraded from deprecated exp-03-07
         output_dimensions: int = 768,
         api_key_index: int = 0,
         enabled: bool = True,
@@ -142,6 +258,7 @@ class GeminiEmbeddingProvider:
         self._dimensions = output_dimensions
         self._api_key_index = api_key_index
         self._client: Any = None
+        self._use_genai_sdk: bool = False  # v1.57.1 — set True when using google.genai SDK
         self._lock = threading.Lock()
         self._call_count = 0
         self._error_count = 0
@@ -155,29 +272,97 @@ class GeminiEmbeddingProvider:
     def dimensions(self) -> int:
         return self._dimensions
 
+    # v1.57.1 [2026-03-26] — Use google.genai SDK directly (API key only, no cookies)
+    # Falls back to aistudio_client REST wrapper if genai SDK fails to init.
+    # CONNECTS: google.genai Client, AI Studio API keys
+    # CALLED BY: embed(), embed_batch(), embed_image()
     def _get_client(self) -> Any:
+        """Get google.genai client — uses API key directly, no cookies needed.
+
+        Primary path: google.genai SDK with API key from the key pool.
+        Fallback: aistudio_client REST wrapper (needs cookies from account pool).
+
+        Returns:
+            google.genai.Client instance (or AIStudioClient as fallback).
+
+        Raises:
+            RuntimeError: If provider is disabled or both paths fail.
+        """
         if not self._enabled:
             raise RuntimeError("Gemini embedding provider disabled")
         if self._client is None:
+            # Primary path — google.genai SDK with API key (no cookies needed)
             try:
-                from engine.integrations.aistudio_client import get_aistudio_client
-
-                self._client = get_aistudio_client()
-            except Exception as exc:
-                logger.error("Failed to create AIStudioClient: %s", exc)
-                raise
+                from google import genai
+                from engine.integrations.aistudio_client import API_KEYS
+                self._client = genai.Client(api_key=API_KEYS[self._api_key_index])
+                self._use_genai_sdk = True
+                logger.info(
+                    "[EmbeddingService] Initialized google.genai SDK client "
+                    "(operation=init_provider, key_index=%d)",
+                    self._api_key_index,
+                )
+            except Exception as genai_exc:
+                logger.warning(
+                    "[EmbeddingService] google.genai SDK init failed, "
+                    "falling back to aistudio_client (operation=init_provider): %s",
+                    genai_exc,
+                )
+                # Fallback — aistudio_client REST wrapper (needs cookies)
+                try:
+                    from engine.integrations.aistudio_client import get_aistudio_client
+                    self._client = get_aistudio_client()
+                    self._use_genai_sdk = False
+                except Exception as rest_exc:
+                    logger.error(
+                        "[EmbeddingService] Both genai SDK and aistudio_client "
+                        "failed (operation=init_provider): genai=%s, rest=%s",
+                        genai_exc, rest_exc,
+                    )
+                    raise RuntimeError(
+                        f"All Gemini client init paths failed: "
+                        f"genai={genai_exc}, rest={rest_exc}"
+                    ) from rest_exc
         return self._client
 
+    # v1.57.1 [2026-03-26] — google.genai SDK primary, aistudio_client fallback
     def embed(self, text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> List[float]:
-        """Generate a single embedding vector."""
+        """Generate a single embedding vector.
+
+        Uses google.genai SDK (primary) or aistudio_client REST (fallback).
+
+        Args:
+            text: Text to embed.
+            task_type: Gemini task type (RETRIEVAL_DOCUMENT, RETRIEVAL_QUERY, etc.).
+
+        Returns:
+            List of float embedding values.
+        """
         client = self._get_client()
         try:
-            vector = client.embed_content(
-                model=self._model,
-                content=text,
-                task_type=task_type,
-                output_dimensionality=self._dimensions if self._dimensions != 3072 else None,
-            )
+            if getattr(self, "_use_genai_sdk", False):
+                # google.genai SDK path — API key only, no cookies
+                config = (
+                    {"output_dimensionality": self._dimensions}
+                    if self._dimensions != 3072
+                    else None
+                )
+                result = client.models.embed_content(
+                    model=self._model,
+                    contents=text,
+                    config=config,
+                )
+                vector = list(result.embeddings[0].values)
+            else:
+                # Fallback: aistudio_client REST wrapper
+                vector = client.embed_content(
+                    model=self._model,
+                    content=text,
+                    task_type=task_type,
+                    output_dimensionality=(
+                        self._dimensions if self._dimensions != 3072 else None
+                    ),
+                )
             self._call_count += 1
             if self._dimensions < 3072:
                 vector = _l2_normalize(vector)
@@ -185,22 +370,56 @@ class GeminiEmbeddingProvider:
         except Exception as exc:
             self._error_count += 1
             self._last_error = str(exc)
-            logger.warning("Gemini embed failed: %s", exc)
+            logger.warning(
+                "[EmbeddingService] Gemini embed failed (operation=embed): %s", exc
+            )
             raise
 
+    # v1.57.1 [2026-03-26] — google.genai SDK primary, aistudio_client fallback
     def embed_batch(self, texts: List[str],
                     task_type: str = "RETRIEVAL_DOCUMENT") -> List[List[float]]:
-        """Generate embeddings for multiple texts in one API call."""
+        """Generate embeddings for multiple texts.
+
+        Uses google.genai SDK (primary) or aistudio_client REST (fallback).
+        The SDK does not have a native batch endpoint, so texts are embedded
+        individually when using genai SDK.
+
+        Args:
+            texts: List of texts to embed.
+            task_type: Gemini task type.
+
+        Returns:
+            List of embedding vectors, one per input text.
+        """
         if not texts:
             return []
         client = self._get_client()
         try:
-            vectors = client.batch_embed_contents(
-                model=self._model,
-                texts=texts,
-                task_type=task_type,
-                output_dimensionality=self._dimensions if self._dimensions != 3072 else None,
-            )
+            if getattr(self, "_use_genai_sdk", False):
+                # google.genai SDK path — embed each text individually
+                config = (
+                    {"output_dimensionality": self._dimensions}
+                    if self._dimensions != 3072
+                    else None
+                )
+                vectors: List[List[float]] = []
+                for text in texts:
+                    result = client.models.embed_content(
+                        model=self._model,
+                        contents=text,
+                        config=config,
+                    )
+                    vectors.append(list(result.embeddings[0].values))
+            else:
+                # Fallback: aistudio_client REST wrapper (native batch)
+                vectors = client.batch_embed_contents(
+                    model=self._model,
+                    texts=texts,
+                    task_type=task_type,
+                    output_dimensionality=(
+                        self._dimensions if self._dimensions != 3072 else None
+                    ),
+                )
             self._call_count += 1
             if self._dimensions < 3072:
                 vectors = [_l2_normalize(v) for v in vectors]
@@ -208,7 +427,11 @@ class GeminiEmbeddingProvider:
         except Exception as exc:
             self._error_count += 1
             self._last_error = str(exc)
-            logger.warning("Gemini batch embed failed (%d texts): %s", len(texts), exc)
+            logger.warning(
+                "[EmbeddingService] Gemini batch embed failed "
+                "(operation=embed_batch, texts=%d): %s",
+                len(texts), exc,
+            )
             raise
 
 
@@ -217,6 +440,8 @@ class GeminiEmbeddingProvider:
 class LMStudioEmbeddingProvider:
     """Local embedding via LMStudio REST API (OpenAI-compatible)."""
 
+    # v1.44.0 [2026-03-21] — Reads api_token from config instead of constructor param
+    # v1.50.2 [2026-03-24] — L2-normalize vectors for cosine space consistency with Gemini
     def __init__(
         self,
         model_key: Optional[str] = None,
@@ -226,7 +451,21 @@ class LMStudioEmbeddingProvider:
         self._model_key = model_key or "text-embedding"
         base = api_host or "127.0.0.1:1234"
         self._base_url = base if base.startswith("http") else f"http://{base}"
-        self._api_token = api_token
+        # Resolve token: explicit param → config → None
+        if api_token:
+            self._api_token = api_token
+        else:
+            try:
+                from engine.config import get_config
+                self._api_token = get_config().get("lmstudio.api_token", "") or None
+            except Exception:
+                self._api_token = None
+        # v1.50.2 [2026-03-24] — Read normalize flag from config (was ignored for LMStudio)
+        try:
+            from engine.config import get_config as _gc
+            self._normalize = _gc().get("nexus.embeddings.normalize", True)
+        except Exception:
+            self._normalize = True
         self._session = requests.Session()
         self._dimensions_cache: Optional[int] = None
         self._call_count = 0
@@ -253,30 +492,55 @@ class LMStudioEmbeddingProvider:
             headers["Authorization"] = f"Bearer {self._api_token}"
         return headers
 
-    # v1.43.0 [2026-03-21] — Better error detection for LMStudio embedding endpoint
+    # v1.50.1 [2026-03-22] — Retry logic + dual endpoint fallback for LMStudio
+    # CONNECTS: LMStudio REST API (/v1/embeddings or /api/v0/embeddings)
+    # CALLED BY: embed(), embed_batch()
+    _ENDPOINTS = ["/v1/embeddings", "/api/v0/embeddings"]
+
     def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        resp = self._session.post(
-            # Embeddings use OpenAI-compat /v1/embeddings (NOT native /api/v1/)
-            f"{self._base_url}/v1/embeddings",
-            headers=self._headers(),
-            json=payload,
-            timeout=30,
+        last_exc: Optional[Exception] = None
+        for attempt in range(3):
+            for endpoint in self._ENDPOINTS:
+                try:
+                    resp = self._session.post(
+                        f"{self._base_url}{endpoint}",
+                        headers=self._headers(),
+                        json=payload,
+                        timeout=45,
+                    )
+                    if resp.status_code >= 400:
+                        raise RuntimeError(
+                            f"LMStudio embed HTTP {resp.status_code} on {endpoint}: "
+                            f"{resp.text[:200]}"
+                        )
+                    try:
+                        data = resp.json()
+                    except Exception as exc:
+                        raise RuntimeError(f"LMStudio embed invalid JSON: {exc}") from exc
+                    # LMStudio may return 200 with error body when no model loaded
+                    if "error" in data:
+                        err_msg = data.get("error", {})
+                        if isinstance(err_msg, dict):
+                            err_msg = err_msg.get("message", str(err_msg))
+                        raise RuntimeError(f"LMStudio embed error: {err_msg}")
+                    if not data.get("data"):
+                        raise RuntimeError(
+                            "LMStudio embed returned no data — is an embedding model loaded?"
+                        )
+                    return data
+                except Exception as exc:
+                    last_exc = exc
+                    logger.debug(
+                        "LMStudio embed attempt %d/%d on %s failed: %s",
+                        attempt + 1, 3, endpoint, exc,
+                    )
+            # Brief pause before retry (model may be loading)
+            if attempt < 2:
+                time.sleep(1.0 * (attempt + 1))
+        raise RuntimeError(
+            f"LMStudio embed failed after 3 attempts across {len(self._ENDPOINTS)} "
+            f"endpoints. Last error: {last_exc}"
         )
-        if resp.status_code >= 400:
-            raise RuntimeError(f"LMStudio embed HTTP {resp.status_code}: {resp.text[:200]}")
-        try:
-            data = resp.json()
-        except Exception as exc:
-            raise RuntimeError(f"LMStudio embed invalid JSON: {exc}") from exc
-        # LMStudio may return 200 with an error body when no embedding model is loaded
-        if "error" in data:
-            err_msg = data.get("error", {})
-            if isinstance(err_msg, dict):
-                err_msg = err_msg.get("message", str(err_msg))
-            raise RuntimeError(f"LMStudio embed error: {err_msg}")
-        if not data.get("data"):
-            raise RuntimeError("LMStudio embed returned no data — is an embedding model loaded?")
-        return data
 
     def _extract_embeddings(self, data: Dict[str, Any]) -> List[List[float]]:
         items = data.get("data") or []
@@ -299,7 +563,11 @@ class LMStudioEmbeddingProvider:
         if not vectors:
             raise RuntimeError("LMStudio embed returned no vectors")
         self._call_count += 1
-        return vectors[0]
+        # v1.50.2 [2026-03-24] — L2-normalize for cosine space (matches Gemini behavior)
+        vector = vectors[0]
+        if self._normalize:
+            vector = _l2_normalize(vector)
+        return vector
 
     def embed_batch(
         self, texts: List[str], task_type: str = "RETRIEVAL_DOCUMENT"
@@ -318,6 +586,9 @@ class LMStudioEmbeddingProvider:
                 f"LMStudio embed_batch mismatch: expected {len(texts)}, got {len(vectors)}"
             )
         self._call_count += 1
+        # v1.50.2 [2026-03-24] — L2-normalize for cosine space (matches Gemini behavior)
+        if self._normalize:
+            vectors = [_l2_normalize(v) for v in vectors]
         return vectors
 
 
@@ -358,7 +629,7 @@ class EmbeddingService:
     ) -> None:
         cfg = get_config()
         self._model = model or cfg.get(
-            "nexus.embeddings.model", "gemini-embedding-exp-03-07"
+            "nexus.embeddings.model", "gemini-embedding-2-preview"
         )
         self._dimensions = dimensions or cfg.get(
             "nexus.embeddings.dimensions", 768
@@ -371,7 +642,14 @@ class EmbeddingService:
         )
         self._batch_size = batch_size
         self._api_key_index = api_key_index
-        self._enable_gemini = cfg.get("nexus.embeddings.enable_gemini", False)
+        # v1.55.0 [2026-03-26] — Backward-compat: support old config key
+        gemini_enabled = cfg.get("nexus.embeddings.gemini.enabled",
+                                 cfg.get("nexus.embeddings.enabled",
+                                         cfg.get("nexus.embeddings.enable_gemini", True)))
+        if cfg.get("nexus.embeddings.enable_gemini") is not None:
+            logger.info("[EmbeddingService] Deprecated config key 'embeddings.enable_gemini' "
+                        "— migrate to 'embeddings.gemini.enabled' (operation=config_migration)")
+        self._enable_gemini = gemini_enabled
         self._lmstudio_host = cfg.get("lmstudio.host", "127.0.0.1")
         self._lmstudio_port = cfg.get("lmstudio.port", 1234)
         self._lmstudio_token = cfg.get("lmstudio.api_token", None)
@@ -382,6 +660,7 @@ class EmbeddingService:
 
         # Build provider chain (lazy — providers instantiated on first use)
         self._providers: List[EmbeddingProvider] = []
+        self._provider_health: Dict[str, ProviderHealth] = {}  # v1.49.5 circuit breaker
         self._active_provider: Optional[EmbeddingProvider] = None
 
     def _ensure_providers(self) -> None:
@@ -401,7 +680,7 @@ class EmbeddingService:
                 )
                 providers.append(gp)
             except Exception as exc:
-                logger.warning("Cannot create Gemini provider: %s", exc)
+                logger.warning("[EmbeddingService] Cannot create Gemini provider (operation=init_provider): %s", exc)
 
         if self._preferred_provider in ("local", "auto", "gemini"):
             try:
@@ -416,7 +695,7 @@ class EmbeddingService:
                 logger.debug("Cannot create LMStudio provider: %s", exc)
 
         if not providers:
-            logger.error("No embedding providers available!")
+            logger.error("[EmbeddingService] No embedding providers available (operation=init_provider)!")
 
         self._providers = providers
         if providers:
@@ -451,16 +730,22 @@ class EmbeddingService:
         start = time.time()
         last_exc: Optional[Exception] = None
 
+        # v1.49.5 [2026-03-22] — Circuit breaker + health tracking per provider
         for provider in self._providers:
+            pname = provider.name
+            health = self._provider_health.setdefault(pname, ProviderHealth())
+            if not health.is_available():
+                logger.debug("[EmbeddingService] Provider %s circuit-broken, skipping", pname)
+                continue
             try:
                 vector = provider.embed(text, task_type=task_type)
                 elapsed_ms = (time.time() - start) * 1000
 
+                health.record_success()
                 self._cache.put(text, task_type, self._dimensions, vector)
                 with self._lock:
                     self._stats.total_embeds += 1
                     self._stats.total_texts += 1
-                    pname = provider.name
                     self._stats.provider_used[pname] = (
                         self._stats.provider_used.get(pname, 0) + 1
                     )
@@ -475,19 +760,21 @@ class EmbeddingService:
 
             except Exception as exc:
                 last_exc = exc
-                logger.debug("Provider %s failed, trying next: %s", provider.name, exc)
+                health.record_failure(exc)
+                logger.warning("[EmbeddingService] Provider %s failed (type=%s): %s",
+                               pname, _classify_error(exc), exc)
                 continue
 
         with self._lock:
             self._stats.errors += 1
         if last_exc:
-            logger.warning(
-                "All embedding providers failed (graceful skip). Last: %s",
+            logger.error(
+                "[EmbeddingService] All providers failed (operation=embed) — data NOT embedded: %s",
                 last_exc,
             )
-        else:
-            logger.warning("No embedding providers configured (graceful skip)")
-        return []
+            raise EmbeddingUnavailableError(f"All providers failed. Last: {last_exc}")
+        logger.error("[EmbeddingService] No providers configured (operation=embed)")
+        raise EmbeddingUnavailableError("No embedding providers configured")
 
     def embed_batch(
         self, texts: List[str], purpose: str = "knowledge"
@@ -527,9 +814,14 @@ class EmbeddingService:
         start = time.time()
         last_exc: Optional[Exception] = None
 
+        # v1.49.5 [2026-03-22] — Circuit breaker + health tracking per provider
         for provider in self._providers:
+            pname = provider.name
+            health = self._provider_health.setdefault(pname, ProviderHealth())
+            if not health.is_available():
+                logger.debug("[EmbeddingService] Provider %s circuit-broken, skipping batch", pname)
+                continue
             try:
-                # Process in chunks of batch_size
                 all_vectors: List[List[float]] = []
                 for chunk_start in range(0, len(uncached_texts), self._batch_size):
                     chunk = uncached_texts[chunk_start:chunk_start + self._batch_size]
@@ -537,18 +829,15 @@ class EmbeddingService:
                     all_vectors.extend(chunk_vectors)
 
                 elapsed_ms = (time.time() - start) * 1000
+                health.record_success()
 
-                # Place results and cache them
                 for j, idx in enumerate(uncached_indices):
                     results[idx] = all_vectors[j]
-                    self._cache.put(
-                        texts[idx], task_type, self._dimensions, all_vectors[j]
-                    )
+                    self._cache.put(texts[idx], task_type, self._dimensions, all_vectors[j])
 
                 with self._lock:
                     self._stats.batch_embeds += 1
                     self._stats.total_texts += len(uncached_texts)
-                    pname = provider.name
                     self._stats.provider_used[pname] = (
                         self._stats.provider_used.get(pname, 0) + 1
                     )
@@ -563,21 +852,132 @@ class EmbeddingService:
 
             except Exception as exc:
                 last_exc = exc
-                logger.debug(
-                    "Provider %s batch failed, trying next: %s", provider.name, exc
-                )
+                health.record_failure(exc)
+                logger.warning("[EmbeddingService] Provider %s batch failed (type=%s): %s",
+                               pname, _classify_error(exc), exc)
                 continue
 
         with self._lock:
             self._stats.errors += 1
         if last_exc:
-            logger.warning(
-                "All providers failed for batch embed (graceful skip). Last: %s",
-                last_exc,
+            logger.error("[EmbeddingService] All providers failed for batch (operation=embed_batch): %s", last_exc)
+            raise EmbeddingUnavailableError(f"All providers failed for batch. Last: {last_exc}")
+        logger.error("[EmbeddingService] No providers configured for batch")
+        raise EmbeddingUnavailableError("No embedding providers configured")
+
+    # ──── Multimodal embedding ─────────────────────────────────────────────
+
+    # v1.57.1 [2026-03-26] — Reuse Gemini provider's genai client (no duplicate init)
+    # CONNECTS: google.genai Client, AI Studio API keys, Gemini embedding model
+    # CALLED BY: External callers needing image→vector embeddings (e.g. visual search)
+    def embed_image(
+        self,
+        image_path: str,
+        purpose: str = "knowledge",
+    ) -> Optional[List[float]]:
+        """Embed an image using Gemini's multimodal embedding model.
+
+        Reuses the GeminiEmbeddingProvider's genai client when available.
+        Falls back to creating a standalone client if the provider chain
+        doesn't have a genai-SDK-based Gemini provider.
+
+        Args:
+            image_path: Path to the image file (PNG, JPEG, etc.).
+            purpose: Semantic purpose (currently unused for images, reserved
+                for future task-type differentiation).
+
+        Returns:
+            List of float embedding values, or None on failure.
+        """
+        try:
+            from google.genai import types
+            from pathlib import Path as _Path
+
+            # Try to reuse the Gemini provider's client from the provider chain
+            self._ensure_providers()
+            genai_client = None
+            for provider in self._providers:
+                if isinstance(provider, GeminiEmbeddingProvider):
+                    try:
+                        client = provider._get_client()
+                        if getattr(provider, "_use_genai_sdk", False):
+                            genai_client = client
+                    except Exception:
+                        pass
+                    break
+
+            # Fallback: create a standalone genai client
+            if genai_client is None:
+                from google import genai
+                from engine.integrations.aistudio_client import API_KEYS
+                genai_client = genai.Client(api_key=API_KEYS[0])
+
+            # Read image and detect MIME type
+            img_path = _Path(image_path)
+            if not img_path.exists():
+                logger.warning(
+                    "[EmbeddingService] Image not found (operation=embed_image, path=%s)",
+                    image_path,
+                )
+                return None
+
+            img_bytes = img_path.read_bytes()
+            suffix = img_path.suffix.lower()
+            mime_map = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+                ".bmp": "image/bmp",
+            }
+            mime = mime_map.get(suffix, "image/png")
+
+            # Determine output dimensions from provider chain if available
+            output_dims = self._dimensions if self._dimensions else 768
+
+            result = genai_client.models.embed_content(
+                model="gemini-embedding-2-preview",
+                contents=types.Content(parts=[
+                    types.Part(
+                        inline_data=types.Blob(mime_type=mime, data=img_bytes),
+                    ),
+                ]),
+                config={"output_dimensionality": output_dims},
             )
-        else:
-            logger.warning("No embedding providers configured for batch (graceful skip)")
-        return []
+
+            if result.embeddings:
+                vector = list(result.embeddings[0].values)
+                # L2-normalize for cosine space consistency
+                if output_dims < 3072:
+                    vector = _l2_normalize(vector)
+                logger.debug(
+                    "[EmbeddingService] Image embedded (operation=embed_image, path=%s, dims=%d)",
+                    image_path,
+                    len(vector),
+                )
+                return vector
+
+            logger.warning(
+                "[EmbeddingService] Image embedding returned no vectors (operation=embed_image, path=%s)",
+                image_path,
+            )
+            return None
+
+        except ImportError as exc:
+            logger.warning(
+                "[EmbeddingService] google-genai SDK not available for image embedding "
+                "(operation=embed_image): %s",
+                exc,
+            )
+            return None
+        except Exception as exc:
+            logger.warning(
+                "[EmbeddingService] Image embedding failed (operation=embed_image, path=%s): %s",
+                image_path,
+                exc,
+            )
+            return None
 
     # ──── Similarity utilities ────────────────────────────────────────────
 

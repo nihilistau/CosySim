@@ -4,6 +4,895 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.61.0] — "PUBLIC RELEASE PREP" — 2026-06-13
+
+Made the repository safe and inviting to publish: a full credential security
+audit (no live secrets in the tree), a hardened ignore policy, and a complete
+professional README + documentation pass.
+
+### Security — credentials externalized (no real secret remains in tracked source)
+- **80+ secrets removed**: 24 hardcoded Google API keys across
+  `engine/integrations/` (aistudio/drive/workspace) → `os.getenv`; 55 keys in
+  `config/nlm_rpcids.yaml` → file gitignored + redacted
+  `config/nlm_rpcids.example.yaml` shipped; the LMStudio API token and a real
+  personal email pulled out of `config/default.yaml` and source; a live
+  `FIREBASE_API_KEY` in the ARGUS sesame client; and key/email stragglers
+  redacted from `docs/ARGUS_*` reports and a heap test fixture.
+- **Secret pattern**: real values live only in a gitignored `.env` (auto-loaded
+  by `engine/config.py` via python-dotenv) or `config/secrets.yaml`; committed
+  config uses `${ENV_VAR}` placeholders resolved at read time. `.env.example`
+  documents every variable. **Local runtime is preserved** — verified config
+  loads, all scenes import, and NEON CITY launches clean.
+- **Personal identifiers** (account handles) moved to
+  `COSYSIM_DEFAULT_ACCOUNT` / `COSYSIM_KNOWN_ACCOUNTS` env vars.
+- **`.gitignore` hardened**: secrets, `config/nlm_rpcids.yaml`,
+  `data/heap_findings*`, dumps, `*.bak`, cookies/credentials, heap variants;
+  `git rm --cached` applied to the two tracked sensitive files (kept on disk).
+
+### Documentation — flagship README + assets
+- **Complete README rewrite** (drafted by an 8-agent fleet, assembled by hand):
+  hero, badges, "Start here" navigation table, quickstart, security/config guide,
+  then deep sections — Overview &amp; Architecture, NEON CITY living world, Engine
+  Internals (interceptors · stream-tag spec decoding · custom LMStudio steering ·
+  ephemeral servers · the Oracle's dual role), NLM + NEXUS frontier-from-local,
+  CONTROL (training/finetune/self-improvement), Integrations/Apps/CLI, the ARGUS
+  protocol, and the Creation pillar. Emphasizes the open, learn-from-it nature.
+- **`docs/assets/scenes/`** — 21 curated scene screenshots embedded/linked.
+- README deep-links the existing `docs/` tree (all links verified to resolve).
+
+---
+
+## [1.60.0] — "LIVING SYSTEMS" — 2026-06-13
+
+A 10-agent fleet upgrade (disjoint file ownership; shared-file hooks integrated
+centrally) that takes the gameplay + infra subsystems from "wired" to pro level.
+Builds directly on the v1.59 feedback loops.
+
+### Gameplay depth
+- **Faction standing now matters** — new `engine/world/faction_gates.py` with
+  reusable helpers scenes call: `shop_access_allowed`, `price_multiplier_for`
+  (matching faction −10%, rival +15%, graded by band), `filter_missions_by_standing`,
+  `npc_standing_note`. `FactionAI._decide()` now weights actions by the player's
+  standing (allies expand/defend near you, rivals raid/sabotage toward your
+  district), and territory-control shifts are broadcast on the EventBus
+  (`NEONCITY_FACTION_SHIFT`) — previously computed but never emitted.
+- **Mission consequences + chains** — completion/failure applies faction-control,
+  reputation, and heat deltas via the player API; new
+  `engine/world/mission_chains.py` defines gated multi-mission arcs (off by
+  default); difficulty/reward scale with player skill levels; crew availability
+  is enforced on assignment.
+- **Crew skill-checks** — operations resolve via a graded success/partial/failure
+  check derived from crew level + loyalty + op difficulty (was: always full
+  reward). Loyalty shifts on outcome; rewards scale per tier.
+- **Equipment & consumables** — new `engine/world/equipment_effects.py` maps
+  equipped cyberware/weapons to real skill/stat bonuses
+  (`get_equipment_bonuses`); consumable effects generalised to work by item
+  *category* instead of a 9-item hardcoded list; optional condition wear.
+- **Economy world-event shocks** — `Market.subscribe_to_world_events()` wires
+  world events → supply/demand shocks via `apply_event` (war→weapons,
+  festival→luxury, shortage→surge), and territory control now flows into
+  specialty-good pricing (`refresh_territory_multipliers`). Activated once at
+  LivingWorld bootstrap. Preserves v1.59 buy/sell settlement.
+
+### Agent depth
+- **Neurochemistry from dialogue** — new `StimulusDetectInterceptor` (pri 88)
+  NLP-detects compliment/insult/kiss/touch/rejection/threat/comfort in replies
+  and applies the matching neurochemistry stimulus to the speaker/addressee, so
+  characters affect each other emotionally from what they actually say (was:
+  stimuli only ever triggered manually).
+
+### Infra hardening
+- **Scheduler** — per-task timeout enforcement (a hung task no longer blocks the
+  loop); stub tasks log an honest "not implemented" instead of faking success.
+- **LMStudio federation** — exponential backoff + jitter on peer health retries;
+  `__del__`/close no longer spews logging noise during interpreter shutdown.
+- **Observability** — flood-guard and error-bucket growth are now LRU-bounded;
+  error-rate threshold alerting (throttled); structured-logging init self-check.
+- **Dead code resolved** — TaskQueue / finetune orchestrator / auto_train either
+  wired into a real path or removed cleanly with exports updated.
+
+### Integration & config
+- All knobs exposed in `config/default.yaml` (faction_gates, territory.faction_ai,
+  mission, crew.skill_check, world.equipment, economy.event_shocks,
+  neurochemistry.stimulus_detect, scheduler, observability.error_aggregator/oracle,
+  lmstudio.task_queue_v2, lmlink.health.backoff) with safe in-code defaults.
+- Each agent shipped hermetic pytest coverage; shared-file edits (interceptor
+  registration, config, activation calls) were applied centrally to avoid
+  parallel-edit conflicts.
+
+---
+
+## [1.59.0] — "CONSEQUENTIAL WORLD" — 2026-06-13
+
+Closed the open feedback loops surfaced by a full subsystem audit. The
+infrastructure was strong (MCP pipeline, agent loop, LMStudio client, Nexus
+router) but state changes flowed downstream and were discarded instead of
+feeding back into the world or agent decisions. This release makes actions
+consequential.
+
+### Added — feedback loops
+- **StatSyncInterceptor (pri 91)** — agents emit `[STAT:arousal+10]` /
+  `[STAT:trust=60]` and the deltas are now **applied to character game state**
+  via the state coordinator (with stat-name aliases: desire→horniness,
+  joy→happiness, …). Runs just before MoodSync (92) so its threshold-rule
+  auto-evaluation sees the new values. Previously these tags were parsed and
+  thrown away — the single biggest "plumbing without payoff" gap.
+- **Economy settlement** — `market.buy()`/`sell()` now move real value:
+  buy deducts credits from the player wallet, adds the good to inventory, and
+  raises **heat** on contraband; sell requires possession, removes the item,
+  and credits the wallet. Unaffordable/unheld trades are rejected and leave the
+  market untouched. Configurable under `economy:` in `config/default.yaml`
+  (`settle`, `contraband_heat_per_unit`, `sell_to_inventory`).
+- **EventCascade ↔ WorldSim** — WorldSim gained an `on_event(callback)`
+  subscriber registry fired from its single event funnel (`_log_event`);
+  `EventCascade.start()` (which already probed for `on_event`) now actually
+  connects, and the handler maps `SimEventType` → `WorldEventType` so scene
+  subscriptions match. Cross-scene ripples finally receive world events.
+
+### Changed — governance
+- **Skill cooldown + prerequisites enforced** in the AgentGovernor auto-skill
+  loop. The auto path bypassed `SkillRegistry.execute_skill` (which enforces
+  these), so auto skills could fire every turn regardless of their declared
+  `cooldown`. Registered skills are now throttled and gated on prerequisites;
+  unregistered MCP tools are unaffected. Added `CooldownTracker.was_used()`.
+
+### Audit notes (verified, no change needed)
+- Heat already gates the casino (≥80) and drives lounge NPC behaviour (≥65/85).
+- The rules engine is already auto-applied every reply (MoodSync threshold eval),
+  and action tags already bump conversation heat — the static audit understated
+  existing wiring.
+- Crew operations already complete via scene routes + the `crew_check_operations`
+  skill (request-driven); a redundant background timer was intentionally **not**
+  added to avoid double-resolution races.
+
+### Tests
+- `test_stat_sync_interceptor.py` (6), `test_market_settlement.py` (5),
+  `test_eventcascade_worldsim.py` (3) — all green; adjacent dialog/skills/scene
+  suites unaffected.
+
+---
+
+## [1.58.0] — "DARK RENAISSANCE" — 2026-06-11
+
+All-scene visual glow-up from the `artifacts/new-assets` design system, three.js
+ES-module migration with a full penthouse 3D overhaul, new NEONCITY landing page,
+and a round of launcher/TUI/runtime bug fixes.
+
+### Fixed (bugs first)
+- **TUI navigation** — ←/→ hop between target list and center panel, ↑/↓ are
+  focus-aware (services table vs target list), Enter/Space launch from either
+  panel, rows clickable/focusable; launches now run as isolated
+  `launcher.py <name>` subprocesses (Stop works for every target type)
+- **lab_break / grid never launched from TUI** — their `__init__` rejected the
+  `host=` kwarg the TUI passes; both constructors now accept it
+- **Penthouse camera presets crashed after config load** — `setCameraViews`
+  now normalizes the YAML `position` key to the runtime `pos` shape
+- **Scene rules never registered** — 2-arg `add_rule(SCENE_ID, rule)` calls in
+  neoncity/coders/command_center, nonexistent `register_action()` in
+  casino/command_center, and a wildcard-tripped idempotency guard meant NO
+  scene rules/actions had ever reached the SceneRulesEngine; rewritten to the
+  real API (neoncity 11+5, coders 8+4, casino 7, command_center 5+5)
+- **`DialogSystem.set_directive(scene_id=)`** — 5 lounge call sites fixed to
+  `scene=` (stage songs, drink rituals, secret reveals all failed silently)
+- **`MCPFramework.get_or_create()`** — asset_studio called a method that never
+  existed; now `get_scene()`; stale guidance strings in nexus_seeder and
+  generate_coder corrected
+- **NLM RPC registry corruption** — all three writers now use shared
+  `engine.utils.atomic_write_json()` (tmp + `os.replace`); corrupt files are
+  quarantined to `.corrupt` instead of erroring forever
+- **intel_hub duplicate assistant blueprint** — idempotent `mount_assistant()`
+- **launcher** — single-target launch refuses to double-bind an occupied port;
+  subprocess scene logs line-buffered; `browser_test.py --scene` accepts names
+- **Restarted a wedged Windows WMI service** that hung every Python startup at
+  `platform._wmi_query` (aiohttp import) under heavy multi-process load
+
+### three.js r128 → r184 (ES modules)
+- Vendored `three.module.min.js` + addons (OrbitControls, GLTFLoader,
+  RoomEnvironment, RoundedBoxGeometry, BufferGeometryUtils, SkeletonUtils)
+  under `content/shared/static/vendor/three/`; import-map partial at
+  `content/shared/templates/partials/three_importmap.html`
+- `content/shared/static/js/three_boot.js` — module boot exposing
+  `window.THREE` (+addons), loading the legacy chain with `async=false`
+  (parallel fetch, ordered execution)
+- Physical-light conversion (×π) across penthouse_3d.js, bedroom.js,
+  lab_3d.js, penthouse_model_import.js; `outputEncoding` removals; CDN
+  GLTFLoader bootstrap deleted
+
+### Penthouse 3D overhaul (Dark Renaissance)
+- Rose `#fb7185` / violet `#9d71ea` material re-grade, RoomEnvironment IBL,
+  transmission-glass curtain wall (south wall is now a floor-to-ceiling
+  window), instanced 64-building skyline with 320 twinkling windows, neon
+  smog bands, night-sky gradient backdrop, GPU rain curtain (600 shader
+  streaks), rose/violet emissive furniture trim, eye-tuned lighting
+- Characters rethemed to the kit identities: Mira (plum-black bob) and new
+  Rei (silver-lavender)
+- 32 FPS on RTX 2060 (headed), zero console errors, all 8 camera views
+
+### Scenes glow-up (all 24 scene keys)
+- `design_tokens_v2.css`: Orbitron display voice, Inter body, Share Tech Mono
+  terminal voice, per-scene accent-rgb fallbacks for all 24 scene keys
+- Webfonts vendored locally (`/shared/fonts/*.woff2` + `fonts.css`) —
+  offline-safe; adds Share Tech Mono + Press Start 2P
+- Shared `.cs-chat-bubble` / `.cs-chat-log` dialogue components
+- Per-scene v2 passes — kit-backed: neoncity, grid, heist, oracle, phone,
+  intel_hub, neonos, hub, asset_studio; extrapolated: tavern, lounge, casino,
+  arena, realm, gallery, lab_break chrome, auction, cyberspace, coders,
+  games, command_center, service UIs
+
+### Landing page
+- Hub `/` now serves the NEONCITY Dark Renaissance landing (skyline, rain,
+  neon title, live footer stats); THE TERMINAL catalogue moved to `/terminal`;
+  navbar/footer hub links point at the catalogue
+
+---
+
+## [1.57.2] — "RPC SYSTEM OVERHAUL + UNIFIED CLI + MULTI-PROTOCOL PROXY + PRIME PE RESEARCH" — 2026-03-27
+
+Complete NLM rpcid system rebuild, unified CLI framework with 15 standalone apps,
+multi-protocol model proxy, and prime-harmonic positional encoding research.
+
+### Prime-Harmonic PE Research (NEW)
+- `apps/prime_encoding/` — self-contained research project (84 tests, 10 modules)
+- Phase 1: mathematical analysis — zeta PE decorrelates 5x faster than sinusoidal
+- Phase 2: synthetic benchmarks — zeta PE matches 100% accuracy on all 4 tasks
+- Phase 3 (local): real language modelling on WikiText-103 (RTX 2060)
+  - **Zeta PE is the ONLY encoding where perplexity improves at longer context (-0.9%)**
+  - Sinusoidal: flat (+0.1%), prime(a=1.0): degrades (+47.3%)
+  - First empirical signal that quasicrystalline frequencies handle long-range better
+- Weighting experiment: 90% zeta / 10% prime optimal (best absolute PPL 1429.4)
+- Attention distance probe: zeta dims attend 7% further (scale decomposition signal)
+- Hybrid fix: per-band normalisation + interleaving (reordering alone: +11% → -0.3%)
+- `apps/prime_encoding/cli.py` — full research CLI (train, compare, sweep, probe, freqs)
+- H100 notebook ready for full-scale run: `PrimePE_Phase3_H100.ipynb`
+- Full research document: `apps/prime_encoding/RESEARCH.md` (v1.5.1, 12 references)
+
+### Multi-Protocol Model Proxy (NEW)
+- Two proxy variants:
+  - `scripts/model_proxy.py` (:5800) — normalized: all protocols convert through OpenAI intermediate format
+  - `scripts/model_proxy_direct.py` (:5801) — zero-conversion: each protocol serializes directly to/from Copilot text (~7x faster)
+- `apps/proxy.py` + `apps/multi_proxy.py` — standalone CLI apps for both variants
+- OpenAI: `POST /v1/chat/completions` with full tool/function calling support
+- Anthropic: `POST /v1/messages` with `tool_use` content blocks
+- Gemini: `POST /v1beta/models/{model}:generateContent` with `functionCall` parts
+- Tool calling emulation for Copilot (38 frontier models) via system prompt injection + `<tool_call>` parsing
+- LMStudio native passthrough (tool calling supported natively)
+- Protocol normalization: all incoming requests converted to internal format, responses converted back
+- 21 models across 5 vendors (Anthropic, OpenAI, Google, xAI, Local)
+- Full alias map: legacy OpenAI/Anthropic/Gemini model IDs resolve to current versions
+- CLI: `--default`, `--account`, `--lmstudio-url`, `--list-models`, `--port`
+- Works with: OpenCode, aider, Cursor, Continue, Anthropic SDK, google-genai SDK
+
+### Unified CLI & Standalone Apps (NEW)
+- `cli.py` — single entry point with 16 command groups (ask, oracle, account, har, heap, argus, cdp, nlm, filestore, test, scene, nexus, launch, cleanup, proxy, lmstudio)
+- 15 standalone apps in `apps/` — each independently runnable with venv auto-bootstrap
+- `apps/_bootstrap.py` — shared venv detection, sys.path setup, subprocess helpers
+- Auto venv re-exec: `python cli.py` works from system Python (no manual activation)
+- `apps/nlm.py upload` — auto-renames .py/.js/.yaml to .py.txt for NLM compatibility
+- `apps/filestore.py` — Gemini File Search CLI (create stores, upload, query, bootstrap)
+- `apps/lmstudio.py` — LMStudio management (status, models, chat, benchmark)
+- `apps/training.py` — Training pipeline CLI (status, datasets, bench, curate)
+- `engine/integrations/github_account_importer.py` — added CLI with auto-detect username
+- Full reference: `docs/APPS.md`
+
+### RPC System Overhaul
+Complete NLM rpcid system rebuild. Operations now use call-time registry lookups
+instead of import-time constants. Auto-recovery on rpcid rotation.
+
+### RPC Auto-Update Pipeline
+- `RpcidUpdater` bridges ARGUS HAR/heap mining → registry (NEW: engine/integrations/rpcid_updater.py)
+- Parses batchexecute traffic from HAR files, extracts rpcids, updates JSON cache
+- Mines V8 heap snapshots for gRPC method names
+
+### Call-Time Registry Lookups
+- `get_rpcid(operation)` replaces import-time RPC_* constants
+- 3-tier fallback: YAML registry → JSON mapper → hardcoded
+- All 15 _batchexecute() calls in nlm_operations.py converted
+- Rpcid changes picked up at runtime without restart
+
+### Auto-Recovery on Rotation
+- Per-rpcid null detection in nlm_transport.py
+- Automatic fallback to alternate rpcid from registry
+- Stale rpcids tracked for diagnostics
+
+### 60 gRPC Method Names Mapped
+- LMStudio heap mining revealed complete LabsTailwindOrchestrationService surface
+- 59 methods mapped in nlm_rpcids.yaml across 10 categories
+- New methods: AddTentativeSources, DiscoverSourcesManifold, CheckSourceFreshness,
+  RefreshSource, CopyProject, ExecuteWritingFunction, MutateAccount/Note/Project/Source
+- gRPC method lookup in nlm_rpc_registry.py
+
+### Embedding Pipeline Fixed
+- GeminiEmbeddingProvider uses google.genai SDK (no cookies needed)
+- Embedding hooks run in daemon threads (non-blocking)
+- Model standardized to gemini-embedding-2-preview across all files
+
+### NLM Parser Updated
+- nlm_ask.py updated for current Gemini response format
+- Handles nested wrb.fr chunk structure
+
+---
+
+## [1.57.0] — "GEMINI NATIVE" — 2026-03-26
+
+Full Gemini API integration: embeddings, File Search, structured output, context caching.
+
+### Gemini Embedding 2 Preview
+- Upgraded from deprecated `gemini-embedding-exp-03-07` to `gemini-embedding-2-preview`
+- ChromaDB native `GoogleGenerativeAiEmbeddingFunction` (replaces custom bridge)
+- Multimodal `embed_image()` for PNG/JPEG/GIF/WEBP via google.genai SDK
+- All 5 API keys confirmed working
+
+### Gemini File Search (Managed RAG)
+- `FileSearchClient` — create stores, upload docs, query with grounded citations
+- QueryRouter Tier 2.5 between vector search and FTS
+- Auto-distillation: every File Search answer stored in Nexus Q&A cache
+- `bootstrap_project_stores()` uploads 9 core docs
+
+### Structured Output
+- `generate_structured()` via google.genai SDK with JSON schema enforcement
+- 6 extraction schemas: QA_BATCH, TASK_DECOMPOSITION, KNOWLEDGE_ENTRY, AGENT_DECISION, GROUNDED_ANSWER
+- NLM Flywheel + QA Distiller upgraded to prefer structured output over regex
+- Knowledge Forge Q&A extraction uses structured output
+
+### Context Caching
+- `ContextCacheClient` — cache context.md + CLAUDE.md server-side
+- Copilot Bridge uses cached context for plan decomposition
+- Scheduler: `context-cache-refresh` task every 8h
+
+### System-Wide Integration
+- Scheduler: 91 tasks (+2: file-search-sync weekly, context-cache-refresh 8h)
+- Oracle: GEMINI SERVICES section (File Search stores + context cache status)
+- LMStudio Router: per-agent Nexus hit rate → route to smaller model
+- ARGUS: File Search API endpoints in recon config
+- Q&A cache relevance scoring (40% word overlap threshold)
+
+---
+
+## [1.56.0] — "NEXUS v2" — 2026-03-26
+
+Full Nexus schema expansion, agent type system with registry-backed access control, unified KnowledgePipeline, LMStudio model health with Nexus routing hints, self-maintenance (freshness scoring, hash dedup), and Oracle metrics for Nexus/LMStudio.
+
+### Part A: Nexus Schema Expansion (35 tables)
+- **agent_registry** table — stores agent type, capabilities, last seen, registration timestamp
+- **access_log** table — records every Nexus operation with agent_id, operation, resource, timestamp
+- **subscriptions** table — per-agent topic subscriptions for event routing
+- Schema now totals **35 tables** across knowledge, governance, training, agent registry, and access tracking
+
+### Part B: Agent Type System (8 types)
+- **AGENT_TYPES** enum: copilot, claude_code, scene_agent, scheduler, training, observer, player, system
+- **Auto-registration** — agents register on first Nexus interaction with type detection
+- **Registry-backed access** — governance rules resolve agent type from registry before permission check
+- Agent capabilities tracked: read, write, delete, admin, embed, train
+
+### Part C: KnowledgePipeline (unified ingest-to-Q&A)
+- **`engine/nexus/knowledge_pipeline.py`** — `get_knowledge_pipeline()` singleton
+- Unified flow: ingest → validate → dedup (content hash) → store → embed → auto Q&A generation
+- Content validation: minimum length, encoding check, duplicate detection via SHA-256 hash
+- Auto Q&A: generates question-answer pairs from stored knowledge for cache priming
+- Integrates with TrainingFlywheel for fine-tuning data collection
+
+### Part D: LMStudio Model Health & Nexus Routing Hint
+- **Model health tracking** — per-model success/failure rates, latency percentiles
+- **Nexus routing hint** — QueryRouter checks model health before falling back to LLM tier
+- Unhealthy models (>50% failure rate) trigger automatic Nexus-first routing preference
+
+### Part E: Self-Maintenance (freshness scoring, hash dedup)
+- **Freshness scoring** — knowledge entries scored by age, access frequency, and citation count
+- **Hash dedup** — SHA-256 content hashing prevents duplicate entries across all ingest paths
+- **Stale entry pruning** — scheduler task marks entries below freshness threshold for review
+- 89 scheduler tasks now registered (up from 32)
+
+### Part F: Oracle Nexus/LMStudio Metrics
+- **Oracle dashboard** now shows Nexus cache hit rate, agent registry size, and access log volume
+- **LMStudio metrics** — model load/unload events, inference latency by model, error rates
+- New Oracle CLI flags surface Nexus and LMStudio health alongside existing service grid
+
+---
+
+## [1.55.0] — "NEXUS ALIVE" — 2026-03-26
+
+Wired the self-improvement loop end-to-end. Agents now check Nexus knowledge cache before GPU, decisions feed training, models hot-reload after promotion, and governance is enforced.
+
+### Nexus-First Agent Inference (THE BIG ONE)
+- **VirtualAgentManager** checks QueryRouter BEFORE LMStudio — cache hits skip GPU entirely
+- Feature-flagged via `nexus.agent_cache.enabled` (default true), min confidence 0.75
+- Per-agent stats tracking in QueryRouter (agent_queries, agent_hits)
+- Graceful fallback: if Nexus unavailable, falls through to LLM as before
+
+### Training Feedback Loop Closed
+- **DataCollector**: new `collect_agent_decision()` and `collect_agent_outcome()` methods
+- **AgentLoop**: every tick logs situation→action→result to `agent_decision_live.jsonl`
+- Quality signals: success=1.0, failure=0.3 — auto-feeds training pipeline
+- Loop: agent decisions → JSONL → auto_train → finetune → promote → hot-reload
+
+### Model Hot-Reload After Promotion
+- **ModelRegistry.promote()** now broadcasts to VirtualAgentManager
+- **VirtualAgentManager.on_model_promoted()** accepts live model updates
+- No restart needed — agents pick up new models immediately
+
+### Governance Enforcement
+- **PermissionError** re-raised in 8 NexusClient methods (was silently swallowed)
+- **Governance rules auto-seeded** on first access (idempotent `ensure_seeded()`)
+- Callers can now catch and handle RBAC violations explicitly
+
+### Plan Decomposition Skill
+- New `nlm_decompose_task` skill in nlm_forge pack
+- Breaks complex tasks into numbered steps via NLM (adapts to model size)
+- Two-tier: KnowledgeForge.decompose() → NLM router fallback
+
+### Nexus KMS v1.4.0 (C:\Files\Nexus)
+- Fixed NLMSyncEngine import mismatch in routes/nlm.py
+- Fixed NLMSyncEngine constructor missing store/client args in mcp/server.py
+- Removed deprecated browser_bridge.py (HTTP-only backend)
+- Added API key auth for non-localhost requests
+- Config: prefer_backend changed from "auto" to "http"
+
+### Embedding Config Migration
+- Backward-compatible support for old `embeddings.enable_gemini` key
+- Deprecation warning logged with migration instructions
+
+---
+
+## [1.54.0] — "FINAL SYSTEM POLISH" — 2026-03-26
+
+Full system audit and hardening across 30 scenes, engine layer, and all subsystems. Production-ready.
+
+### BenchHUD Cleanup (7 scenes)
+- Removed legacy `cosysim-bench.js` script from arena, gallery, neoncity, intel_hub, heist, phone templates
+- Eliminates duplicate footer bar that overlapped the shared `cs-footer`
+
+### Interceptor Pipeline Completion
+- Registered 6 missing interceptors in `engine/agents/interceptors/__init__.py`
+- ContentIntensityInterceptor (pri 1), CharacterMemoryInterceptor (pri 7), WorldStateInterceptor (pri 15), ReputationInterceptor (pri 22), DialogueGateInterceptor (pri 45), GrammarScannerInterceptor (pri 95)
+- Full pipeline now 36 interceptors, sorted by priority
+
+### Silent Failure Elimination
+- **Oracle**: error handler emit failures now logged (was silent `pass`)
+- **Gallery/Lounge interceptors**: 8 debug-level exception handlers upgraded to warnings with Oracle-format context
+- **CharacterRegistry**: Nexus sync failures now logged (was silent `pass`)
+- **AgentLoop**: unregister MCP failure upgraded from debug to warning
+- **Crew system**: PlayerProfile import failure now logged
+
+### Stale Code Cleanup
+- Deleted `neoncity_v146.html` (stale v1.46 template, 577 lines)
+- Converted `console.log` → `console.info` with module prefixes in neonos, auction, cyberspace JS
+- Converted 140+ `var` → `const`/`let` in penthouse_model_import.js and penthouse_anim_studio.js
+
+### System Hardening
+- **AgentGovernor**: auto-skill type validation before `_invoke_mcp_tool()` invocation
+- **QueryRouter**: null guards on Nexus client in all 4 tier methods
+- **NeonCity board game**: bounds checking on hex grid positions with `_validate_position()`
+- **Config**: detailed logging of loaded base, env, and pillar files on init
+
+---
+
+## [1.53.1] — "PENTHOUSE REVIVAL" — 2026-03-26
+
+Four penthouse bugs fixed: 3D characters now render, move, and interact correctly.
+
+### Penthouse 3D — Character Rendering Fixed
+- **penthouse_3d.js scoping crash** — `_initialized`, `_initError`, `_readyCallbacks` were declared inside `init()` but referenced from `_safeInit()` at IIFE scope; strict mode threw `ReferenceError`, permanently blocking CharacterBridge `onReady` callbacks and leaving `_scene` null
+- **Character models now visible** — CharacterBridge pipeline unfrozen: init → syncCharacters → CharModels.create → scene.add all flow correctly
+- **Per-location Y offsets** — characters placed ON furniture (bed y=0.70, couch y=0.50, bar y=0.55, bath y=0.45, vanity y=0.40) instead of at floor level clipping through geometry
+- **Duplicate name labels fixed** — CharacterBridge now removes built-in CharModels label before adding its own styled pill label
+
+### Penthouse Agent Loop — Multi-Character Fix
+- **Hot-registration** — characters added after the agent loop starts are now immediately registered via `_register_char_with_loop()`, with full agent + governance + context injection
+- Previously, only characters present at loop start time participated; latecomers stood idle
+
+### Footer Cleanup
+- **BenchHUD removed from penthouse** — legacy collapsible performance HUD (`cs-bench-hud`, z-index 9990) overlapped the new `cs-footer`; script removed entirely from template, `_initBenchHUD()` method deleted
+- **Footer version bumped** — `neon_base.html` footer now reads "CosySim v1.53"
+
+### Diagnostic Logging
+- `[CharModels]` load confirmation with outfit/look/pose counts
+- `[CharBridge]` breadcrumbs at init, syncCharacters, ensureCharacter with dependency state
+- try/catch around `CharModels.create()` — errors surface in console instead of failing silently
+
+---
+
+## [1.52.0] — "LIVE GAME + CO-OP HEISTS" — 2026-03-26
+
+HUD polish, browser test coverage, CSS responsiveness, multiplayer co-op
+heist squad system, launch scripts, and live visual verification.
+
+### HUD Narrative + Spectator Widgets
+- **Narrative progress bar** — purple mini-bar in HUD strip showing current story pack stage + title
+- **Spectator/danmaku counter** — cyan subscriber count with eye icon
+- Both auto-show/hide based on `/api/hud/state` data presence
+- DOM elements in `neon_hud.html`, rendering in `cosysim-neon-hud.js`
+
+### CSS Polish + Mobile Breakpoints
+- **HUD responsive** — hide narrative/spectator at <768px, hide rep/weather/time at <480px
+- **Footer responsive** — wraps at <640px, hides keyboard hints on mobile
+- **Danmaku entrance glow** — `.cosy-danmaku-msg--new` with brightness 1.4 pulse
+
+### Browser Test Extensions
+- Footer: `.cs-footer` existence, version text, keyboard hints, quick links
+- Navbar: `#cs-navbar` existence, 8+ scene links
+- Danmaku: F7 toggle creates/destroys overlay
+- HUD widgets: `#hud-narrative` and `#hud-spectator` DOM presence
+
+### Multiplayer Co-Op Heist Squad System
+- **engine/multiplayer/squad.py** (370 lines) — `Squad`, `SquadMember`, `SquadManager`
+- Full lifecycle: create → join → set roles → ready check → start heist → complete → loot split
+- Loot split: equal base + 10% bonus per obstacle cleared - 5% penalty per argument
+- 6 valid roles: hacker, muscle, talker, driver, demo, recon
+- `SquadStatus`: forming → ready → in_heist → completed/disbanded
+- Thread-safe singleton via `get_squad_manager()`
+- 3 new heist skills: `form_heist_squad`, `invite_to_squad`, `vote_phase_advance`
+
+### Launch Scripts
+- **start_services.ps1** — starts Nexus KMS + Hub with health checks
+- **start_scenes.ps1** — launches scenes with zombie port cleanup (Clear-Port)
+- Both use `-WindowStyle Minimized` so errors are visible
+- Zombie port killer prevents stale processes from blocking new launches
+
+### Bug Fixes
+- `update_docs.py` regex fix — comma in `~1,040` no longer causes doubling
+- Footer version: v1.51 → v1.52
+- Zombie port cleanup in start_scenes.ps1
+- `127.0.0.1 localhost` added to hosts file (was commented out, causing IPv6 resolution)
+
+### Known Issues
+- `Start-Process` launched Flask-SocketIO scenes may timeout on some Windows configs
+- Workaround: use TUI (`python tui.py`) or run `python launcher.py <scene>` directly in foreground
+- Root cause: werkzeug dev server + SocketIO polling transport; fix: switch to waitress/gunicorn
+
+### Live Verification
+- Oracle scene verified fully loaded via Chrome MCP screenshot (port 7777)
+- All CSS, HUD, navbar, footer, meditation panel, fortune, city pulse, whispers rendering correctly
+- 496 pytest smoke tests passing
+
+### Files
+- 2 new files: `engine/multiplayer/squad.py` (370 lines), `scripts/start_scenes.ps1`
+- Modified: `cosysim-neon-hud.js`, `neon_hud.html`, `cosysim-neon-hud.css`, `neon_base.css`, `cosysim-danmaku.css`, `browser_test.py`, `heist_planning_skills.py`, `update_docs.py`, `start_services.ps1`, `flask_scene.py`, `oracle_scene.py`
+
+---
+
+## [1.51.1] — "FEATURE SPRINT" — 2026-03-25
+
+Hardening + feature sprint building on v1.51.0 OpenRoom features. Fixed all
+test failures, added faction/heat interceptors, expanded story packs, new
+skill packs, group chat, Signal Desktop App, and Oracle Persistent Companion.
+
+### Bug Fixes
+- **FastMCP v2 → v3 upgrade** — pydantic 2.12.5 compatibility. `get_tools()` → `list_tools()`, `_tool_manager` → async re-export. All 28 test_mcp_server + 24 test_nexus_bridge tests pass.
+- **Starlette pinned < 1.0** — FastAPI Router compat fix for TTS + canvas tests
+- **496 tests passing** (was 493 with 3 failures — now 0 failures)
+
+### Faction-Aware NPC Responses (Interceptor, priority 40)
+- **FactionContextInterceptor** — reads player's faction_standings from PlayerState, injects context so NPCs naturally adjust tone: allied members are warm, hostile ones are threatening
+- Standing labels: allied (50+), friendly (20+), neutral, unfriendly (-20), hostile (-50)
+- Character→faction mapping for NeonCity factions (OmniCorp, Ghost_Net, Iron Collective, Neon Syndicate, Free Radicals, Chrome Saints)
+
+### Heat/Wanted System in Agent Responses (Interceptor, priority 75)
+- **HeatAwarenessInterceptor** — injects heat level context into NPC prompts
+- 4 heat tiers: LOW (20+), MODERATE (40+), HIGH (60+), CRITICAL (80+)
+- Type-specific reactions: authorities confront, criminals demand you cool off, merchants refuse service
+- Character type detection: authority, criminal, merchant, civilian
+
+### 2 New Narrative Story Packs (5 total)
+- **tavern_intrigue** — "The Stranger's Bargain" — 4 stages: stranger arrives → secret revealed → trust decision → fallout
+- **grid_data_heist** — "The Phantom Download" — 3 stages: find mark → infiltrate node → extraction under pressure
+- Auto-load wired in: Realm (dragonfire), Tavern (intrigue), Grid (heist) — now 5 scenes auto-load packs
+
+### Faction Politics Skill Pack (10 skills)
+- `charm_npc`, `blackmail`, `negotiate_alliance`, `spread_rumor`, `bribe_official`, `request_favor`, `betray_faction`, `defect_to_faction`, `call_in_debt`, `political_speech`
+- All interact with PlayerState (credits, heat, faction_standings)
+- Risk/reward mechanics: blackmail (50% success, +credits or +heat), betrayal (-40 standing +15 heat)
+
+### Heist Planning Skill Pack (8 skills)
+- `case_target`, `find_weaknesses`, `recruit_specialist`, `plan_entry`, `plan_escape`, `acquire_tools`, `set_distraction`, `execute_heist`
+- Full heist lifecycle: recon → plan → equip → execute with risk roll
+- 6 specialist types (hacker, muscle, driver, insider, demolitions, face)
+- Risk system: each preparation step reduces risk %, final roll determines success
+- Heist plans persist to virtual filesystem
+
+### Group Chat for Phone Scene (4 new routes)
+- `POST /api/threads/create_group` — create group with 2+ characters
+- `POST /api/threads/<id>/group_message` — send message, all characters reply with staggered delays
+- `GET /api/threads/<id>/group_messages` — paginated group history with sender names
+- `POST /api/threads/<id>/group_reply` — trigger single character reply
+- Characters see full group context (last 30 messages) and react to each other
+- SocketIO real-time broadcast for group messages + typing indicators
+
+### Infrastructure
+- Interceptors: 28 → **30** (faction_context + heat_awareness)
+- Story packs: 3 → **5** (tavern_intrigue + grid_data_heist)
+- Skills: ~1,010 → **~1,030** (18 new: 10 faction_politics + 8 heist_planning)
+- Tests: 493 → **496** passing (0 failures, was 3)
+
+### Signal Desktop App (4 tabs, 11 new routes)
+- **Desktop mode** — tab bar toggle from dock replaces app grid with Messages | Email | Files | Music
+- **Email tab** — inbox from NexusFilesystem `/home/player/inbox/`, read/star/delete with unread badges
+- **Files tab** — virtual filesystem browser with breadcrumbs, directory navigation, file viewer, file type icons
+- **Music tab** — playlist browser from `/home/{char}/playlists/`, song listing, play/next/stop, now-playing bar
+- 3 new backend modules: `email_app.py`, `files_app.py`, `music_app.py`
+- 11 new API routes: `/api/email/*`, `/api/files/*`, `/api/music/*`
+- 240 lines new CSS, 421 lines new JS (3 registerApp calls + tab switching system)
+
+### Oracle Persistent Companion (autonomous agent)
+- **OracleCompanion** class — background agent loop (5-min interval, weighted random actions)
+- **5 autonomous actions:** diary (30%), Signal message (25%), observation (20%), playlist (15%), email (10%)
+- Generates content via LMStudio with Oracle personality prompt (mystery: 0.99)
+- Writes diary entries to `/home/oracle/journal/`
+- Sends cryptic Signal messages to player's phone (real-time via SocketIO)
+- Curates mood playlists (midnight_meditation, neon_pulse, ghost_frequencies, chrome_dreams)
+- Composes intel/prediction emails to player's inbox
+- Writes field observations to `/home/oracle/notes/`
+- Auto-registers Oracle in CharacterRegistry with full personality stats
+- Started from `oracle_scene.py` `on_before_serve()`
+
+### ARGUS Modular Rewrite
+- **config/argus_openroom.yaml** — config-driven endpoint registry (146 lines), 8-app catalog, playlists, known FS paths
+- **openroom_config.py** — config loader with YAML + Python defaults, 15+ convenience accessors
+- OpenRoom client refactored from hardcoded constants to config-driven
+- New HAR findings: complete app registry, storage API, music system, email system, UGC mod gen, Guance RUM
+
+### Files
+- 14 new files, 12 modified files
+- `engine/agents/oracle_companion.py` (369 lines)
+- `content/scenes/phone/apps/email_app.py` (209 lines)
+- `content/scenes/phone/apps/files_app.py` (129 lines)
+- `content/scenes/phone/apps/music_app.py` (207 lines)
+- `config/argus_openroom.yaml` (146 lines)
+- `scripts/argus/clients/openroom_config.py` (263 lines)
+- `engine/agents/interceptors/faction_context.py` (140 lines)
+- `engine/agents/interceptors/heat_awareness.py` (130 lines)
+- `engine/skills/builtin/faction_politics_skills.py` (350 lines)
+- `engine/skills/builtin/heist_planning_skills.py` (400 lines)
+- `content/scenes/phone/phone_scene_v2.py` (+722 lines)
+- `content/scenes/phone/static/js/phone_v2.js` (+421 lines)
+- `content/scenes/phone/static/css/phone.css` (+242 lines)
+
+---
+
+## [1.51.0] — "OPENROOM FEATURES" — 2026-03-25
+
+6 features inspired by OpenRoom/VibeApps that transform AI characters from reactive
+chat agents into autonomous beings with memory, agency, and a virtual world. Identified
+through ARGUS deep analysis (HAR traffic, V8 heap snapshots, open source code review).
+
+### Feature 1 — save_memory + recall_about Skills
+- **save_memory** — Agents proactively save important info to long-term memory with 5 categories: fact, preference, event, emotion, observation
+- **recall_about** — Subject-based memory retrieval with optional category filter
+- Extended `search_memory` with subject/category filtering
+- **Modified:** `engine/skills/builtin/memory_skills.py`, `content/simulation/database/rag.py`
+
+### Feature 2 — Danmaku/Spectator Mode
+- **SpectatorBus** singleton — thread-safe broadcast/subscribe with 200-entry ring buffer
+- **SpectatorBroadcastInterceptor** (priority 92) — extracts reply text, mood, agent from post-call context
+- **cosysim-danmaku.js + CSS** — floating right-to-left bullet comments with neon glow, 5-lane layout, F7 toggle, mood-mapped colors
+- **Oracle spectator API** — `/api/oracle/spectator` endpoint + `danmaku_msg` SocketIO event
+- **New:** `engine/services/spectator_bus.py`, `engine/agents/interceptors/spectator_broadcast.py`, `content/shared/static/js/cosysim-danmaku.js`, `content/shared/static/css/cosysim-danmaku.css`
+
+### Feature 3 — NeonOS Virtual Desktop Shell
+- **NeonOS scene** (port 5593) — virtual desktop rendering every CosySim scene as a draggable/resizable window
+- **cosysim-desktop.js** — `NeonDesktop` class (app launcher grid, taskbar, z-index management) + `NeonWindow` class (drag, resize, minimize, maximize, close)
+- **/api/apps** endpoint — reads control_plane_registry, TCP-probes ports for online/offline status
+- Glass-morphism windows with neon-glow borders matching each app's accent color
+- **New:** `content/scenes/neonos/` (5 files), `content/shared/static/js/cosysim-desktop.js`, `content/shared/static/css/cosysim-desktop.css`
+
+### Feature 4 — Virtual Filesystem over Nexus
+- **NexusFilesystem** — path-based CRUD mapping virtual paths to Nexus KMS entries
+- Auto-seeds `/home/player/`, `/home/player/notes/`, `/home/player/journal/`, `/shared/`, `/system/`
+- 6 filesystem skills: `read_file`, `write_file`, `list_files`, `make_directory`, `delete_file`, `find_files`
+- **New:** `engine/nexus/filesystem.py`, `engine/skills/builtin/fs_skills.py`
+
+### Feature 5 — Stage+Target Narrative System
+- **NarrativeModEngine** singleton — manages narrative mods with stages and completion targets
+- **ModStage** + **ModTarget** data model — stages have prompt injections, targets track completion
+- **NarrativeModInterceptor** (priority 15) — injects current stage context into agent system prompts
+- 4 narrative skills: `start_narrative`, `complete_target`, `get_narrative_progress`, `advance_narrative_stage`
+- Auto-advances stage when all targets in current stage complete
+- **Wired into Realm** — branching quest acceptance → start_mod, branch choice → complete_target
+- **Wired into Lab Break** — personality arcs as stages, arc shifts → target completion
+- **New:** `engine/mcp/narrative_mod.py`, `engine/agents/interceptors/narrative_mod.py`, `engine/skills/builtin/narrative_skills.py`
+
+### Feature 6 — Character Creation Pipeline
+- **CharacterWizard** — 6-stage pipeline: Archetype → Appearance → Voice → Stats → Story → Memory Seed
+- 5 archetypes: companion, rival, mentor, trickster, guardian (each with default personality, tone, traits)
+- `finalize()` registers in CharacterRegistry, seeds memories in RAGMemory, auto-seeds backstory
+- **New:** `engine/creation/character_wizard.py`
+
+### Infrastructure
+- Interceptor pipeline expanded from 26 to **28** interceptors
+- Skills expanded from ~1,000 to **~1,010** (10 new skills across 3 packs)
+- Targets expanded from 32 to **33** (NeonOS added)
+- **New ARGUS clients:** `scripts/argus/clients/sesame_client.py` (Sesame AI explorer), `scripts/argus/clients/openroom_client.py` (OpenRoom explorer)
+- **ARGUS generic analyzers:** protocol auto-detection, HAR analysis, heap analysis, deep automated pipeline
+
+### Tests
+- 493 smoke tests passing, 0 regressions
+- `test_neonos.py` — NeonOS scene routes
+- Pre-existing failures in `test_nexus_bridge.py` (tool count assertions) and `test_mcp_server.py` (pydantic compat) unchanged
+
+### Documentation
+- **New:** `docs/OPENROOM_FEATURES.md` — comprehensive guide to all 6 features with inspiration, architecture, usage, and code examples
+- Updated: README.md, CHANGELOG.md, INDEX.md, ARCHITECTURE.md, INTERCEPTORS.md, SKILLS.md, SCENES.md, CLAUDE.md
+
+### Files
+- **18 new files**, **5 modified files**, **~3,800 new lines**
+- Full file listing in [docs/OPENROOM_FEATURES.md](docs/OPENROOM_FEATURES.md)
+
+---
+
+## [1.50.2] — "NEXUS SELF-IMPROVING PIPELINE" — 2026-03-24
+
+Major hardening sprint: NEXUS self-improving loop fully wired, tested, and verified
+running end-to-end (10/10 smoke test). Embedding pipeline fixed, vector search
+operational, scheduler auto-assignment live, flywheel execution tracking, bidirectional
+config sync.
+
+### Phase 1 — Fix the Plumbing
+- **Gemini embedding config fix** — code read `enable_gemini` (non-existent key, always `False`); now reads `nexus.embeddings.enabled` — Gemini Embedding 2 finally initializes
+- **LMStudio L2 normalization** — LMStudio vectors were unnormalized in cosine space; now L2-normalized matching Gemini provider behavior (norm=1.0000 verified)
+- **Vector store feature flag** — `nexus.vector_store.enabled` config now actually respected; `is_vector_store_enabled()` guard added to query router Tier 2
+- **Vector store health check** — `NexusVectorStore.health()` method for Oracle observability
+- **Query provenance logging** — every query resolution logged with tier, confidence, time for Oracle aggregation
+
+### Phase 2 — Close the Feedback Loop
+- **Distiller → task generation** — `NexusDistiller.distill()` now auto-creates verification tasks via TaskScheduler when fix patterns are found
+- **Session logger governance** — raw HTTP fallback now logs warnings; session_distillation.py rewritten to use governed `get_nexus_client()` instead of `urllib.request`
+- **Agent feedback entries** — `LocalAgentBridge.complete_task()` stores structured feedback (category=agent-feedback) for distiller pattern extraction
+
+### Phase 3 — Scheduler Observable
+- **Enhanced `status()`** — overdue count, error rate %, tasks sorted by urgency, `next_due_in_s` per task
+- **Oracle endpoint** — `/api/oracle/scheduler` already wired (confirmed working)
+
+### Phase 4 — Scheduler Auto-Assignment
+- **Fixed `auto_assign()` bug** — was calling `claim_task(agent_id)` which claims wrong task; now uses `claim_task_by_id(task.id, agent_id)`
+- **Stale task cleanup** — `cleanup_stale_tasks()` resets CLAIMED tasks stuck >24h to PENDING
+- **Agent capability registry** — `build_agent_registry()` discovers loaded LMStudio models, maps to capability dicts with model size parsing
+- **Daemon task registered** — `task-auto-assign` runs every 5m: discovers agents → cleans stale → auto-assigns
+
+### Phase 5 — Flywheel Execution Tracking
+- **`_poll_previous_tasks()`** — checks execution status of tasks from prior flywheel runs before creating new ones
+- **Failed task fingerprint clearing** — FAILED tasks get fingerprint removed so they can be re-created
+- **Stuck task reset** — PENDING >48h tasks get `fail_task(retry=True)` to re-enter the queue
+
+### Phase 6 — Bidirectional Copilot Config Sync
+- **Pull methods** — `pull_instructions_from_nexus()`, `pull_agents_from_nexus()`, `pull_hooks_from_nexus()`, `pull_all_from_nexus()` with conflict detection (disk newer → skip + warn)
+- **`bidirectional_sync()`** — push first, then pull
+- **Structured preferences** — `store_preference()` now uses `add_entry()` with structured tags instead of fragile `add_qa()` storage
+- **Session lifecycle** — pull at session start, push at session end (copilot_bridge.py)
+
+### Smoke Test & Verification
+- **`scripts/nexus_smoke_test.py`** — 10-check end-to-end verification: Nexus health, embedding service, vector store, query router, scheduler daemon, config consistency, self-improvement loop
+- **10/10 passing** with Nexus KMS running
+
+### Tests
+- 16 new auto-assign tests (test_auto_assign.py)
+- 5 new flywheel tracking tests (test_flywheel_tracking.py)
+- 8 new copilot sync tests (test_copilot_sync.py)
+- 4 new vector search tests added to test_query_router.py (was globally disabled, now properly mocked)
+- 197 NEXUS tests passing, zero regressions
+
+### Files
+- 15 files modified, 3 new test files, 1 new script
+- engine/nexus/: embedding_service, vector_store, query_router, nexus_distiller, session_logger, session_distillation, local_agent_bridge, scheduler_daemon, task_scheduler, notebooklm_flywheel, copilot_self_config, copilot_bridge
+- config/default.yaml: embeddings + vector_store + tasks.auto_assign config
+- scripts/nexus_smoke_test.py: end-to-end verification
+
+---
+
+## [1.49] — "INTERACTIVE SYSTEMS + CREATION KIT + API-FIRST" — 2026-03-22
+
+Major sprint: 3 interactive game UIs, a complete visual scene editor,
+API-first architecture, and long-standing 3D bug fixes.
+
+### v1.46 — NeonCity Interactive Systems
+- **Rich event feed** — color-coded cards with type icons (7 types), severity dots (0–3), impact badges (economy/heat/rep), click-to-expand descriptions, actor/faction tags
+- **Board game UI overhaul** — movement range highlighting, storm gradient visualization, player health overlays with mini HP bars, turn transition banners, game over screen with stats, resume existing game, weapon selection dropdown
+- **Cyberspace intrusion UI** — canvas-based network graph at `/cyberspace`, node navigation with click-to-move, ICE combat (break/cloak/siphon/virus), program deployment sidebar, data extraction, detection meter (green/amber/red), session summary overlay, CRT phosphor-green aesthetic
+- 15+ new REST endpoints wired to CyberspaceEngine
+- Cyberspace link added to NeonCity hacker_den district card
+
+### v1.47–v1.48 — Creation Kit (Visual Scene Editor)
+- **37 components** across 7 categories: Layout (7), Display (7), Input (5), Data (6), Game (4), Nav (4), Media (3)
+- **Component types:** glass_panel, column_layout, sidebar, section_divider, spacer, divider_line, custom_html, stat_bar, portrait, ticker, progress_tracker, alert_banner, timer_display, text_block, chat_log, button, tab_bar, button_group, select_dropdown, card_grid, inventory_grid, faction_bars, event_feed, economy_panel, data_table, crew_roster, mission_board, skill_tree, npc_roster, scene_header, modal, map_widget, toast_container, particle_canvas, image_display, canvas_widget, hud_badge_row
+- **Nested layouts** — container components (glass_panel, column_layout, sidebar, modal) have slot drop zones; components drop into named slots
+- **Drag-drop editor** — palette sidebar with search, canvas with drag reorder, property inspector with type-aware fields (text, color, select, boolean, number, textarea)
+- **Live auto-preview** — debounced split-view iframe refreshes on every change
+- **Save/load** — layouts persist as JSON in `data/layouts/`
+- Registered in control_plane_registry (creation pillar, port 5592)
+
+### v1.49 — Scene Factory (HTML + CSS + JS Generation)
+- **CSS generation engine** — derives full color palette from accent color (9 variants), generates component-specific CSS for only used types, responsive breakpoints, scrollbar styling
+- **JS generation engine** — generates `TavernScene`-style class with Socket.IO connection, stat bar auto-updaters, chat log handler with Enter key, button click wiring (auto-detects drink-* patterns → order_drink), HUD badge updaters, toast notification system, scene lifecycle
+- **API-first data fetchers** — auto-generates `fetch()` + client-side render functions for data-driven components (inventory, events, factions, NPCs, missions, crew, data tables)
+- **Full export pipeline** — writes HTML template + scene CSS + scene JS to scene directory
+
+### v1.49 — Grid Scene Live Swap (API-First Proof)
+- Rebuilt THE GRID through Creation Kit (27 component instances)
+- **Removed all Jinja2 data rendering** — no `{% for %}` loops, no `{{ variable }}` data injection
+- `render_template("grid.html")` with **zero context arguments**
+- Market items rendered client-side via `loadMarketItems()` → `/api/market/items`
+- Faction cards rendered client-side via `loadFactionData()` → `/api/faction/standings`
+- Structural Jinja2 preserved (extends, blocks) for neon_base.html composition
+- Original template preserved as `grid_original.html`
+
+### v1.49.1 — Penthouse 3D Fix (6 Bugs)
+- **Characters Y=0 sinking** → use `location.pos.y` for furniture height
+- **Director avatar disappearing** → only remove on explicit user action, not state fetch omissions; added `_explicitRemove` flag
+- **depthTest:false on sprites** → enabled `depthTest: true, depthWrite: false`, set `renderOrder: 10` (labels) and `11` (bubbles)
+- **Location Y ignored** → `updateCharPositions()` uses `pos.y`
+- **Director race condition** → guard checks `group.parent` before animate
+- **Sprite z-ordering** → `renderOrder` above character body but respects scene depth
+
+### Tests
+- 335 NeonCity tests pass, 115 cyberspace tests pass
+- 89 Grid tests pass (API-first), 172 Penthouse tests pass
+- 22 scene registration/import tests pass (including creation_kit)
+- All templates parse cleanly (Jinja2 validation)
+
+### Files
+- 19 files changed, +7,501 lines, -454 deletions
+
+---
+
+## [1.45] — "NEONCITY PLAYABLE DASHBOARD" — 2026-03-21
+
+Interactive missions, crew operations, shop, skills, hacking, heat warnings.
+
+- Mission detail modal (objectives checklist, progress bar, rewards, complete/abandon)
+- Crew operations modal (6 op types, crew selector, countdown timers)
+- Inventory context menu (use/equip/sell actions, rarity glow)
+- Shop integration (shared shop component wired with buy/sell)
+- Skill progression panel (8 skills with XP bars, global level)
+- Hacking trigger (target browser, CosyHack wired)
+- Heat warning system (amber/red/critical visual thresholds, WANTED badge)
+- Fixed API bugs (double dict serialization, crew format, recruit tuple)
+- 7 new REST endpoints, +2102 lines, all 51 tests pass
+
+---
+
+## [1.44] — "LMSTUDIO OVERHAUL + NEONCITY DASHBOARD" — 2026-03-21
+
+Complete LMStudio subsystem refactor and NeonCity HUD overhaul.
+
+### LMStudio Refactor (engine/lmstudio/)
+- **Unified `chat.py` facade** — `chat()`, `chat_response()`, `chat_stateful()`, `chat_structured()`, `quick_reply()` functions; every scene and service calls one module
+- **Eliminated direct HTTP** — benchmark.py, finetuned_router.py, auto_tuner.py, inference_monitor.py all rewired through LMSClient
+- **Fixed 8 silent exception swallows** — task_queue, orchestrator, lms_client, router callbacks now log instead of silently passing
+- **Speculative decoding wired end-to-end** — auto-enables from config on orchestrator startup, `_test_speculative()` benchmark implemented
+- **Unified metrics** — InferenceMonitor wired into chat.py facade and TaskQueue; `record_from_response()` convenience method added
+- **Deprecated `get_lmstudio_headers()`** — all engine/lmstudio/ callers migrated, deprecation warning added to engine/utils.py
+- **60+ callers consolidated** — scenes (penthouse, lab_break, neoncity, phone, coders, intel_hub), engine modules, and health checks all use unified path
+
+### NeonCity 3-Column Dashboard (content/scenes/neoncity/)
+- **Full layout redesign** — left sidebar (player stats + city map + inventory), center (districts + factions + chat/economy/events), right sidebar (crew + missions)
+- **Player stats panel** — HP/Energy/Heat/Rep bars with live values, skill chips, location indicator
+- **Inventory grid** — 4x3 grid with item icons, rarity borders (rare/epic/legendary), quantity badges, equipped tags
+- **Crew roster** — member cards with name/role/level, loyalty gradient bars, check operations button
+- **Mission board** — tabbed available/active, type-colored labels (recon/heist/deal/extraction/hit), difficulty stars, accept buttons, reward display
+- **City map panel** — current location display, neighbor list with travel costs (energy/heat), click-to-travel
+
+### Living City (engine/world/ + navbar)
+- **LivingWorld daemon started** — world events, faction AI, weather, NPC routines all tick every 60s from NeonCity scene start
+- **NPC district chat** — 15 unique NPC personalities, LMStudio-powered replies via `chat()`, world context injected
+- **Mission offers from NPCs** — 20% chance per NPC interaction to offer available missions
+- **Crew operation auto-polling** — every 60s, completed ops detected, rewards applied, HUD notified
+- **Navbar travel interceptor** — all scene nav links routed through `POST /api/city/travel` with energy/heat costs, travel toast UI, error handling
+- **City map integration** — `/api/city/neighbors` endpoint rendered in HUD, click-to-travel with cost display
+
+### Backend APIs Added (NeonCity)
+- `GET /api/player` — full player state
+- `GET /api/inventory` + `POST /api/inventory/use` — inventory with equip/sell/use
+- `GET /api/crew` + `POST /api/crew/recruit` — crew management
+- `GET /api/missions` + `POST /api/missions/accept` — mission board
+- `GET /api/hud` — combined HUD data (single call)
+- Socket.IO: `get_hud` → `hud_state`, `district_chat` → `city_event`
+
+### Tests
+- 491 smoke tests pass (1 pre-existing scheduler count failure)
+- 62 scene import/route tests pass
+- 248 LMStudio + arena + compute router tests pass
+- All 24 engine/lmstudio modules import cleanly
+
+---
+
 ## [1.40] — "HEALTH CHECK DASHBOARD + SERVICE DISCOVERY" — 2026-03
 
 Unified health check aggregator polling all system services concurrently, a

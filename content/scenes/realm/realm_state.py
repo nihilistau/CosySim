@@ -6,10 +6,20 @@ Thread-safe state management for the LitRPG visual novel using the MCP
 GameState store. Manages:
 
 * Player stats, inventory, skills
+* Character classes with unique stat bonuses and abilities
 * Director personality & patience meter
 * Murder mystery phase tracking
 * Memory echoes (past-run hints)
 * Time limits & win conditions
+* 12-quest library with branching narrative paths
+* Narrative mod integration for stage-based storytelling
+
+Version: v1.51.0 [2026-03-25]
+
+Change Log:
+    v1.51.0 [2026-03-25] — NarrativeModEngine integration for branching quests
+    v1.49.5 [2026-03-22] — Character classes (4) + branching quest library (12 quests, 3 tiers)
+    v1.49.3 [2026-03-22] — Structured logging context
 """
 from __future__ import annotations
 
@@ -63,8 +73,345 @@ STARTER_ITEMS = [
 ]
 
 # ═══════════════════════════════════════════════════════════════
-#  EQUIPMENT & ECONOMY
+#  CHARACTER CLASSES
 # ═══════════════════════════════════════════════════════════════
+
+# v1.49.5 [2026-03-22] — Character classes with unique stat bonuses and abilities
+CHARACTER_CLASSES: Dict[str, Dict[str, Any]] = {
+    "fighter": {
+        "name": "Fighter",
+        "description": "A battle-hardened warrior. Strong, tough, straightforward.",
+        "stat_bonus": {"STR": 2, "CON": 1, "DEX": 0, "INT": 0, "WIS": 0, "CHA": 0},
+        "abilities": [
+            {"name": "Shield Wall", "description": "+3 DEF for 2 turns", "cooldown": 3, "type": "defensive"},
+            {"name": "Cleave", "description": "Hit all enemies for 75% damage", "cooldown": 4, "type": "offensive"},
+        ],
+    },
+    "rogue": {
+        "name": "Rogue",
+        "description": "Quick, cunning, and deadly from the shadows.",
+        "stat_bonus": {"DEX": 2, "INT": 1, "STR": 0, "CON": 0, "WIS": 0, "CHA": 0},
+        "abilities": [
+            {"name": "Backstab", "description": "2x damage from stealth (first strike only)", "cooldown": 2, "type": "offensive"},
+            {"name": "Pickpocket", "description": "Steal a random item from enemy", "cooldown": 5, "type": "utility"},
+        ],
+    },
+    "cleric": {
+        "name": "Cleric",
+        "description": "A healer and protector guided by faith.",
+        "stat_bonus": {"WIS": 2, "CHA": 1, "STR": 0, "DEX": 0, "CON": 0, "INT": 0},
+        "abilities": [
+            {"name": "Heal", "description": "Restore 20 HP", "cooldown": 3, "type": "healing"},
+            {"name": "Turn Undead", "description": "Fear effect on undead enemies (skip turn)", "cooldown": 4, "type": "offensive"},
+        ],
+    },
+    "mage": {
+        "name": "Mage",
+        "description": "Master of arcane power. Fragile but devastating.",
+        "stat_bonus": {"INT": 2, "WIS": 1, "STR": 0, "DEX": 0, "CON": 0, "CHA": 0},
+        "abilities": [
+            {"name": "Fireball", "description": "25 damage to all enemies", "cooldown": 4, "type": "offensive"},
+            {"name": "Arcane Shield", "description": "Absorb next 15 damage", "cooldown": 3, "type": "defensive"},
+        ],
+    },
+}
+
+# Mapping from class stat abbreviation to game stat key
+# Why: CHARACTER_CLASSES use D&D-style abbreviations (STR, DEX) but
+# DEFAULT_STATS uses full names (strength, agility). This bridge lets
+# apply_class_bonus() translate correctly.
+_CLASS_STAT_MAP: Dict[str, str] = {
+    "STR": "strength",
+    "CON": "max_hp",     # CON bonus adds to max HP pool (10 HP per point)
+    "DEX": "agility",
+    "INT": "intellect",
+    "WIS": "max_mp",     # WIS bonus adds to max MP pool (10 MP per point)
+    "CHA": "charisma",
+}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  QUEST LIBRARY — 12 QUESTS WITH BRANCHING PATHS
+# ═══════════════════════════════════════════════════════════════
+
+# v1.49.5 [2026-03-22] — 12 narrative quests across 3 tiers with branching choices
+# Each quest has 2-3 branches that lead to different outcomes and bonus rewards.
+# The quest system feeds into the Director pipeline — branches inform the LLM narration.
+
+QUEST_LIBRARY: Dict[str, Dict[str, Any]] = {
+
+    # ── Tier 1 — Beginner (levels 1-3) ──────────────────────────────
+
+    "missing_merchant": {
+        "name": "The Missing Merchant", "tier": 1, "xp": 50, "gold": 100,
+        "intro": "A merchant named Aldric hasn't returned from the forest trail. His wife begs you to find him.",
+        "branches": {
+            "search_forest": {
+                "description": "Search the forest trail",
+                "outcome": "You find Aldric tied up by bandits. Combat encounter with 3 bandits.",
+                "reward_bonus": {"gold": 50},
+            },
+            "ask_tavern": {
+                "description": "Ask around the tavern first",
+                "outcome": "A drunk mentions seeing Aldric gambling at the crossroads. He's alive but lost everything. No combat.",
+                "reward_bonus": {"xp": 25},
+            },
+            "follow_tracks": {
+                "description": "Follow the wagon tracks",
+                "outcome": "The tracks lead to a hidden cave. Aldric made a deal with smugglers. You can join them or turn them in.",
+                "reward_bonus": {"item": "smuggler_map"},
+            },
+        },
+    },
+
+    "haunted_well": {
+        "name": "The Haunted Well", "tier": 1, "xp": 40, "gold": 75,
+        "intro": "Children have been hearing whispers from the village well at night. The elders fear a restless spirit.",
+        "branches": {
+            "descend_well": {
+                "description": "Climb down into the well",
+                "outcome": "You discover an underground chamber with a trapped ghost. She was a healer, murdered and hidden here decades ago. Free her spirit or bind it as a servant.",
+                "reward_bonus": {"item": "spectral_lantern"},
+            },
+            "research_history": {
+                "description": "Visit the village records",
+                "outcome": "You find records of a woman who vanished 40 years ago. The current mayor's father was the last person to see her alive. Confronting the mayor opens a political subplot.",
+                "reward_bonus": {"xp": 30},
+            },
+            "set_trap": {
+                "description": "Set a trap at the well at midnight",
+                "outcome": "The whispers are actually a colony of rare cave sprites using the well as an echo chamber. They're harmless — and valuable to the right buyer.",
+                "reward_bonus": {"gold": 100},
+            },
+        },
+    },
+
+    "rat_kings_court": {
+        "name": "The Rat King's Court", "tier": 1, "xp": 45, "gold": 60,
+        "intro": "The cellar rats have organized. The innkeeper swears he saw them marching in formation. Something intelligent is leading them.",
+        "branches": {
+            "exterminate": {
+                "description": "Poison the cellar and kill them all",
+                "outcome": "The poison works, but you discover the rats were guarding a clutch of eggs from a much larger creature below. Now nothing stands between it and the surface.",
+                "reward_bonus": {"xp": 20},
+            },
+            "negotiate": {
+                "description": "Attempt to communicate with the Rat King",
+                "outcome": "The Rat King is a polymorphed wizard trapped in rat form. He offers powerful knowledge in exchange for lifting his curse — which requires a rare ingredient from the mountain.",
+                "reward_bonus": {"item": "rat_kings_signet"},
+            },
+            "observe": {
+                "description": "Watch from hiding to learn their patterns",
+                "outcome": "You discover the rats are stockpiling a glowing mineral. They're not attacking anyone — they're building something. An alchemist would pay well for samples.",
+                "reward_bonus": {"gold": 80},
+            },
+        },
+    },
+
+    "the_toll_bridge": {
+        "name": "The Toll Bridge", "tier": 1, "xp": 35, "gold": 80,
+        "intro": "A troll has claimed the only bridge to the eastern farmlands. Farmers can't reach their fields. But the troll says the bridge is rightfully his — he built it.",
+        "branches": {
+            "fight_troll": {
+                "description": "Challenge the troll to combat",
+                "outcome": "The troll is surprisingly tough but honorable. If you win, he leaves peacefully. If you lose, he takes your weapon as a toll and lets you cross anyway.",
+                "reward_bonus": {"xp": 30},
+            },
+            "find_deed": {
+                "description": "Investigate whether the troll really built the bridge",
+                "outcome": "He did build it — 200 years ago. The village's founding charter actually acknowledges troll bridge rights. You can negotiate a fair toll or expose the village council's dishonesty.",
+                "reward_bonus": {"gold": 50},
+            },
+            "build_alternative": {
+                "description": "Help the farmers build a second crossing",
+                "outcome": "While building, you discover an ancient ford the river has exposed. Below the waterline: ruins of a pre-human civilization. The troll knows more than he's letting on.",
+                "reward_bonus": {"item": "ancient_river_stone"},
+            },
+        },
+    },
+
+    # ── Tier 2 — Intermediate (levels 4-7) ──────────────────────────
+
+    "the_clockwork_plague": {
+        "name": "The Clockwork Plague", "tier": 2, "xp": 100, "gold": 200,
+        "intro": "People in the mining district are turning mechanical — skin becoming brass, eyes becoming gears. It's spreading. The Artificers' Guild claims innocence.",
+        "branches": {
+            "quarantine": {
+                "description": "Enforce a quarantine and study the afflicted",
+                "outcome": "The plague is caused by nanite-like constructs in the water supply. They're not random — they're upgrading people according to a blueprint. Someone designed this. Following the signal leads to an abandoned workshop beneath the guild.",
+                "reward_bonus": {"xp": 50, "item": "nanite_sample"},
+            },
+            "infiltrate_guild": {
+                "description": "Go undercover in the Artificers' Guild",
+                "outcome": "The Guild is split: a radical faction believes flesh is weakness and has been seeding the water. The moderates want to stop them but fear a civil war. You must choose a side — or play both.",
+                "reward_bonus": {"gold": 150},
+            },
+            "find_patient_zero": {
+                "description": "Track down whoever was first afflicted",
+                "outcome": "Patient zero is a child who found a brass music box in the old mines. The box is an artifact from an ancient machine civilization. The 'plague' is actually a calling — the machines want their people back.",
+                "reward_bonus": {"item": "clockwork_heart"},
+            },
+        },
+    },
+
+    "the_mirrors_lie": {
+        "name": "The Mirror's Lie", "tier": 2, "xp": 120, "gold": 175,
+        "intro": "A noble's enchanted mirror has begun showing impossible reflections — scenes of a world where the noble made different choices. Now his reflection is trying to switch places.",
+        "branches": {
+            "destroy_mirror": {
+                "description": "Shatter the mirror before the switch happens",
+                "outcome": "Destroying the mirror releases the reflection as a shadow-entity. It's furious, powerful, and knows all the noble's secrets. It begins blackmailing the entire court. You created a bigger problem.",
+                "reward_bonus": {"xp": 60},
+            },
+            "enter_mirror": {
+                "description": "Step into the mirror world",
+                "outcome": "The mirror world is a version of the realm where a great war was averted. It's better in many ways — but the cost was terrible. The reflection-noble sacrificed his family to stop the war. He wants a second chance at happiness. Let him cross, or seal the portal?",
+                "reward_bonus": {"item": "mirror_shard"},
+            },
+            "negotiate_terms": {
+                "description": "Broker a deal between the noble and his reflection",
+                "outcome": "Both versions agree to merge — combining the best of both timelines. The process requires a rare ritual component and a willing sacrifice of one memory from each. The merged noble becomes unnervingly wise and grateful.",
+                "reward_bonus": {"gold": 200, "xp": 40},
+            },
+        },
+    },
+
+    "the_singing_dead": {
+        "name": "The Singing Dead", "tier": 2, "xp": 110, "gold": 150,
+        "intro": "Every full moon, the cemetery sings. Beautiful harmonies rise from the graves. The priests call it an abomination, but the music heals the sick who listen.",
+        "branches": {
+            "silence_graves": {
+                "description": "Perform the rites to silence the dead",
+                "outcome": "The singing stops — but so does the healing. A child who was recovering from plague relapses. The dead weren't singing for themselves; they were singing for the living. The priests are hiding something about why the dead have this power.",
+                "reward_bonus": {"xp": 50},
+            },
+            "join_chorus": {
+                "description": "Visit the cemetery during the full moon and listen",
+                "outcome": "The dead sing a story: a bard buried here centuries ago made a pact with a god of mercy. Her song would heal as long as someone remembered her name. No one does anymore. Find her name, and the song becomes permanent.",
+                "reward_bonus": {"item": "song_of_mercy_scroll"},
+            },
+            "follow_melody": {
+                "description": "Trace the melody to its source underground",
+                "outcome": "Beneath the cemetery is a crystalline cave where sound resonates perfectly. The bard's bones rest here, wrapped around a divine instrument. Taking the instrument stops the automatic singing but lets YOU play healing songs.",
+                "reward_bonus": {"item": "bards_lyre"},
+            },
+        },
+    },
+
+    "the_debt_collector": {
+        "name": "The Debt Collector", "tier": 2, "xp": 90, "gold": 250,
+        "intro": "A shadowy figure called 'The Ledger' is collecting on debts nobody remembers making. People are paying with years of their life. The contracts are magically binding — and your name is in his book.",
+        "branches": {
+            "pay_debt": {
+                "description": "Negotiate your debt and pay it",
+                "outcome": "Your debt is 7 years of life — but The Ledger offers an alternative. Collect three other debts for him, and yours is forgiven. The three debtors are a beggar, a queen, and a dragon. Each has a reason they can't pay.",
+                "reward_bonus": {"gold": 100},
+            },
+            "steal_ledger": {
+                "description": "Attempt to steal The Ledger's book",
+                "outcome": "The book is alive — it screams when touched and The Ledger appears instantly. But you notice the book has a page about The Ledger himself. He owes a debt too — to Death. His entire operation is him trying to avoid his own reckoning.",
+                "reward_bonus": {"xp": 50, "item": "page_of_debts"},
+            },
+            "expose_fraud": {
+                "description": "Investigate whether the contracts are truly legitimate",
+                "outcome": "The contracts are real — but the debts were inherited. Your ancestor made a deal during a famine: food for the village in exchange for a future debt from each bloodline. The Ledger is just enforcing a 300-year-old promise. Breaking it would undo the magic that saved the village.",
+                "reward_bonus": {"gold": 150, "xp": 30},
+            },
+        },
+    },
+
+    # ── Tier 3 — Advanced (levels 8+) ───────────────────────────────
+
+    "the_throne_of_echoes": {
+        "name": "The Throne of Echoes", "tier": 3, "xp": 200, "gold": 400,
+        "intro": "The shattered throne whispers to those who approach. Each shard contains the consciousness of a dead king. Reassemble the throne to gain ultimate power — or let the kings rest and lose the only weapon against the coming darkness.",
+        "branches": {
+            "reassemble": {
+                "description": "Gather all shards and rebuild the throne",
+                "outcome": "The kings' consciousnesses merge into a gestalt intelligence that offers to advise you — but they demand sacrifices. One king was a tyrant, one was a saint, one was a madman. Their conflicting advice will tear at your sanity unless you can silence two of them.",
+                "reward_bonus": {"item": "throne_shard_crown", "xp": 100},
+            },
+            "destroy_shards": {
+                "description": "Destroy the shards to free the dead kings",
+                "outcome": "The kings' spirits are released. The saint blesses you before departing. The madman curses you. The tyrant lingers — he has nowhere to go. He offers to haunt your enemies in exchange for a vessel to inhabit. Do you trust a dead tyrant?",
+                "reward_bonus": {"gold": 300},
+            },
+            "use_one_shard": {
+                "description": "Take only the shard of the wisest king",
+                "outcome": "The shard of King Alderon the Wise bonds with you. His ghost becomes a permanent advisor — calm, strategic, but haunted by guilt. He tells you the throne was shattered on purpose. The real threat isn't outside the realm — it's inside the shards themselves.",
+                "reward_bonus": {"item": "alderens_wisdom", "xp": 75},
+            },
+        },
+    },
+
+    "the_gods_wager": {
+        "name": "The God's Wager", "tier": 3, "xp": 250, "gold": 350,
+        "intro": "Two gods are betting on your life. The God of Order bet you'll follow the prophecy. The God of Chaos bet you'll defy it. Both are offering you power. Accepting either enrages the other.",
+        "branches": {
+            "accept_order": {
+                "description": "Accept the God of Order's blessing",
+                "outcome": "You gain incredible power — but the prophecy locks in. Every future event becomes fated. You know exactly when you'll die (turn 100). But every action until then succeeds perfectly. Is a perfect life worth a known ending?",
+                "reward_bonus": {"xp": 150, "item": "seal_of_order"},
+            },
+            "accept_chaos": {
+                "description": "Accept the God of Chaos's blessing",
+                "outcome": "Reality warps around you. Random events intensify. Enemies become allies, allies become enemies, gold rains from the sky one moment and turns to ash the next. You're untouchable — but everyone around you suffers from the instability.",
+                "reward_bonus": {"gold": 500, "item": "chaos_brand"},
+            },
+            "reject_both": {
+                "description": "Refuse both gods and forge your own path",
+                "outcome": "Both gods are furious — but a third entity notices your defiance. The Forgotten God, erased from all records, whispers: 'Finally, someone who won't play their game.' It offers you the one thing the other gods can't — freedom from the game itself.",
+                "reward_bonus": {"item": "forgotten_gods_eye", "xp": 200},
+            },
+        },
+    },
+
+    "the_last_library": {
+        "name": "The Last Library", "tier": 3, "xp": 180, "gold": 300,
+        "intro": "The world's last library is burning. Inside are the only copies of spells, histories, and prophecies that could save the realm. You can save some — but not all. What matters most?",
+        "branches": {
+            "save_spells": {
+                "description": "Rush to the arcane wing and save the spellbooks",
+                "outcome": "You rescue 12 legendary spellbooks, including the lost art of resurrection. But the history wing burns — and with it, the only record of who built the shattered throne and why. Mages worship you. Historians despair. Some spells should have stayed lost.",
+                "reward_bonus": {"item": "resurrection_tome", "xp": 80},
+            },
+            "save_histories": {
+                "description": "Prioritize the historical records and prophecies",
+                "outcome": "You save the complete history of the realm — including a terrifying truth. The 'realm' is a prison. The shattered throne was a lock. The darkness outside isn't invading — it's the real world trying to break in. Everything you know is a lie.",
+                "reward_bonus": {"xp": 120, "item": "truth_codex"},
+            },
+            "save_people": {
+                "description": "Forget the books — save the trapped scholars",
+                "outcome": "You rescue 8 scholars, including the last living keeper of oral history. She knows things no book contains — living knowledge passed down for millennia. She tells you: the library fire wasn't an accident. Someone wants this knowledge destroyed before you find it.",
+                "reward_bonus": {"gold": 200, "xp": 60},
+            },
+        },
+    },
+
+    "the_hollow_crown": {
+        "name": "The Hollow Crown", "tier": 3, "xp": 300, "gold": 500,
+        "intro": "You've been offered the crown. The realm needs a ruler. But the crown is cursed — every monarch who wore it lost themselves within a year, consumed by the crown's ancient intelligence. Yet without a ruler, civil war is inevitable.",
+        "branches": {
+            "wear_crown": {
+                "description": "Accept the crown and fight its influence",
+                "outcome": "The crown's intelligence is not malevolent — it's the accumulated wisdom (and trauma) of every past ruler. It tries to override your personality not from malice but from habit. You can coexist with it, but it means hearing the whispers of 400 dead monarchs forever. The realm stabilizes under your rule.",
+                "reward_bonus": {"item": "hollow_crown", "xp": 200},
+            },
+            "destroy_crown": {
+                "description": "Destroy the crown and establish a republic",
+                "outcome": "The crown shatters and releases 400 ghosts, each with unfinished business. The realm erupts into temporary chaos as spectral kings try to reclaim their old territories. But once they fade, the people are truly free for the first time. Building a republic from nothing is the hardest quest of all.",
+                "reward_bonus": {"gold": 400, "xp": 100},
+            },
+            "find_worthy": {
+                "description": "Search for someone strong enough to bear the crown",
+                "outcome": "You scour the realm and find one person who can wear it safely: a child born during a solar eclipse with no family name. The crown accepts them without a fight. But a child-ruler needs a regent — and every faction wants to be that regent. You've solved one problem and created a dozen more.",
+                "reward_bonus": {"xp": 150, "item": "regents_seal"},
+            },
+        },
+    },
+}
+
+
 
 EQUIPMENT_SLOTS = ["weapon", "armor", "shield", "helm", "boots", "ring", "amulet"]
 
@@ -278,6 +625,14 @@ class RealmGameState:
         self.skills_unlocked: List[str] = []
         self.status_effects: List[Dict[str, Any]] = []
 
+        # v1.49.5 [2026-03-22] — Character class system
+        self.player_class: Optional[str] = None  # Key into CHARACTER_CLASSES
+        self.class_abilities: List[Dict[str, Any]] = []  # Active abilities from class
+        self.ability_cooldowns: Dict[str, int] = {}  # ability_name → turns until ready
+
+        # v1.49.5 [2026-03-22] — Branching quest library tracking
+        self.quest_branches_chosen: Dict[str, str] = {}  # quest_key → branch_key
+
         # ── Director ──
         self.director_personality: str = "random"
         self.director_patience: float = 100.0
@@ -349,6 +704,12 @@ class RealmGameState:
                 "gold": self.gold,
                 "current_location": self.current_location,
                 "location_info": REALM_LOCATIONS.get(self.current_location, {}),
+                # v1.49.5 [2026-03-22] — Class & branching quest data
+                "player_class": self.player_class,
+                "class_info": CHARACTER_CLASSES.get(self.player_class, {}) if self.player_class else None,
+                "class_abilities": list(self.class_abilities),
+                "ability_cooldowns": dict(self.ability_cooldowns),
+                "quest_branches_chosen": dict(self.quest_branches_chosen),
             }
 
     # ── Time ──
@@ -361,6 +722,333 @@ class RealmGameState:
 
     def is_timed_out(self) -> bool:
         return self.time_limit_s > 0 and self.time_remaining() <= 0
+
+    # ── Character Class System ─────────────────────────────────────
+    # v1.49.5 [2026-03-22] — Class selection with stat bonuses and abilities
+    # CONNECTS: CHARACTER_CLASSES, _CLASS_STAT_MAP, player_stats
+    # CALLED BY: /api/game/new (with class_id), /api/game/select_class
+    # EMITS: class_selected SocketIO event (via scene)
+
+    def apply_class_bonus(self, class_id: str) -> Dict[str, Any]:
+        """Apply a character class to the player, modifying stats and granting abilities.
+
+        Args:
+            class_id: Key in CHARACTER_CLASSES (e.g. "fighter", "rogue").
+
+        Returns:
+            Dict with class details and applied stat changes, or error dict.
+        """
+        if class_id not in CHARACTER_CLASSES:
+            return {"error": f"Unknown class '{class_id}'. Valid: {list(CHARACTER_CLASSES.keys())}"}
+
+        cls = CHARACTER_CLASSES[class_id]
+        applied_bonuses: Dict[str, int] = {}
+
+        with self._lock:
+            self.player_class = class_id
+            self.class_abilities = list(cls["abilities"])
+            self.ability_cooldowns = {a["name"]: 0 for a in cls["abilities"]}
+
+            # Apply stat bonuses via the mapping
+            for abbrev, bonus in cls["stat_bonus"].items():
+                if bonus == 0:
+                    continue
+                stat_key = _CLASS_STAT_MAP.get(abbrev)
+                if not stat_key:
+                    continue
+                # CON and WIS bonuses multiply by 10 (HP/MP pools)
+                if abbrev in ("CON", "WIS"):
+                    actual_bonus = bonus * 10
+                else:
+                    actual_bonus = bonus
+                self.player_stats[stat_key] = self.player_stats.get(stat_key, 0) + actual_bonus
+                applied_bonuses[stat_key] = actual_bonus
+
+                # Also bump current HP/MP if max was raised
+                if stat_key == "max_hp":
+                    self.player_stats["hp"] = self.player_stats.get("hp", 0) + actual_bonus
+                elif stat_key == "max_mp":
+                    self.player_stats["mp"] = self.player_stats.get("mp", 0) + actual_bonus
+
+        logger.info("Player selected class '%s', bonuses applied: %s", class_id, applied_bonuses)
+        return {
+            "class_id": class_id,
+            "class_info": cls,
+            "applied_bonuses": applied_bonuses,
+            "abilities": cls["abilities"],
+            "player_stats": dict(self.player_stats),
+        }
+
+    def use_class_ability(self, ability_name: str) -> Dict[str, Any]:
+        """Attempt to use a class ability, respecting cooldowns.
+
+        Args:
+            ability_name: Name of the ability to use.
+
+        Returns:
+            Dict with ability details and effect description, or error dict.
+        """
+        if not self.player_class:
+            return {"error": "No class selected"}
+
+        ability = next((a for a in self.class_abilities if a["name"] == ability_name), None)
+        if not ability:
+            return {"error": f"Unknown ability '{ability_name}'"}
+
+        current_cd = self.ability_cooldowns.get(ability_name, 0)
+        if current_cd > 0:
+            return {"error": f"'{ability_name}' on cooldown ({current_cd} turns remaining)"}
+
+        with self._lock:
+            # Set cooldown
+            self.ability_cooldowns[ability_name] = ability["cooldown"]
+
+            # Apply ability effects based on type
+            effect_description = ability["description"]
+            stat_changes: Dict[str, int] = {}
+
+            if ability["type"] == "healing":
+                heal_amt = 20
+                old_hp = self.player_stats.get("hp", 0)
+                max_hp = self.player_stats.get("max_hp", 100)
+                self.player_stats["hp"] = min(max_hp, old_hp + heal_amt)
+                stat_changes["hp"] = self.player_stats["hp"] - old_hp
+
+            elif ability["type"] == "defensive":
+                # Add a temporary status effect
+                self.status_effects.append({
+                    "name": ability_name,
+                    "type": "defense_boost",
+                    "value": 3,
+                    "turns_remaining": 2,
+                })
+
+            # Offensive and utility abilities are narrated by the Director
+            # — they don't have direct stat effects here
+
+        return {
+            "success": True,
+            "ability": ability,
+            "effect": effect_description,
+            "cooldown_set": ability["cooldown"],
+            "stat_changes": stat_changes,
+        }
+
+    def tick_ability_cooldowns(self) -> None:
+        """Reduce all ability cooldowns by 1 (called each turn)."""
+        with self._lock:
+            for name in list(self.ability_cooldowns.keys()):
+                if self.ability_cooldowns[name] > 0:
+                    self.ability_cooldowns[name] -= 1
+
+    # ── Branching Quest Library ────────────────────────────────────
+    # v1.49.5 [2026-03-22] — 12-quest library with branching paths
+    # CONNECTS: QUEST_LIBRARY, QUEST_TEMPLATES, active_quests
+    # CALLED BY: /api/quests/library, /api/quests/branch
+    # EMITS: quest_branch_chosen SocketIO event (via scene)
+
+    def get_quest_library(self, tier: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Return quests from the branching library, optionally filtered by tier.
+
+        Args:
+            tier: If set, only return quests of this tier (1, 2, or 3).
+
+        Returns:
+            List of quest dicts with name, tier, intro, and branch summaries.
+        """
+        quests = []
+        for key, quest in QUEST_LIBRARY.items():
+            if tier is not None and quest.get("tier") != tier:
+                continue
+            quests.append({
+                "key": key,
+                "name": quest["name"],
+                "tier": quest["tier"],
+                "xp": quest["xp"],
+                "gold": quest["gold"],
+                "intro": quest["intro"],
+                "completed": key in self.completed_quests,
+                "active": any(q["key"] == key for q in self.active_quests),
+                "branch_chosen": self.quest_branches_chosen.get(key),
+                "branches": {
+                    bk: {"description": bv["description"]}
+                    for bk, bv in quest["branches"].items()
+                },
+            })
+        return quests
+
+    def accept_library_quest(self, quest_key: str) -> Dict[str, Any]:
+        """Accept a quest from the branching QUEST_LIBRARY.
+
+        Args:
+            quest_key: Key in QUEST_LIBRARY.
+
+        Returns:
+            Dict with quest details, or error dict.
+        """
+        if quest_key not in QUEST_LIBRARY:
+            return {"error": f"Unknown library quest '{quest_key}'"}
+        if quest_key in self.completed_quests:
+            return {"error": "Quest already completed"}
+        if any(q["key"] == quest_key for q in self.active_quests):
+            return {"error": "Quest already active"}
+
+        template = QUEST_LIBRARY[quest_key]
+        quest = {
+            "key": quest_key,
+            "title": template["name"],
+            "description": template["intro"],
+            "objective": f"Choose a path and complete the quest (Tier {template['tier']})",
+            "progress": 0,
+            "target": 1,  # Complete when branch is resolved
+            "accepted_turn": self.turn_number,
+            "source": "library",
+            "tier": template["tier"],
+            "branches": list(template["branches"].keys()),
+        }
+        with self._lock:
+            self.active_quests.append(quest)
+
+        # v1.51.0 [2026-03-25] — Wire quest into NarrativeModEngine for stage context injection
+        # CONNECTS: NarrativeModEngine, NarrativeModInterceptor
+        try:
+            from engine.mcp.narrative_mod import (
+                ModStage, ModTarget, get_narrative_engine,
+            )
+            branches = template.get("branches", {})
+            targets = [
+                ModTarget(target_id=bk, description=bv["description"])
+                for bk, bv in branches.items()
+            ]
+            stage = ModStage(
+                stage_id=f"{quest_key}_main",
+                title=template["name"],
+                description=template["intro"],
+                prompt_injection=(
+                    f"Active quest: {template['name']} (Tier {template['tier']})\n"
+                    f"{template['intro']}\n"
+                    "The player must choose one of these paths:\n"
+                    + "\n".join(
+                        f"  - {bk}: {bv['description']}"
+                        for bk, bv in branches.items()
+                    )
+                ),
+                targets=targets,
+                on_complete_note=f"Quest '{template['name']}' resolved.",
+            )
+            get_narrative_engine().start_mod(
+                mod_id=f"realm_quest_{quest_key}",
+                mod_name=template["name"],
+                stages=[stage],
+                scene_id="realm",
+                character_id="director",
+            )
+        except Exception as exc:
+            logger.debug("[RealmState] Narrative mod start failed (non-fatal): %s", exc)
+
+        return {"accepted": True, "quest": quest}
+
+    def choose_quest_branch(self, quest_key: str, branch_key: str) -> Dict[str, Any]:
+        """Choose a branching path for an active library quest.
+
+        Resolves the quest: grants base XP/gold plus branch-specific bonuses.
+        Moves the quest to completed and records the branch choice.
+
+        Args:
+            quest_key: Key of the active quest.
+            branch_key: Key of the chosen branch within the quest.
+
+        Returns:
+            Dict with outcome narrative, rewards, and updated state.
+        """
+        if quest_key not in QUEST_LIBRARY:
+            return {"error": f"Unknown library quest '{quest_key}'"}
+
+        quest_data = QUEST_LIBRARY[quest_key]
+
+        # Verify quest is active
+        active_quest = next(
+            (q for q in self.active_quests if q["key"] == quest_key),
+            None,
+        )
+        if not active_quest:
+            return {"error": "Quest not active"}
+
+        if branch_key not in quest_data["branches"]:
+            return {"error": f"Unknown branch '{branch_key}'. Valid: {list(quest_data['branches'].keys())}"}
+
+        branch = quest_data["branches"][branch_key]
+        rewards: Dict[str, Any] = {
+            "xp": quest_data["xp"],
+            "gold": quest_data["gold"],
+        }
+
+        # Apply branch-specific bonus rewards
+        bonus = branch.get("reward_bonus", {})
+        rewards["xp"] += bonus.get("xp", 0)
+        rewards["gold"] += bonus.get("gold", 0)
+        bonus_item = bonus.get("item")
+
+        with self._lock:
+            # Record branch choice
+            self.quest_branches_chosen[quest_key] = branch_key
+
+            # Grant XP
+            xp_result = {}
+            if rewards["xp"] > 0:
+                xp_result = self.gain_xp(rewards["xp"])
+
+            # Grant gold
+            if rewards["gold"] > 0:
+                self.gold += rewards["gold"]
+                self.player_stats["gold"] = self.player_stats.get("gold", 0) + rewards["gold"]
+
+            # Grant bonus item
+            granted_item = None
+            if bonus_item:
+                item = {
+                    "id": f"{bonus_item}_{uuid.uuid4().hex[:4]}",
+                    "name": bonus_item.replace("_", " ").title(),
+                    "type": "quest_reward",
+                    "description": f"Reward from '{quest_data['name']}' ({branch_key})",
+                }
+                self.add_item(item)
+                granted_item = item
+
+            # Complete the quest
+            self.active_quests = [q for q in self.active_quests if q["key"] != quest_key]
+            self.completed_quests.append(quest_key)
+
+        # v1.51.0 [2026-03-25] — Complete narrative mod target for this branch
+        # CONNECTS: NarrativeModEngine
+        try:
+            from engine.mcp.narrative_mod import get_narrative_engine
+            get_narrative_engine().complete_target(
+                f"realm_quest_{quest_key}", branch_key,
+            )
+        except Exception as exc:
+            logger.debug("[RealmState] Narrative mod complete failed (non-fatal): %s", exc)
+
+        # Post to shared boards
+        self._post_board_message(
+            "realm_quests", "Player",
+            f"Completed '{quest_data['name']}' via [{branch_key}]",
+        )
+        self._submit_leaderboard(
+            "realm_quests_completed", "Player", len(self.completed_quests),
+        )
+
+        return {
+            "success": True,
+            "quest_name": quest_data["name"],
+            "branch": branch_key,
+            "outcome": branch["outcome"],
+            "description": branch["description"],
+            "rewards": rewards,
+            "bonus_item": granted_item,
+            "leveled_up": xp_result.get("leveled_up", False) if isinstance(xp_result, dict) else False,
+            "total_completed": len(self.completed_quests),
+        }
 
     # ── Director ──
 

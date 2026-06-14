@@ -4,7 +4,7 @@ Port 5558.  Flask + SocketIO.
 
 A showcase scene demonstrating *every* major MCP framework feature:
 
-    ✅  BaseScene + MCPSceneMixin      — proper lifecycle
+    ✅  FlaskScene base class          — unified lifecycle
     ✅  MCPSceneNode                   — state, rules, events
     ✅  SceneStateManager              — persistent character stats
     ✅  DialogSystem / ResponseDirective — forced NPC lines
@@ -23,6 +23,13 @@ A showcase scene demonstrating *every* major MCP framework feature:
     ✅  Web UI                         — Flask + SocketIO + HTML
 
 Created as a reference implementation for new scene developers.
+
+Version: v1.51.0 [2026-03-22]
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
+    v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+    v0.68   [2026-03-20] — Dark Renaissance gritty dockside tavern
 """
 
 from __future__ import annotations
@@ -36,13 +43,9 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-import jinja2
-from flask import Flask, jsonify, render_template, request
-from flask_socketio import SocketIO
+from flask import jsonify, render_template, request
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
 
 try:
     from engine.world.world_state import get_world_state
@@ -51,25 +54,28 @@ try:
 except ImportError:
     _WORLD_AVAILABLE = False
 
-log = logging.getLogger(__name__)
-
 # ---------------------------------------------------------------------------
 #  Constants
 # ---------------------------------------------------------------------------
 
 SCENE_ID = "tavern"
-DEFAULT_PORT = 5558
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("tavern", 5558)
+except Exception:
+    DEFAULT_PORT = 5558
 
 
 # ---------------------------------------------------------------------------
 #  Scene class
 # ---------------------------------------------------------------------------
 
-class TavernScene(BaseScene, NexusSceneMixin):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class TavernScene(FlaskScene):
     """The Dragon's Flagon — a fantasy tavern.
 
-    Inherits BaseScene for lifecycle management and uses MCPSceneMixin
-    (applied via __init_subclass__ if available, or manual wiring).
+    Inherits FlaskScene for unified lifecycle, MCP, and Nexus integration.
     """
 
     SCENE_METADATA = {
@@ -101,50 +107,29 @@ class TavernScene(BaseScene, NexusSceneMixin):
     #  Init
     # ------------------------------------------------------------------
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
         # Lazy imports to avoid circular deps at module level
         from .tavern_state import TavernState
 
         self.tavern_state = TavernState()
 
-        # Flask app
-        self.app = Flask(
-            __name__,
-            template_folder=os.path.join(os.path.dirname(__file__), "templates"),
-            static_folder=os.path.join(os.path.dirname(__file__), "static"),
-        )
-        _shared_tmpl = str(Path(os.path.dirname(__file__)).parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
-        register_shared_assets(self.app)
-
         self._register_routes()
         self._register_socketio()
 
-        # MCP wiring
+        # MCP wiring (scene-specific lifecycle hooks beyond FlaskScene._connect_mcp)
         self._wire_mcp()
-
-        # Background ticker
-        self._ticker_running = False
-        self._ticker_thread: Optional[threading.Thread] = None
-
-        self.nexus_init("tavern")
 
         # ── World State ──────────────────────────────────────────────
         self._world_state = None
-        self._event_bus = None
+        self._event_bus_ref = None
         if _WORLD_AVAILABLE:
             self._world_state = get_world_state()
-            self._event_bus = get_event_bus()
-            self._event_bus.subscribe("world.tick", self._on_world_tick)
-            self._event_bus.subscribe("world.time_change", self._on_time_change)
+            self._event_bus_ref = get_event_bus()
 
-        log.info("TavernScene created on port %d", port)
+        logger.info("[%s] Scene created on port %d", SCENE_ID, port)
 
     # ------------------------------------------------------------------
     #  MCP integration
@@ -166,9 +151,9 @@ class TavernScene(BaseScene, NexusSceneMixin):
             fw.add_lifecycle_hook("framework_ready", self._on_framework_ready)
             fw.add_lifecycle_hook("scene_tick", self._on_scene_tick)
 
-            log.info("TavernScene MCP wired")
+            logger.info("[%s] MCP wired (operation=mcp_wire)", SCENE_ID)
         except Exception as exc:
-            log.warning("MCP wiring failed (non-fatal): %s", exc)
+            logger.warning("[%s] MCP wiring failed (operation=mcp_wire): %s", SCENE_ID, exc)
             self._fw = None
             self._scene_node = None
 
@@ -178,7 +163,7 @@ class TavernScene(BaseScene, NexusSceneMixin):
             self._scene_node.update_state(self.tavern_state.to_snapshot())
 
     def _on_framework_ready(self, **_kw: Any) -> None:
-        log.info("MCP framework ready — tavern scene active")
+        logger.info("[%s] MCP framework ready — scene active (operation=lifecycle)", SCENE_ID)
 
     def _on_scene_tick(self, scene_id: str = "", **_kw: Any) -> None:
         if scene_id == SCENE_ID:
@@ -204,8 +189,9 @@ class TavernScene(BaseScene, NexusSceneMixin):
                 fired = self._fw.tick(SCENE_ID)
                 for c in fired:
                     self._emit("consequence", c)
-            except Exception:
-                pass
+            except Exception as exc:
+                # v1.49.1 [2026-03-22] — Surface tick failures
+                logger.warning("[%s] MCP tick failed (operation=tick): %s", SCENE_ID, exc)
 
     # ------------------------------------------------------------------
     #  Background ticker
@@ -224,7 +210,7 @@ class TavernScene(BaseScene, NexusSceneMixin):
             try:
                 self._tick()
             except Exception as exc:
-                log.debug("Ticker error: %s", exc)
+                logger.debug("Ticker error: %s", exc)
 
     def _stop_ticker(self) -> None:
         self._ticker_running = False
@@ -248,7 +234,7 @@ class TavernScene(BaseScene, NexusSceneMixin):
             try:
                 return jsonify(self.get_health())
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": "tavern", "reason": "health check raised"}), 500
 
         @app.route("/api/status")
@@ -362,7 +348,7 @@ class TavernScene(BaseScene, NexusSceneMixin):
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                log.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/consequences")
@@ -377,32 +363,25 @@ class TavernScene(BaseScene, NexusSceneMixin):
                     "pending": [c.to_dict() for c in store.get_pending(SCENE_ID, player_id)],
                 })
             except Exception as exc:
-                log.error("Consequences API error: %s", exc)
+                logger.error("[%s] Consequences API error (operation=consequences): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
-        # Health route for service discovery
-        self.register_health_route(app)
-        self.register_hud_route(app)
-        self.register_announcer_route(app)
-        self.register_inventory_route(app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
+        # Scene-specific extra routes
         self.register_shop_route(app)
 
-        # Bench metrics + TTS endpoints
+        # Bench metrics
         try:
             self.register_bench_route(app, self.socketio)
         except Exception as exc:
-            log.debug("Bench route: %s", exc)
-        try:
-            self.register_tts_route(app)
-        except Exception as exc:
-            log.debug("TTS route: %s", exc)
+            logger.debug("Bench route: %s", exc)
 
         # Overlay + skills server
         try:
             self.mount_overlay(app)
             self.mount_skills_server(app)
         except Exception as exc:
-            log.debug("Overlay/skills mount: %s", exc)
+            logger.debug("Overlay/skills mount: %s", exc)
 
     # ------------------------------------------------------------------
     #  SocketIO
@@ -468,8 +447,8 @@ class TavernScene(BaseScene, NexusSceneMixin):
                         "tavern.quest_accepted",
                         {"quest_id": quest_id, "title": q.title},
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
                 sio.emit("quest_started", {
                     "quest_id": quest_id,
                     "title": q.title,
@@ -514,8 +493,8 @@ class TavernScene(BaseScene, NexusSceneMixin):
                         transaction_type=TransactionType.SPEND,
                         description=f"Ordered {item.name} at The Rusty Anchor",
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
             from .tavern_skills import buy_drink_and_rumor
             result = buy_drink_and_rumor(drink_name=drink)
             self._sync_mcp_state()
@@ -539,42 +518,46 @@ class TavernScene(BaseScene, NexusSceneMixin):
                     "clues": len(board.get_clues()),
                 })
             except Exception as exc:
-                log.debug("Investigate rumor error: %s", exc)
+                logger.debug("Investigate rumor error: %s", exc)
                 sio.emit("rumor_investigated", {"rumor_id": rumor_id, "clues": 0})
 
-        @sio.on("action")
-        def on_action(data):
-            action_type = data.get("type", "")
-            log.debug("SocketIO action: %s", action_type)
-            # Legacy handler — new actions use dedicated events above
+        # v1.49.1 [2026-03-22] — Removed legacy NOOP "action" handler
+        # (new actions use dedicated events above)
 
     def _emit(self, event: str, data: dict) -> None:
         """Push event to all connected WebSocket clients."""
         try:
             self.socketio.emit(event, data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
 
     # ------------------------------------------------------------------
     #  BaseScene interface
     # ------------------------------------------------------------------
 
-    def start(self) -> None:
-        log.info("Starting TavernScene on %s:%d", self.host, self.port)
-        self._start_ticker()
-        self.socketio.run(self.app, host=self.host, port=self.port,
-                          allow_unsafe_werkzeug=True)
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-    def stop(self) -> None:
-        self.nexus_flush()
-        log.info("Stopping TavernScene")
-        if hasattr(self, "_event_bus") and self._event_bus:
+    def on_before_serve(self) -> None:
+        """Hook: subscribe to world events before the server starts."""
+        if _WORLD_AVAILABLE and self._event_bus_ref:
+            self._event_bus_ref.subscribe("world.tick", self._on_world_tick)
+            self._event_bus_ref.subscribe("world.time_change", self._on_time_change)
+
+        # v1.51.1 [2026-03-25] — Auto-load tavern intrigue story pack
+        try:
+            from engine.mcp.narrative_packs import load_pack
+            load_pack("tavern_intrigue", scene_id="tavern", character_id="bartender")
+        except Exception:
+            pass
+
+    def on_shutdown(self) -> None:
+        """Hook: unsubscribe from world events during shutdown."""
+        if hasattr(self, "_event_bus_ref") and self._event_bus_ref:
             try:
-                self._event_bus.unsubscribe("world.tick", self._on_world_tick)
-                self._event_bus.unsubscribe("world.time_change", self._on_time_change)
-            except Exception:
-                pass
-        self._stop_ticker()
+                self._event_bus_ref.unsubscribe("world.tick", self._on_world_tick)
+                self._event_bus_ref.unsubscribe("world.time_change", self._on_time_change)
+            except Exception as e:
+                logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:
@@ -587,8 +570,8 @@ class TavernScene(BaseScene, NexusSceneMixin):
                     "day": getattr(time_data, "day", 1),
                     "weather": str(getattr(time_data, "weather", "clear")),
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[TavernScene] Silent exception suppressed (operation=best_effort): %s", e)
 
     def _on_time_change(self, event: dict) -> None:
         """Last call at 02:00 — refresh quest board at dawn (06:00)."""

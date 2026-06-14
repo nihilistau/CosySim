@@ -1,5 +1,5 @@
 /*
- * CosySim Component Library — v0.68 "Dark Renaissance"
+ * CosySim Component Library — v1.57.3 [2026-05-12]
  * =====================================================
  * Reusable UI components for all scenes.
  * Requires: design_tokens.css · cosysim-animations.css
@@ -9,6 +9,11 @@
  *   Voice Toggle · Bench HUD · Arena Cards · Hacker Panel ·
  *   Economy Ticker · Agent Tag · Pixel Card · Scene Header ·
  *   Sidebar · Chip Badge · Online Dot · Investigation Board
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Add .cs-chat-bubble / .cs-chat-log shared dialogue
+ *                           components (ported from Dark Renaissance kit)
+ *   v1.57.3 [2026-05-12] — Add glass-subtle/medium/deep depth tiers + cs-btn-scene standardized button
  */
 
 /* ══════════════════════════════════════════════════════════════
@@ -1100,4 +1105,137 @@
 .cs-glass-card textarea:focus::placeholder {
     opacity: 0.5;
     transform: translateX(4px);
+}
+
+/* ── Glass Depth Levels — v1.57.3 [2026-05-12] — subtle/medium/deep backdrop tiers ── */
+/* Three standardized depth tiers replacing ad-hoc backdrop-filter values.
+   Use glass-subtle for receding panels, glass-medium as default, glass-deep for focus/modal. */
+
+.glass-subtle {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: var(--cs-shadow-sm);
+}
+
+.glass-medium {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: var(--cs-shadow-md);
+}
+
+.glass-deep {
+    background: rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: var(--cs-shadow-lg);
+}
+
+/* ── Standardized Scene Button — v1.57.3 [2026-05-12] — accent-aware button variant ── */
+/* Uses --cs-scene-accent-rgb for colors. Additive variant alongside existing .cs-btn. */
+
+.cs-btn-scene {
+    font-size: var(--cs-text-sm);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.4);
+    border-radius: var(--cs-radius-sm);
+    color: var(--cs-scene-accent, var(--cs-accent));
+    cursor: pointer;
+    transition: background var(--cs-duration-fast) var(--cs-ease),
+                border-color var(--cs-duration-fast) var(--cs-ease),
+                box-shadow var(--cs-duration-fast) var(--cs-ease);
+    white-space: nowrap;
+}
+.cs-btn-scene:hover {
+    background: rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.15);
+    border-color: rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.6);
+}
+.cs-btn-scene:active,
+.cs-btn-scene.active {
+    background: rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.9);
+    border-color: var(--cs-scene-accent, var(--cs-accent));
+    color: #fff;
+    box-shadow: 0 0 20px rgb(var(--cs-scene-accent-rgb, 59 130 246) / 0.5);
+}
+.cs-btn-scene:focus-visible {
+    outline: 2px solid var(--cs-scene-accent, var(--cs-accent));
+    outline-offset: 2px;
+}
+.cs-btn-scene:disabled,
+.cs-btn-scene[disabled] {
+    color: var(--cs-text-dim);
+    border-color: rgba(255, 255, 255, 0.08);
+    cursor: not-allowed;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CHAT BUBBLES — v1.58.0 [2026-06-11]
+   Ported from the Dark Renaissance kit (artifacts/new-assets/
+   components/chat_bubble). Shared dialogue bubble so scenes stop
+   rolling their own: npc (left accent bar) · player (right accent
+   gradient) · system (dashed centered pill).
+   Container should be flex-column (.cs-chat-log provided below).
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cs-space-sm);
+}
+
+.cs-chat-bubble {
+    align-self: flex-start;
+    max-width: 80%;
+    padding: 8px 12px;
+    border-radius: var(--cs-radius-lg);
+    font-family: var(--cs-font-sans);
+    font-size: var(--cs-text-sm);
+    line-height: var(--cs-leading-normal);
+    color: var(--cs-text-primary);
+    background: rgba(20, 21, 32, 0.7);
+    border: 1px solid var(--cs-border);
+    border-left: 3px solid var(--cs-scene-accent, var(--cs-accent));
+}
+
+.cs-chat-bubble__name {
+    display: block;
+    font-family: var(--cs-font-mono);
+    font-size: 9px;
+    color: var(--cs-scene-accent, var(--cs-accent));
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.cs-chat-bubble--player {
+    align-self: flex-end;
+    background: linear-gradient(135deg,
+        rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.12),
+        rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.06));
+    border: 1px solid rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.25);
+    border-left: 1px solid rgba(var(--cs-scene-accent-rgb, 59 130 246), 0.25);
+    border-right: 3px solid var(--cs-scene-accent, var(--cs-accent));
+}
+
+.cs-chat-bubble--system {
+    align-self: center;
+    max-width: none;
+    font-family: var(--cs-font-mono);
+    font-size: 9.5px;
+    color: var(--cs-text-muted);
+    padding: 3px 12px;
+    background: transparent;
+    border: 1px dashed var(--cs-border);
+    border-radius: var(--cs-radius-full);
+    letter-spacing: 0.04em;
 }

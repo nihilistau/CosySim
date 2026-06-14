@@ -45,20 +45,50 @@ window.CharacterBridge = (function () {
   let _directorSprite = null;
 
   // ─── Initialise ──────────────────────────────────────────────────
+  // v1.49.2 [2026-03-22] — Use onReady() callback instead of blind setTimeout polling
+  let _initAttempts = 0;
+  const _MAX_INIT_ATTEMPTS = 10;
+
+  // v1.53.0 [2026-03-26] — Enhanced diagnostic logging for character model debugging
   function init() {
-    if (!window.penthouse3D) {
-      console.warn('[CharBridge] penthouse3D not ready — retrying in 500ms');
-      setTimeout(init, 500);
-      return;
-    }
+    console.info('[CharBridge] init() — CharModels=%s, penthouse3D=%s, penthouse3D.init=%s',
+      typeof CharModels !== 'undefined' ? 'loaded' : 'MISSING',
+      window.penthouse3D ? 'exists' : 'MISSING',
+      window.penthouse3D && window.penthouse3D.isInitialized() ? 'true' : 'false');
+
+    // Wait for CharModels (loaded via separate script)
     if (typeof CharModels === 'undefined') {
-      console.warn('[CharBridge] CharModels not loaded — retrying in 500ms');
+      _initAttempts++;
+      if (_initAttempts > _MAX_INIT_ATTEMPTS) {
+        console.error('[CharBridge] CharModels not available after %d attempts — disabling 3D characters', _MAX_INIT_ATTEMPTS);
+        return;
+      }
+      console.debug('[CharBridge] CharModels not loaded — retrying in 500ms (attempt %d)', _initAttempts);
       setTimeout(init, 500);
       return;
     }
 
-    _scene = window.penthouse3D.getScene();
-    _locationPositions = window.penthouse3D.getLocationPositions();
+    // Use onReady if penthouse3D exists but isn't initialized yet
+    if (window.penthouse3D && !window.penthouse3D.isInitialized()) {
+      console.info('[CharBridge] penthouse3D exists but not initialized — registering onReady callback');
+      window.penthouse3D.onReady(_onPenthouseReady);
+      return;
+    }
+    if (!window.penthouse3D) {
+      console.warn('[CharBridge] penthouse3D not found — listening for penthouse3d:ready event');
+      // Listen for the ready event as fallback
+      document.addEventListener('penthouse3d:ready', () => _onPenthouseReady(window.penthouse3D), { once: true });
+      document.addEventListener('penthouse3d:error', () => {
+        console.error('[CharBridge] Penthouse 3D init failed — disabling 3D characters');
+      }, { once: true });
+      return;
+    }
+    _onPenthouseReady(window.penthouse3D);
+  }
+
+  function _onPenthouseReady(p3d) {
+    _scene = p3d.getScene();
+    _locationPositions = p3d.getLocationPositions();
 
     if (!_scene) {
       console.error('[CharBridge] Could not get Three.js scene from penthouse3D');
@@ -73,7 +103,18 @@ window.CharacterBridge = (function () {
 
     console.info('[CharBridge] Initialised — scene acquired, %d locations mapped',
       Object.keys(_locationPositions).length);
+
+    // v1.51.1 [2026-03-25] — Replay any queued character syncs that arrived before init
+    if (_pendingSync) {
+      console.info('[CharBridge] Replaying queued character sync (%d chars)',
+        Object.keys(_pendingSync.chars || {}).length);
+      syncCharacters(_pendingSync.chars, _pendingSync.locs);
+      _pendingSync = null;
+    }
   }
+
+  // v1.51.1 [2026-03-25] — Queue for characters that arrive before 3D scene is ready
+  let _pendingSync = null;
 
   // ─── Sync characters from scene_state ────────────────────────────
 
@@ -82,11 +123,20 @@ window.CharacterBridge = (function () {
    * @param {Object} stateChars  - data.characters from scene_state
    * @param {Object} stateLocations - data.locations from scene_state (optional)
    */
+  // v1.53.0 [2026-03-26] — Added diagnostic logging
   function syncCharacters(stateChars, stateLocations) {
+    const charCount = Object.keys(stateChars || {}).length;
+
     if (!_scene) {
+      // v1.51.1 — Queue sync instead of dropping it; init will replay when ready
+      console.info('[CharBridge] syncCharacters called but _scene is null — queuing %d chars', charCount);
+      _pendingSync = { chars: stateChars, locs: stateLocations };
       init();
-      if (!_scene) return;
+      return;
     }
+
+    console.info('[CharBridge] syncCharacters — processing %d chars, _scene=%s',
+      charCount, _scene ? 'set' : 'null');
 
     const chars = stateChars || {};
     const locs = stateLocations || {};
@@ -103,6 +153,9 @@ window.CharacterBridge = (function () {
     for (const [cid, info] of Object.entries(chars)) {
       const sprite = ensureCharacter(cid, info.name || cid, colorIdx, info);
       colorIdx++;
+
+      // v1.53.0 — Skip if model creation failed
+      if (!sprite) continue;
 
       // Update outfit if changed
       const outfit = info.outfit || 'casual';
@@ -140,7 +193,7 @@ window.CharacterBridge = (function () {
       if (count === 2) offsetX = (idx === 0) ? -BRIDGE_CONFIG.occupantOffset2P : BRIDGE_CONFIG.occupantOffset2P;
       else if (count >= 3) offsetX = (idx - 1) * BRIDGE_CONFIG.occupantOffsetNP;
 
-      sprite.targetPos.set(locPos.x + offsetX, 0, locPos.z);
+      sprite.targetPos.set(locPos.x + offsetX, locPos.y || 0, locPos.z);
     }
 
     // Remove characters no longer in state
@@ -151,17 +204,40 @@ window.CharacterBridge = (function () {
 
   // ─── Character CRUD ──────────────────────────────────────────────
 
+  // v1.53.0 [2026-03-26] — try/catch for model creation, fix duplicate labels, diagnostic logging
   function ensureCharacter(charId, name, colorIdx, info) {
     if (characters[charId]) return characters[charId];
 
     const color = CHAR_COLORS[colorIdx % CHAR_COLORS.length];
     const gender = info?.gender || undefined;
 
-    const model = CharModels.create({
-      name: name,
-      charColor: color,
-      gender: gender,
+    let model;
+    try {
+      model = CharModels.create({
+        name: name,
+        charColor: color,
+        gender: gender,
+      });
+    } catch (err) {
+      console.error('[CharBridge] CharModels.create() FAILED for %s: %s', name, err.message, err);
+      return null;
+    }
+
+    if (!model || !model.group) {
+      console.error('[CharBridge] CharModels.create() returned invalid model for %s:', name, model);
+      return null;
+    }
+
+    console.info('[CharBridge] Model created for %s — group.children=%d, gender=%s',
+      name, model.group.children.length, gender || 'auto');
+
+    // Remove built-in name label from CharModels to avoid duplicates
+    // (CharModels adds a Sprite label; we create our own styled one below)
+    const builtinLabels = [];
+    model.group.children.forEach(child => {
+      if (child.isSprite && child.position.y > 1.5) builtinLabels.push(child);
     });
+    builtinLabels.forEach(lbl => model.group.remove(lbl));
 
     // Apply initial outfit
     const outfit = info?.outfit || 'casual';
@@ -183,7 +259,7 @@ window.CharacterBridge = (function () {
     // Position at initial location
     const locId = info?.location_id || 'bed';
     const locPos = _locationPositions[locId] || { x: 0, y: 0, z: 0 };
-    model.group.position.set(locPos.x, 0, locPos.z);
+    model.group.position.set(locPos.x, locPos.y || 0, locPos.z);
 
     // Create name label sprite
     const label = createNameLabel(name, color);
@@ -191,7 +267,7 @@ window.CharacterBridge = (function () {
 
     const entry = {
       model: model,
-      targetPos: new THREE.Vector3(locPos.x, 0, locPos.z),
+      targetPos: new THREE.Vector3(locPos.x, locPos.y || 0, locPos.z),
       currentOutfit: outfit,
       currentMood: 'neutral',
       label: label,
@@ -368,7 +444,7 @@ window.CharacterBridge = (function () {
     _scene.add(model.group);
 
     const locPos = _locationPositions[locationId] || { x: 0, y: 0, z: 0 };
-    model.group.position.set(locPos.x + 1.2, 0, locPos.z);
+    model.group.position.set(locPos.x + 1.2, locPos.y || 0, locPos.z);
 
     const label = createNameLabel('Director', '#ffd700');
     if (label) model.group.add(label);
@@ -385,7 +461,7 @@ window.CharacterBridge = (function () {
     // Track in characters map so director participates like agents
     characters['director'] = {
       model: model,
-      targetPos: new THREE.Vector3(locPos.x + 1.2, 0, locPos.z),
+      targetPos: new THREE.Vector3(locPos.x + 1.2, locPos.y || 0, locPos.z),
       locationId: locationId,
       currentMood: 'neutral',
       label: label,
@@ -542,7 +618,7 @@ window.CharacterBridge = (function () {
       const dir = characters['director'];
       if (!dir) return;
       const locPos = _locationPositions[locationId] || { x: 0, y: 0, z: 0 };
-      dir.targetPos.set(locPos.x + 1.2, 0, locPos.z);
+      dir.targetPos.set(locPos.x + 1.2, locPos.y || 0, locPos.z);
       dir.locationId = locationId;
       if (window.PenthouseAnim) {
         const state = PenthouseAnim.inferAnimState(locationId, 'idle');

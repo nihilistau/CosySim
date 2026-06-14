@@ -125,6 +125,8 @@ class BackupManager:
         )
         self._retention_days = retention_days
         self._full_backup_days = full_backup_days
+        # v1.51.0 [2026-03-24] — Count-based backup retention to prevent unbounded growth
+        self._max_backups_per_db: int = cfg.get("nexus.backup_max_per_db", 3)
         self._last_result: Optional[BackupResult] = None
         self._backup_dir.mkdir(parents=True, exist_ok=True)
 
@@ -337,6 +339,23 @@ class BackupManager:
                     f.unlink()
                     pruned += 1
                     logger.debug("Pruned old backup: %s", f.name)
+
+        # v1.51.0 [2026-03-24] — Count-based retention: keep only N most recent per DB
+        for db_name, files in by_name.items():
+            remaining = sorted(
+                [f for f in files if f.exists()],
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            full_backups = [f for f in remaining if "_full" in f.name]
+            keep_latest_full = full_backups[0] if full_backups else None
+            for f in remaining[self._max_backups_per_db:]:
+                if f == keep_latest_full:
+                    continue
+                f.unlink()
+                pruned += 1
+                logger.debug("Pruned excess backup: %s (max_per_db=%d)",
+                             f.name, self._max_backups_per_db)
 
         return pruned
 

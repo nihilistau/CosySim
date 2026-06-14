@@ -72,7 +72,7 @@ def debug_scene(port: int = 5556, include_vision: bool = False) -> str:
     try:
         return _run_async(_run())
     except ConnectionError:
-        return f"ERROR: No Chrome tab found for {target}. Is the scene running and Chrome open with --remote-debugging-port=9222?"
+        return f"ERROR: No Chrome tab found for {target}. Is the scene running and Chrome open with --remote-debugging-port=9223?"
     except Exception as exc:
         return f"ERROR: Diagnostic failed: {exc}"
 
@@ -552,13 +552,13 @@ def debug_list_tabs() -> str:
         from scripts.argus.live_debugger import LiveDebugger
         tabs = LiveDebugger.list_tabs()
         if not tabs:
-            return "No Chrome tabs found. Is Chrome running with --remote-debugging-port=9222?"
+            return "No Chrome tabs found. Is Chrome running with --remote-debugging-port=9223?"
         lines = ["Open Chrome tabs:"]
         for i, tab in enumerate(tabs):
             lines.append(f"  {i+1}. {tab['title'][:60]} — {tab['url'][:80]}")
         return "\n".join(lines)
     except ConnectionError:
-        return "ERROR: Cannot connect to Chrome CDP. Start Chrome with --remote-debugging-port=9222"
+        return "ERROR: Cannot connect to Chrome CDP. Start Chrome with --remote-debugging-port=9223"
     except Exception as exc:
         return f"ERROR: Tab listing failed: {exc}"
 

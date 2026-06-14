@@ -49,13 +49,16 @@ def _get_comfyui_base_url() -> str:
         return env_url.rstrip("/")
     try:
         from engine.config import get_config
-        url = get_config().get("comfyui.base_url", "http://localhost:8188")
+        url = get_config().get("comfyui.base_url", "")
         # Ensure we have a valid string, not None
         if url:
             return url.rstrip("/")
-        return "http://localhost:8188"
-    except Exception:
-        return "http://localhost:8188"
+        from engine.port_registry import get_service_url
+        return get_service_url("comfyui")
+    except Exception as e:
+        logger.debug("[ComfyUIClient] Config unavailable, using default URL (operation=init): %s", e)
+        from engine.port_registry import get_service_url
+        return get_service_url("comfyui")
 
 
 COMFYUI_BASE_URL = _get_comfyui_base_url()
@@ -292,7 +295,8 @@ def _default_image_workflow(
         try:
             from engine.media.media_config import get_media_config
             width, height = get_media_config().image_dims("selfie")
-        except Exception:
+        except Exception as e:
+            logger.debug("[ComfyUIClient] MediaConfig unavailable, using model-based defaults (operation=build_workflow): %s", e)
             _xl_keywords = ("xl", "sdxl", "pony", "flux", "juggernaut")
             is_xl = any(k in model.lower() for k in _xl_keywords)
             width, height = (1024, 1024) if is_xl else (512, 768)
@@ -358,7 +362,8 @@ class ComfyUIClient:
     def __init__(self, base_url: str = COMFYUI_BASE_URL, timeout: int = 300):
         # Handle None case for base_url
         if base_url is None:
-            base_url = "http://localhost:8188"
+            from engine.port_registry import get_service_url
+            base_url = get_service_url("comfyui")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.client_id = str(uuid.uuid4())
@@ -417,7 +422,8 @@ class ComfyUIClient:
         try:
             r = requests.get(f"{self.base_url}/system_stats", timeout=5)
             return r.ok
-        except Exception:
+        except Exception as e:
+            logger.debug("[ComfyUIClient] Health check failed (operation=is_available): %s", e)
             return False
 
     def get_models(self) -> List[str]:
@@ -427,8 +433,8 @@ class ComfyUIClient:
             if r.ok:
                 data = r.json()
                 return data.get("CheckpointLoaderSimple", {}).get("input", {}).get("required", {}).get("ckpt_name", [[]])[0]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[ComfyUIClient] Failed to list models (operation=get_models): %s", e)
         return []
 
     # ──────────────────────────────
@@ -458,8 +464,8 @@ class ComfyUIClient:
                     history = r.json()
                     if prompt_id in history:
                         return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[ComfyUIClient] Poll attempt failed (operation=wait_for_prompt): %s", e)
             time.sleep(poll_interval)
         logger.warning("ComfyUI timeout waiting for prompt %s", prompt_id)
         return False

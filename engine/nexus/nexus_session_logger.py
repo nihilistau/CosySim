@@ -1,5 +1,9 @@
-"""
-nexus_session_logger.py — Logs Copilot CLI session events to Nexus.
+"""nexus_session_logger.py — Logs Copilot CLI session events to Nexus.
+
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Add warning when raw HTTP fallback bypasses governed client
 
 Called by .github/hooks/session-logger/hooks.json on session lifecycle events.
 Falls back to local logging if Nexus is unavailable.
@@ -39,7 +43,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
+def _get_nexus_url() -> str:
+    env = os.environ.get("NEXUS_URL")
+    if env:
+        return env
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
 LOG_DIR = Path(__file__).resolve().parent.parent.parent / ".github" / "hooks" / "logs"
 SESSION_FILE = LOG_DIR / "current_session.json"
 SESSION_STORE_DB = Path.home() / ".copilot" / "session-store" / "store.sqlite"
@@ -99,12 +108,18 @@ def _post(path: str, data: dict, timeout: int = 5, method: str = "POST") -> dict
     except Exception:
         logger.debug("Suppressed exception", exc_info=True)
 
+    # v1.50.2 [2026-03-24] — Warn when falling back to raw HTTP (bypasses governance)
     try:
-        url = f"{NEXUS_URL}{path}"
+        url = f"{_get_nexus_url()}{path}"
         body = json.dumps(payload).encode()
         req = urllib.request.Request(url, data=body, method=method,
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
+            logger.warning(
+                "[SessionLogger] Fell back to raw HTTP (operation=post, path=%s): "
+                "governed client failed, bypassing embedding hooks and governance",
+                path,
+            )
             return json.loads(resp.read())
     except Exception:
         return None

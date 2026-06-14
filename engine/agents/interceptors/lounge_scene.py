@@ -69,7 +69,8 @@ class LoungeSceneInterceptor(InterceptorBase):
             try:
                 directive = ds.get_active_directive(agent_id, SCENE_ID)
             except Exception as exc:
-                logger.debug("LoungeSceneInterceptor: directive lookup failed: %s", exc)
+                # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+                logger.warning("[LoungeInterceptor] Directive lookup failed (operation=pre_call): %s", exc)
 
             # ── Available cocktails this trust level ──────────────────
             cocktails_avail = get_all_cocktails(trust)
@@ -86,14 +87,16 @@ class LoungeSceneInterceptor(InterceptorBase):
                 actions = eng.get_available_actions(SCENE_ID, stats_dict)
                 available_actions = [a["id"] for a in actions[:8]]
             except Exception as exc:
-                logger.debug("LoungeSceneInterceptor: available actions failed: %s", exc)
+                # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+                logger.warning("[LoungeInterceptor] Available actions lookup failed (operation=pre_call): %s", exc)
 
             # ── Rules summary ─────────────────────────────────────────
             rules_summary = ""
             try:
                 rules_summary = eng.get_rules_summary(SCENE_ID)
             except Exception as exc:
-                logger.debug("LoungeSceneInterceptor: rules summary failed: %s", exc)
+                # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+                logger.warning("[LoungeInterceptor] Rules summary lookup failed (operation=pre_call): %s", exc)
 
             # ── Cross-agent inbox ─────────────────────────────────────
             cross_note = ""
@@ -106,7 +109,8 @@ class LoungeSceneInterceptor(InterceptorBase):
                     if msgs:
                         cross_note = "Internal message: " + " / ".join(msgs)
             except Exception as exc:
-                logger.debug("LoungeSceneInterceptor: cross-scene inbox failed: %s", exc)
+                # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+                logger.warning("[LoungeInterceptor] Cross-scene inbox failed (operation=pre_call): %s", exc)
 
             # ── Build injection block ─────────────────────────────────
             lines: List[str] = [
@@ -154,8 +158,9 @@ class LoungeSceneInterceptor(InterceptorBase):
                 conv_directive = conv_heat.get_directive(conv_key)
                 if conv_directive:
                     lines.append(f"[Conversation pacing] {conv_directive}")
-            except Exception:
-                logger.debug("Suppressed exception", exc_info=True)
+            except Exception as exc:
+                # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+                logger.warning("[LoungeInterceptor] ConversationHeat pacing failed (operation=pre_call): %s", exc)
 
             injection = "\n\n[LOUNGE MCP CONTEXT]\n" + "\n".join(lines) + "\n[/LOUNGE MCP CONTEXT]"
             ctx["system_prompt"] = ctx.get("system_prompt", "") + injection

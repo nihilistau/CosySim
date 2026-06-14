@@ -1,10 +1,23 @@
 """
-memory_skills.py — Memory query, storage, and chain summarization skills
+Memory Skills — Agent memory, recall, and chain summarization
+==============================================================
 
 These skills give the LLM direct access to:
-- Long-term memory via ChromaDB RAG (search + store)
+- Long-term memory via ChromaDB RAG (search + store + save_memory + recall_about)
 - The EventChain diagnostics tree (retrieve + summarize for memory compaction)
 - Conversation history summarization (compacts old messages into a single memory)
+
+Version: v1.51.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.51.0 [2026-03-25] — Added save_memory (OpenRoom-style categorized) and
+                            recall_about (subject-based retrieval)
+    v1.0.0  [2026-03-21] — Initial memory skills (search, store, chain summarize)
+
+CONNECTS: RAGMemory (ChromaDB), EventChain, CharacterMemory
+CALLED BY: AgentGovernor (auto/optional skills), scene chat handlers
+EMITS: Memory entries to ChromaDB vector store
 """
 from __future__ import annotations
 
@@ -255,3 +268,169 @@ def summarize_chain(
 
     except Exception as exc:
         return f"Failed to summarize chain {chain_id}: {exc}"
+
+
+# ──── OpenRoom-Inspired Memory Skills ────────────────────────────────────────
+# v1.51.0 [2026-03-25] — Categorized memory saving + subject-based recall
+# Inspired by OpenRoom's save_memory tool that lets AI characters remember
+# important facts, preferences, events, and emotional moments about the player.
+# CONNECTS: RAGMemory, CharacterMemory
+# CALLED BY: AI agents during conversation (auto or explicit)
+
+
+_VALID_CATEGORIES = {"fact", "preference", "event", "emotion", "observation"}
+
+
+@skill(
+    pack="memory",
+    description=(
+        "Save an important piece of information to long-term memory. "
+        "Use this when you learn something significant about the player that "
+        "should be remembered across conversations: their preferences, facts "
+        "about their life, emotional moments, or key events."
+    ),
+    tags=["memory", "save", "important", "long-term"],
+    category="MEMORY",
+)
+def save_memory(
+    content: str,
+    category: str = "fact",
+    subject: str = "",
+    character_id: str = "",
+    importance: float = 0.7,
+) -> str:
+    """Save a categorized memory about the player or an important fact.
+
+    The AI character calls this during conversation when it learns something
+    worth remembering. Memories are persisted to ChromaDB and can be recalled
+    by category or subject.
+
+    Args:
+        content:      The information to remember (concise, one key fact per call).
+        category:     One of: "fact" (user facts), "preference" (likes/dislikes),
+                      "event" (what happened), "emotion" (emotional moments),
+                      "observation" (general observations).
+        subject:      What this memory is about (e.g., "player's job",
+                      "dinner conversation", "fear of spiders"). Used for
+                      targeted recall via recall_about().
+        character_id: Associate with a specific character (auto-detected if empty).
+        importance:   Importance score 0.0–1.0 (higher = more likely to be recalled).
+
+    Returns:
+        Confirmation with category, subject, and importance.
+    """
+    # Validate category
+    category = category.lower().strip()
+    if category not in _VALID_CATEGORIES:
+        category = "fact"
+
+    try:
+        from content.simulation.database.rag import RAGMemory
+        from engine.skills.chain_context import get_chain_context
+
+        ctx = get_chain_context()
+        rag = RAGMemory()
+        char_id = character_id or ctx.get("character_id") or "global"
+
+        rag.add_memory(
+            character_id=char_id,
+            content=content,
+            memory_type=category,
+            importance=float(max(0.0, min(1.0, importance))),
+            chain_id=ctx.get("chain_id"),
+            scene_id=ctx.get("scene_id", "unknown"),
+            metadata={"subject": subject} if subject else None,
+        )
+
+        logger.info(
+            "[MemorySkills] save_memory (operation=save, category=%s, subject=%s, char=%s)",
+            category, subject or "(none)", char_id,
+        )
+
+        parts = [f"Memory saved ({category})"]
+        if subject:
+            parts.append(f"about: {subject}")
+        parts.append(f"importance: {importance:.1f}")
+        return " | ".join(parts)
+
+    except Exception as exc:
+        logger.error("[MemorySkills] save_memory failed: %s", exc)
+        return f"Failed to save memory: {exc}"
+
+
+@skill(
+    pack="memory",
+    description=(
+        "Recall memories about a specific subject or topic. "
+        "Use this to remember what you know about something specific: "
+        "a person, a place, an event, a preference, etc."
+    ),
+    tags=["memory", "recall", "subject", "search"],
+    category="MEMORY",
+)
+def recall_about(
+    subject: str,
+    character_id: str = "",
+    category: str = "",
+    top_k: int = 5,
+) -> str:
+    """Recall memories about a specific subject.
+
+    Unlike search_memory (which does semantic search on content), this
+    filters by the subject metadata field for targeted retrieval.
+
+    Args:
+        subject:      What to recall about (e.g., "player's family",
+                      "last mission", "favorite food").
+        character_id: Filter by character (auto-detected if empty).
+        category:     Optional category filter: fact, preference, event,
+                      emotion, observation.
+        top_k:        Number of memories to return (1–20).
+
+    Returns:
+        Formatted list of matching memories with categories, or a message
+        if none found.
+    """
+    try:
+        from content.simulation.database.rag import RAGMemory
+        from engine.skills.chain_context import get_chain_context
+
+        ctx = get_chain_context()
+        rag = RAGMemory()
+        char_id = character_id or ctx.get("character_id") or "global"
+        top_k = max(1, min(top_k, 20))
+
+        # Search with subject as the query, filtered by category if provided
+        results = rag.query_memories(
+            character_id=char_id,
+            query=subject,
+            n_results=top_k,
+            chain_id=ctx.get("chain_id"),
+            scene_id=ctx.get("scene_id", "unknown"),
+        )
+
+        if not results:
+            return f"No memories found about '{subject}'."
+
+        # Filter by category if specified
+        if category and category in _VALID_CATEGORIES:
+            results = [r for r in results if r.get("memory_type") == category or
+                       r.get("metadata", {}).get("memory_type") == category]
+            if not results:
+                return f"No {category} memories found about '{subject}'."
+
+        lines = []
+        for i, r in enumerate(results):
+            content = r.get("content", str(r))
+            mem_type = r.get("memory_type", r.get("metadata", {}).get("memory_type", "?"))
+            mem_subject = r.get("metadata", {}).get("subject", "")
+            label = f"[{mem_type}]"
+            if mem_subject:
+                label += f" ({mem_subject})"
+            lines.append(f"{i+1}. {label} {content}")
+
+        return "\n".join(lines)
+
+    except Exception as exc:
+        logger.error("[MemorySkills] recall_about failed: %s", exc)
+        return f"Failed to recall memories: {exc}"

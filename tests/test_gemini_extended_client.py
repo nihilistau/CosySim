@@ -35,7 +35,7 @@ def _make_batchexecute_response(rpcid: str, inner: Any) -> str:
     """Build a minimal batchexecute wrb.fr HTTP response string."""
     inner_json = json.dumps(inner, separators=(",", ":"))
     chunk = json.dumps([["wrb.fr", rpcid, inner_json]], separators=(",", ":"))
-    return f")]}'\n{chunk}\n"
+    return ")]}'\n" + chunk + "\n"
 
 
 def _make_client(
@@ -154,7 +154,7 @@ class TestGeminiExtendedParsing:
         inner = {"key": "val"}
         inner_json = json.dumps(inner)
         chunk = json.dumps([["wrb.fr", "ZKcapf", inner_json]])
-        raw = f")]}'\n{chunk}"
+        raw = ")]}'\n" + chunk
         result = client._parse_batchexecute_response(raw, "ZKcapf")
         assert result == inner
 
@@ -422,7 +422,7 @@ class TestGeminiStreamResponse:
         inner = [[chunk_text]]
         inner_json = json.dumps(inner)
         line = json.dumps([["wrb.fr", "sr", inner_json]])
-        raw_chunk = f")]}'\n{line}\n"
+        raw_chunk = ")]}'\n" + line + "\n"
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()

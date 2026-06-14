@@ -3,10 +3,16 @@
 Baselines (NLM_RPCIDS, GEMINI_RPCIDS, AISTUDIO_METHODS, etc.) are derived
 dynamically from config/nlm_rpcids.yaml at import time. Hardcoded fallbacks
 are kept inline for graceful degradation if the YAML is missing or corrupt.
+
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Add Gemini File Search API endpoints for reconnaissance
 """
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -134,7 +140,7 @@ def _derive_heap_discovered(data: Dict[str, Any]) -> Dict[str, str]:
 
 # ──── Chrome CDP ────
 CDP_HOST = "localhost"
-CDP_PORT = 9222
+CDP_PORT = 9223
 CDP_URL  = f"http://{CDP_HOST}:{CDP_PORT}"
 
 # ──── tshark ────
@@ -169,6 +175,18 @@ TARGETS: Dict[str, Dict] = {
         "webchannel": "https://webchannel-alkalimakersuite-pa.clients6.google.com",
         "service":    "MakerSuiteService",
     },
+}
+
+# v1.57.0 [2026-03-26] — Gemini File Search (managed RAG) API endpoints
+# These are the REST endpoints for the Gemini File Search stores, which provide
+# server-managed document retrieval with grounded citations.
+# Docs: https://ai.google.dev/gemini-api/docs/file-search
+FILE_SEARCH_ENDPOINTS: Dict[str, str] = {
+    "stores": "https://generativelanguage.googleapis.com/v1beta/fileSearchStores",
+    "documents": "https://generativelanguage.googleapis.com/v1beta/fileSearchStores/{store}/documents",
+    "query": "https://generativelanguage.googleapis.com/v1beta/fileSearchStores/{store}:query",
+    "create_store": "https://generativelanguage.googleapis.com/v1beta/fileSearchStores",
+    "delete_store": "https://generativelanguage.googleapis.com/v1beta/fileSearchStores/{store}",
 }
 
 # ──── Load YAML registry and derive baselines ────
@@ -519,10 +537,9 @@ HEAP_OVERRIDE_TARGETS: Dict[str, Dict] = {
 # FLAG_ID_RANGE = range(300, 1500) — moved above HEAP_OVERRIDE_TARGETS
 
 # ──── Known API keys (rotatable via GenerateCloudApiKey) ────
+# v1.61.0 [2026-06-13] — move harvested AI Studio API keys to env (comma-separated)
 AISTUDIO_API_KEYS: List[str] = [
-    "REDACTED-GOOGLE-API-KEY",
-    "REDACTED-GOOGLE-API-KEY",
-    "REDACTED-GOOGLE-API-KEY",
+    k.strip() for k in os.getenv("GOOGLE_AISTUDIO_API_KEYS", "").split(",") if k.strip()
 ]
 
 # ──── Crawl timeouts ────

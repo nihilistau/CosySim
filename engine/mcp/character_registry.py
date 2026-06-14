@@ -584,7 +584,8 @@ class CharacterRegistry:
             from content.simulation.database.db import Database
             db = Database()
         except Exception as exc:
-            logger.warning("persist_to_db: cannot access DB: %s", exc)
+            # v1.49.3 [2026-03-22] — Structured logging context
+            logger.warning("[CharacterRegistry] Cannot access DB (operation=persist_to_db): %s", exc)
             return 0
 
         ids = [character_id] if character_id else list(self.list_characters())
@@ -606,7 +607,7 @@ class CharacterRegistry:
             except Exception as exc:
                 logger.debug("persist_to_db(%s): %s", cid, exc)
         if persisted:
-            logger.info("persist_to_db: saved %d/%d characters to DB", persisted, len(ids))
+            logger.info("[CharacterRegistry] Persisted to DB (operation=persist_to_db, saved=%d, total=%d)", persisted, len(ids))
         return persisted
 
 
@@ -726,8 +727,9 @@ def seed_registry_from_character(char: Any, *, voice_id: str = "") -> None:
             voices = get_config().get("voices", {})
             if isinstance(voices, dict) and cid in voices:
                 resolved_voice_id = cid
-        except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+        except Exception as exc:
+            # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+            logger.warning("[CharacterRegistry] Voice config lookup failed (operation=register): %s", exc)
 
     # Gather personality traits from whatever attributes exist
     _trait_keys = [
@@ -741,8 +743,9 @@ def seed_registry_from_character(char: Any, *, voice_id: str = "") -> None:
         if v is not None:
             try:
                 personality[k] = float(v)
-            except (TypeError, ValueError):
-                logger.debug("Suppressed exception", exc_info=True)
+            except (TypeError, ValueError) as exc:
+                # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+                logger.warning("[CharacterRegistry] Personality trait parse failed (operation=register, key=%s): %s", k, exc)
 
     # Appearance dict — accept existing dict, string description, or build from attrs
     _raw_app = getattr(char, "appearance", {}) or {}
@@ -782,8 +785,9 @@ def seed_registry_from_character(char: Any, *, voice_id: str = "") -> None:
     if mood_intensity is not None:
         try:
             state_kwargs["mood_intensity"] = float(mood_intensity)
-        except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+        except Exception as exc:
+            # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+            logger.warning("[CharacterRegistry] mood_intensity parse failed (operation=register): %s", exc)
     if state_kwargs:
         reg.set_state(cid, **state_kwargs)
 

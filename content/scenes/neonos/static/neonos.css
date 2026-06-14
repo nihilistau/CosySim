@@ -1,0 +1,43 @@
+/*
+ * neonos.css — NEON OS Scene-Specific Overrides
+ * ================================================
+ *
+ * Overrides for the NeonOS desktop shell.  The bulk of desktop styles
+ * live in /shared/css/cosysim-desktop.css; this file handles scene-level
+ * tweaks like hiding the default neon layout wrapper.
+ *
+ * Version: v1.51.0 [2026-03-25]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.51.0 [2026-03-25] — Desktop shell overrides (hide neon-main padding,
+ *                           full-viewport desktop container)
+ *   v1.0.0  [2026-03-25] — Initial scaffold via Creation Kit
+ */
+
+/* ── Palette ────────────────────────────────────────────────────────── */
+:root {
+  --neonos-accent: #00e5ff;
+  --neonos-accent-rgb: 0 229 255;
+  --neonos-glow: rgba(0, 229, 255, 0.25);
+  --neonos-bg: #080a10;
+  --neonos-panel: rgba(10, 14, 22, 0.85);
+  --neonos-border: rgba(0, 229, 255, 0.12);
+  --neonos-text: #c0c8d8;
+}
+
+/* ── Layout Overrides ───────────────────────────────────────────────── */
+/* v1.51.0 [2026-03-25] — Remove default scene padding/margins so the
+   desktop fills the entire viewport below the navbar */
+
+.neon-main {
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden;
+}
+
+.neon-layout {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+}

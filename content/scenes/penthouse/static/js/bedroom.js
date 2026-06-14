@@ -7,6 +7,8 @@
 let scene, camera, renderer, controls;
 let ambientLight, directionalLight, pointLights = [];
 let clock = new THREE.Clock();
+// v1.49.2 [2026-03-22] — Track whether we reused penthouse3D's renderer
+let _reusedPenthouse3D = false;
 
 // Location 3D markers  { id → THREE.Mesh }
 const locationMarkers = {};
@@ -59,33 +61,61 @@ let cameraAnimating = false;
 // ═══════════════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════════════
+// v1.49.2 [2026-03-22] — Reuse penthouse3D scene/renderer if available to prevent
+// dual-renderer conflict on the same canvas. Falls back to own if penthouse3D absent.
 function init() {
-    const canvas = document.getElementById('bedroom-canvas');
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a2e);
-
-    camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
-    camera.position.set(CONFIG.cameraPos.x, CONFIG.cameraPos.y, CONFIG.cameraPos.z);
-
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.target.set(CONFIG.cameraTarget.x, CONFIG.cameraTarget.y, CONFIG.cameraTarget.z);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.minDistance = 2;
-    controls.maxDistance = 30;
-    controls.maxPolarAngle = Math.PI / 2.05;
-    controls.minPolarAngle = 0.2;
-    controls.zoomSpeed = 1.2;
+    // Try to reuse penthouse3D's already-initialized renderer
+    if (window.penthouse3D && window.penthouse3D.isInitialized && window.penthouse3D.isInitialized()) {
+        scene = window.penthouse3D.getScene();
+        camera = window.penthouse3D.getCamera();
+        renderer = window.penthouse3D.getRenderer();
+        _reusedPenthouse3D = true;
+        console.debug('[Bedroom] Reusing penthouse3D scene/camera/renderer');
+        // Still set up OrbitControls on the shared renderer
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(CONFIG.cameraTarget.x, CONFIG.cameraTarget.y, CONFIG.cameraTarget.z);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 2;
+        controls.maxDistance = 30;
+        controls.maxPolarAngle = Math.PI / 2.05;
+        controls.minPolarAngle = 0.2;
+        controls.zoomSpeed = 1.2;
     controls.rotateSpeed = 0.8;
     controls.panSpeed = 0.8;
     controls.enablePan = true;
     controls.update();
+
+    } else {
+        // Fallback: create own renderer (penthouse3D not available)
+        const canvas = document.getElementById('penthouse-canvas');
+        if (!canvas) {
+            console.error('[Bedroom] canvas#penthouse-canvas not found in DOM — 3D scene cannot render');
+            return;
+        }
+        renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 500);
+        camera.position.set(CONFIG.cameraPos.x, CONFIG.cameraPos.y, CONFIG.cameraPos.z);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(CONFIG.cameraTarget.x, CONFIG.cameraTarget.y, CONFIG.cameraTarget.z);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 2;
+        controls.maxDistance = 30;
+        controls.maxPolarAngle = Math.PI / 2.05;
+        controls.minPolarAngle = 0.2;
+        controls.zoomSpeed = 1.2;
+        console.debug('[Bedroom] Created own renderer (penthouse3D not available)');
+    }
 
     createLighting();
     createRoom();
@@ -97,17 +127,17 @@ function init() {
     buildViewPresetButtons();
 
     animate();
-    console.log('Bedroom v6 initialized');
+    console.debug('[Bedroom] v6 initialized (reused3D=%s)', _reusedPenthouse3D);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 //  LIGHTING
 // ═══════════════════════════════════════════════════════════════════════
 function createLighting() {
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.15 * LPI);
     scene.add(ambientLight);
 
-    directionalLight = new THREE.DirectionalLight(0xffeedd, 0.4);
+    directionalLight = new THREE.DirectionalLight(0xffeedd, 0.4 * LPI);
     directionalLight.position.set(5, 10, 5);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.set(2048, 2048);
@@ -128,7 +158,7 @@ function createLighting() {
         { x: -5, y: 2.5, z: -4.5, color: 0xffaa44, intensity: 0.15 }, // bed nightstand
     ];
     lampPositions.forEach(p => {
-        const pl = new THREE.PointLight(p.color, p.intensity, 8);
+        const pl = new THREE.PointLight(p.color, p.intensity * LPI, 8);
         pl.position.set(p.x, p.y, p.z);
         pl.castShadow = true;
         scene.add(pl);
@@ -139,11 +169,11 @@ function createLighting() {
 function applyLighting(preset) {
     if (!preset) return;
     const c = new THREE.Color(preset.color);
-    ambientLight.intensity = preset.ambient * 0.5;
-    directionalLight.intensity = preset.directional * 0.8;
+    ambientLight.intensity = preset.ambient * 0.5 * LPI;
+    directionalLight.intensity = preset.directional * 0.8 * LPI;
     directionalLight.color = c;
     const mul = (timeOfDay === 'night') ? 0.8 : (timeOfDay === 'morning') ? 0.3 : 0.5;
-    pointLights.forEach(l => { l.intensity = l.userData?.baseIntensity * mul || mul * 0.5; });
+    pointLights.forEach(l => { l.intensity = (l.userData?.baseIntensity * mul || mul * 0.5) * LPI; });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -411,11 +441,11 @@ function buildFireplace() {
     });
 
     // Fire glow
-    const fireLight1 = new THREE.PointLight(0xff6622, 0.8, 5);
+    const fireLight1 = new THREE.PointLight(0xff6622, 0.8 * LPI, 5);
     fireLight1.position.set(FX, 0.5, FZ);
     scene.add(fireLight1);
     pointLights.push(fireLight1);
-    const fireLight2 = new THREE.PointLight(0xff4400, 0.4, 3);
+    const fireLight2 = new THREE.PointLight(0xff4400, 0.4 * LPI, 3);
     fireLight2.position.set(FX - 0.2, 0.35, FZ + 0.05);
     scene.add(fireLight2);
     pointLights.push(fireLight2);
@@ -442,7 +472,7 @@ function buildFireplace() {
         );
         candleStick.position.set(FX + x, 2.43, FZ);
         scene.add(candleStick);
-        const flame = new THREE.PointLight(0xff8800, 0.15, 1.5);
+        const flame = new THREE.PointLight(0xff8800, 0.15 * LPI, 1.5);
         flame.position.set(FX + x, 2.53, FZ);
         scene.add(flame);
         pointLights.push(flame);
@@ -647,7 +677,7 @@ function buildBathroomFixtures() {
         );
         candle.position.set(BTX + ox, 0.82, BTZ + oz);
         scene.add(candle);
-        const glow = new THREE.PointLight(0xff8800, 0.12, 1.5);
+        const glow = new THREE.PointLight(0xff8800, 0.12 * LPI, 1.5);
         glow.position.set(BTX + ox, 0.90, BTZ + oz);
         scene.add(glow);
         pointLights.push(glow);
@@ -711,7 +741,7 @@ function buildDecorations() {
         crystal.position.set(Math.cos(angle) * 0.5, 3.4, Math.sin(angle) * 0.5);
         scene.add(crystal);
     }
-    const chanLight = new THREE.PointLight(0xffeecc, 0.5, 10);
+    const chanLight = new THREE.PointLight(0xffeecc, 0.5 * LPI, 10);
     chanLight.position.set(0, 3.4, 0);
     scene.add(chanLight);
     pointLights.push(chanLight);
@@ -750,7 +780,7 @@ function buildDecorations() {
         );
         sconce.position.set(side * 7.9, 2.2, -2);
         scene.add(sconce);
-        const sconceLight = new THREE.PointLight(0xffddaa, 0.2, 4);
+        const sconceLight = new THREE.PointLight(0xffddaa, 0.2 * LPI, 4);
         sconceLight.position.set(side * 7.8, 2.3, -2);
         scene.add(sconceLight);
         pointLights.push(sconceLight);
@@ -777,7 +807,7 @@ function buildDecorations() {
         );
         candle.position.set(-2.3 + i * 0.3, 1.2, -5.65);
         scene.add(candle);
-        const flame = new THREE.PointLight(0xff8800, 0.15, 2);
+        const flame = new THREE.PointLight(0xff8800, 0.15 * LPI, 2);
         flame.position.set(-2.3 + i * 0.3, 1.32, -5.65);
         scene.add(flame);
         pointLights.push(flame);
@@ -899,11 +929,17 @@ function ensureCharSprite(charId, name, colorIdx, info) {
     const outfit = (info && info.outfit) ? info.outfit : 'casual';
     CharModels.updateOutfit(model, outfit);
 
+    // v1.49.1 [2026-03-21] — Set initial Y to character standing height
+    // Characters are built with feet at Y=0, so group Y should match
+    // the location's floor level (typically 0 for ground, higher for furniture)
+    const initY = (info && info.location_y !== undefined) ? info.location_y : 0;
+    model.group.position.y = initY;
+
     scene.add(model.group);
     charSprites[charId] = {
         ...model,
-        targetPos: new THREE.Vector3(0, 0, 0),
-        currentPos: new THREE.Vector3(0, 0, 0),
+        targetPos: new THREE.Vector3(0, initY, 0),
+        currentPos: new THREE.Vector3(0, initY, 0),
         bubble: null,
         currentOutfit: outfit,
     };
@@ -955,7 +991,8 @@ function updateCharPositions(characters, locations) {
         if (count === 2) off = (idx === 0) ? -0.6 : 0.6;
         else if (count >= 3) off = (idx - 1) * 0.7;
 
-        sprite.targetPos.set(pos.x + off, 0, pos.z);
+        // v1.49.1 [2026-03-21] — Use location Y for furniture height (fix avatar sinking)
+        sprite.targetPos.set(pos.x + off, pos.y || 0, pos.z);
     }
 
     // Remove sprites for characters no longer present
@@ -984,8 +1021,8 @@ function animate() {
         if (s.bodyGroup && !CharModels.isPoseActive()) CharModels.animate(s, t);
     }
 
-    // Director avatar animation
-    if (directorSprite && directorSprite.bodyGroup) {
+    // v1.49.1 [2026-03-21] — Guard against race condition: check group still in scene
+    if (directorSprite && directorSprite.bodyGroup && directorSprite.group.parent) {
         directorSprite.group.position.lerp(directorSprite.targetPos, Math.min(1, dt * 3));
         CharModels.animate(directorSprite, t);
     }
@@ -1002,7 +1039,7 @@ function animate() {
     for (let i = 0; i < pointLights.length; i++) {
         const pl = pointLights[i];
         if (pl.color.r > 0.8 && pl.position.y < 1.0) {
-            pl.intensity = 0.4 + 0.4 * Math.random() + 0.2 * Math.sin(t * 8 + i);
+            pl.intensity = (0.4 + 0.4 * Math.random() + 0.2 * Math.sin(t * 8 + i)) * LPI;
         }
     }
 
@@ -1087,15 +1124,15 @@ function connectSocket() {
 
     // ── Bed game → sex pose integration ──────────────────────────────
     socket.on('bedgame_started', (data) => {
-        console.log('[BedGame] Started:', data);
+        console.debug('[BedGame] Started:', data);
         // Poses are applied per-action, not on start
     });
     socket.on('bedgame_action', (data) => {
-        console.log('[BedGame] Action:', data);
+        console.debug('[BedGame] Action:', data);
         _applyBedGamePose(data);
     });
     socket.on('bedgame_ended', (data) => {
-        console.log('[BedGame] Ended');
+        console.debug('[BedGame] Ended');
         CharModels.stopPose(false); // smooth return to standing
     });
     socket.on('world_event', (evt) => {
@@ -1248,8 +1285,11 @@ function applyState(st) {
     // Director tab — populate char dropdowns
     populateCharacterDropdowns(st.characters || {});
 
-    // Director avatar
-    updateDirectorAvatar(st.director_avatar || null);
+    // v1.49.1 — Only update director if the field is explicitly present in state
+    // Prevents accidental removal when backend omits the field
+    if ('director_avatar' in st) {
+        updateDirectorAvatar(st.director_avatar);
+    }
 
     // Interact tab — populate move dropdowns
     const moveCharSel = document.getElementById('moveCharSelect');
@@ -1813,7 +1853,7 @@ function triggerEventEffect(type) {
             setTimeout(() => applyLighting(sceneState.lighting || {}), 8000);
             break;
         case 'thunder':
-            const flash = new THREE.PointLight(0xffffff, 5, 50);
+            const flash = new THREE.PointLight(0xffffff, 5 * LPI, 50);
             flash.position.set(0, 10, 0);
             scene.add(flash);
             setTimeout(() => { flash.intensity = 0; }, 100);
@@ -1986,6 +2026,7 @@ async function placeDirectorAvatar() {
     addFeedEntry({ character_name: '(Director)', action: 'director', message: `${name}'s avatar placed at ${locationId}` }, 'director');
 }
 
+// v1.49.1 [2026-03-21] — Mark as explicit removal so state fetches don't conflict
 async function removeDirectorAvatar() {
     await fetch('/api/director/avatar', {
         method: 'POST',
@@ -1993,20 +2034,28 @@ async function removeDirectorAvatar() {
         body: JSON.stringify({ action: 'remove' })
     });
     if (directorSprite) {
+        directorSprite._explicitRemove = true;
         scene.remove(directorSprite.group);
         directorSprite = null;
     }
     addFeedEntry({ character_name: '(Director)', action: 'director', message: 'Director avatar removed' }, 'director');
 }
 
+// v1.49.1 [2026-03-21] — Fixed director avatar persistence:
+// - Only remove if explicit removal requested (not on every state fetch)
+// - Use location Y for proper height
+// - Guard against race conditions in animation loop
 function updateDirectorAvatar(avatarData) {
-    if (!avatarData) {
-        if (directorSprite) {
-            scene.remove(directorSprite.group);
-            directorSprite = null;
-        }
+    // Only remove director when explicitly null AND was previously set by user action.
+    // State fetches that omit director_avatar should NOT remove an active director.
+    if (avatarData === null && directorSprite && directorSprite._explicitRemove) {
+        scene.remove(directorSprite.group);
+        directorSprite = null;
         return;
     }
+    // If no data and no existing sprite, nothing to do
+    if (!avatarData) return;
+
     if (!directorSprite) {
         directorSprite = CharModels.create({
             name: avatarData.name || 'Director',
@@ -2016,6 +2065,7 @@ function updateDirectorAvatar(avatarData) {
         scene.add(directorSprite.group);
         directorSprite.targetPos = new THREE.Vector3(0, 0, 0);
         directorSprite.currentOutfit = null;
+        directorSprite._explicitRemove = false;
     }
     // Update outfit
     const outfit = avatarData.outfit || 'casual';
@@ -2023,12 +2073,12 @@ function updateDirectorAvatar(avatarData) {
         CharModels.updateOutfit(directorSprite, outfit);
         directorSprite.currentOutfit = outfit;
     }
-    // Position based on location
+    // Position based on location — use Y for furniture height
     const locId = avatarData.location_id || 'bed';
-    const locations = sceneState.locations || {};
-    const loc = locations[locId];
+    const locs = sceneState.locations || {};
+    const loc = locs[locId];
     if (loc && loc.pos) {
-        directorSprite.targetPos.set(loc.pos.x + 1.0, 0, loc.pos.z);
+        directorSprite.targetPos.set(loc.pos.x + 1.0, loc.pos.y || 0, loc.pos.z);
     }
 }
 

@@ -456,7 +456,7 @@ def _get_qa_pairs() -> list[tuple[str, str, str, list[str]]]:
             "4. Override start(), stop(), get_plugin_info()\n"
             "5. Create {name}_skills.py with @skill(pack='{name}') functions\n"
             "6. Add templates/ and static/ directories\n"
-            "7. Register MCP nodes in start(): fw.get_or_create('scenes.{name}', MCPSceneNode)\n"
+            "7. Register MCP node in on_before_serve(): fw.get_scene('{name}')\n"
             "8. Wire DialogSystem and EventChain\n"
             "9. Add tests in tests/test_{name}.py",
             "development", ["scenes", "howto"],
@@ -660,7 +660,7 @@ def seed_rules() -> int:
         ("global", "quality", "Git commits", "Use conventional commits (feat/fix/docs/test/chore/refactor) with Copilot co-author trailer", 20),
         ("scene:*", "convention", "Scene structure", "Inherit BaseScene, set SCENE_METADATA, override start/stop/get_plugin_info", 10),
         ("scene:*", "convention", "Scene skills", "Create {name}_skills.py with @skill(pack='{name}') — import in __init__.py", 10),
-        ("scene:*", "convention", "MCP wiring", "Register scene node in start(): fw.get_or_create('scenes.{name}', MCPSceneNode)", 10),
+        ("scene:*", "convention", "MCP wiring", "Register scene node in on_before_serve(): fw.get_scene('{name}') — MCPFramework has no get_or_create()", 10),
         ("agent:*", "governance", "Interceptor pipeline", "Always pass governance_context through agent.reply() chain — interceptor injections are lost without it", 5),
         ("agent:*", "governance", "Skill access", "Agents must use @skill functions for tool calling — never direct API access", 15),
         ("testing", "convention", "Test framework", "pytest with plain assert, no unittest.TestCase. Use fixtures from conftest.py", 10),

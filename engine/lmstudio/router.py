@@ -21,6 +21,15 @@ Priority levels:
     BATCH(3)       — Image prompts, analytics, non-urgent
 
 Thread-safe.  All public methods are safe to call from multiple threads.
+
+Version: v1.57.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.57.0 [2026-03-26] — Enhanced Nexus-aware routing: agent hit-rate analysis
+                             from QueryRouter stats for smarter model selection
+    v1.56.0 [2026-03-26] — Nexus-aware routing hint for small model selection
+    v1.49.0 [2026-03-22] — Initial three-tier priority queue router
 """
 from __future__ import annotations
 
@@ -311,6 +320,60 @@ class InferenceRouter:
         future = self.submit(request)
         return future.result(timeout=timeout)
 
+    # ─────────────────────────────── Nexus-aware routing ──
+
+    # v1.57.0 [2026-03-26] — Enhanced Nexus-aware routing with agent hit-rate analysis
+    # CONNECTS: select_tier(), Nexus QueryRouter stats, knowledge confidence
+    # CALLED BY: select_tier() as a pre-check before ML/rule routing
+    def _nexus_routing_hint(self, request: InferenceRequest) -> Optional[str]:
+        """Use Nexus query patterns to optimize model selection.
+
+        Checks two signals:
+        1. Short factual questions (< 50 chars with '?') → small model
+        2. Agent-level Nexus hit rate — if an agent gets 70%+ cache hits
+           from Nexus (after 10+ queries), it asks simple questions that
+           a smaller CPU model can handle.
+
+        Args:
+            request: The inference request to evaluate.
+
+        Returns:
+            ``"small"`` if a lightweight model would suffice, else ``None``.
+        """
+        messages = getattr(request, "messages", None) or []
+        if not isinstance(messages, list):
+            return None
+        # Find the last user message
+        user_msg = ""
+        for m in reversed(messages):
+            if isinstance(m, dict) and m.get("role") == "user":
+                user_msg = m.get("content", "")
+                break
+        if not user_msg:
+            return None
+
+        # Short factual questions → small model
+        if len(user_msg) < 50 and "?" in user_msg:
+            return "small"
+
+        # v1.57.0 [2026-03-26] — Check if Nexus-first inference is catching
+        # most queries for this agent.  High hit rate means simple questions
+        # that a smaller model can handle just as well.
+        agent_id = request.agent_id
+        if agent_id:
+            try:
+                from engine.nexus.query_router import get_query_router
+                stats = get_query_router().stats
+                agent_hits = stats.agent_hits.get(agent_id, 0)
+                agent_queries = stats.agent_queries.get(agent_id, 0)
+                if agent_queries > 10 and agent_hits / max(1, agent_queries) > 0.7:
+                    # This agent gets 70%+ cache hits — simple questions, use small model
+                    return "small"
+            except Exception:
+                pass
+
+        return None
+
     # ─────────────────────────────── routing logic ──
 
     def select_tier(self, request: InferenceRequest) -> Tier:
@@ -333,6 +396,14 @@ class InferenceRouter:
             if self.has_available_slot(affinity_tier):
                 return affinity_tier
 
+        # v1.56.0 — Nexus-aware routing hint: short factual queries → small model
+        hint = self._nexus_routing_hint(request)
+        if hint == "small" and not request.tools:
+            # Prefer CPU utility for simple questions (saves GPU for dialogue)
+            if self._tiers.get(Tier.CPU_UTILITY, TierConfig(Tier.CPU_UTILITY)).enabled:
+                if self.has_available_slot(Tier.CPU_UTILITY):
+                    return Tier.CPU_UTILITY
+
         # RouterV3 ML-based prediction
         try:
             from engine.lmstudio.router_v3_client import get_router_v3_client
@@ -350,7 +421,7 @@ class InferenceRouter:
             if self._tiers.get(tier, TierConfig(tier)).enabled:
                 return tier
         except Exception:
-            pass  # fall through to rule-based
+            logger.debug("Tier selection lookup failed, falling through to rules", exc_info=True)
 
         task = request.task_type
 

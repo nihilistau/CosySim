@@ -64,7 +64,8 @@ class NexusPromptInterceptor(InterceptorBase):
             nx = get_nexus_client()
             if not nx:
                 return
-        except Exception:
+        except Exception as e:
+            logger.debug("[NexusPromptInterceptor] Failed to get Nexus client (operation=pre_call): %s", e)
             return
 
         parts: List[str] = []

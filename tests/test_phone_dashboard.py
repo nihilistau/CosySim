@@ -30,33 +30,9 @@ def mock_framework():
 class TestSystemDashboard:
     """Tests for /api/system/dashboard."""
 
-    @pytest.mark.skip(reason="stub — needs real endpoint test")
-    def test_dashboard_returns_ok(self, mock_framework):
-        """Dashboard endpoint returns aggregated system status."""
-        with patch("content.scenes.phone.phone_scene_v2.get_framework", return_value=mock_framework):
-            from content.scenes.phone.phone_scene_v2 import PhoneSceneV2
-            # Verify the class has the expected route definitions
-            assert True  # Import succeeds, routes defined
-
-    @pytest.mark.skip(reason="stub — needs real endpoint test")
-    def test_dashboard_lmstudio_offline(self):
-        """Dashboard handles LMStudio being unavailable."""
-        # When model_manager import fails, lmstudio shows offline
-        mock_fw = MagicMock()
-        mock_fw.get_status.return_value = {}
-        mock_fw.list_agent_profiles.return_value = []
-
-        with patch("content.scenes.phone.phone_scene_v2.get_framework", return_value=mock_fw):
-            # If LMStudio is down, the dashboard still returns ok with lms.online=False
-            assert True  # The endpoint handles exceptions gracefully
-
-    @pytest.mark.skip(reason="stub — tests constant length, not actual endpoint behavior")
-    def test_dashboard_aggregates_all_services(self):
-        """Dashboard response includes all expected top-level keys."""
-        expected_keys = {"ok", "mcp", "lmstudio", "nexus", "scheduler", "scenes", "agents", "metrics"}
-        # Verify the route handler returns all expected fields
-        # (tested via the route definition structure)
-        assert len(expected_keys) == 8
+    # v1.49.1 [2026-03-22] — Removed 3 stub tests (assert True only) that were
+    # permanently skipped. Real endpoint tests should use Flask test_client()
+    # when phone_scene_v2 is importable in isolation. TODO: implement.
 
 
 # ══════════════════════════════════════════════════════════════════════

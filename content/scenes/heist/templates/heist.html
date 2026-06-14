@@ -4,6 +4,21 @@
 {% set scene_accent = '#f59e0b' %}
 {% set scene_accent_rgb = '245 158 11' %}
 
+{#
+  THE SCORE — Heist Scene
+  =======================
+  Blueprint planning room: briefing, pinboard, crew, phase stepper.
+
+  Version: v1.58.0 [2026-06-11]
+  Author:  CosySim Team
+
+  Change Log:
+    v1.58.0 [2026-06-11] — Dark Renaissance glow-up: pulse-glow on job
+                            name, stagger-in on jobs/crew lists; heist.css
+                            re-pointed at the template accent (--cs-* v2
+                            tokens, amber #f59e0b wins over kit crimson)
+#}
+
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/heist.css') }}">
 {% endblock %}
@@ -17,7 +32,8 @@
   <header class="heist-header">
     <div class="job-title-area">
       <span class="job-label">TARGET</span>
-      <h1 class="job-name" id="job-name">— SELECT JOB —</h1>
+      {# v1.58.0 [2026-06-11] — pulse-glow on the job wordmark (kit .job-name) #}
+      <h1 class="job-name anim-pulse-glow" id="job-name">— SELECT JOB —</h1>
     </div>
 
     <div class="heat-area">
@@ -50,7 +66,8 @@
         <div class="job-select-hint">No job selected.<br>Choose a target to begin.</div>
       </div>
 
-      <div class="jobs-list" id="jobs-list" role="list" aria-label="Available jobs">
+      {# v1.58.0 [2026-06-11] — anim-stagger-in: job cards cascade in #}
+      <div class="jobs-list anim-stagger-in" id="jobs-list" role="list" aria-label="Available jobs">
         <!-- Populated by JS -->
       </div>
     </section>
@@ -88,7 +105,8 @@
         <h2 class="panel-title">CREW</h2>
       </div>
 
-      <div class="crew-list" id="crew-list" role="list" aria-label="Crew members">
+      {# v1.58.0 [2026-06-11] — anim-stagger-in: crew cards cascade in #}
+      <div class="crew-list anim-stagger-in" id="crew-list" role="list" aria-label="Crew members">
         <div class="crew-empty-hint">No active crew.<br>Start a job to deploy.</div>
       </div>
 
@@ -150,6 +168,6 @@
 
 {% block body_scripts %}
   <script src="/shared/js/cosysim-particles3d.js"></script>
-  <script src="/shared/js/cosysim-bench.js"></script>
+  <!-- v1.54.0 [2026-03-26] — BenchHUD removed; replaced by cs-footer in neon_base -->
   <script src="{{ url_for('static', filename='js/heist.js') }}"></script>
 {% endblock %}

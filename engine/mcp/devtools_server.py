@@ -1087,8 +1087,9 @@ async def notebooklm_node_ask(notebook_id: str, question: str, session_id: str =
     Pass ``session_id`` from a prior response to continue a multi-turn conversation.
     Returns JSON with ``answer``, ``sources``, and ``session_id``.
     """
+    # v1.49.2 [2026-03-22] — await async tools.nlm delegates
     from engine.mcp.tools.nlm import notebooklm_node_ask
-    return notebooklm_node_ask(notebook_id, question, session_id)
+    return await notebooklm_node_ask(notebook_id, question, session_id)
 
 
 
@@ -1101,7 +1102,7 @@ async def notebooklm_node_batch_ask(notebook_id: str, questions: str) -> str:
     Returns a JSON array of ``{answer, sources, session_id}`` dicts.
     """
     from engine.mcp.tools.nlm import notebooklm_node_batch_ask
-    return notebooklm_node_batch_ask(notebook_id, questions)
+    return await notebooklm_node_batch_ask(notebook_id, questions)
 
 
 
@@ -1118,7 +1119,7 @@ async def notebooklm_node_add_source(
     Returns JSON with ``status`` and ``source_id``.
     """
     from engine.mcp.tools.nlm import notebooklm_node_add_source
-    return notebooklm_node_add_source(notebook_id, source_type, source_value, title)
+    return await notebooklm_node_add_source(notebook_id, source_type, source_value, title)
 
 
 
@@ -1135,7 +1136,7 @@ async def notebooklm_node_create_notebook(
     Returns JSON with notebook ``id`` and ``url``.
     """
     from engine.mcp.tools.nlm import notebooklm_node_create_notebook
-    return notebooklm_node_create_notebook(name, sources, description, topics)
+    return await notebooklm_node_create_notebook(name, sources, description, topics)
 
 
 
@@ -1145,7 +1146,7 @@ async def notebooklm_node_list_notebooks() -> str:
     Returns JSON array of ``{id, title, source_count, url}`` objects.
     """
     from engine.mcp.tools.nlm import notebooklm_node_list_notebooks
-    return notebooklm_node_list_notebooks()
+    return await notebooklm_node_list_notebooks()
 
 
 
@@ -1155,7 +1156,7 @@ async def notebooklm_node_generate_audio(notebook_id: str) -> str:
     via the Node bridge. Returns JSON with ``status`` and ``progress``.
     """
     from engine.mcp.tools.nlm import notebooklm_node_generate_audio
-    return notebooklm_node_generate_audio(notebook_id)
+    return await notebooklm_node_generate_audio(notebook_id)
 
 
 
@@ -1167,7 +1168,7 @@ async def notebooklm_node_generate_video(notebook_id: str, style: str = "cinemat
     Returns JSON with ``video_id`` and ``status``.
     """
     from engine.mcp.tools.nlm import notebooklm_node_generate_video
-    return notebooklm_node_generate_video(notebook_id, style)
+    return await notebooklm_node_generate_video(notebook_id, style)
 
 
 
@@ -1178,7 +1179,7 @@ async def notebooklm_node_extract_tables(notebook_id: str, query: str = "") -> s
     each table having ``headers`` and ``rows``.
     """
     from engine.mcp.tools.nlm import notebooklm_node_extract_tables
-    return notebooklm_node_extract_tables(notebook_id, query)
+    return await notebooklm_node_extract_tables(notebook_id, query)
 
 
 
@@ -1188,7 +1189,7 @@ async def notebooklm_node_chat_history(notebook_id: str, limit: int = 20) -> str
     Returns JSON array of ``{question, answer, timestamp}`` objects.
     """
     from engine.mcp.tools.nlm import notebooklm_node_chat_history
-    return notebooklm_node_chat_history(notebook_id, limit)
+    return await notebooklm_node_chat_history(notebook_id, limit)
 
 
 
@@ -1199,7 +1200,7 @@ async def notebooklm_node_health() -> str:
     available tools, proxy reachability, and Chrome profile status.
     """
     from engine.mcp.tools.nlm import notebooklm_node_health
-    return notebooklm_node_health()
+    return await notebooklm_node_health()
 
 
 
@@ -1211,7 +1212,7 @@ async def notebooklm_node_setup_auth() -> str:
     Only callable by copilot (admin operation).
     """
     from engine.mcp.tools.nlm import notebooklm_node_setup_auth
-    return notebooklm_node_setup_auth()
+    return await notebooklm_node_setup_auth()
 
 
 
@@ -1225,7 +1226,7 @@ async def notebooklm_node_sync_nexus(notebook_id: str, questions: str) -> str:
     Returns JSON with ``stored`` count, ``errors``, and each Q&A pair.
     """
     from engine.mcp.tools.nlm import notebooklm_node_sync_nexus
-    return notebooklm_node_sync_nexus(notebook_id, questions)
+    return await notebooklm_node_sync_nexus(notebook_id, questions)
 
 
 

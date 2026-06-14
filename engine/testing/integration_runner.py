@@ -41,12 +41,16 @@ _instance_lock: threading.Lock = threading.Lock()
 # Known service probe endpoints / strategies
 # ---------------------------------------------------------------------------
 
-_SERVICE_PROBES: Dict[str, Dict[str, Any]] = {
-    "lmstudio": {"type": "http", "url": "http://localhost:1234/api/v1/models"},
-    "comfyui": {"type": "http", "url": "http://localhost:8188/"},
-    "nexus": {"type": "http", "url": "http://localhost:8765/api/health"},
-    "mcp": {"type": "import", "module": "engine.skills.skill", "attr": None},
-}
+def _build_service_probes() -> Dict[str, Dict[str, Any]]:
+    from engine.port_registry import get_service_url
+    return {
+        "lmstudio": {"type": "http", "url": get_service_url("lmstudio", "/api/v1/models")},
+        "comfyui": {"type": "http", "url": get_service_url("comfyui", "/")},
+        "nexus": {"type": "http", "url": get_service_url("nexus", "/api/health")},
+        "mcp": {"type": "import", "module": "engine.skills.skill", "attr": None},
+    }
+
+_SERVICE_PROBES: Dict[str, Dict[str, Any]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +157,9 @@ class ServiceProbe:
         if not service_name:
             return True
 
+        global _SERVICE_PROBES
+        if not _SERVICE_PROBES:
+            _SERVICE_PROBES = _build_service_probes()
         spec = _SERVICE_PROBES.get(service_name)
         if spec is None:
             logger.debug("ServiceProbe: unknown service '%s' — assuming down", service_name)
@@ -327,6 +334,9 @@ class IntegrationRunner:
         Returns:
             Dict mapping service name → bool.
         """
+        global _SERVICE_PROBES
+        if not _SERVICE_PROBES:
+            _SERVICE_PROBES = _build_service_probes()
         names = service_names if service_names is not None else list(_SERVICE_PROBES.keys())
         return self._probe.probe_all(names)
 
@@ -730,7 +740,8 @@ def integration_test(
         @integration_test("my_test", services=["lmstudio"], timeout=10)
         def test_lmstudio():
             import requests
-            resp = requests.get("http://localhost:1234/api/v1/models", timeout=5)
+            from engine.port_registry import get_service_url
+            resp = requests.get(get_service_url("lmstudio", "/api/v1/models"), timeout=5)
             assert resp.status_code == 200
 
     Args:
@@ -806,8 +817,10 @@ def _test_lmstudio_reachable() -> None:
     """Verify that the LMStudio API is reachable."""
     import requests
 
+    from engine.port_registry import get_service_url
+
     resp = requests.get(
-        "http://localhost:1234/api/v1/models",
+        get_service_url("lmstudio", "/api/v1/models"),
         timeout=5,
     )
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"

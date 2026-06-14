@@ -25,7 +25,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = "http://127.0.0.1:8700"
+
+def _get_nexus_url() -> str:
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -35,7 +38,7 @@ NEXUS_URL = "http://127.0.0.1:8700"
 def api_get(path: str, params: Dict[str, Any] | None = None) -> Any:
     """GET from Nexus API."""
     try:
-        r = requests.get(f"{NEXUS_URL}{path}", params=params or {}, timeout=5)
+        r = requests.get(f"{_get_nexus_url()}{path}", params=params or {}, timeout=5)
         if r.ok:
             data = r.json()
             return data.get("data", data) if isinstance(data, dict) else data
@@ -48,7 +51,7 @@ def api_get(path: str, params: Dict[str, Any] | None = None) -> Any:
 def api_post(path: str, data: Dict[str, Any]) -> Any:
     """POST to Nexus API."""
     try:
-        r = requests.post(f"{NEXUS_URL}{path}", json=data, timeout=5)
+        r = requests.post(f"{_get_nexus_url()}{path}", json=data, timeout=5)
         return r.json() if r.ok else {"error": r.text}
     except Exception as e:
         return {"error": str(e)}
@@ -57,7 +60,7 @@ def api_post(path: str, data: Dict[str, Any]) -> Any:
 def api_delete(path: str) -> bool:
     """DELETE from Nexus API."""
     try:
-        r = requests.delete(f"{NEXUS_URL}{path}", timeout=5)
+        r = requests.delete(f"{_get_nexus_url()}{path}", timeout=5)
         return r.ok
     except Exception:
         return False
@@ -142,7 +145,7 @@ if page == "📊 Dashboard":
 
     # Health check
     try:
-        health = requests.get(f"{NEXUS_URL}/api/health", timeout=3)
+        health = requests.get(f"{_get_nexus_url()}/api/health", timeout=3)
         col4.metric("💚 Health", "Online" if health.ok else "Offline")
     except Exception:
         col4.metric("💔 Health", "Offline")
@@ -522,7 +525,7 @@ elif page == "🔧 Maintenance":
     with col1:
         st.subheader("🏥 Health Check")
         try:
-            health = requests.get(f"{NEXUS_URL}/api/health", timeout=3)
+            health = requests.get(f"{_get_nexus_url()}/api/health", timeout=3)
             if health.ok:
                 st.json(health.json())
             else:
@@ -533,7 +536,7 @@ elif page == "🔧 Maintenance":
     with col2:
         st.subheader("📊 Statistics")
         try:
-            stats = requests.get(f"{NEXUS_URL}/api/stats", timeout=3)
+            stats = requests.get(f"{_get_nexus_url()}/api/stats", timeout=3)
             if stats.ok:
                 st.json(stats.json())
         except Exception:
@@ -575,7 +578,7 @@ elif page == "🔧 Maintenance":
                     ns = detect_namespace(e.get("category", ""), tags)
                     if ns not in tags:
                         tags.append(ns)
-                        r = requests.put(f"{NEXUS_URL}/api/entries/{e['id']}", json={"tags": tags}, timeout=5)
+                        r = requests.put(f"{_get_nexus_url()}/api/entries/{e['id']}", json={"tags": tags}, timeout=5)
                         if r.ok:
                             updated += 1
                 st.success(f"Retagged {updated} entries")

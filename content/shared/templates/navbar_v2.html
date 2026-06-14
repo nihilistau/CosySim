@@ -24,11 +24,7 @@
     v1.42.0 [2026-03-21] — Pillar wiring, hub modernization
     v0.68   [prior]      — Initial B1 track implementation
 -->
-{#
-  NOTE: The HTML comment above is visible in rendered output for
-  debugging. The Jinja2 comments below ({# ... #}) are stripped
-  during template rendering and are for developer-only reference.
-#}
+{# NOTE: HTML comment above is visible in output. Jinja2 comments (like this one) are stripped. #}
 {% set current_scene = current_scene | default('') %}
 {% set scene_name    = scene_name    | default('CosySim') %}
 {% set scene_accent  = scene_accent  | default('#00e5ff') %}
@@ -65,6 +61,9 @@
   { "key": "asset_studio",    "label": "ASSET STUDIO",      "port": 5568, "accent": "#fb923c" },
   { "key": "canvas",          "label": "NEXUS CANVAS",      "port": 5590, "accent": "#06b6d4" },
   { "key": "hub",             "label": "THE LOFT",          "port": 8500, "accent": "#94a3b8" },
+  { "key": "oracle",          "label": "THE ORACLE",        "port": 5572, "accent": "#a855f7" },
+  { "key": "neonos",          "label": "NEON OS",           "port": 5593, "accent": "#06b6d4" },
+  { "key": "creation_kit",    "label": "CREATION KIT",      "port": 5592, "accent": "#f59e0b" },
 ] %}
 
 {# ─────────────────────────────────────────────────────────────── #}
@@ -243,7 +242,10 @@
 <div class="cs-navbar__spacer" aria-hidden="true"></div>
 
 {# ── Neon HUD — inject after navbar spacer ─────────────────────────── #}
+{# v1.50.0 [2026-03-22] — Respect hide_hud flag (documented in neon_base.html) #}
+{% if not hide_hud %}
 {% include 'neon_hud.html' %}
+{% endif %}
 
 <script src="{{ _js_url }}" defer></script>
 <script src="/shared/js/cosysim-transitions.js" defer></script>

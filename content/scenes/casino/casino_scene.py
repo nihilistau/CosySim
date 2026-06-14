@@ -1,6 +1,7 @@
 """
-CLUB NOIR — Scene  (v0.68 Dark Renaissance)
-=============================================
+CLUB NOIR — Casino Scene
+=========================
+
 A high-stakes underground casino revamped from The Midnight Casino.
 Accent: neon orange #f97316.  Port: 5559.
 
@@ -26,6 +27,12 @@ Characters
 ----------
 • Dealer Jack — the house dealer.  Calm, precise, slightly ominous.
 • Hustler Mira — a fellow player.  Charming, unpredictable, reads people.
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 from __future__ import annotations
 
@@ -39,17 +46,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, render_template, jsonify, request
-from flask_socketio import SocketIO, emit
-from flask_cors import CORS
+from flask import render_template, jsonify, request
+from flask_socketio import emit
 
 import sys
 from engine.paths import ROOT as _root
 sys.path.insert(0, str(_root))
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from content.scenes.casino.casino_mcp import (
     register_casino_rules,
     SCENE_ID, DEALER_ID, HUSTLER_ID,
@@ -69,6 +74,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+
 CASINO_PORT = 5559
 
 
@@ -76,7 +83,8 @@ CASINO_PORT = 5559
 #  CASINO SCENE
 # ══════════════════════════════════════════════════════════════════════
 
-class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class CasinoScene(FlaskScene):
     """
     The Midnight Casino — MCP framework showcase.
 
@@ -94,23 +102,11 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         "description": "Everyone owes someone. The cards don't lie. The dealers do.",
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = CASINO_PORT) -> None:
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
+        super().__init__(host=host, port=port)
 
-        # ── Flask app ────────────────────────────────────────────────
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         self.app.config["SECRET_KEY"] = "midnight_casino_noir_2026"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
 
         # Mount control overlay
         from engine.overlay import mount_overlay
@@ -160,7 +156,6 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         # ── Setup ────────────────────────────────────────────────────
         self._setup_routes()
         self._setup_socketio()
-        self._mcp_init()
         register_casino_rules()
         self._seed_casino_registry()
         self._wire_event_bus()
@@ -168,8 +163,6 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         # Framework integration
         self._state_mgr = get_scene_state_manager()
         self._tag_registry = TagRegistry.get()
-
-        self.nexus_init("casino")
 
         # ── New engine integrations ───────────────────────────────────
         self._economy       = None
@@ -187,8 +180,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             self._event_bus = get_event_bus()
             self._event_bus.subscribe("world.tick", self._on_world_tick)
             self._event_bus.subscribe("world.time_change", self._on_time_change)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
     # ══════════════════════════════════════════════════════════════════
     #  FRAMEWORK INTEGRATION
@@ -219,23 +212,23 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
     def _on_mood_event(self, evt) -> None:
         try:
             self.socketio.emit("mood_update", evt.payload)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Mood update emit failed (operation=on_mood_event): %s", SCENE_ID, e)
 
     def _on_env_change(self, evt) -> None:
         if evt.payload.get("scene_id") == SCENE_ID:
             try:
                 self.socketio.emit("environment_update", evt.payload)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Environment update emit failed (operation=on_env_change): %s", SCENE_ID, e)
 
     def _on_story_beat(self, evt) -> None:
         if evt.payload.get("scene_id") == SCENE_ID:
             self.events_log.append({"type": "story_beat", "data": evt.payload})
             try:
                 self.socketio.emit("story_beat", evt.payload)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Story beat emit failed (operation=on_story_beat): %s", SCENE_ID, e)
 
     def _check_timers(self) -> None:
         """Check if any casino timers have completed."""
@@ -253,27 +246,27 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         try:
             from engine.economy.economy import get_economy_manager
             self._economy = get_economy_manager()
-            logger.info("CLUB NOIR: EconomyManager wired")
+            logger.info("[%s] EconomyManager wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("CLUB NOIR: EconomyManager unavailable: %s", exc)
+            logger.warning("[%s] EconomyManager unavailable (operation=lifecycle): %s", SCENE_ID, exc)
 
     def _wire_reputation(self) -> None:
         """Wire ReputationManager for win/loss tracking."""
         try:
             from engine.characters.reputation import get_reputation_manager
             self._reputation = get_reputation_manager()
-            logger.info("CLUB NOIR: ReputationManager wired")
+            logger.info("[%s] ReputationManager wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("CLUB NOIR: ReputationManager unavailable: %s", exc)
+            logger.warning("[%s] ReputationManager unavailable (operation=lifecycle): %s", SCENE_ID, exc)
 
     def _wire_consequence_store(self) -> None:
         """Wire ConsequenceStore for delayed narrative consequences."""
         try:
             from engine.mechanics.consequences import get_consequence_store
             self._consequence = get_consequence_store()
-            logger.info("CLUB NOIR: ConsequenceStore wired")
+            logger.info("[%s] ConsequenceStore wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("CLUB NOIR: ConsequenceStore unavailable: %s", exc)
+            logger.warning("[%s] ConsequenceStore unavailable (operation=lifecycle): %s", SCENE_ID, exc)
 
     def _wire_new_event_bus(self) -> None:
         """Wire EventBus for casino.major_win publishing and world sim events."""
@@ -281,9 +274,9 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             from engine.events.event_bus import get_event_bus, EventTypes
             self._event_bus_new = get_event_bus()
             self._event_bus_new.subscribe("world.economy_tick", self._on_economy_tick_world)
-            logger.info("CLUB NOIR: EventBus wired")
+            logger.info("[%s] EventBus wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("CLUB NOIR: EventBus unavailable: %s", exc)
+            logger.warning("[%s] EventBus unavailable (operation=lifecycle): %s", SCENE_ID, exc)
 
     # ── Economy helpers ───────────────────────────────────────────────
 
@@ -292,8 +285,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         try:
             if self._economy:
                 return int(self._economy.get_balance("player"))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Economy balance check failed (operation=economy_balance): %s", SCENE_ID, e)
         return self.player_chips
 
     def _economy_spend(self, amount: int, reason: str = "casino_buy_in") -> bool:
@@ -305,7 +298,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     self._log_transaction("debit", amount, reason)
                 return ok
         except Exception as exc:
-            logger.warning("CLUB NOIR: economy spend degraded for %s: %s", reason, exc)
+            logger.warning("[%s] Economy spend degraded (operation=economy, reason=%s): %s", SCENE_ID, reason, exc)
             self._log_transaction(
                 "debit",
                 amount,
@@ -328,7 +321,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 self._log_transaction("credit", amount, reason)
                 return
         except Exception as exc:
-            logger.warning("CLUB NOIR: economy credit degraded for %s: %s", reason, exc)
+            logger.warning("[%s] Economy credit degraded (operation=economy, reason=%s): %s", SCENE_ID, reason, exc)
             self._log_transaction(
                 "credit",
                 amount,
@@ -400,7 +393,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 delay_hours=24,
                 description="Mira calls — she always knows.",
             )
-            logger.info("CLUB NOIR: Mira call consequence scheduled (loss=$%d)", loss_amount)
+            logger.info("[%s] Mira call consequence scheduled (operation=consequence, loss=$%d)", SCENE_ID, loss_amount)
         except Exception as exc:
             logger.debug("schedule_mira_call error: %s", exc)
 
@@ -477,8 +470,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         try:
             if self._consequence:
                 return len(self._consequence.poll(scene=SCENE_ID, peek=True))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Consequence poll failed (operation=pending_count): %s", SCENE_ID, e)
         return 0
 
     # ══════════════════════════════════════════════════════════════════
@@ -548,9 +541,9 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             for cid in [DEALER_ID, HUSTLER_ID]:
                 self._fw.get_character(cid).enter_scene(SCENE_ID)
 
-            logger.info("Casino registry seeded: Dealer Jack + Hustler Mira")
+            logger.info("[%s] Registry seeded: Dealer Jack + Hustler Mira (operation=seed)", SCENE_ID)
         except Exception as exc:
-            logger.warning("_seed_casino_registry failed: %s", exc)
+            logger.warning("[%s] Registry seeding failed (operation=seed): %s", SCENE_ID, exc)
 
     # ══════════════════════════════════════════════════════════════════
     #  AGENT HELPERS
@@ -594,7 +587,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     )
                 else:
                     system = "You are a casino character. Keep responses short. Use [MOOD:emotion] tags."
-            except Exception:
+            except Exception as e:
+                logger.debug("[%s] System prompt build failed (operation=agent_reply): %s", SCENE_ID, e)
                 system = "You are a casino character. Keep responses short. Use [MOOD:emotion] tags."
 
             # Append governance context (interceptor injections, scene rules)
@@ -626,8 +620,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     char_node = get_framework().get_character(character_id)
                     if char_node:
                         char_node.update_state({"mood": result["mood"]})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] Framework mood sync failed (operation=agent_reply): %s", SCENE_ID, e)
                 try:
                     from engine.mcp.state_coordinator import get_coordinator
                     get_coordinator().update(
@@ -636,12 +630,12 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                         source="casino_reply",
                         scene=SCENE_ID,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] State coordinator mood sync failed (operation=agent_reply): %s", SCENE_ID, e)
 
             return result
         except Exception as exc:
-            logger.warning("Casino agent reply failed: %s", exc)
+            logger.warning("[%s] Agent reply failed (operation=chat, agent=%s): %s", SCENE_ID, character_id, exc)
             result["degraded"] = True
             result["error"] = str(exc)
             result["text"] = "The table goes quiet for a beat. The house voice cuts out. (LLM unavailable)"
@@ -652,7 +646,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
         try:
             from engine.mcp.comms_framework import build_governance_context
             return build_governance_context(character_id, "casino", "") or ""
-        except Exception:
+        except Exception as e:
+            logger.debug("[%s] Governance context failed (operation=get_governance_context): %s", SCENE_ID, e)
             return ""
 
     # ══════════════════════════════════════════════════════════════════
@@ -867,8 +862,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             try:
                 from engine.skills.builtin.social_skills import mood_contagion
                 mood_contagion(HUSTLER_ID, "frustration", intensity=0.3, scene_id=SCENE_ID)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Mood contagion failed (operation=showdown): %s", SCENE_ID, e)
 
         # Agent comments
         self.dealer_comment = self._agent_text(
@@ -902,8 +897,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     self.player_chips,
                     metadata={"round": self.round_number, "hand": player_eval["rank"]},
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Leaderboard submit failed (operation=showdown): %s", SCENE_ID, e)
 
         return self._get_game_state()
 
@@ -1073,7 +1068,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             try:
                 return jsonify({"status": "ok", "scene": SCENE_ID, "port": self.port})
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": SCENE_ID, "reason": "health check raised"}), 500
 
         @app.route("/api/state")
@@ -1158,7 +1153,7 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/world/status")
@@ -1332,8 +1327,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                 try:
                     from engine.world.player_state import get_player_state as _gps
                     _gps().earn_credits(abs(bj["winnings"]), "casino_win")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] PlayerState credit sync failed (operation=blackjack_win): %s", SCENE_ID, e)
                 bj["active"] = False
                 dealer_says = "Blackjack! The house pays 3:2."
 
@@ -1467,8 +1462,8 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     _ps.earn_credits(abs(bj.get("winnings", 0)), "casino_win")
                 elif _bj_result in ("loss", "bust"):
                     _ps.spend_credits(abs(bj.get("bet", 0)), "casino_loss")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] PlayerState credit sync failed (operation=blackjack_result): %s", SCENE_ID, e)
 
             # Get dealer reaction
             dealer_says = self._agent_text(
@@ -1525,25 +1520,27 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
             "skill_packs": ["casino", "social", "environment", "narrative", "memory", "character"],
         }
 
-    def start(self) -> None:
-        logger.info("CLUB NOIR opening on port %d", self.port)
-        self._fw.emit_event("scene_started", {"scene_id": SCENE_ID, "port": CASINO_PORT}, source=SCENE_ID)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
-                          allow_unsafe_werkzeug=True)
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-    def stop(self) -> None:
-        self.nexus_flush()
-        logger.info("The Midnight Casino closing")
+    def on_before_serve(self) -> None:
+        """Hook: emit scene_started event before serving."""
+        try:
+            self._fw.emit_event("scene_started", {"scene_id": SCENE_ID, "port": CASINO_PORT}, source=SCENE_ID)
+        except Exception as e:
+            logger.debug("[%s] Framework event emit failed (operation=on_before_serve): %s", SCENE_ID, e)
+
+    def on_shutdown(self) -> None:
+        """Hook: unsubscribe world events and save framework state."""
         if hasattr(self, "_event_bus") and self._event_bus:
             try:
                 self._event_bus.unsubscribe("world.tick", self._on_world_tick)
                 self._event_bus.unsubscribe("world.time_change", self._on_time_change)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] EventBus unsubscribe failed (operation=on_shutdown): %s", SCENE_ID, e)
         try:
             self._fw.save_state()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Framework state save failed (operation=on_shutdown): %s", SCENE_ID, e)
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:
@@ -1556,15 +1553,15 @@ class CasinoScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_
                     "day": getattr(time_data, "day", 1),
                     "weather": str(getattr(time_data, "weather", "clear")),
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] World tick emit failed (operation=on_world_tick): %s", SCENE_ID, e)
 
     def _on_time_change(self, event: dict) -> None:
         """Happy hour 18:00-20:00 — 2x economy multiplier."""
         hour = event.get("hour", 0)
         if hasattr(self, "_economy") and self._economy:
             if 18 <= hour < 20:
-                logger.info("Casino: Happy hour active — 2x win multiplier")
+                logger.info("[%s] Happy hour active — 2x win multiplier (operation=world_event)", SCENE_ID)
 
 
 # ── Standalone entry point ────────────────────────────────────────────

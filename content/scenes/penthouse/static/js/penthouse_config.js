@@ -35,7 +35,7 @@
         this._applySceneConfig(this._data.scene || {});
         this._applyAnimationConfig(this._data.animations || {});
         this._loaded = true;
-        console.log('[PenthouseConfig] All configs loaded and applied');
+        console.debug('[PenthouseConfig] All configs loaded and applied');
         return this._data;
       } catch (err) {
         console.error('[PenthouseConfig] Load error:', err);
@@ -264,18 +264,25 @@
   };
 
   // Auto-load on DOM ready
-  document.addEventListener('DOMContentLoaded', () => {
+  // v1.58.0 [2026-06-11] — readyState guard (file now loads post-DOMContentLoaded
+  // via the three_boot module chain; bare listener never fired in that case)
+  function _autoLoad() {
     // Small delay to ensure CharModels and penthouse3D are initialized
     setTimeout(() => {
       PenthouseConfig.load().then(data => {
         if (data) {
-          console.log('[PenthouseConfig] Loaded:', Object.keys(data).join(', '));
+          console.debug('[PenthouseConfig] Loaded:', Object.keys(data).join(', '));
           // Emit custom event so other scripts can react
           window.dispatchEvent(new CustomEvent('penthouse-config-loaded', { detail: data }));
         }
       });
     }, 500);
-  });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _autoLoad);
+  } else {
+    _autoLoad();
+  }
 
   window.PenthouseConfig = PenthouseConfig;
 })();

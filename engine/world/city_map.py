@@ -74,6 +74,9 @@ _EDGES: List[Tuple[str, str, int, int, int]] = [
     ("NEON CITY",            "THE VELVET PIT",         7,  1, 0),
     ("NEON CITY",            "SIGNAL",                 10, 2, 0),
     ("THE SHATTERED THRONE", "THE BRIEFING ROOM",      12, 3, 3),
+    # v1.52.0 — THE ORACLE (deep in tech district, accessible from Grid and NeonCity)
+    ("THE GRID",             "THE ORACLE",             8,  2, 0),
+    ("NEON CITY",            "THE ORACLE",             12, 3, 0),
 ]
 
 # District definitions
@@ -82,7 +85,7 @@ DISTRICTS: Dict[str, List[str]] = {
     "COMBAT_ZONE":    ["THE COLOSSEUM", "THE RUSTY ANCHOR"],
     "HIGHRISE":       ["THE PENTHOUSE", "Command Center"],
     "UNDERWORLD":     ["THE SCORE", "THE BRIEFING ROOM"],
-    "TECH_DISTRICT":  ["THE LAB", "THE GRID", "THE ARCADE", "SIGNAL"],
+    "TECH_DISTRICT":  ["THE LAB", "THE GRID", "THE ARCADE", "SIGNAL", "THE ORACLE"],
     "OUTSKIRTS":      ["THE SHATTERED THRONE", "NEON CITY", "ASSET STUDIO"],
 }
 
@@ -104,6 +107,7 @@ SCENE_PORTS: Dict[str, int] = {
     "ASSET STUDIO":         5568,
     "THE GRID":             5569,
     "THE BRIEFING ROOM":    5580,
+    "THE ORACLE":           5572,  # v1.52.0 — Claude's signature scene
 }
 
 # Starting location
@@ -373,19 +377,25 @@ class CityMap:
         energy_cost: int,
         heat_add: int,
     ) -> None:
+        payload = {
+            "from": origin,
+            "to": destination,
+            "travel_time_min": travel_time,
+            "energy_cost": energy_cost,
+            "heat_add": heat_add,
+            "timestamp": time.time(),
+        }
+        # v1.52.0 — Fire via both EventCascade and EventBus for broader reach
         try:
             from engine.world.event_cascade import get_event_cascade
-            ec = get_event_cascade()
-            ec.fire("player_travel", {
-                "from": origin,
-                "to": destination,
-                "travel_time_min": travel_time,
-                "energy_cost": energy_cost,
-                "heat_add": heat_add,
-                "timestamp": time.time(),
-            })
+            get_event_cascade().fire("player_travel", payload)
         except Exception as exc:
-            logger.debug("Could not fire travel event: %s", exc)
+            logger.debug("Could not fire travel event (cascade): %s", exc)
+        try:
+            from engine.events.event_bus import get_event_bus
+            get_event_bus().publish("player_travel", payload)
+        except Exception as exc:
+            logger.debug("Could not fire travel event (bus): %s", exc)
 
     # ── NPC Location Tracking ─────────────────────────────────────────────
 

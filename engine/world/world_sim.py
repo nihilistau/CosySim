@@ -548,7 +548,8 @@ class WorldSim:
         try:
             ws = self._get_world_state()
             return _game_time_string(ws.get_time())
-        except Exception:
+        except Exception as e:
+            logger.debug("[WorldSim] Game time unavailable (operation=current_time): %s", e)
             return "Day 0 00:00"
 
     def _fire_npc_action(self) -> SimEvent:
@@ -750,8 +751,8 @@ class WorldSim:
             try:
                 from engine.world.player_state import get_player_state
                 get_player_state().adjust_heat(heat_impact, reason="ghost_message")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[WorldSim] Heat adjustment failed (operation=hacker_event): %s", e)
 
         event = SimEvent(
             id=str(uuid.uuid4()),
@@ -964,6 +965,33 @@ class WorldSim:
     # Event log management
     # ------------------------------------------------------------------
 
+    # v1.59.0 [2026-06-13] — Local event-subscriber registry. EventCascade
+    # (and any other in-process consumer) registers via on_event(); every
+    # logged event is fanned out to subscribers. Previously EventCascade.start()
+    # probed for sim.on_event() which didn't exist, so the cross-scene cascade
+    # never received world events.
+    # CONNECTS: EventCascade._on_world_sim_event
+    def on_event(self, callback: "Callable[[SimEvent], None]") -> None:
+        """Register *callback* to receive every SimEvent as it is logged.
+
+        Safe to call multiple times; duplicate callbacks are ignored.
+        """
+        subs = getattr(self, "_event_subscribers", None)
+        if subs is None:
+            subs = self._event_subscribers = []
+        if callback not in subs:
+            subs.append(callback)
+            logger.debug("[world_sim] event subscriber registered (operation=on_event): %d total",
+                         len(subs))
+
+    def _notify_event_subscribers(self, event: SimEvent) -> None:
+        """Fan *event* out to all registered on_event() subscribers."""
+        for cb in list(getattr(self, "_event_subscribers", []) or []):
+            try:
+                cb(event)
+            except Exception as exc:
+                logger.debug("[world_sim] event subscriber failed (operation=notify): %s", exc)
+
     def _log_event(self, event: SimEvent) -> None:
         """Append *event* to the ring buffer and persist to Nexus.
 
@@ -977,6 +1005,9 @@ class WorldSim:
             self._event_log.append(event)
             if len(self._event_log) > _RING_BUFFER_MAX:
                 self._event_log.pop(0)
+
+        # v1.59.0 — fan out to local subscribers (EventCascade etc.)
+        self._notify_event_subscribers(event)
 
         try:
             nexus = self._get_nexus()

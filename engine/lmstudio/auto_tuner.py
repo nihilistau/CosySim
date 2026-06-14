@@ -1,8 +1,16 @@
 """
-AutoTuner — Iterative settings optimizer for LMStudio inference.
+AutoTuner — Iterative settings optimizer for LMStudio inference
+================================================================
 
 Runs benchmark matrices, adjusts settings toward best performance,
 and stores optimal configs per model in Nexus.
+
+Version: v1.44.0 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.44.0 [2026-03-21] — Replaced direct Nexus HTTP with NexusClient
+    v1.43.0 [2026-03-21] — Initial auto-tuner
 
 Usage::
 
@@ -19,10 +27,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-import requests
-
 from engine.config import get_config
-from engine.utils import get_lmstudio_headers
 from engine.lmstudio.benchmark import BenchmarkSummary, InferenceBenchmark
 
 logger = logging.getLogger(__name__)
@@ -132,7 +137,6 @@ class AutoTuner:
     def __init__(self, config: Optional[Any] = None) -> None:
         self._config = config or get_config()
         self._benchmark = InferenceBenchmark(self._config)
-        self._nexus_url = self._config.get("nexus.url", "http://localhost:8700/api")
         self._results: List[TuningResult] = []
 
     def find_optimal(
@@ -267,12 +271,74 @@ class AutoTuner:
 
         return result
 
+    # v1.44.0 [2026-03-21] — Implemented speculative decoding benchmark
     def _test_speculative(self, runs: int) -> Dict[str, Any]:
-        """Placeholder for speculative decoding benchmark."""
+        """Test if speculative decoding improves throughput.
+
+        Loads main + draft model, benchmarks with spec decode active,
+        then unloads draft and benchmarks without. Compares TPS and latency.
+        """
+        from engine.lmstudio.lms_client import get_lms_client
+
+        client = get_lms_client()
+        main_model = self._config.get("lmstudio.speculative.main_model", "")
+        draft_model = self._config.get("lmstudio.speculative.draft_model", "")
+
+        if not draft_model:
+            return {
+                "hypothesis": "speculative",
+                "status": "skipped",
+                "note": "No draft_model configured in lmstudio.speculative.draft_model",
+            }
+
+        if not main_model:
+            main_model = client.resolve_model()
+        if not main_model:
+            return {
+                "hypothesis": "speculative",
+                "status": "skipped",
+                "note": "No main model available",
+            }
+
+        # Phase 1: Benchmark WITH speculative decoding
+        try:
+            client.enable_speculative(main_model, draft_model)
+        except Exception as exc:
+            return {
+                "hypothesis": "speculative",
+                "status": "error",
+                "note": f"Failed to enable speculative decoding: {exc}",
+            }
+
+        with_spec = self._benchmark.run_quick(
+            model=main_model, runs=runs, prompt_type="medium",
+        )
+
+        # Phase 2: Benchmark WITHOUT speculative decoding
+        try:
+            client.disable_speculative(draft_model)
+        except Exception:
+            logger.debug("Failed to disable speculative for comparison", exc_info=True)
+
+        without_spec = self._benchmark.run_quick(
+            model=main_model, runs=runs, prompt_type="medium",
+        )
+
+        speedup = round(
+            with_spec.tps_stats["mean"] / max(without_spec.tps_stats["mean"], 0.1), 2
+        )
+
         return {
             "hypothesis": "speculative",
-            "status": "not_implemented",
-            "note": "Requires LMStudio speculative decoding API support",
+            "status": "completed",
+            "main_model": main_model,
+            "draft_model": draft_model,
+            "with_spec_tps": with_spec.tps_stats["mean"],
+            "without_spec_tps": without_spec.tps_stats["mean"],
+            "with_spec_latency": with_spec.latency_stats["mean"],
+            "without_spec_latency": without_spec.latency_stats["mean"],
+            "speedup_factor": speedup,
+            "recommendation": "enable" if speedup > 1.1 else "disable",
         }
 
     def _test_context_reduction(self, runs: int) -> Dict[str, Any]:
@@ -297,25 +363,23 @@ class AutoTuner:
             ),
         }
 
+    # v1.44.0 [2026-03-21] — Uses NexusClient instead of raw HTTP
     def store_results(self, result: TuningResult) -> Optional[str]:
-        """Store tuning results in Nexus."""
+        """Store tuning results in Nexus via NexusClient."""
         try:
+            from engine.nexus.client import get_nexus_client
+
+            client = get_nexus_client()
             content = result.to_markdown()
             timestamp = time.strftime("%Y-%m-%d %H:%M")
-            resp = requests.post(
-                f"{self._nexus_url}/entries",
-                json={
-                    "title": f"Tuning: {result.model} ({result.task_type}) — {timestamp}",
-                    "content": content,
-                    "content_type": "audit",
-                    "category": "performance",
-                    "tags": ["tuning", "auto-generated", result.model, result.task_type],
-                },
-                headers=get_lmstudio_headers(),
-                timeout=10,
+            entry_id = client.add_entry(
+                title=f"Tuning: {result.model} ({result.task_type}) — {timestamp}",
+                content=content,
+                content_type="audit",
+                category="performance",
+                tags=["tuning", "auto-generated", result.model, result.task_type],
             )
-            if resp.ok:
-                entry_id = resp.json().get("id", "?")
+            if entry_id:
                 logger.info("Stored tuning result in Nexus: %s", entry_id)
                 return entry_id
         except Exception as e:

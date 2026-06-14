@@ -674,7 +674,8 @@ class VirtualAgent:
                 else:
                     texts.append(str(r))
             return texts
-        except Exception:
+        except Exception as e:
+            logger.debug("[VirtualAgent] Memory search failed for %s (operation=search_memories): %s", self.character.id, e)
             return []
 
     # ── Event logging ───────────────────────────────────────────────

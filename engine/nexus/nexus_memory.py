@@ -56,8 +56,11 @@ class NexusMemory:
         self,
         namespace: str = "agent",
         agent_id: str = "system",
-        nexus_url: str = "http://127.0.0.1:8700",
+        nexus_url: str = "",
     ) -> None:
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self._namespace = namespace
         self._agent_id = agent_id
         self._url = nexus_url

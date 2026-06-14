@@ -1,10 +1,10 @@
 # CosySim Arena Guide — THE COLOSSEUM
 
-> v1.04b — CosySim Documentation
-
-THE COLOSSEUM is a tactical card-game arena where AI fighters powered by
-LMStudio battle in real-time. Players spectate, place bets, and watch each
-fighter's reasoning unfold live. Port **5561**, accent color **#dc2626**.
+> CosySim Documentation — v1.52.0 [2026-03-26]
+>
+> THE COLOSSEUM is a tactical card-game arena where AI fighters powered by
+> LMStudio battle in real-time. Players spectate, place bets, and watch each
+> fighter's reasoning unfold live. Port **5561**, accent color **#dc2626**.
 
 ---
 
@@ -66,12 +66,12 @@ class ArenaScene(BaseScene, MCPSceneMixin, mcp_scene_id="arena"):
 
 | Event | Direction | Description |
 |-------|-----------|-------------|
-| `create_match` | Client → Server | Request a new match |
-| `play_round` | Client → Server | Advance to next round |
-| `place_bet` | Client → Server | Place a bet on a fighter |
-| `get_match` | Client → Server | Request current match state |
-| `match_update` | Server → Client | Real-time match state broadcast |
-| `round_result` | Server → Client | Round outcome with reasoning |
+| `create_match` | Client -> Server | Request a new match |
+| `play_round` | Client -> Server | Advance to next round |
+| `place_bet` | Client -> Server | Place a bet on a fighter |
+| `get_match` | Client -> Server | Request current match state |
+| `match_update` | Server -> Client | Real-time match state broadcast |
+| `round_result` | Server -> Client | Round outcome with reasoning |
 
 ---
 
@@ -91,20 +91,20 @@ makes the card choice for each fighter, providing tactical reasoning.
 | **DEFENSE** | Block damage | Reduces incoming damage |
 | **SPECIAL** | Unique effects | `double_damage`, `heal`, `steal`, `skip` |
 | **WILD** | Random type | Resolves as a random card type |
-| **TRAP** | Delayed detonation | Queued to explode next round (2× power) |
-| **COUNTER** | Anti-attack | Beats ATTACK for 2× damage |
+| **TRAP** | Delayed detonation | Queued to explode next round (2x power) |
+| **COUNTER** | Anti-attack | Beats ATTACK for 2x damage |
 
 ### Resolution Rules
 
 Resolution follows an extended RPS pattern:
 
 ```
-1. Traps detonate first (2× power, queued from previous round)
+1. Traps detonate first (2x power, queued from previous round)
 2. WILD cards randomize into ATTACK, DEFENSE, or SPECIAL
-3. COUNTER vs ATTACK → Counter wins, deals 2× damage
-4. ATTACK vs DEFENSE → Net damage = attack power − defense power
-5. ATTACK vs ATTACK → Both take damage from opposing card
-6. DEFENSE vs DEFENSE → Draw (no damage)
+3. COUNTER vs ATTACK -> Counter wins, deals 2x damage
+4. ATTACK vs DEFENSE -> Net damage = attack power - defense power
+5. ATTACK vs ATTACK -> Both take damage from opposing card
+6. DEFENSE vs DEFENSE -> Draw (no damage)
 7. SPECIAL effects trigger based on effect keyword
 ```
 
@@ -141,7 +141,7 @@ response = requests.post(f"{lmstudio_url}/api/v1/chat", json={
 
 ## 3. Fighter Stats
 
-Source: `engine/arena/arena_engine.py` → `Fighter` dataclass
+Source: `engine/arena/arena_engine.py` -> `Fighter` dataclass
 
 ```python
 @dataclass
@@ -192,7 +192,7 @@ class ArenaMatch:
     id: str                            # UUID
     fighter_a: Fighter
     fighter_b: Fighter
-    status: MatchStatus                # PENDING → IN_PROGRESS → COMPLETE
+    status: MatchStatus                # PENDING -> IN_PROGRESS -> COMPLETE
     rounds: List[RoundOutcome] = []    # Round history
     bets: List[Bet] = []              # All placed bets
     max_rounds: int = 7                # Hard cap
@@ -205,22 +205,22 @@ class ArenaMatch:
 
 ```
 create_match(fighter_a_id, fighter_b_id)
-  → Load/generate fighters, reset HP, shuffle deck, deal 5 cards
-  → Status: PENDING → IN_PROGRESS
-  → Persist to Nexus
+  -> Load/generate fighters, reset HP, shuffle deck, deal 5 cards
+  -> Status: PENDING -> IN_PROGRESS
+  -> Persist to Nexus
 
 play_round(match_id)              [repeat up to max_rounds]
-  → Both fighters select cards via LMStudio
-  → RPS resolution → damage applied
-  → Commentary generated
-  → EventBus fires "arena.round_complete"
-  → Check for KO or max rounds
+  -> Both fighters select cards via LMStudio
+  -> RPS resolution -> damage applied
+  -> Commentary generated
+  -> EventBus fires "arena.round_complete"
+  -> Check for KO or max rounds
 
 Match end
-  → Winner determined (KO or HP ratio tiebreaker)
-  → Career stats updated (wins/losses/draws)
-  → Bets resolved
-  → Status: COMPLETE
+  -> Winner determined (KO or HP ratio tiebreaker)
+  -> Career stats updated (wins/losses/draws)
+  -> Bets resolved
+  -> Status: COMPLETE
 ```
 
 ### MatchStatus Enum
@@ -238,7 +238,7 @@ When enabled, a daemon thread plays rounds automatically every 5 seconds
 and broadcasts results to all connected clients via Socket.IO:
 
 ```python
-# In ArenaScene — auto-play loop
+# In ArenaScene -- auto-play loop
 def _auto_play_loop(self, match_id: str):
     while match.status == MatchStatus.IN_PROGRESS:
         outcome = self._engine.play_round(match_id)
@@ -250,27 +250,27 @@ def _auto_play_loop(self, match_id: str):
 
 ## 5. Betting System
 
-Source: `engine/arena/arena_engine.py` → `Bet` dataclass
+Source: `engine/arena/arena_engine.py` -> `Bet` dataclass
 
 ### Bet Types
 
 | Bet Type | Target | Odds | Description |
 |----------|--------|------|-------------|
-| `match_winner` | `fighter_a` / `fighter_b` | 2.0× | Predict overall winner |
-| `round_winner` | `fighter_a` / `fighter_b` | 1.8× | Predict a round winner |
-| `special_move` | Card name | 1.5× | Predict a specific card play |
+| `match_winner` | `fighter_a` / `fighter_b` | 2.0x | Predict overall winner |
+| `round_winner` | `fighter_a` / `fighter_b` | 1.8x | Predict a round winner |
+| `special_move` | Card name | 1.5x | Predict a specific card play |
 
 ### Betting Flow
 
 ```python
-# 1. Place bet — credits deducted immediately via BET_LOSS
+# 1. Place bet -- credits deducted immediately via BET_LOSS
 bet = engine.place_bet(match_id, "match_winner", "fighter_a", 100)
 
 # 2. Match plays out...
 
-# 3. Resolve — winning bets paid out via BET_WIN
+# 3. Resolve -- winning bets paid out via BET_WIN
 engine.resolve_bets(match_id)
-# If fighter_a wins: player receives 100 × 2.0 = ₵200
+# If fighter_a wins: player receives 100 x 2.0 = C200
 ```
 
 ### Economy Integration
@@ -330,7 +330,7 @@ def place_arena_bet(match_id: str, target: str, amount: int,
     scene = get_active_scene("arena")
     bet = scene._engine.place_bet(match_id, bet_type, target, amount)
     balance = get_economy_manager().get_balance("player")
-    return f"Bet placed! ₵{bet.amount} on {bet.target} | Balance: ₵{balance}"
+    return f"Bet placed! C{bet.amount} on {bet.target} | Balance: C{balance}"
 ```
 
 ---
@@ -345,7 +345,7 @@ leaders = engine.get_leaderboard()   # sorted by wins
 
 # Individual fighter profile
 profile = engine.get_fighter_profile("shadow")
-# → {name, wins, losses, draws, win_rate, ...}
+# -> {name, wins, losses, draws, win_rate, ...}
 ```
 
 The leaderboard is served at `/api/leaderboard` and accessible via the
@@ -398,7 +398,7 @@ bet_odds = cfg.get("arena.bet_odds.match_winner", 2.0)
 Full two-way integration with `EconomyManager`:
 - Bets deducted and paid out through the transaction system
 - Player balance available at `/api/economy`
-- See [ECONOMY_GUIDE.md](ECONOMY_GUIDE.md)
+- See [Economy Guide](ECONOMY_GUIDE.md)
 
 ### EventBus
 
@@ -425,10 +425,19 @@ Arena events fire on the global bus:
 
 ## Cross-References
 
-- [ECONOMY_GUIDE.md](ECONOMY_GUIDE.md) — Full economy system
-- [SCENES.md](SCENES.md) — Scene listing and ports
-- [SKILLS.md](SKILLS.md) — Full skill reference
-- [LMSTUDIO.md](LMSTUDIO.md) — LMStudio integration
-- [MCP_FRAMEWORK.md](MCP_FRAMEWORK.md) — MCP state tree
-- [CONTENT_GUIDE.md](CONTENT_GUIDE.md) — Creating new scenes
-- [GAME_SYSTEMS.md](GAME_SYSTEMS.md) — All game mechanics
+- [Scenes](SCENES.md) — Scene listing and ports
+- [Skills](SKILLS.md) — Full skill reference
+- [Game Systems](GAME_SYSTEMS.md) — All game mechanics
+- [Economy Guide](ECONOMY_GUIDE.md) — Full economy system
+- [LMStudio](LMSTUDIO.md) — LMStudio integration
+- [MCP Framework](MCP_FRAMEWORK.md) — MCP state tree
+- [Contributing](CONTRIBUTING.md) — Creating new scenes
+
+---
+
+## Change Log
+
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Updated header to v1.50, fixed cross-references (CONTENT_GUIDE -> CONTRIBUTING) |
+| v1.04 | 2026-03-15 | Initial comprehensive arena documentation with combat, betting, skills, and config |

@@ -71,12 +71,20 @@ def _restore_protected_modules():
 @pytest.fixture
 def mock_config():
     """Return a dict-based mock config that mimics get_config()."""
+    # v1.49.1 [2026-03-22] — Expanded defaults to cover more config paths
     defaults = {
         "lmstudio.base_url": "http://localhost:1234",
         "comfyui.base_url": "http://localhost:8188",
+        "comfyui.output_dir": "data/art/output",
         "tts.engine": "placeholder",
         "database.path": ":memory:",
         "hardware.vram_cap_mb": 11500,
+        "nexus.base_url": "http://localhost:8700",
+        "nexus.enabled": False,
+        "paths.project_root": str(Path(__file__).resolve().parent.parent),
+        "paths.data_dir": "data",
+        "mcp.enabled": True,
+        "scenes.default_port": 5555,
     }
     mock = MagicMock()
     mock.get = lambda key, default=None: defaults.get(key, default)
@@ -139,6 +147,27 @@ def _wipe_singletons() -> None:
     try:
         import engine.world.player_state as _m
         _m._PLAYER_STATE = None
+    except Exception:
+        pass
+    # v1.49.1 [2026-03-22] — Add missing singleton clears for comms_framework,
+    # LMStudio manager, and Nexus client to prevent test contamination
+    try:
+        import engine.mcp.comms_framework as _m
+        _m._manifest = None
+        _m._game_state = None
+        _m._router = None
+    except Exception:
+        pass
+    try:
+        import engine.lmstudio.lmstudio_manager as _m
+        if hasattr(_m, "_instance"):
+            _m._instance = None
+    except Exception:
+        pass
+    try:
+        import engine.nexus.client as _m
+        if hasattr(_m, "_client"):
+            _m._client = None
     except Exception:
         pass
 

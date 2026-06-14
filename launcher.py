@@ -27,10 +27,16 @@ Usage:
 Auto-start flags live in config/launcher.yaml — edit that file to control
 which targets launch with --core / --services / --scenes.
 
-Version: v1.42.1 [2026-03-21]
+Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.58.0 [2026-06-11] — launch_single refuses to double-bind an occupied
+                            port (clear error instead of a Werkzeug stack
+                            trace); subprocess scene logs are line-buffered
+    v1.52.1 [2026-03-25] — Fix venv Python resolution for subprocess launches
+    v1.52.0 [2026-03-25] — Version stamp sync with audit remediation
+    v1.49.1 [2026-03-22] — Version stamp sync with project version
     v1.42.1 [2026-03-21] — Managed Nexus KMS via external type, priority-sorted
                             service launch, _start_external_proc helper
     v1.42.0 [2026-03-21] — Three-pillar architecture (game/service/creation)
@@ -61,6 +67,20 @@ for _stream in (sys.stdout, sys.stderr):
 
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# v1.52.1 [2026-03-25] — Resolve venv Python so subprocesses use the correct interpreter
+def _resolve_python() -> str:
+    """Return the venv Python path if a .venv exists, else sys.executable."""
+    venv_python = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    if venv_python.exists():
+        return str(venv_python)
+    venv_python_unix = PROJECT_ROOT / ".venv" / "bin" / "python"
+    if venv_python_unix.exists():
+        return str(venv_python_unix)
+    return sys.executable
+
+
+PYTHON = _resolve_python()
 
 try:
     from importlib.metadata import version as _pkg_version
@@ -94,6 +114,34 @@ _load_config()
 
 # ──── Low-Level Helpers ───────────────────────────────────────────────────
 
+# v1.52.1 [2026-03-25] — Kill zombie processes on a port before launching
+def _kill_port(port: int) -> None:
+    """Kill any process listening on *port*. Windows-only."""
+    import re
+    try:
+        out = subprocess.check_output(
+            ["netstat", "-ano"], stderr=subprocess.DEVNULL, text=True,
+        )
+        pids = set()
+        for line in out.splitlines():
+            if f":{port} " in line and "LISTENING" in line:
+                parts = line.split()
+                if parts:
+                    pid = parts[-1]
+                    if pid.isdigit() and int(pid) > 0:
+                        pids.add(pid)
+        for pid in pids:
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", pid, "/F"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def _port_up(port: int) -> bool:
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -122,16 +170,22 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
     """Start one target in the foreground. Blocks until it exits."""
     t = info["type"]
     if t == "flask":
-        _import_class(info["cls"])().start()
+        # v1.52.1 [2026-03-25] — Scenes that override __init__(config=) don't accept host=
+        # Try host= first (FlaskScene default), fall back to no-arg construction
+        cls = _import_class(info["cls"])
+        try:
+            cls(host=info.get("host", "0.0.0.0")).start()
+        except TypeError:
+            cls().start()
     elif t == "streamlit":
         script = PROJECT_ROOT / info["script"]
         if not script.exists():
             print(f"Script not found: {script}")
             sys.exit(1)
         subprocess.run([
-            sys.executable, "-m", "streamlit", "run", str(script),
+            PYTHON, "-m", "streamlit", "run", str(script),
             f"--server.port={info['port']}",
-            "--server.address=0.0.0.0",
+            f"--server.address={info.get('host', '0.0.0.0')}",
             "--server.headless=true",
             "--browser.gatherUsageStats=false",
             "--logger.level=warning",
@@ -139,7 +193,7 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
     elif t == "fastapi":
         import uvicorn  # type: ignore
         uvicorn.run(_import_factory(info["factory"]),
-                    host="0.0.0.0", port=info["port"], log_level="warning")
+                    host=info.get("host", "0.0.0.0"), port=info["port"], log_level="warning")
     elif t == "node":
         script_dir = PROJECT_ROOT / info["script"]
         subprocess.run(["npm", "run", "dev"], cwd=str(script_dir))
@@ -157,17 +211,40 @@ def _run_single(name: str, info: Dict[str, Any]) -> None:
 
 # ──── Multi-Launch Engine ─────────────────────────────────────────────────
 
+# v1.51.3 [2026-03-22] — Pre-import module in main thread, construct+serve in daemon.
+# Avoids import lock deadlocks (main thread does the import) while keeping
+# heavy __init__ work (register_shared_assets etc.) off the main thread.
+
 def _start_in_thread(name: str, info: Dict[str, Any],
                      failed: List[str]) -> threading.Thread:
+    """Launch a target as a subprocess for memory isolation.
+
+    v1.51.4 [2026-03-24] — Changed from daemon threads to subprocesses.
+    Each scene gets its own Python process so 17+ Flask apps don't share
+    one address space. The thread just monitors the subprocess.
+    """
     def _worker() -> None:
         try:
-            _run_single(name, info)
+            # v1.52.1 [2026-03-25] — Log subprocess stderr to data/ for debugging
+            log_path = PROJECT_ROOT / "data" / f"scene_{name}.log"
+            # v1.58.0 [2026-06-11] — line-buffered so crashes surface immediately
+            log_file = open(log_path, "w", encoding="utf-8", buffering=1)
+            proc = subprocess.Popen(
+                [PYTHON, str(PROJECT_ROOT / "launcher.py"), name],
+                stdout=subprocess.DEVNULL,
+                stderr=log_file,
+                cwd=str(PROJECT_ROOT),
+            )
+            # Store proc for cleanup — attach to the thread object
+            _worker.proc = proc
+            proc.wait()  # block until scene exits
         except Exception as exc:
             print(f"\n  {info['label']} crashed: {exc}")
             failed.append(name)
-    t = threading.Thread(target=_worker, daemon=True, name=f"cosysim-{name}")
-    t.start()
-    return t
+
+    thr = threading.Thread(target=_worker, daemon=True, name=f"cosysim-{name}")
+    thr.start()
+    return thr
 
 
 def _start_streamlit_proc(info: Dict[str, Any],
@@ -179,10 +256,10 @@ def _start_streamlit_proc(info: Dict[str, Any],
         return None
     try:
         return subprocess.Popen(
-            [sys.executable, "-m", "streamlit", "run", str(script),
+            [PYTHON, "-m", "streamlit", "run", str(script),
              f"--server.port={info['port']}",
              "--server.headless=true",
-             "--server.address=0.0.0.0",
+             f"--server.address={info.get('host', '0.0.0.0')}",
              "--browser.gatherUsageStats=false",
              "--logger.level=warning"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -255,6 +332,17 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
         print("Nothing to launch. Check auto_start flags in config/launcher.yaml.")
         return
 
+    # v1.52.1 [2026-03-25] — Kill zombie processes on all target ports before launch
+    all_ports = {ALL_TARGETS[n]["port"] for n in service_names + scene_names}
+    zombies_killed = 0
+    for port in sorted(all_ports):
+        if _port_up(port):
+            _kill_port(port)
+            zombies_killed += 1
+    if zombies_killed:
+        print(f"  Cleared {zombies_killed} occupied ports from previous run.")
+        time.sleep(1)  # Let OS release sockets
+
     box_w = 62
     print(f"\n{'=' * (box_w + 2)}")
     print(f"  CosySim v{VERSION}")
@@ -275,6 +363,25 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
     all_procs: List[subprocess.Popen] = []
     failed: List[str] = []
 
+    # v1.51.1 [2026-03-22] — Install Ctrl+C handler EARLY so startup is interruptible
+    _shutdown = False
+
+    def _handle_sigint(sig, frame):
+        nonlocal _shutdown
+        _shutdown = True
+        print("\n  Interrupted — shutting down...")
+        import os
+        os._exit(1)
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+    try:
+        signal.signal(signal.SIGTERM, _handle_sigint)
+    except (OSError, AttributeError):
+        pass
+
+    # v1.51.3 [2026-03-24] — Staggered launch: wait for each scene to bind
+    # its port before starting the next one. Prevents import lock contention
+    # and port-binding races that caused --core to drop scenes silently.
     def _launch_group(names: List[str], group: str) -> None:
         if not names:
             return
@@ -291,11 +398,10 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                 if proc:
                     all_procs.append(proc)
                     print(f"    [OK] {info['label']} (PID {proc.pid})")
-            elif info["type"] == "external":  # v1.42.1 — external type handler
+            elif info["type"] == "external":
                 proc = _start_external_proc(info, failed)
                 if proc:
                     all_procs.append(proc)
-                    # Wait up to 15s for external service to come online
                     port = info["port"]
                     for _wait in range(15):
                         if _port_up(port):
@@ -305,114 +411,146 @@ def launch_multi(service_names: List[str], scene_names: List[str]) -> None:
                     print(f"    [OK] {info['label']} (PID {proc.pid}, {status})")
             else:
                 _start_in_thread(name, info, failed)
-                print(f"    [OK] {info['label']} -> :{info['port']}")
-            time.sleep(0.4)
+                # Wait for this scene to bind its port before launching next
+                port = info["port"]
+                for _wait in range(8):
+                    if _port_up(port):
+                        break
+                    time.sleep(0.5)
+                status = "UP" if _port_up(port) else "starting"
+                print(f"    [{status:>2s}] {info['label']:.<35s} :{port}")
+            time.sleep(0.3)
 
-    # v1.42.1 [2026-03-21] — Priority-sorted service launch (external deps first)
-    # Services with start_priority=0 (e.g. Nexus KMS) launch before Flask scenes
+    # ── v1.51.2 [2026-03-22] — Launch everything, wait once ─────────
+    # 1. External services (Nexus KMS — needs port wait before anything else)
+    # 2. Everything else in parallel (services + daemons + scenes)
+    # 3. Single 25s settle, then health check all at once
+
+    # Step 1: External services first (Nexus KMS must be up for others)
     service_names_sorted = sorted(
         service_names,
         key=lambda n: ALL_TARGETS[n].get("start_priority", 50),
     )
-    _launch_group(service_names_sorted, "Services")
-    if service_names_sorted and scene_names:
-        time.sleep(2)
-    _launch_group(scene_names, "Scenes")
+    externals = [n for n in service_names_sorted if ALL_TARGETS[n]["type"] == "external"]
+    internals = [n for n in service_names_sorted if ALL_TARGETS[n]["type"] != "external"]
 
-    # After all scenes are started, activate the living world
-    try:
-        from engine.world.world_sim import get_world_sim
-        _world_sim = get_world_sim()
-        _world_sim.start()
-        print("  🌍 WorldSim daemon started")
-    except Exception as exc:
-        print(f"  ⚠️  WorldSim start failed: {exc}")
+    if externals:
+        print("  Starting external services...")
+        for name in externals:
+            info = ALL_TARGETS[name]
+            proc = _start_external_proc(info, failed)
+            if proc:
+                all_procs.append(proc)
+                port = info["port"]
+                for _wait in range(15):
+                    if _port_up(port):
+                        break
+                    time.sleep(1)
+                status = "UP" if _port_up(port) else "starting"
+                print(f"    [OK] {info['label']} (PID {proc.pid}, {status})")
 
-    try:
-        from engine.events.cross_scene_relay import get_cross_scene_relay
-        get_cross_scene_relay().start()
-        print("  🔗 Cross-scene relay active")
-    except Exception as exc:
-        print(f"  ⚠️  Cross-scene relay: {exc}")
-
-    try:
-        from engine.world.event_cascade import get_event_cascade
-        get_event_cascade().start()
-        print("  🌊 EventCascade active")
-    except Exception as exc:
-        print(f"  ⚠️  EventCascade start failed: {exc}")
-
-    # Start scheduler daemon + autonomous feedback loops
-    try:
-        from engine.nexus.scheduler_daemon import get_scheduler_daemon
-        _scheduler = get_scheduler_daemon()
-        _scheduler.start()
-        task_count = len(_scheduler.list_tasks())
-        print(f"  ⏱️  Scheduler daemon started ({task_count} tasks)")
-    except Exception as exc:
-        print(f"  ⚠️  Scheduler daemon: {exc}")
-
-    try:
-        from engine.nexus.auto_loop import get_auto_loop
-        _auto_loop = get_auto_loop()
-        registered = _auto_loop.register_tasks()
-        print(f"  🔄 Auto-loop registered ({registered} feedback tasks)")
-    except Exception as exc:
-        print(f"  ⚠️  Auto-loop: {exc}")
-
-    try:
-        from engine.nexus.conversation_sync import get_conversation_sync
-        _conv_sync = get_conversation_sync()
-        _conv_sync.register_task()
-        print("  💬 Conversation sync active")
-    except Exception as exc:
-        print(f"  ⚠️  Conversation sync: {exc}")
-
-    time.sleep(5)
-    print("\n  Health check:")
-    for name in service_names + scene_names:
-        port = ALL_TARGETS[name]["port"]
-        label = ALL_TARGETS[name]["label"]
-        icon = "[UP]" if _port_up(port) else "[--]"
-        note = " FAILED" if name in failed else ""
-        print(f"    {icon} {label:.<35s} :{port}{note}")
-    print(f"\n  {total} target(s) launched.  Hub -> {_hub_url()}\n")
-
-    try:
-        signal.signal(signal.SIGINT, signal.default_int_handler)
-        while True:
-            time.sleep(60)
-            down = [n for n in service_names + scene_names
-                    if not _port_up(ALL_TARGETS[n]["port"])]
-            if down:
-                print(f"  Warning: not responding: {', '.join(down)}")
-    except KeyboardInterrupt:
-        print("\n  Shutting down...")
-        # Gracefully stop the living world systems before killing subprocesses
-        try:
-            from engine.world.world_sim import get_world_sim
-            get_world_sim().stop()
-            print("  WorldSim stopped.")
-        except Exception:
-            pass
-        try:
-            from engine.world.event_cascade import get_event_cascade
-            get_event_cascade().stop()
-            print("  EventCascade stopped.")
-        except Exception:
-            pass
-        try:
-            from engine.events.cross_scene_relay import get_cross_scene_relay
-            get_cross_scene_relay().stop()
-        except Exception:
-            pass
-        # Terminate subprocess-based targets (streamlit, node)
-        for proc in all_procs:
+    # Step 2: World daemons (before scenes so event subscriptions work)
+    if scene_names:
+        for label, mod, getter, method in [
+            ("WorldSim",       "engine.world.world_sim",          "get_world_sim",        "start"),
+            ("CrossSceneRelay","engine.events.cross_scene_relay", "get_cross_scene_relay", "start"),
+            ("EventCascade",   "engine.world.event_cascade",      "get_event_cascade",     "start"),
+        ]:
             try:
-                proc.terminate()
+                import importlib as _il
+                m = _il.import_module(mod)
+                getattr(getattr(m, getter)(), method)()
             except Exception:
                 pass
-        print("  Done.\n")
+        for label, mod, getter, setup in [
+            ("Scheduler", "engine.nexus.scheduler_daemon", "get_scheduler_daemon", "start"),
+            ("AutoLoop",  "engine.nexus.auto_loop",        "get_auto_loop",        "register_tasks"),
+            ("ConvSync",  "engine.nexus.conversation_sync", "get_conversation_sync","register_task"),
+        ]:
+            try:
+                import importlib as _il
+                m = _il.import_module(mod)
+                getattr(getattr(m, getter)(), setup)()
+            except Exception:
+                pass
+
+    # Step 3: Fire off all services + scenes (no waiting between them)
+    _launch_group(internals, "Services")
+    _launch_group(scene_names, "Scenes")
+
+    # Step 4: Poll until all ports are up (or 60s timeout)
+    all_names = list(service_names) + list(scene_names)
+    expected_ports = {name: ALL_TARGETS[name]["port"] for name in all_names}
+    pending = set(all_names)
+    deadline = time.monotonic() + 60
+
+    print(f"\n  Monitoring {len(pending)} targets...", flush=True)
+    while pending and time.monotonic() < deadline:
+        time.sleep(1)
+        newly_up = []
+        for name in list(pending):
+            if _port_up(expected_ports[name]):
+                label = ALL_TARGETS[name]["label"]
+                elapsed = int(60 - (deadline - time.monotonic()))
+                print(f"    [UP] {label:.<35s} :{expected_ports[name]}  ({elapsed}s)")
+                newly_up.append(name)
+        for name in newly_up:
+            pending.discard(name)
+
+    for name in pending:
+        label = ALL_TARGETS[name]["label"]
+        print(f"    [--] {label:.<35s} :{expected_ports[name]}  (timeout)")
+        failed.append(name)
+
+    up_count = len(all_names) - len(pending)
+    print(f"\n  {up_count}/{len(all_names)} targets UP.  Hub -> {_hub_url()}\n")
+
+    # ── Watchdog loop ────────────────────────────────────────────────
+    # v1.51.1 — 1s ticks for Windows Ctrl+C compat (handler installed above)
+
+    # Switch from hard os._exit to graceful shutdown now that startup is done
+    def _handle_sigint_graceful(sig, frame):
+        nonlocal _shutdown
+        _shutdown = True
+
+    signal.signal(signal.SIGINT, _handle_sigint_graceful)
+
+    _watchdog_counter = 0
+    try:
+        while not _shutdown:
+            time.sleep(1)
+            _watchdog_counter += 1
+            if _watchdog_counter >= 30:
+                _watchdog_counter = 0
+                down = [n for n in service_names + scene_names
+                        if not _port_up(ALL_TARGETS[n]["port"])]
+                if down:
+                    labels = [ALL_TARGETS[n]["label"] for n in down]
+                    print(f"  [WARN] Not responding: {', '.join(labels)}")
+    except KeyboardInterrupt:
+        pass
+
+    print("\n  Shutting down...")
+    for mod, getter, method in [
+        ("engine.world.world_sim", "get_world_sim", "stop"),
+        ("engine.world.event_cascade", "get_event_cascade", "stop"),
+        ("engine.events.cross_scene_relay", "get_cross_scene_relay", "stop"),
+    ]:
+        try:
+            import importlib as _il
+            m = _il.import_module(mod)
+            getattr(getattr(m, getter)(), method)()
+        except Exception:
+            pass
+    for proc in all_procs:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    print("  Done.\n")
+    # Force exit — daemon threads won't block shutdown
+    import os
+    os._exit(0)
 
 
 
@@ -459,6 +597,12 @@ def launch_single(name: str) -> None:
         print(f"  Scenes   : {', '.join(SCENES)}")
         sys.exit(1)
     group = "service" if name in SERVICES else "scene"
+    # v1.58.0 [2026-06-11] — Refuse to double-bind: a clear one-liner beats a
+    # Werkzeug "address already in use" stack trace ten frames deep.
+    if _port_up(info["port"]):
+        print(f"  '{name}' already running on :{info['port']} — "
+              f"stop it first (TUI 'S' key or launcher --list to inspect)")
+        sys.exit(1)
     print(f"\n  Starting {group} '{info['label']}' -> http://localhost:{info['port']}")
     _run_single(name, info)
 
@@ -610,6 +754,13 @@ def interactive_menu() -> None:
 # ──── CLI Entry Point ────────────────────────────────────────────────────
 
 def main() -> None:
+    # v1.49.4 [2026-03-22] — Oracle: initialize observability before anything else
+    try:
+        from engine.observability.oracle import ensure_initialized
+        ensure_initialized()
+    except Exception:
+        pass  # Never block launcher startup
+
     _load_config()  # apply launcher.yaml overrides before parsing
 
     parser = argparse.ArgumentParser(

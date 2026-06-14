@@ -6,6 +6,8 @@
 
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/asset_studio.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/asset_studio_v2.css') }}">
 {% endblock %}
 
 {% block scene_content %}

@@ -1,4 +1,8 @@
-"""Asset Studio scene — standalone and CosySim-integrated asset generation hub.
+"""
+Asset Studio Scene
+===================
+
+Asset Studio scene — standalone and CosySim-integrated asset generation hub.
 
 A full asset creation system with 9 tabs:
     LIBRARY | IMAGES | PORTRAITS | VOICE | VIDEO | ITEMS | SVG | AUDIO | SETTINGS
@@ -6,6 +10,12 @@ A full asset creation system with 9 tabs:
 Can run standalone (``python launcher.py --scene asset_studio``) or be accessed
 from the CosySim hub.  Feeds PortraitCache, emits ``asset_generated`` socket
 events, and registers with MCPFramework for full system integration.
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 from __future__ import annotations
 
@@ -14,23 +24,22 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
-from flask_cors import CORS
+from flask import jsonify, render_template, request, send_from_directory
 from flask_socketio import SocketIO
 
 from engine.port_registry import build_scene_listing, get_port
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "asset_studio"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 DEFAULT_PORT = get_port(SCENE_ID)
 
 
-class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="asset_studio"):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class AssetStudioScene(FlaskScene):
     """The Asset Studio — unified asset creation and management hub."""
 
     SCENE_METADATA = {
@@ -48,29 +57,17 @@ class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
         """Initialise the Asset Studio Flask app."""
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
-        self._mcp_init()
+        super().__init__(host=host, port=port)
 
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
         self.app.config["SECRET_KEY"] = "asset_studio_v1"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
-        register_shared_assets(self.app)
 
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
         self._register_routes()
         self._register_socket_events()
@@ -96,7 +93,7 @@ class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="
                 result = get_studio_core().generate(asset_type, data)
                 return jsonify(result)
             except Exception as exc:
-                logger.exception("Generate endpoint error: %s", exc)
+                logger.exception("[%s] Generate endpoint error (operation=generate): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         # ── Asset library endpoints ────────────────────────────────────────
@@ -383,10 +380,10 @@ class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="
                     "url": flask_url,
                     "filename": filename,
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Asset update emit failed (operation=inject): %s", SCENE_ID, e)
 
-            logger.info("Injected %s → %s", source_filename, target_path)
+            logger.info("[%s] Injected asset (operation=inject): %s → %s", SCENE_ID, source_filename, target_path)
             return jsonify({
                 "status": "ok",
                 "scene": scene,
@@ -463,25 +460,21 @@ class AssetStudioScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="
 
     # ── BaseScene interface ────────────────────────────────────────────────────
 
-    def start(self) -> None:
-        """Start the Asset Studio Flask server."""
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
+
+    def on_before_serve(self) -> None:
+        """Hook: register MCP scene node and import skills."""
+        # v1.58.0 [2026-06-11] — MCPFramework has no get_or_create(); use
+        # get_scene() like FlaskScene._connect_mcp (auto-creates the node).
         try:
-            from engine.mcp.framework import get_framework  # noqa: PLC0415
             fw = get_framework()
-            fw.get_or_create(f"scenes.{SCENE_ID}")
+            fw.get_scene(SCENE_ID)
         except Exception as exc:
-            logger.warning("MCP framework not available: %s", exc)
+            logger.warning("[%s] MCP framework not available (operation=mcp_wire): %s", SCENE_ID, exc)
         try:
             from content.scenes.asset_studio import asset_studio_skills  # noqa: PLC0415, F401
         except Exception as exc:
             logger.debug("Could not import asset_studio_skills: %s", exc)
-        logger.info("Asset Studio starting on port %d", self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port,
-                          allow_unsafe_werkzeug=True)
-
-    def stop(self) -> None:
-        """Stop the scene."""
-        logger.info("Asset Studio stopped")
 
     def get_plugin_info(self) -> Dict[str, Any]:
         """Return plugin metadata for hub discovery."""

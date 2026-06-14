@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  NeonCity Cyberspace Intrusion — v1.46 "Interactive Systems"
+  ============================================================
+  Network graph visualization for deep hacking intrusions.
+  Canvas-based node graph, ICE indicators, detection meter,
+  program sidebar, data extraction UI, session summary.
+
+  Version: v1.46.0 [2026-03-21]
+  Change Log:
+    v1.46.0 [2026-03-21] — Initial cyberspace network graph UI
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyberspace — NeonCity — CosySim</title>
+<link rel="stylesheet" href="/shared/css/design_tokens.css">
+<script src="/shared/js/socket.io.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════
+   CYBERSPACE — v1.46.0 [2026-03-21]
+   Deep network intrusion visualization.
+   Aesthetic: CRT phosphor green on black. Scanline grain.
+   Typography: Orbitron (display) + Share Tech Mono (data).
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  --cs-bg: #010208;
+  --cs-panel: #060b14;
+  --cs-panel-2: #0a1020;
+  --cs-border: #0d1a2e;
+  --cs-green: #00ff88;
+  --cs-green-rgb: 0 255 136;
+  --cs-green-dim: #00aa5c;
+  --cs-cyan: #00e5ff;
+  --cs-cyan-rgb: 0 229 255;
+  --cs-red: #ff2244;
+  --cs-red-rgb: 255 34 68;
+  --cs-amber: #ffaa00;
+  --cs-amber-rgb: 255 170 0;
+  --cs-purple: #aa44ff;
+  --cs-purple-rgb: 170 68 255;
+  --cs-blue: #2266ff;
+  --cs-text: #88ccaa;
+  --cs-muted: #2a4a3a;
+  --cs-display: 'Orbitron', 'Cascadia Code', monospace;
+  --cs-mono: 'Share Tech Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  font-family: var(--cs-mono);
+  font-size: 13px;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* CRT scanline overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,255,136,0.015) 2px,
+    rgba(0,255,136,0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Layout ─────────────────────────────────────────────── */
+.cs-app {
+  display: grid;
+  grid-template-columns: 240px 1fr 280px;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+}
+
+/* ── Top bar ────────────────────────────────────────────── */
+.cs-topbar {
+  grid-column: 1 / -1;
+  background: linear-gradient(180deg, #030810 0%, var(--cs-panel) 100%);
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid var(--cs-green);
+  box-shadow: 0 0 20px rgba(var(--cs-green-rgb) / 0.15);
+}
+.cs-topbar h1 {
+  font-family: var(--cs-display);
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: var(--cs-green);
+  text-shadow: 0 0 12px var(--cs-green), 0 0 30px rgba(var(--cs-green-rgb) / 0.3);
+  letter-spacing: 4px;
+}
+.cs-info-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  background: rgba(var(--cs-green-rgb) / 0.04);
+  border: 1px solid rgba(var(--cs-green-rgb) / 0.12);
+  border-radius: 3px;
+}
+.cs-info-label {
+  font-size: 0.55rem;
+  color: var(--cs-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+.cs-info-val {
+  font-family: var(--cs-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Detection meter in top bar */
+.cs-detection-wrap {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cs-detection-bar {
+  width: 120px;
+  height: 8px;
+  background: #0a0a14;
+  border: 1px solid rgba(var(--cs-green-rgb) / 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cs-detection-fill {
+  height: 100%;
+  background: var(--cs-green);
+  transition: width 0.4s, background 0.4s;
+  border-radius: 1px;
+}
+.cs-detection-fill.warn { background: var(--cs-amber); }
+.cs-detection-fill.danger { background: var(--cs-red); box-shadow: 0 0 8px var(--cs-red); }
+.cs-detection-pct {
+  font-family: var(--cs-mono);
+  font-size: 0.75rem;
+  min-width: 32px;
+  text-align: right;
+}
+
+.cs-btn-back {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--cs-border);
+  color: var(--cs-muted);
+  font-family: var(--cs-mono);
+  font-size: 0.65rem;
+  border-radius: 3px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.cs-btn-back:hover { border-color: var(--cs-green); color: var(--cs-green); }
+
+/* ── Left panel — Programs + Deck ───────────────────────── */
+.cs-left {
+  background: var(--cs-panel);
+  border-right: 1px solid var(--cs-border);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cs-section-title {
+  font-family: var(--cs-display);
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  color: var(--cs-green);
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  margin: 10px 0 4px;
+  border-bottom: 1px solid rgba(var(--cs-green-rgb) / 0.1);
+}
+.cs-section-title:first-child { margin-top: 0; }
+
+/* Cyberdeck stats */
+.cs-deck-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  padding: 2px 0;
+}
+.cs-deck-val { color: var(--cs-cyan); }
+
+/* RAM bar */
+.cs-ram-bar {
+  height: 6px;
+  background: #0a0a14;
+  border-radius: 3px;
+  margin: 4px 0 8px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--cs-green-rgb) / 0.08);
+}
+.cs-ram-fill {
+  height: 100%;
+  background: var(--cs-cyan);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.cs-ram-fill.low { background: var(--cs-amber); }
+.cs-ram-fill.critical { background: var(--cs-red); }
+
+/* Program cards */
+.cs-program {
+  padding: 6px 8px;
+  background: var(--cs-bg);
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  margin: 3px 0;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.cs-program:hover { border-color: var(--cs-green); }
+.cs-program.active { border-color: var(--cs-cyan); background: rgba(var(--cs-cyan-rgb) / 0.05); }
+.cs-program.depleted { opacity: 0.3; cursor: default; }
+.cs-prog-name { font-size: 0.72rem; color: var(--cs-text); }
+.cs-prog-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 0.6rem;
+  color: var(--cs-muted);
+}
+.cs-prog-uses { color: var(--cs-cyan); }
+.cs-prog-counter { color: var(--cs-green); }
+
+/* ── Center — Network graph canvas ──────────────────────── */
+.cs-graph-area {
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #040a14 0%, var(--cs-bg) 70%);
+}
+.cs-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Network selection overlay */
+.cs-network-select {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: rgba(1,2,8,0.95);
+  z-index: 10;
+}
+.cs-network-select.hidden { display: none; }
+.cs-select-title {
+  font-family: var(--cs-display);
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--cs-green);
+  text-shadow: 0 0 30px rgba(var(--cs-green-rgb) / 0.4);
+  letter-spacing: 6px;
+}
+.cs-select-subtitle {
+  font-size: 0.8rem;
+  color: var(--cs-muted);
+  max-width: 400px;
+  text-align: center;
+  line-height: 1.6;
+}
+.cs-network-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  max-width: 600px;
+}
+.cs-network-card {
+  padding: 14px;
+  background: var(--cs-panel);
+  border: 1px solid var(--cs-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+.cs-network-card:hover {
+  border-color: var(--cs-green);
+  box-shadow: 0 0 16px rgba(var(--cs-green-rgb) / 0.15);
+  transform: translateY(-2px);
+}
+.cs-net-faction {
+  font-family: var(--cs-display);
+  font-size: 0.65rem;
+  letter-spacing: 1.5px;
+  margin-bottom: 4px;
+}
+.cs-net-name { font-size: 0.75rem; color: var(--cs-text); margin-bottom: 6px; }
+.cs-net-diff {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+}
+.cs-diff-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(var(--cs-green-rgb) / 0.15);
+}
+.cs-diff-dot.filled { background: var(--cs-green); }
+.cs-net-status {
+  font-size: 0.6rem;
+  color: var(--cs-muted);
+  margin-top: 6px;
+}
+
+/* Node tooltip */
+.cs-tooltip {
+  position: absolute;
+  z-index: 20;
+  background: rgba(6,11,20,0.96);
+  border: 1px solid var(--cs-green);
+  border-radius: 4px;
+  padding: 10px 12px;
+  max-width: 220px;
+  font-size: 0.72rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  box-shadow: 0 0 16px rgba(var(--cs-green-rgb) / 0.15);
+}
+.cs-tooltip.show { opacity: 1; }
+.cs-tt-label { color: var(--cs-green); font-weight: 600; margin-bottom: 4px; }
+.cs-tt-type { color: var(--cs-muted); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1px; }
+.cs-tt-ice { margin-top: 4px; }
+.cs-tt-ice-item { font-size: 0.62rem; padding: 1px 0; }
+.cs-tt-data { margin-top: 4px; color: var(--cs-cyan); font-size: 0.62rem; }
+
+/* ── Right panel — Node detail + actions ────────────────── */
+.cs-right {
+  background: var(--cs-panel);
+  border-left: 1px solid var(--cs-border);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cs-node-detail {
+  background: var(--cs-bg);
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  padding: 10px;
+}
+.cs-node-name {
+  font-family: var(--cs-display);
+  font-size: 0.75rem;
+  color: var(--cs-green);
+  letter-spacing: 1px;
+}
+.cs-node-type {
+  font-size: 0.6rem;
+  color: var(--cs-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 6px;
+}
+.cs-node-desc {
+  font-size: 0.68rem;
+  color: rgba(136,204,170,0.6);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+/* ICE list */
+.cs-ice-list { margin-bottom: 8px; }
+.cs-ice-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: rgba(var(--cs-red-rgb) / 0.04);
+  border: 1px solid rgba(var(--cs-red-rgb) / 0.15);
+  border-radius: 3px;
+  margin: 3px 0;
+  font-size: 0.68rem;
+}
+.cs-ice-icon { font-size: 0.8rem; }
+.cs-ice-name { flex: 1; }
+.cs-ice-str { color: var(--cs-red); font-weight: 600; }
+.cs-ice-item.broken { opacity: 0.25; border-color: var(--cs-muted); }
+
+/* Data payloads */
+.cs-data-list { margin-bottom: 8px; }
+.cs-data-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: rgba(var(--cs-cyan-rgb) / 0.04);
+  border: 1px solid rgba(var(--cs-cyan-rgb) / 0.15);
+  border-radius: 3px;
+  margin: 3px 0;
+  font-size: 0.68rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cs-data-item:hover { border-color: var(--cs-cyan); }
+.cs-data-item.extracted { opacity: 0.25; cursor: default; }
+.cs-data-item.encrypted { border-color: var(--cs-amber); }
+.cs-data-icon { font-size: 0.8rem; }
+.cs-data-label { flex: 1; }
+.cs-data-value { color: var(--cs-cyan); font-weight: 600; }
+
+/* Adjacent nodes */
+.cs-adjacent-list { margin-bottom: 8px; }
+.cs-adj-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  background: var(--cs-bg);
+  border: 1px solid var(--cs-border);
+  border-radius: 3px;
+  margin: 3px 0;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cs-adj-node:hover { border-color: var(--cs-green); color: var(--cs-green); }
+.cs-adj-node.blocked { border-color: var(--cs-red); opacity: 0.5; cursor: not-allowed; }
+.cs-adj-icon { font-size: 0.65rem; }
+.cs-adj-ice-badge {
+  font-size: 0.5rem;
+  padding: 0 4px;
+  background: rgba(var(--cs-red-rgb) / 0.15);
+  color: var(--cs-red);
+  border-radius: 2px;
+  margin-left: auto;
+}
+
+/* Action buttons */
+.cs-btn {
+  width: 100%;
+  padding: 8px;
+  background: var(--cs-bg);
+  border: 1px solid var(--cs-border);
+  color: var(--cs-text);
+  font-family: var(--cs-mono);
+  font-size: 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+}
+.cs-btn:hover { border-color: var(--cs-green); color: var(--cs-green); }
+.cs-btn:disabled { opacity: 0.3; cursor: default; }
+.cs-btn.scan { border-color: rgba(var(--cs-cyan-rgb) / 0.3); color: var(--cs-cyan); }
+.cs-btn.scan:hover { border-color: var(--cs-cyan); }
+.cs-btn.extract { border-color: rgba(var(--cs-cyan-rgb) / 0.3); color: var(--cs-cyan); }
+.cs-btn.jackout { border-color: rgba(var(--cs-red-rgb) / 0.3); color: var(--cs-red); }
+.cs-btn.jackout:hover { border-color: var(--cs-red); background: rgba(var(--cs-red-rgb) / 0.06); }
+
+/* Action log */
+.cs-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 0.68rem;
+  line-height: 1.6;
+}
+.cs-log-entry {
+  padding: 2px 4px;
+  border-bottom: 1px solid rgba(var(--cs-green-rgb) / 0.04);
+}
+.cs-log-entry.success { color: var(--cs-green); }
+.cs-log-entry.fail { color: var(--cs-red); }
+.cs-log-entry.info { color: var(--cs-cyan); }
+.cs-log-entry.warn { color: var(--cs-amber); }
+.cs-log-entry.system { color: var(--cs-muted); }
+
+/* ── Bottom bar ─────────────────────────────────────────── */
+.cs-bottombar {
+  grid-column: 1 / -1;
+  background: var(--cs-panel);
+  border-top: 1px solid var(--cs-border);
+  padding: 6px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.65rem;
+  color: var(--cs-muted);
+}
+.cs-stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cs-stat-val { color: var(--cs-cyan); }
+
+/* ── Session summary overlay ────────────────────────────── */
+.cs-summary-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(1,2,8,0.92);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+.cs-summary-overlay.show { opacity: 1; pointer-events: all; }
+.cs-sum-title {
+  font-family: var(--cs-display);
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: 5px;
+}
+.cs-sum-title.success { color: var(--cs-green); text-shadow: 0 0 30px var(--cs-green); }
+.cs-sum-title.detected { color: var(--cs-red); text-shadow: 0 0 30px var(--cs-red); }
+.cs-sum-title.jacked-out { color: var(--cs-amber); text-shadow: 0 0 30px var(--cs-amber); }
+.cs-sum-stats {
+  display: flex;
+  gap: 14px;
+}
+.cs-sum-stat {
+  text-align: center;
+  padding: 10px 16px;
+  background: var(--cs-panel);
+  border: 1px solid var(--cs-border);
+  border-radius: 6px;
+}
+.cs-sum-num {
+  font-family: var(--cs-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--cs-green);
+}
+.cs-sum-label {
+  font-size: 0.55rem;
+  color: var(--cs-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: var(--cs-border); border-radius: 2px; }
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes pulse-green { 0%,100%{box-shadow:0 0 4px var(--cs-green)} 50%{box-shadow:0 0 16px var(--cs-green)} }
+@keyframes data-glow { 0%{opacity:0.6} 100%{opacity:1} }
+</style>
+</head>
+<body>
+<div class="cs-app" id="cs-app">
+
+  <!-- ── Top bar ────────────────────────────────────────── -->
+  <div class="cs-topbar">
+    <h1>CYBERSPACE</h1>
+    <div class="cs-info-pill">
+      <span class="cs-info-label">Network</span>
+      <span class="cs-info-val" id="cs-net-name">—</span>
+    </div>
+    <div class="cs-info-pill">
+      <span class="cs-info-label">Node</span>
+      <span class="cs-info-val" id="cs-node-name" style="color:var(--cs-green)">—</span>
+    </div>
+    <div class="cs-info-pill">
+      <span class="cs-info-label">Moves</span>
+      <span class="cs-info-val" id="cs-moves" style="color:var(--cs-cyan)">0</span>
+    </div>
+
+    <div class="cs-detection-wrap">
+      <span class="cs-info-label">TRACE</span>
+      <div class="cs-detection-bar">
+        <div class="cs-detection-fill" id="cs-detect-fill" style="width:0%"></div>
+      </div>
+      <span class="cs-detection-pct" id="cs-detect-pct">0%</span>
+    </div>
+    <a href="/" class="cs-btn-back">&#9666; DASHBOARD</a>
+  </div>
+
+  <!-- ── Left panel — Cyberdeck + Programs ──────────────── -->
+  <div class="cs-left" id="cs-left">
+    <div class="cs-section-title">CYBERDECK</div>
+    <div class="cs-deck-stat"><span>Deck</span><span class="cs-deck-val" id="cs-deck-name">Netrunner MK1</span></div>
+    <div class="cs-deck-stat"><span>RAM</span><span class="cs-deck-val" id="cs-ram-label">4 / 4</span></div>
+    <div class="cs-ram-bar"><div class="cs-ram-fill" id="cs-ram-fill" style="width:100%"></div></div>
+    <div class="cs-deck-stat"><span>CPU</span><span class="cs-deck-val" id="cs-cpu">1.0x</span></div>
+
+    <div class="cs-section-title">LOADED PROGRAMS</div>
+    <div id="cs-programs">
+      <div style="color:var(--cs-muted);font-size:0.68rem;">No programs loaded</div>
+    </div>
+
+    <div class="cs-section-title">INSTALLED</div>
+    <div id="cs-installed">
+      <div style="color:var(--cs-muted);font-size:0.68rem;">No programs installed</div>
+    </div>
+  </div>
+
+  <!-- ── Center — Network graph ─────────────────────────── -->
+  <div class="cs-graph-area" id="cs-graph-area">
+    <!-- Network selection screen -->
+    <div class="cs-network-select" id="cs-net-select">
+      <div class="cs-select-title">JACK IN</div>
+      <div class="cs-select-subtitle">
+        Select a target network to infiltrate. Higher difficulty means stronger ICE,
+        more detection, but greater rewards.
+      </div>
+      <div class="cs-network-grid" id="cs-net-grid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <!-- Graph canvas -->
+    <canvas class="cs-canvas" id="cs-canvas"></canvas>
+
+    <!-- Tooltip -->
+    <div class="cs-tooltip" id="cs-tooltip">
+      <div class="cs-tt-label" id="cs-tt-label"></div>
+      <div class="cs-tt-type" id="cs-tt-type"></div>
+      <div class="cs-tt-ice" id="cs-tt-ice"></div>
+      <div class="cs-tt-data" id="cs-tt-data"></div>
+    </div>
+
+    <!-- Session summary -->
+    <div class="cs-summary-overlay" id="cs-summary">
+      <div class="cs-sum-title" id="cs-sum-title">DISCONNECTED</div>
+      <div id="cs-sum-subtitle" style="color:var(--cs-muted)"></div>
+      <div class="cs-sum-stats" id="cs-sum-stats"></div>
+      <button class="cs-btn" onclick="CS.reset()" style="width:auto;padding:10px 32px;margin-top:8px">SELECT NETWORK</button>
+      <a href="/" class="cs-btn-back" style="color:var(--cs-muted)">&#9666; Return to Dashboard</a>
+    </div>
+  </div>
+
+  <!-- ── Right panel — Node info + actions ──────────────── -->
+  <div class="cs-right" id="cs-right">
+    <div class="cs-section-title">CURRENT NODE</div>
+    <div class="cs-node-detail" id="cs-node-detail">
+      <div class="cs-node-name" id="cs-nd-name">—</div>
+      <div class="cs-node-type" id="cs-nd-type">—</div>
+      <div class="cs-node-desc" id="cs-nd-desc">Select a network to begin.</div>
+    </div>
+
+    <div class="cs-section-title">ICE DEFENSES</div>
+    <div class="cs-ice-list" id="cs-ice-list">
+      <div style="color:var(--cs-muted);font-size:0.68rem">No ICE detected</div>
+    </div>
+
+    <div class="cs-section-title">DATA PAYLOADS</div>
+    <div class="cs-data-list" id="cs-data-list">
+      <div style="color:var(--cs-muted);font-size:0.68rem">No data found</div>
+    </div>
+
+    <div class="cs-section-title">ADJACENT NODES</div>
+    <div class="cs-adjacent-list" id="cs-adj-list">
+      <div style="color:var(--cs-muted);font-size:0.68rem">—</div>
+    </div>
+
+    <button class="cs-btn scan" id="btn-scan" onclick="CS.scan()" disabled>&#9673; SCAN NODE</button>
+    <button class="cs-btn jackout" id="btn-jackout" onclick="CS.jackOut()" disabled>&#9888; JACK OUT</button>
+
+    <div class="cs-section-title" style="margin-top:6px">ACTION LOG</div>
+    <div class="cs-log" id="cs-log">
+      <div class="cs-log-entry system">Awaiting network selection...</div>
+    </div>
+  </div>
+
+  <!-- ── Bottom bar ─────────────────────────────────────── -->
+  <div class="cs-bottombar">
+    <div class="cs-stat-chip">ICE Broken: <span class="cs-stat-val" id="cs-stat-ice">0</span></div>
+    <div class="cs-stat-chip">Data Extracted: <span class="cs-stat-val" id="cs-stat-data">0</span></div>
+    <div class="cs-stat-chip">XP Earned: <span class="cs-stat-val" id="cs-stat-xp">0</span></div>
+    <div class="cs-stat-chip">Credits: <span class="cs-stat-val" id="cs-stat-credits">0</span></div>
+    <div class="cs-stat-chip" style="margin-left:auto">Session: <span class="cs-stat-val" id="cs-stat-session">—</span></div>
+  </div>
+
+</div>
+
+<script>
+/**
+ * Cyberspace Intrusion Controller — v1.46.0 [2026-03-21]
+ *
+ * Canvas-based network graph with node navigation, ICE combat,
+ * program deployment, data extraction, and detection tracking.
+ *
+ * CONNECTS: /api/cyberspace/* REST endpoints
+ * CALLED BY: DOM handlers + canvas click events
+ * EMITS: Canvas renders, DOM panel updates
+ */
+'use strict';
+
+const CS = {
+  // State
+  networks: [],
+  networkMap: null,
+  session: null,
+  sessionId: null,
+  currentNode: null,
+  scanData: null,
+
+  // Canvas
+  canvas: null,
+  ctx: null,
+  nodes: [],         // {id, x, y, type, label, visited, compromised, isCurrent, hasIce, hasData, isObjective}
+  edges: [],         // {from, to}
+  hoveredNode: null,
+  animFrame: null,
+
+  // ── Lifecycle ────────────────────────────────────────────────────
+
+  async init() {
+    this.canvas = document.getElementById('cs-canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this._resizeCanvas();
+    window.addEventListener('resize', () => this._resizeCanvas());
+    this.canvas.addEventListener('mousemove', e => this._onMouseMove(e));
+    this.canvas.addEventListener('click', e => this._onCanvasClick(e));
+
+    await this.loadNetworks();
+    this._startRenderLoop();
+  },
+
+  _resizeCanvas() {
+    const area = document.getElementById('cs-graph-area');
+    this.canvas.width = area.clientWidth;
+    this.canvas.height = area.clientHeight;
+  },
+
+  // ── Network selection ────────────────────────────────────────────
+
+  async loadNetworks() {
+    try {
+      const res = await fetch('/api/cyberspace/networks');
+      const data = await res.json();
+      this.networks = data.networks || [];
+      this._renderNetworkGrid();
+    } catch (e) {
+      this.log('Failed to load networks', 'fail');
+    }
+  },
+
+  _renderNetworkGrid() {
+    const grid = document.getElementById('cs-net-grid');
+    if (!this.networks.length) {
+      grid.innerHTML = '<div style="color:var(--cs-muted)">No networks available. Generate via skills.</div>';
+      return;
+    }
+    grid.innerHTML = this.networks.map(n => {
+      const diff = n.difficulty || 1;
+      const dots = Array.from({length: 5}, (_, i) =>
+        `<div class="cs-diff-dot ${i < diff ? 'filled' : ''}"></div>`
+      ).join('');
+      const factionColor = this._factionColor(n.faction || '');
+      const status = n.generated ? (n.complete ? 'COMPLETE' : 'AVAILABLE') : 'GENERATE';
+      return `<div class="cs-network-card" onclick="CS.selectNetwork('${n.network_id}', ${diff})"
+                   style="border-left:3px solid ${factionColor}">
+        <div class="cs-net-faction" style="color:${factionColor}">${n.faction || '???'}</div>
+        <div class="cs-net-name">${n.label || n.network_id}</div>
+        <div class="cs-net-diff">${dots}</div>
+        <div class="cs-net-status">${status}</div>
+      </div>`;
+    }).join('');
+  },
+
+  _factionColor(faction) {
+    const map = {
+      OmniCorp: '#3b82f6', NeoTech: '#8b5cf6', SynthSec: '#ec4899',
+      DeepState: '#06b6d4', Ghost_Net: '#22c55e', BlackMarket: '#f97316',
+    };
+    return map[faction] || '#00ff88';
+  },
+
+  async selectNetwork(networkId, difficulty) {
+    this.log('Generating network topology...', 'system');
+
+    // Generate if needed
+    try {
+      await fetch('/api/cyberspace/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({network_id: networkId, difficulty})
+      });
+    } catch (e) { /* may already exist */ }
+
+    // Load network map
+    try {
+      const res = await fetch(`/api/cyberspace/network/${networkId}`);
+      this.networkMap = await res.json();
+    } catch (e) {
+      this.log('Failed to load network map', 'fail');
+      return;
+    }
+
+    // Jack in
+    try {
+      const res = await fetch('/api/cyberspace/jack_in', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({network_id: networkId})
+      });
+      this.session = await res.json();
+      if (this.session.error) {
+        this.log(`Jack-in failed: ${this.session.error}`, 'fail');
+        return;
+      }
+      this.sessionId = this.session.session_id;
+      this.currentNode = this.session.current_node;
+    } catch (e) {
+      this.log('Jack-in failed', 'fail');
+      return;
+    }
+
+    // Hide network select, show graph
+    document.getElementById('cs-net-select').classList.add('hidden');
+    document.getElementById('btn-scan').disabled = false;
+    document.getElementById('btn-jackout').disabled = false;
+
+    // Build graph nodes/edges from network map
+    this._buildGraph();
+    this._updateUI();
+    this.log(`Jacked into ${this.networkMap.label || networkId}`, 'success');
+    this.log(`Entry: ${this.currentNode}`, 'info');
+
+    // Auto-scan entry node
+    await this.scan();
+  },
+
+  _buildGraph() {
+    if (!this.networkMap?.nodes) return;
+    const nodeMap = this.networkMap.nodes;
+    const entries = Object.entries(nodeMap);
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+
+    this.nodes = [];
+    this.edges = [];
+    const positions = {};
+
+    // Layout: use provided x,y or auto-layout in a circle
+    entries.forEach(([id, node], i) => {
+      let px = (node.x || 0) * (w - 120) + 60;
+      let py = (node.y || 0) * (h - 120) + 60;
+
+      // If x/y are 0 (not set), use circular layout
+      if (!node.x && !node.y) {
+        const angle = (i / entries.length) * Math.PI * 2 - Math.PI / 2;
+        const radius = Math.min(w, h) * 0.35;
+        px = w / 2 + Math.cos(angle) * radius;
+        py = h / 2 + Math.sin(angle) * radius;
+      }
+
+      positions[id] = {x: px, y: py};
+      this.nodes.push({
+        id,
+        x: px,
+        y: py,
+        type: node.node_type || 'router',
+        label: node.label || id,
+        visited: node.visited || false,
+        compromised: node.compromised || false,
+        isCurrent: id === this.currentNode,
+        hasIce: (node.ice || []).some(ice => ice.active !== false),
+        hasData: (node.data || []).some(d => !d.extracted),
+        isObjective: (this.networkMap.objective_nodes || []).includes(id),
+        connections: node.connections || [],
+      });
+    });
+
+    // Build edges (deduplicated)
+    const edgeSet = new Set();
+    entries.forEach(([id, node]) => {
+      (node.connections || []).forEach(cid => {
+        const key = [id, cid].sort().join('|');
+        if (!edgeSet.has(key)) {
+          edgeSet.add(key);
+          this.edges.push({
+            from: positions[id],
+            to: positions[cid],
+            fromId: id,
+            toId: cid,
+          });
+        }
+      });
+    });
+  },
+
+  // ── Canvas rendering ─────────────────────────────────────────────
+
+  _startRenderLoop() {
+    const render = () => {
+      this._draw();
+      this.animFrame = requestAnimationFrame(render);
+    };
+    render();
+  },
+
+  _draw() {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Background grid
+    ctx.strokeStyle = 'rgba(0,255,136,0.03)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < w; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+    for (let y = 0; y < h; y += 40) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    // Draw edges
+    this.edges.forEach(e => {
+      const isAdj = this.scanData?.adjacent?.some(a =>
+        (a.id === e.fromId && e.toId === this.currentNode) ||
+        (a.id === e.toId && e.fromId === this.currentNode)
+      );
+      ctx.beginPath();
+      ctx.moveTo(e.from.x, e.from.y);
+      ctx.lineTo(e.to.x, e.to.y);
+      ctx.strokeStyle = isAdj ? 'rgba(0,255,136,0.3)' : 'rgba(0,255,136,0.08)';
+      ctx.lineWidth = isAdj ? 1.5 : 0.8;
+      ctx.stroke();
+    });
+
+    // Draw nodes
+    const time = Date.now() / 1000;
+    this.nodes.forEach(n => {
+      const r = n.isCurrent ? 18 : (n.isObjective ? 16 : 12);
+      const isHovered = this.hoveredNode === n.id;
+
+      // Node fill
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+
+      if (n.isCurrent) {
+        ctx.fillStyle = 'rgba(0,255,136,0.15)';
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 2.5;
+        // Pulse glow
+        const pulse = 4 + Math.sin(time * 3) * 3;
+        ctx.shadowColor = '#00ff88';
+        ctx.shadowBlur = pulse;
+      } else if (n.isObjective) {
+        ctx.fillStyle = n.compromised ? 'rgba(0,229,255,0.1)' : 'rgba(170,68,255,0.1)';
+        ctx.strokeStyle = n.compromised ? '#00e5ff' : '#aa44ff';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.shadowBlur = 3 + Math.sin(time * 2) * 2;
+      } else if (n.visited) {
+        ctx.fillStyle = 'rgba(0,255,136,0.06)';
+        ctx.strokeStyle = 'rgba(0,255,136,0.25)';
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.02)';
+        ctx.strokeStyle = 'rgba(0,255,136,0.12)';
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 0;
+      }
+
+      if (isHovered) {
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#00ff88';
+        ctx.shadowBlur = 8;
+      }
+
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // ICE indicator (red dot)
+      if (n.hasIce && !n.compromised) {
+        ctx.beginPath();
+        ctx.arc(n.x + r * 0.7, n.y - r * 0.7, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff2244';
+        ctx.fill();
+      }
+
+      // Data indicator (cyan dot)
+      if (n.hasData) {
+        ctx.beginPath();
+        ctx.arc(n.x - r * 0.7, n.y - r * 0.7, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#00e5ff';
+        ctx.fill();
+      }
+
+      // Type icon
+      ctx.fillStyle = n.isCurrent ? '#00ff88' : (n.visited ? 'rgba(0,255,136,0.5)' : 'rgba(0,255,136,0.2)');
+      ctx.font = `${r * 0.8}px 'Share Tech Mono', monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const icon = this._nodeIcon(n.type);
+      ctx.fillText(icon, n.x, n.y);
+
+      // Label below node
+      ctx.font = '9px "Share Tech Mono", monospace';
+      ctx.fillStyle = n.isCurrent ? 'rgba(0,255,136,0.8)' : 'rgba(0,255,136,0.25)';
+      ctx.fillText(n.label.substring(0, 12), n.x, n.y + r + 12);
+    });
+  },
+
+  _nodeIcon(type) {
+    const map = {
+      entry: '\u25C9',       // ◉
+      router: '\u25C6',      // ◆
+      server: '\u25A0',      // ■
+      firewall: '\u25B2',    // ▲
+      datastore: '\u25CF',   // ●
+      terminal: '\u25A3',    // ▣
+      honeypot: '\u2620',    // ☠
+      exit: '\u25CB',        // ○
+    };
+    return map[type] || '\u25C6';
+  },
+
+  // ── Canvas interaction ───────────────────────────────────────────
+
+  _onMouseMove(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    let found = null;
+    for (const n of this.nodes) {
+      const dx = mx - n.x;
+      const dy = my - n.y;
+      if (dx * dx + dy * dy < 400) { // 20px radius
+        found = n.id;
+        break;
+      }
+    }
+    this.hoveredNode = found;
+    this.canvas.style.cursor = found ? 'pointer' : 'default';
+
+    // Tooltip
+    const tt = document.getElementById('cs-tooltip');
+    if (found) {
+      const node = this.nodes.find(n => n.id === found);
+      document.getElementById('cs-tt-label').textContent = node.label;
+      document.getElementById('cs-tt-type').textContent = node.type.toUpperCase();
+      tt.style.left = (e.clientX - rect.left + 16) + 'px';
+      tt.style.top = (e.clientY - rect.top - 10) + 'px';
+      tt.classList.add('show');
+    } else {
+      tt.classList.remove('show');
+    }
+  },
+
+  async _onCanvasClick(e) {
+    if (!this.hoveredNode || !this.sessionId) return;
+    const targetId = this.hoveredNode;
+    if (targetId === this.currentNode) return;
+
+    // Check if adjacent
+    const adj = this.scanData?.adjacent?.map(a => a.id) || [];
+    const nodeObj = this.nodes.find(n => n.id === this.currentNode);
+    const connections = nodeObj?.connections || [];
+    if (!adj.includes(targetId) && !connections.includes(targetId)) {
+      this.log('Node not adjacent — cannot move there', 'warn');
+      return;
+    }
+
+    await this.moveTo(targetId);
+  },
+
+  // ── Actions ──────────────────────────────────────────────────────
+
+  async moveTo(nodeId) {
+    try {
+      const res = await fetch('/api/cyberspace/move', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: this.sessionId, target_node: nodeId})
+      });
+      const data = await res.json();
+
+      if (data.status === 'blocked') {
+        this.log(`Blocked by ${data.ice_type || 'ICE'} — use a program first`, 'warn');
+        return;
+      }
+      if (data.status === 'detected') {
+        this.log('DETECTED! Session terminated.', 'fail');
+        this._showSummary(data, 'detected');
+        return;
+      }
+      if (data.error) {
+        this.log(data.error, 'fail');
+        return;
+      }
+
+      this.currentNode = data.current_node || nodeId;
+      this.log(`Moved to ${data.node_label || nodeId}`, 'success');
+      this._updateDetection(data.detection_level);
+
+      // Refresh graph state + auto-scan
+      await this._refreshNetwork();
+      await this.scan();
+    } catch (e) {
+      this.log('Move failed', 'fail');
+    }
+  },
+
+  async scan() {
+    try {
+      const res = await fetch('/api/cyberspace/scan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: this.sessionId})
+      });
+      this.scanData = await res.json();
+      if (this.scanData.error) {
+        this.log(this.scanData.error, 'fail');
+        return;
+      }
+      this._updateNodeDetail(this.scanData);
+      this.log('Node scanned', 'info');
+    } catch (e) {
+      this.log('Scan failed', 'fail');
+    }
+  },
+
+  async useProgram(programId, targetIceId, targetNodeId) {
+    try {
+      const body = {session_id: this.sessionId, program_id: programId};
+      if (targetIceId) body.target_ice_id = targetIceId;
+      if (targetNodeId) body.target_node_id = targetNodeId;
+
+      const res = await fetch('/api/cyberspace/use_program', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        this.log(data.error, 'fail');
+        return;
+      }
+
+      this.log(`${programId}: ${data.status || 'executed'}`, data.status === 'success' ? 'success' : 'warn');
+      if (data.detection_level !== undefined) this._updateDetection(data.detection_level);
+
+      if (data.status === 'detected') {
+        this._showSummary(data, 'detected');
+        return;
+      }
+
+      // Refresh
+      await this._refreshNetwork();
+      await this.scan();
+      this._updateProgramsUI();
+    } catch (e) {
+      this.log('Program execution failed', 'fail');
+    }
+  },
+
+  async extractData(dataId) {
+    try {
+      const res = await fetch('/api/cyberspace/extract', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: this.sessionId, data_id: dataId})
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        this.log(data.error, 'fail');
+        return;
+      }
+
+      this.log(`Data extracted! +${data.credits_earned || 0} credits, +${data.xp_earned || 0} XP`, 'success');
+      if (data.detection_level !== undefined) this._updateDetection(data.detection_level);
+
+      if (data.network_complete) {
+        this.log('ALL OBJECTIVES COMPLETE!', 'success');
+      }
+      if (data.status === 'detected') {
+        this._showSummary(data, 'detected');
+        return;
+      }
+
+      await this._refreshNetwork();
+      await this.scan();
+      this._updateStats();
+    } catch (e) {
+      this.log('Extraction failed', 'fail');
+    }
+  },
+
+  async jackOut() {
+    try {
+      const res = await fetch('/api/cyberspace/jack_out', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: this.sessionId})
+      });
+      const data = await res.json();
+      this.log('Jacked out safely', 'warn');
+      this._showSummary(data, 'jacked-out');
+    } catch (e) {
+      this.log('Jack-out failed', 'fail');
+    }
+  },
+
+  reset() {
+    this.networkMap = null;
+    this.session = null;
+    this.sessionId = null;
+    this.currentNode = null;
+    this.scanData = null;
+    this.nodes = [];
+    this.edges = [];
+    document.getElementById('cs-net-select').classList.remove('hidden');
+    document.getElementById('cs-summary').classList.remove('show');
+    document.getElementById('btn-scan').disabled = true;
+    document.getElementById('btn-jackout').disabled = true;
+    this.loadNetworks();
+  },
+
+  // ── UI updates ───────────────────────────────────────────────────
+
+  async _refreshNetwork() {
+    if (!this.networkMap?.network_id) return;
+    try {
+      const res = await fetch(`/api/cyberspace/network/${this.networkMap.network_id}`);
+      this.networkMap = await res.json();
+      this._buildGraph();
+    } catch (e) { /* keep existing */ }
+
+    // Also refresh session
+    if (this.sessionId) {
+      try {
+        const res = await fetch(`/api/cyberspace/session/${this.sessionId}`);
+        const sess = await res.json();
+        if (!sess.error) {
+          this.session = sess;
+          this._updateProgramsUI();
+          this._updateStats();
+        }
+      } catch (e) { /* keep existing */ }
+    }
+  },
+
+  _updateUI() {
+    document.getElementById('cs-net-name').textContent = this.networkMap?.label || '—';
+    document.getElementById('cs-node-name').textContent = this.currentNode || '—';
+    if (this.session) {
+      this._updateDetection(this.session.detection_level || 0);
+      this._updateProgramsUI();
+      this._updateStats();
+    }
+  },
+
+  _updateDetection(level) {
+    const pct = Math.min(100, Math.max(0, level));
+    const fill = document.getElementById('cs-detect-fill');
+    fill.style.width = pct + '%';
+    fill.className = 'cs-detection-fill' + (pct >= 75 ? ' danger' : pct >= 40 ? ' warn' : '');
+    document.getElementById('cs-detect-pct').textContent = Math.round(pct) + '%';
+    document.getElementById('cs-detect-pct').style.color =
+      pct >= 75 ? 'var(--cs-red)' : pct >= 40 ? 'var(--cs-amber)' : 'var(--cs-green)';
+  },
+
+  _updateNodeDetail(scan) {
+    document.getElementById('cs-nd-name').textContent = scan.label || scan.node_id || '—';
+    document.getElementById('cs-nd-type').textContent = (scan.node_type || '—').toUpperCase();
+    document.getElementById('cs-nd-desc').textContent = scan.description || '';
+    document.getElementById('cs-node-name').textContent = scan.label || scan.node_id || '—';
+    document.getElementById('cs-moves').textContent = this.session?.moves || '0';
+
+    // ICE list
+    const iceEl = document.getElementById('cs-ice-list');
+    const iceList = scan.ice || [];
+    if (iceList.length) {
+      iceEl.innerHTML = iceList.map(ice => {
+        const active = ice.active !== false;
+        const iceIcons = {barrier: '\u26D4', trace: '\u{1F50D}', black_ice: '\u26A1', scramble: '\u{1F500}'};
+        return `<div class="cs-ice-item ${active ? '' : 'broken'}">
+          <span class="cs-ice-icon">${iceIcons[ice.ice_type] || '\u26A0'}</span>
+          <span class="cs-ice-name">${ice.ice_type || '?'}</span>
+          <span class="cs-ice-str">STR ${ice.strength || '?'}</span>
+          ${active ? `<button class="cs-btn" style="width:auto;padding:2px 6px;font-size:0.6rem"
+                        onclick="CS._promptProgram('${ice.id}')">BREAK</button>` : '<span style="color:var(--cs-muted)">BROKEN</span>'}
+        </div>`;
+      }).join('');
+    } else {
+      iceEl.innerHTML = '<div style="color:var(--cs-muted);font-size:0.68rem">No ICE detected</div>';
+    }
+
+    // Data payloads
+    const dataEl = document.getElementById('cs-data-list');
+    const dataList = scan.data || [];
+    if (dataList.length) {
+      dataEl.innerHTML = dataList.map(d => {
+        const extracted = d.extracted;
+        const encrypted = d.encrypted;
+        const icon = encrypted ? '\u{1F512}' : '\u{1F4BE}';
+        return `<div class="cs-data-item ${extracted ? 'extracted' : ''} ${encrypted ? 'encrypted' : ''}"
+                     ${!extracted && !encrypted ? `onclick="CS.extractData('${d.id}')"` : ''}>
+          <span class="cs-data-icon">${icon}</span>
+          <span class="cs-data-label">${d.label || d.data_type || '???'}</span>
+          <span class="cs-data-value">${d.value || 0}</span>
+          ${extracted ? '<span style="font-size:0.55rem;color:var(--cs-muted)">DONE</span>' :
+            encrypted ? '<span style="font-size:0.55rem;color:var(--cs-amber)">ENCRYPTED</span>' :
+            '<span style="font-size:0.55rem;color:var(--cs-cyan)">EXTRACT</span>'}
+        </div>`;
+      }).join('');
+    } else {
+      dataEl.innerHTML = '<div style="color:var(--cs-muted);font-size:0.68rem">No data found</div>';
+    }
+
+    // Adjacent nodes
+    const adjEl = document.getElementById('cs-adj-list');
+    const adjList = scan.adjacent || [];
+    if (adjList.length) {
+      adjEl.innerHTML = adjList.map(a => {
+        const blocked = a.has_ice;
+        return `<div class="cs-adj-node ${blocked ? 'blocked' : ''}"
+                     onclick="${blocked ? '' : `CS.moveTo('${a.id}')`}">
+          <span class="cs-adj-icon">${this._nodeIcon(a.type || 'router')}</span>
+          <span>${a.label || a.id}</span>
+          ${blocked ? '<span class="cs-adj-ice-badge">ICE</span>' : ''}
+        </div>`;
+      }).join('');
+    } else {
+      adjEl.innerHTML = '<div style="color:var(--cs-muted);font-size:0.68rem">No adjacent nodes</div>';
+    }
+  },
+
+  _updateProgramsUI() {
+    // Loaded programs in current session
+    const progEl = document.getElementById('cs-programs');
+    const loaded = this.session?.loaded_programs || [];
+    if (loaded.length) {
+      progEl.innerHTML = loaded.map(p => {
+        const depleted = (p.uses_remaining || 0) <= 0;
+        return `<div class="cs-program ${depleted ? 'depleted' : ''}"
+                     onclick="${depleted ? '' : `CS._selectProgram('${p.program_id}')`}">
+          <div class="cs-prog-name">${p.name || p.program_id}</div>
+          <div class="cs-prog-meta">
+            <span class="cs-prog-uses">${p.uses_remaining || 0} uses</span>
+            <span>RAM: ${p.ram_cost || '?'}</span>
+            <span class="cs-prog-counter">${p.counters || ''}</span>
+          </div>
+        </div>`;
+      }).join('');
+    } else {
+      progEl.innerHTML = '<div style="color:var(--cs-muted);font-size:0.68rem">No programs loaded</div>';
+    }
+
+    // Deck info
+    const deck = this.session?.cyberdeck || {};
+    document.getElementById('cs-deck-name').textContent = deck.name || deck.deck_id || '—';
+    const ramAvail = (deck.ram_total || 4) - (deck.ram_used || 0) - (deck.ram_damage || 0);
+    const ramTotal = deck.ram_total || 4;
+    document.getElementById('cs-ram-label').textContent = `${ramAvail} / ${ramTotal}`;
+    const ramPct = (ramAvail / ramTotal) * 100;
+    const ramFill = document.getElementById('cs-ram-fill');
+    ramFill.style.width = ramPct + '%';
+    ramFill.className = 'cs-ram-fill' + (ramPct < 25 ? ' critical' : ramPct < 50 ? ' low' : '');
+    document.getElementById('cs-cpu').textContent = (deck.cpu_speed || 1.0) + 'x';
+  },
+
+  _updateStats() {
+    if (!this.session) return;
+    document.getElementById('cs-stat-ice').textContent = this.session.ice_broken || 0;
+    document.getElementById('cs-stat-data').textContent = this.session.data_extracted?.length || 0;
+    document.getElementById('cs-stat-xp').textContent = this.session.xp_earned || 0;
+    document.getElementById('cs-stat-credits').textContent = this.session.credits_earned || 0;
+    document.getElementById('cs-stat-session').textContent = this.sessionId?.substring(0, 8) || '—';
+  },
+
+  // ── Program selection helpers ────────────────────────────────────
+
+  _promptProgram(iceId) {
+    // Find matching program for this ICE type
+    const ice = (this.scanData?.ice || []).find(i => i.id === iceId);
+    if (!ice) return;
+    const counterMap = {barrier: 'icebreaker', trace: 'cloak', black_ice: 'siphon', scramble: 'decrypt'};
+    const neededProg = counterMap[ice.ice_type];
+
+    const loaded = this.session?.loaded_programs || [];
+    const prog = loaded.find(p => p.program_id === neededProg && (p.uses_remaining || 0) > 0);
+    if (prog) {
+      this.useProgram(prog.program_id, iceId);
+    } else {
+      // Try virus as universal fallback
+      const virus = loaded.find(p => p.program_id === 'virus' && (p.uses_remaining || 0) > 0);
+      if (virus) {
+        this.useProgram('virus', iceId);
+      } else {
+        this.log(`Need ${neededProg || 'a program'} to break ${ice.ice_type} ICE`, 'warn');
+      }
+    }
+  },
+
+  _selectProgram(programId) {
+    // Use program on current node (for non-targeted actions like cloak, overclock)
+    this.useProgram(programId);
+  },
+
+  // ── Session summary ──────────────────────────────────────────────
+
+  _showSummary(data, type) {
+    const overlay = document.getElementById('cs-summary');
+    const title = document.getElementById('cs-sum-title');
+    const sub = document.getElementById('cs-sum-subtitle');
+    const stats = document.getElementById('cs-sum-stats');
+
+    title.className = `cs-sum-title ${type}`;
+    const titles = {
+      'detected': 'TRACED',
+      'jacked-out': 'DISCONNECTED',
+      'complete': 'EXTRACTION COMPLETE',
+    };
+    title.textContent = titles[type] || 'SESSION ENDED';
+    sub.textContent = type === 'detected'
+      ? 'Your signal was traced. ICE countermeasures locked you out.'
+      : type === 'complete'
+        ? 'All objectives achieved. Clean extraction.'
+        : 'You disconnected voluntarily.';
+
+    stats.innerHTML = `
+      <div class="cs-sum-stat"><div class="cs-sum-num">${data.nodes_visited || data.moves || 0}</div><div class="cs-sum-label">Nodes</div></div>
+      <div class="cs-sum-stat"><div class="cs-sum-num">${data.ice_broken || 0}</div><div class="cs-sum-label">ICE Broken</div></div>
+      <div class="cs-sum-stat"><div class="cs-sum-num">${data.data_extracted || 0}</div><div class="cs-sum-label">Data</div></div>
+      <div class="cs-sum-stat"><div class="cs-sum-num">${data.xp_earned || 0}</div><div class="cs-sum-label">XP</div></div>
+      <div class="cs-sum-stat"><div class="cs-sum-num">${data.credits_earned || 0}</div><div class="cs-sum-label">Credits</div></div>
+    `;
+
+    overlay.classList.add('show');
+    this.sessionId = null;
+  },
+
+  // ── Log ──────────────────────────────────────────────────────────
+
+  log(msg, type = '') {
+    const el = document.getElementById('cs-log');
+    const div = document.createElement('div');
+    div.className = `cs-log-entry ${type}`;
+    div.textContent = `> ${msg}`;
+    el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+    while (el.children.length > 80) el.removeChild(el.firstChild);
+  },
+};
+
+// Boot
+document.addEventListener('DOMContentLoaded', () => CS.init());
+</script>
+<script src="/shared/js/cosysim-voice.js"></script>
+</body>
+</html>

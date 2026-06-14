@@ -1,5 +1,12 @@
 """Copilot Bridge — Makes Copilot CLI self-improving via NLM + Nexus.
 
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Use Gemini context cache for richer plan decomposition in pre_plan()
+    v1.56.0 [2026-03-26] — Auto-register Copilot with Nexus agent_registry on init
+    v1.50.2 [2026-03-24] — Wire config pull at session start, push at session end
+
 Provides functions that the Copilot CLI hooks can call to:
 - Pre-plan tasks using NLM (batch-ask before coding)
 - Analyze source files before editing
@@ -94,6 +101,30 @@ class CopilotBridge:
         self._nexus = None
         self._router = None
         self._forge = None
+        # v1.56.0 [2026-03-26] — Auto-register Copilot with Nexus agent_registry
+        self._register_with_nexus()
+
+    # v1.56.0 [2026-03-26] — Auto-register Copilot with Nexus agent_registry
+    # CONNECTS: NexusClient (agent_registry API)
+    # CALLED BY: __init__
+    # EMITS: Nexus /api/agents/register POST
+    def _register_with_nexus(self) -> None:
+        """Register the Copilot bridge as an expert-tier agent in Nexus.
+
+        Best-effort: failures are silently ignored so bridge init never
+        blocks on Nexus availability.
+        """
+        try:
+            client = self._get_nexus()
+            if client and client.is_available(timeout=2):
+                client._post("/api/agents/register", {
+                    "agent_id": "copilot",
+                    "display_name": "Claude Code",
+                    "agent_type": "copilot",
+                    "tier": "expert",
+                })
+        except Exception:
+            pass
 
     @staticmethod
     def _looks_like_runtime_task(task_description: str) -> bool:
@@ -442,6 +473,14 @@ class CopilotBridge:
         except Exception as exc:
             logger.debug("Onboarding context failed: %s", exc)
 
+        # v1.50.2 [2026-03-24] — Pull updated config from Nexus at session start
+        try:
+            from engine.nexus.copilot_self_config import get_copilot_config
+            pull_result = get_copilot_config().pull_all_from_nexus()
+            context["config_sync"] = pull_result
+        except Exception as exc:
+            logger.debug("Config pull at session start failed: %s", exc)
+
         if not nexus or not task_description:
             return context
 
@@ -525,10 +564,21 @@ class CopilotBridge:
         except Exception as e:
             logger.debug("Metrics storage failed: %s", e)
 
+        # v1.50.2 [2026-03-24] — Push updated config to Nexus at session end
+        try:
+            from engine.nexus.copilot_self_config import get_copilot_config
+            get_copilot_config().sync_all_to_nexus()
+        except Exception as exc:
+            logger.debug("Config push at session end failed: %s", exc)
+
         return result
 
     # ──── Pre-Coding Operations ────
 
+    # v1.57.0 [2026-03-26] — Use Gemini context cache for richer plan decomposition
+    # CONNECTS: ContextCacheClient, TASK_DECOMPOSITION_SCHEMA, KnowledgeForge
+    # CALLED BY: pre_plan() entry point
+    # EMITS: guide dict with qa_pairs, recommendations, optional context_cache steps
     def pre_plan(
         self,
         task: str,
@@ -536,6 +586,45 @@ class CopilotBridge:
         question_count: int = 10,
     ) -> Dict[str, Any]:
         """Pre-plan a task using NLM before writing code.
+
+        Attempts context-cache-powered decomposition first for richer
+        results grounded in project context, falling back to the
+        KnowledgeForge Q&A pipeline when unavailable.
+
+        Args:
+            task: Description of the task.
+            context_files: Optional source files for context.
+            question_count: Number of questions to generate.
+
+        Returns:
+            Dict with guide questions, answers, and recommendations.
+        """
+        # v1.57.0 — Try context cache decomposition first
+        try:
+            from engine.integrations.context_cache_client import get_context_cache
+            cache = get_context_cache()
+            if cache.is_cached:
+                from engine.nexus.schemas import TASK_DECOMPOSITION_SCHEMA
+                steps = cache.generate_structured_with_context(
+                    f"Break this plan into numbered implementation steps:\n\n{task}",
+                    TASK_DECOMPOSITION_SCHEMA,
+                )
+                if steps:
+                    logger.info("[CopilotBridge] Plan decomposed via context cache: %d steps", len(steps))
+                    return {"steps": steps, "source": "context_cache", "task": task}
+        except Exception as exc:
+            logger.debug("[CopilotBridge] Context cache decomposition failed: %s", exc)
+
+        # Fallback to existing KnowledgeForge decomposition
+        return self._decompose_via_forge(task, context_files, question_count)
+
+    def _decompose_via_forge(
+        self,
+        task: str,
+        context_files: Optional[List[str]] = None,
+        question_count: int = 10,
+    ) -> Dict[str, Any]:
+        """Decompose a plan via the KnowledgeForge Q&A pipeline (original path).
 
         Generates relevant questions about the task, batch-asks NLM,
         and returns a knowledge brief. All answers stored in Nexus.

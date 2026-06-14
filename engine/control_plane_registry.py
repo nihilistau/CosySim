@@ -15,14 +15,15 @@ Version: v1.42.1 [2026-03-21]
 Author:  CosySim Team
 
 Change Log:
-    v1.42.1 [2026-03-21] — Added module header, section dividers, version stamps
-    v1.42.0 [2026-03-21] — Three-pillar architecture, managed Nexus KMS
-    v1.41.0 [2026-03-20] — ARGUS deep polish, extended rpcids
-    v1.40.0 [2026-03-19] — Health check aggregator, service discovery registry
+    v1.42.1 [2026-03-21] â€” Added module header, section dividers, version stamps
+    v1.42.0 [2026-03-21] â€” Three-pillar architecture, managed Nexus KMS
+    v1.41.0 [2026-03-20] â€” ARGUS deep polish, extended rpcids
+    v1.40.0 [2026-03-19] â€” Health check aggregator, service discovery registry
 """
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 
@@ -32,12 +33,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LAUNCHER_CONFIG_PATH = PROJECT_ROOT / "config" / "launcher.yaml"
 
 
-# ──── Service Definitions ────────────────────────────────────────────────────
+# â”€â”€â”€â”€ Service Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Launcher-managed services: infrastructure, dashboards, APIs, proxies.
 # Each entry defines type, class/script path, display label, auto-start flag,
 # and pillar membership (service | game | creation).
 
-# v1.42.1 [2026-03-21] — 14 service targets across 3 pillars
+# v1.42.1 [2026-03-21] â€” 14 service targets across 3 pillars
 SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
     "nexus_kms": {
         "type": "external",
@@ -45,7 +46,7 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
         "auto_start": True,
         "pillar": "service",
         "cwd": "C:/Files/Nexus",
-        "cmd": ["python", "-m", "nexus", "api"],
+        "cmd": [sys.executable, "-m", "nexus", "api"],
         "start_priority": 0,  # must start before everything else
     },
     "hub": {
@@ -134,11 +135,11 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# ──── Scene Definitions ──────────────────────────────────────────────────────
+# â”€â”€â”€â”€ Scene Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Interactive game scenes and content scenes.  Each scene is a Flask app with
 # Socket.IO, served on its own port (resolved by port_registry at runtime).
 
-# v1.42.1 [2026-03-21] — 17 scene targets (15 game, 1 service, 1 creation)
+# v1.52.0 [2026-03-25] â€” 22 scene targets (18 game, 2 service, 2 creation)
 SCENE_DEFS: Dict[str, Dict[str, Any]] = {
     "phone": {
         "type": "flask",
@@ -252,10 +253,49 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "auto_start": False,
         "pillar": "creation",
     },
+    # v1.47.0 [2026-03-21] â€” Creation Kit visual scene editor
+    "creation_kit": {
+        "type": "flask",
+        "cls": "content.scenes.creation_kit.creation_kit_scene.CreationKitScene",
+        "label": "CREATION KIT",
+        "auto_start": False,
+        "pillar": "creation",
+    },
     "lab_break": {
         "type": "flask",
         "cls": "content.scenes.lab_break.lab_break_scene.LabBreakScene",
         "label": "LAB BREAK",
+        "auto_start": False,
+        "pillar": "game",
+    },
+    # v1.52.0 — Auto-registered by Creation Kit
+    "oracle": {
+        "type": "flask",
+        "cls": "content.scenes.oracle.oracle_scene.OracleScene",
+        "label": "THE ORACLE",
+        "auto_start": False,
+        "pillar": "game",
+    },
+    # v1.52.0 — Auto-registered by Creation Kit
+    "neonos": {
+        "type": "flask",
+        "cls": "content.scenes.neonos.neonos_scene.NeonosScene",
+        "label": "NEON OS",
+        "auto_start": False,
+        "pillar": "game",
+    },
+    # v1.52.0 [2026-03-25] — New game scenes (audit remediation)
+    "auction": {
+        "type": "flask",
+        "cls": "content.scenes.auction.auction_scene.AuctionScene",
+        "label": "THE AUCTION HOUSE",
+        "auto_start": False,
+        "pillar": "game",
+    },
+    "cyberspace": {
+        "type": "flask",
+        "cls": "content.scenes.cyberspace.cyberspace_scene.CyberspaceScene",
+        "label": "CYBERSPACE",
         "auto_start": False,
         "pillar": "game",
     },
@@ -267,7 +307,7 @@ SERVICE_IDS: Tuple[str, ...] = tuple(SERVICE_DEFS.keys())
 SCENE_IDS: Tuple[str, ...] = tuple(SCENE_DEFS.keys())
 
 
-# ──── Catalogue Helpers ──────────────────────────────────────────────────────
+# â”€â”€â”€â”€ Catalogue Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _copy_catalogue(entries: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -326,7 +366,7 @@ def get_target_metadata_catalogue() -> Dict[str, Dict[str, Any]]:
     return metadata
 
 
-# ──── Pillar Grouping ────────────────────────────────────────────────────────
+# â”€â”€â”€â”€ Pillar Grouping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def get_targets_by_pillar(pillar: str) -> Dict[str, Dict[str, Any]]:
@@ -339,7 +379,7 @@ def get_targets_by_pillar(pillar: str) -> Dict[str, Dict[str, Any]]:
     return result
 
 
-# v1.42.1 [2026-03-21] — Pre-computed pillar membership for fast lookup
+# v1.42.1 [2026-03-21] â€” Pre-computed pillar membership for fast lookup
 PILLAR_IDS: Dict[str, Tuple[str, ...]] = {
     "game": tuple(
         tid for tid, info in {**SERVICE_DEFS, **SCENE_DEFS}.items()
@@ -356,7 +396,7 @@ PILLAR_IDS: Dict[str, Tuple[str, ...]] = {
 }
 
 
-# ──── Launcher Catalogue Builder ─────────────────────────────────────────────
+# â”€â”€â”€â”€ Launcher Catalogue Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def build_launcher_catalogues(
@@ -374,7 +414,7 @@ def build_launcher_catalogues(
     return services, scenes, {**services, **scenes}
 
 
-# ──── Dynamic scene discovery ─────────────────────────────────────────────────
+# â”€â”€â”€â”€ Dynamic scene discovery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def scan_scene_directories() -> Dict[str, Any]:

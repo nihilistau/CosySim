@@ -6,57 +6,38 @@
  *   .show() / .hide()  – explicit open/close
  *   .refresh()         – reload library from server
  *
- * Depends on: Three.js r128 (window.THREE), CharacterBridge (optional).
- * GLTFLoader loaded on-demand from CDN.
+ * Depends on: Three.js r184 (window.THREE via three_boot.js — includes
+ * GLTFLoader as a vendored addon), CharacterBridge (optional).
  */
 (function () {
   'use strict';
 
   /* ── Constants ────────────────────────────────────────────────── */
-  var ALLOWED_EXT = ['glb', 'vrm', 'gltf'];
-  var MAX_MB = 50;
-  var GLTF_LOADER_URL = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
+  const ALLOWED_EXT = ['glb', 'vrm', 'gltf'];
+  const MAX_MB = 50;
 
   /* ── State ────────────────────────────────────────────────────── */
-  var panel = null;
-  var visible = false;
-  var library = [];       // [{id, filename, format, size_mb, uploaded_at, ...}]
-  var assignments = {};   // character_id → model_id
-  var previewRenderers = {};  // model_id → {renderer, scene, camera, animId}
-  var gltfLoaderReady = false;
-  var gltfLoaderLoading = false;
+  let panel = null;
+  let visible = false;
+  let library = [];       // [{id, filename, format, size_mb, uploaded_at, ...}]
+  let assignments = {};   // character_id → model_id
+  const previewRenderers = {};  // model_id → {renderer, scene, camera, animId}
 
-  /* ── GLTFLoader Bootstrap ─────────────────────────────────────── */
+  /* ── GLTFLoader availability ──────────────────────────────────── */
+  // v1.58.0 [2026-06-11] — GLTFLoader is bundled on window.THREE by
+  // three_boot.js (vendored r184 addon); the old on-demand CDN bootstrap
+  // (examples/js was deleted upstream in r148) is gone.
   function ensureGLTFLoader(cb) {
-    if (gltfLoaderReady || (window.THREE && window.THREE.GLTFLoader)) {
-      gltfLoaderReady = true;
+    if (window.THREE && window.THREE.GLTFLoader) {
       if (cb) cb();
       return;
     }
-    if (gltfLoaderLoading) {
-      var iv = setInterval(function () {
-        if (gltfLoaderReady) { clearInterval(iv); if (cb) cb(); }
-      }, 100);
-      return;
-    }
-    gltfLoaderLoading = true;
-    var s = document.createElement('script');
-    s.src = GLTF_LOADER_URL;
-    s.onload = function () {
-      gltfLoaderReady = true;
-      gltfLoaderLoading = false;
-      if (cb) cb();
-    };
-    s.onerror = function () {
-      console.error('[ModelImport] Failed to load GLTFLoader from CDN');
-      gltfLoaderLoading = false;
-    };
-    document.head.appendChild(s);
+    console.error('[ModelImport] THREE.GLTFLoader missing (operation=gltf_loader) — three_boot.js not loaded?');
   }
 
   /* ── Utility ──────────────────────────────────────────────────── */
   function el(tag, attrs, children) {
-    var e = document.createElement(tag);
+    let e = document.createElement(tag);
     if (attrs) {
       Object.keys(attrs).forEach(function (k) {
         if (k === 'className') e.className = attrs[k];
@@ -82,7 +63,7 @@
   }
 
   function fileExtension(name) {
-    var parts = name.split('.');
+    let parts = name.split('.');
     return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
   }
 
@@ -112,7 +93,7 @@
   /* ── Upload file ──────────────────────────────────────────────── */
   function uploadFile(file) {
     if (!file) return;
-    var ext = fileExtension(file.name);
+    let ext = fileExtension(file.name);
     if (ALLOWED_EXT.indexOf(ext) === -1) {
       setStatus('Unsupported format: .' + ext, true);
       return;
@@ -122,13 +103,13 @@
       return;
     }
 
-    var form = new FormData();
+    let form = new FormData();
     form.append('file', file);
 
     setStatus('Uploading ' + file.name + '…');
     showProgress(0);
 
-    var xhr = new XMLHttpRequest();
+    let xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/models/upload');
     xhr.upload.onprogress = function (e) {
       if (e.lengthComputable) showProgress(Math.round(e.loaded / e.total * 100));
@@ -136,7 +117,7 @@
     xhr.onload = function () {
       hideProgress();
       try {
-        var res = JSON.parse(xhr.responseText);
+        let res = JSON.parse(xhr.responseText);
         if (xhr.status >= 200 && xhr.status < 300 && res.success) {
           setStatus('Uploaded: ' + file.name);
           refreshLibrary();
@@ -164,7 +145,7 @@
     });
 
     // Header
-    var header = el('div', { className: 'ph-mi-header' }, [
+    let header = el('div', { className: 'ph-mi-header' }, [
       el('span', { className: 'ph-mi-title' }, '📦 Model Library'),
       el('button', {
         className: 'ph-mi-close',
@@ -175,11 +156,11 @@
     panel.appendChild(header);
 
     // Status bar
-    var statusBar = el('div', { id: 'ph-mi-status', className: 'ph-mi-status' });
+    let statusBar = el('div', { id: 'ph-mi-status', className: 'ph-mi-status' });
     panel.appendChild(statusBar);
 
     // Progress bar
-    var progressWrap = el('div', {
+    let progressWrap = el('div', {
       id: 'ph-mi-progress-wrap',
       className: 'ph-mi-progress-wrap',
       style: { display: 'none' },
@@ -189,7 +170,7 @@
     panel.appendChild(progressWrap);
 
     // Drop zone
-    var dropZone = el('div', {
+    let dropZone = el('div', {
       id: 'ph-mi-dropzone',
       className: 'ph-mi-dropzone',
     }, [
@@ -221,7 +202,7 @@
     panel.appendChild(dropZone);
 
     // Hidden file input
-    var fileInput = el('input', {
+    let fileInput = el('input', {
       type: 'file',
       accept: '.glb,.vrm,.gltf',
       style: { display: 'none' },
@@ -233,7 +214,7 @@
     panel.appendChild(fileInput);
 
     // Library grid container
-    var libSection = el('div', { className: 'ph-mi-lib-section' }, [
+    let libSection = el('div', { className: 'ph-mi-lib-section' }, [
       el('div', { className: 'ph-mi-lib-header' }, 'Uploaded Models'),
       el('div', { id: 'ph-mi-lib-grid', className: 'ph-mi-lib-grid' }),
     ]);
@@ -245,7 +226,7 @@
 
   /* ── Status / progress helpers ─────────────────────────────────── */
   function setStatus(msg, isError) {
-    var bar = document.getElementById('ph-mi-status');
+    let bar = document.getElementById('ph-mi-status');
     if (!bar) return;
     bar.textContent = msg;
     bar.style.color = isError ? '#ef4444' : '#a78bfa';
@@ -256,65 +237,67 @@
   }
 
   function showProgress(pct) {
-    var wrap = document.getElementById('ph-mi-progress-wrap');
-    var bar = document.getElementById('ph-mi-progress-bar');
+    let wrap = document.getElementById('ph-mi-progress-wrap');
+    let bar = document.getElementById('ph-mi-progress-bar');
     if (wrap) wrap.style.display = 'block';
     if (bar) bar.style.width = pct + '%';
   }
 
   function hideProgress() {
-    var wrap = document.getElementById('ph-mi-progress-wrap');
-    var bar = document.getElementById('ph-mi-progress-bar');
+    let wrap = document.getElementById('ph-mi-progress-wrap');
+    let bar = document.getElementById('ph-mi-progress-bar');
     if (wrap) wrap.style.display = 'none';
     if (bar) bar.style.width = '0%';
   }
 
   /* ── 3D Preview ────────────────────────────────────────────────── */
   function createPreview(canvas, modelMeta) {
-    if (!window.THREE || !gltfLoaderReady) return;
+    // v1.58.0 [2026-06-11] — r184: GLTFLoader rides on window.THREE;
+    // outputEncoding removed (sRGB output is the default); light
+    // intensities converted to physical units (×π).
+    if (!window.THREE || !window.THREE.GLTFLoader) return;
 
-    var w = canvas.clientWidth || 120;
-    var h = canvas.clientHeight || 120;
+    let w = canvas.clientWidth || 120;
+    let h = canvas.clientHeight || 120;
 
-    var renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+    let renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
     renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.outputEncoding = THREE.sRGBEncoding;
 
-    var scene = new THREE.Scene();
+    let scene = new THREE.Scene();
 
-    var camera = new THREE.PerspectiveCamera(40, w / h, 0.01, 50);
+    let camera = new THREE.PerspectiveCamera(40, w / h, 0.01, 50);
     camera.position.set(0, 1.2, 3);
     camera.lookAt(0, 0.8, 0);
 
-    // Lighting
-    var amb = new THREE.AmbientLight(0xffffff, 0.6);
+    // Lighting (physical units)
+    let amb = new THREE.AmbientLight(0xffffff, 0.6 * Math.PI);
     scene.add(amb);
-    var dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    let dir = new THREE.DirectionalLight(0xffffff, 0.8 * Math.PI);
     dir.position.set(2, 3, 2);
     scene.add(dir);
-    var rim = new THREE.DirectionalLight(0x8888ff, 0.3);
+    let rim = new THREE.DirectionalLight(0x8888ff, 0.3 * Math.PI);
     rim.position.set(-2, 1, -2);
     scene.add(rim);
 
     // Load model
-    var loader = new THREE.GLTFLoader();
-    var fileUrl = '/api/models/file/' + modelMeta.stored_as;
+    let loader = new THREE.GLTFLoader();
+    let fileUrl = '/api/models/file/' + modelMeta.stored_as;
 
     loader.load(fileUrl, function (gltf) {
-      var model = gltf.scene;
+      let model = gltf.scene;
 
       // Auto-fit: compute bounding box and normalize
-      var box = new THREE.Box3().setFromObject(model);
-      var size = new THREE.Vector3();
-      var center = new THREE.Vector3();
+      let box = new THREE.Box3().setFromObject(model);
+      let size = new THREE.Vector3();
+      let center = new THREE.Vector3();
       box.getSize(size);
       box.getCenter(center);
 
-      var maxDim = Math.max(size.x, size.y, size.z);
+      let maxDim = Math.max(size.x, size.y, size.z);
       if (maxDim > 0) {
-        var targetHeight = 2.0;
-        var s = targetHeight / maxDim;
+        let targetHeight = 2.0;
+        let s = targetHeight / maxDim;
         model.scale.setScalar(s);
       }
 
@@ -325,7 +308,7 @@
       scene.add(model);
 
       // Spin animation
-      var animId;
+      let animId;
       function animate() {
         animId = requestAnimationFrame(animate);
         model.rotation.y += 0.008;
@@ -345,7 +328,7 @@
   }
 
   function destroyPreview(modelId) {
-    var pr = previewRenderers[modelId];
+    let pr = previewRenderers[modelId];
     if (pr) {
       if (pr.animId) cancelAnimationFrame(pr.animId);
       if (pr.renderer) pr.renderer.dispose();
@@ -355,11 +338,11 @@
 
   /* ── Build model card ──────────────────────────────────────────── */
   function buildModelCard(model) {
-    var card = el('div', { className: 'ph-mi-card' });
+    let card = el('div', { className: 'ph-mi-card' });
 
     // Preview canvas
-    var canvasWrap = el('div', { className: 'ph-mi-preview-wrap' });
-    var canvas = el('canvas', {
+    let canvasWrap = el('div', { className: 'ph-mi-preview-wrap' });
+    let canvas = el('canvas', {
       className: 'ph-mi-preview-canvas',
       width: '120',
       height: '120',
@@ -368,7 +351,7 @@
     card.appendChild(canvasWrap);
 
     // Info
-    var info = el('div', { className: 'ph-mi-card-info' }, [
+    let info = el('div', { className: 'ph-mi-card-info' }, [
       el('div', { className: 'ph-mi-card-name', title: model.filename },
         model.filename.length > 20 ? model.filename.slice(0, 18) + '…' : model.filename
       ),
@@ -379,20 +362,20 @@
     card.appendChild(info);
 
     // Character assignment dropdown
-    var assignWrap = el('div', { className: 'ph-mi-assign-wrap' });
-    var select = el('select', { className: 'ph-mi-assign-select select-input-sm' });
+    let assignWrap = el('div', { className: 'ph-mi-assign-wrap' });
+    let select = el('select', { className: 'ph-mi-assign-select select-input-sm' });
     select.appendChild(el('option', { value: '' }, '— assign to —'));
 
     // Populate with known characters
-    var chars = getCharacterList();
+    let chars = getCharacterList();
     chars.forEach(function (c) {
-      var opt = el('option', { value: c.id }, c.name || c.id);
+      let opt = el('option', { value: c.id }, c.name || c.id);
       if (assignments[c.id] === model.id) opt.selected = true;
       select.appendChild(opt);
     });
 
     select.addEventListener('change', function () {
-      var cid = select.value;
+      let cid = select.value;
       if (!cid) return;
       apiPost('/api/models/assign', {
         character_id: cid,
@@ -412,10 +395,10 @@
     card.appendChild(assignWrap);
 
     // Actions row
-    var actions = el('div', { className: 'ph-mi-card-actions' });
+    let actions = el('div', { className: 'ph-mi-card-actions' });
 
     // Delete button
-    var delBtn = el('button', {
+    let delBtn = el('button', {
       className: 'ph-mi-delete-btn',
       title: 'Delete model',
       onClick: function () {
@@ -445,9 +428,9 @@
   function getCharacterList() {
     // Try CharacterBridge first
     if (window.CharacterBridge && typeof CharacterBridge.getCharacterIds === 'function') {
-      var ids = CharacterBridge.getCharacterIds();
+      let ids = CharacterBridge.getCharacterIds();
       return ids.map(function (id) {
-        var entry = CharacterBridge.getCharacter(id);
+        let entry = CharacterBridge.getCharacter(id);
         return {
           id: id,
           name: entry && entry.model ? (entry.model.name || id) : id,
@@ -467,26 +450,26 @@
   /* ── Apply model to character via CharacterBridge ───────────────── */
   function applyModelToCharacter(charId, modelMeta) {
     if (!window.CharacterBridge) return;
-    if (!window.THREE || !gltfLoaderReady) {
+    if (!window.THREE || !window.THREE.GLTFLoader) {  // v1.58.0 — addon on window.THREE
       ensureGLTFLoader(function () { applyModelToCharacter(charId, modelMeta); });
       return;
     }
 
-    var entry = CharacterBridge.getCharacter(charId);
+    let entry = CharacterBridge.getCharacter(charId);
     if (!entry || !entry.model) {
       console.warn('[ModelImport] Character not in scene:', charId);
       return;
     }
 
-    var loader = new THREE.GLTFLoader();
-    var fileUrl = '/api/models/file/' + modelMeta.stored_as;
+    let loader = new THREE.GLTFLoader();
+    let fileUrl = '/api/models/file/' + modelMeta.stored_as;
 
     loader.load(fileUrl, function (gltf) {
-      var importedScene = gltf.scene;
-      var group = entry.model.group;
+      let importedScene = gltf.scene;
+      let group = entry.model.group;
 
       // Remove existing procedural children (keep name label and bubble)
-      var toRemove = [];
+      let toRemove = [];
       group.children.forEach(function (child) {
         if (child.isSprite) return; // keep labels / bubbles
         toRemove.push(child);
@@ -494,18 +477,18 @@
       toRemove.forEach(function (child) { group.remove(child); });
 
       // Auto-scale imported model to character height
-      var box = new THREE.Box3().setFromObject(importedScene);
-      var size = new THREE.Vector3();
+      let box = new THREE.Box3().setFromObject(importedScene);
+      let size = new THREE.Vector3();
       box.getSize(size);
-      var targetH = modelMeta.height || 1.7;
+      let targetH = modelMeta.height || 1.7;
       if (size.y > 0) {
-        var s = targetH / size.y;
+        let s = targetH / size.y;
         importedScene.scale.setScalar(s);
       }
 
       // Recenter
       box.setFromObject(importedScene);
-      var center = new THREE.Vector3();
+      let center = new THREE.Vector3();
       box.getCenter(center);
       importedScene.position.x -= center.x;
       importedScene.position.z -= center.z;
@@ -520,12 +503,12 @@
 
       // Play animations if present
       if (gltf.animations && gltf.animations.length > 0) {
-        var mixer = new THREE.AnimationMixer(importedScene);
+        let mixer = new THREE.AnimationMixer(importedScene);
         gltf.animations.forEach(function (clip) { mixer.clipAction(clip).play(); });
         entry.model._importedMixer = mixer;
       }
 
-      console.log('[ModelImport] Applied', modelMeta.filename, 'to', charId);
+      console.debug('[ModelImport] Applied', modelMeta.filename, 'to', charId);
     }, undefined, function (err) {
       console.error('[ModelImport] Failed to load model for character:', err);
       setStatus('Failed to apply model to ' + charId, true);
@@ -542,7 +525,7 @@
   }
 
   function renderLibrary() {
-    var grid = document.getElementById('ph-mi-lib-grid');
+    let grid = document.getElementById('ph-mi-lib-grid');
     if (!grid) return;
 
     // Cleanup old previews
@@ -565,14 +548,14 @@
     panel.classList.add('open');
     visible = true;
     refreshLibrary();
-    var btn = document.getElementById('ph-model-import-toggle');
+    let btn = document.getElementById('ph-model-import-toggle');
     if (btn) btn.classList.add('active');
   }
 
   function hide() {
     if (panel) panel.classList.remove('open');
     visible = false;
-    var btn = document.getElementById('ph-model-import-toggle');
+    let btn = document.getElementById('ph-model-import-toggle');
     if (btn) btn.classList.remove('active');
   }
 
@@ -585,10 +568,10 @@
   function animationUpdate(dt) {
     // Update imported model animation mixers
     if (!window.CharacterBridge) return;
-    var ids = typeof CharacterBridge.getCharacterIds === 'function'
+    let ids = typeof CharacterBridge.getCharacterIds === 'function'
       ? CharacterBridge.getCharacterIds() : [];
     ids.forEach(function (cid) {
-      var entry = CharacterBridge.getCharacter(cid);
+      let entry = CharacterBridge.getCharacter(cid);
       if (entry && entry.model && entry.model._importedMixer) {
         entry.model._importedMixer.update(dt);
       }
@@ -599,7 +582,7 @@
   function wireSocketIO() {
     if (typeof io === 'undefined') return;
     try {
-      var socket = io();
+      let socket = io();
       socket.on('model_assigned', function (data) {
         if (data && data.character_id) {
           if (data.model_id) {

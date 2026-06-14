@@ -54,13 +54,11 @@ class OutputEvaluator:
         # 3. no_truncation — does not end with truncation punctuation or mid-word
         if stripped:
             last_char = stripped[-1]
-            if last_char not in _TRUNCATION_ENDS and last_char.isalnum() is False:
-                # Passes if last char is not a truncation mark
-                total += 0.2
-            elif last_char not in _TRUNCATION_ENDS and last_char.isalpha():
-                # Last char is alphabetic → mid-word cut → fail
-                pass
-            elif last_char not in _TRUNCATION_ENDS:
+            if last_char in _TRUNCATION_ENDS:
+                pass  # Truncation punctuation → fail
+            elif last_char.isalpha():
+                pass  # Mid-word cut → fail
+            else:
                 total += 0.2
 
         # 4. no_repetition — no 4+ word phrase repeated 3 or more times

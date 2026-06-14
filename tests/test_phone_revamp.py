@@ -35,13 +35,19 @@ def _stub_heavy_deps(monkeypatch):
     base_mod.get_active_scene = MagicMock(return_value=None)
 
     class _FakeBase:
-        def __init__(self, scene_name="", host="0.0.0.0", port=5555):
-            self.scene_name = scene_name
+        # v1.51.0 — FlaskScene provides app/socketio; _FakeBase must replicate
+        SCENE_METADATA = {"name": "phone", "port": 5555}
+
+        def __init__(self, scene_name="", host="0.0.0.0", port=5555, **kw):
+            self.scene_name = scene_name or self.SCENE_METADATA.get("name", "")
             self.host = host
             self.port = port
             self._lock = __import__("threading").Lock()
             self._threads: dict = {}
             self._ghost_message_count = 0
+            self.app = MagicMock()
+            self.socketio = MagicMock()
+            self._stop_event = __import__("threading").Event()
 
         def register_health_route(self, app):
             pass
@@ -64,6 +70,11 @@ def _stub_heavy_deps(monkeypatch):
     base_mod.BaseScene = _FakeBase
     monkeypatch.setitem(sys.modules, "engine.scenes.base_scene", base_mod)
 
+    # v1.51.0 — NeonPhone now inherits FlaskScene; stub it as well
+    flask_scene_mod = types.ModuleType("engine.scenes.flask_scene")
+    flask_scene_mod.FlaskScene = _FakeBase
+    monkeypatch.setitem(sys.modules, "engine.scenes.flask_scene", flask_scene_mod)
+
     # Stub content.shared
     shared_mod = types.ModuleType("content.shared")
     shared_mod.register_shared_assets = MagicMock()
@@ -76,6 +87,7 @@ def _stub_heavy_deps(monkeypatch):
     flask_mod.request = MagicMock()
     flask_mod.render_template = MagicMock(return_value="<html/>")
     flask_mod.Response = MagicMock()
+    flask_mod.send_from_directory = MagicMock()
     monkeypatch.setitem(sys.modules, "flask", flask_mod)
 
     socketio_mod = types.ModuleType("flask_socketio")

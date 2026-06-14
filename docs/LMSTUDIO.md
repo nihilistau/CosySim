@@ -1,6 +1,10 @@
 # LMStudio Integration
 
-> CosySim v0.91b — Local inference backbone via LMStudio v1 native API.
+> CosySim Documentation — v1.52.0 [2026-03-26]
+>
+> Local inference backbone via LMStudio v1 native API at localhost:1234. SSE streaming,
+> stateful conversations via response_id, ServerController, LMLinkManager (federation),
+> TaskQueue, and 23 modules providing the complete inference subsystem.
 
 LMStudio is CosySim's primary inference backend. Every character reply,
 autonomous thought, classification task, benchmark, and vision analysis
@@ -108,7 +112,7 @@ LMSClient(
 | `chat_stateful(user_message, *, previous_response_id, system, config, model)` | Stateful chat — server retains KV cache |
 | `chat_stream(messages, *, config, model, on_event, store)` | SSE streaming with typed events |
 | `chat_stream_stateful(user_message, *, previous_response_id, system, config, model, on_event)` | Stateful + streaming combined |
-| `quick_reply(user_message, *, system, **kwargs)` | One-shot: system + user → reply string |
+| `quick_reply(user_message, *, system, **kwargs)` | One-shot: system + user -> reply string |
 | `chat_with_mcp(messages, mcp_servers, **kwargs)` | Chat with MCP tool integrations |
 
 ### Specialized Chat Methods (2)
@@ -116,7 +120,7 @@ LMSClient(
 | Method | Purpose |
 |--------|---------|
 | `chat_structured(messages, schema, *, schema_name, **kwargs)` | JSON schema-enforced structured output |
-| `chat_with_images(text, image_urls, *, system, **kwargs)` | Vision: text + images → VLM analysis |
+| `chat_with_images(text, image_urls, *, system, **kwargs)` | Vision: text + images -> VLM analysis |
 
 ### Model Lifecycle (6)
 
@@ -232,8 +236,8 @@ sc = get_server_controller()
 
 | Method | Purpose |
 |--------|---------|
-| `load_model(model_key, *, context_length, gpu_offload, stop_strings)` | Load with config → ModelInstance |
-| `unload_model(model_key)` | Unload → free VRAM |
+| `load_model(model_key, *, context_length, gpu_offload, stop_strings)` | Load with config -> ModelInstance |
+| `unload_model(model_key)` | Unload -> free VRAM |
 | `list_models()` | All loaded and available models |
 | `configure_inference(model_key, *, stop_strings, temperature, max_tokens)` | Update inference params |
 | `get_instance_config(model_key)` | Get load/inference config |
@@ -295,7 +299,7 @@ class ServerHealth:
     temperature_c: Optional[float]
     queued_requests: int
     active_requests: int
-    error_rate: float             # 0.0–1.0
+    error_rate: float             # 0.0-1.0
 
     @property
     def vram_usage_pct(self) -> float
@@ -316,7 +320,7 @@ uses typed `event:` lines followed by `data:` JSON.
 |-------|-------------|---------|
 | `chat.start` | `model_instance_id` | Session begins |
 | `model_load.start` | `model_instance_id` | Model loading begins |
-| `model_load.progress` | `progress (0.0–1.0)` | Loading progress |
+| `model_load.progress` | `progress (0.0-1.0)` | Loading progress |
 | `model_load.end` | `load_time_seconds` | Loading complete |
 | `prompt_processing.start` | `model_instance_id` | Tokenization begins |
 | `prompt_processing.progress` | `progress` | Processing progress |
@@ -456,7 +460,7 @@ Async priority task execution in `engine/lmstudio/task_queue.py`.
 
 | Method | Purpose |
 |--------|---------|
-| `submit(task_type, messages, *, config, priority, model, on_complete)` | Submit task → task_id |
+| `submit(task_type, messages, *, config, priority, model, on_complete)` | Submit task -> task_id |
 | `cancel(task_id)` | Cancel pending/running task |
 | `get_task(task_id)` | Retrieve task state |
 | `wait_for(task_id, timeout)` | Blocking wait for completion |
@@ -608,15 +612,15 @@ Configured in `config/default.yaml` under `lmstudio.models`:
 | `big` | T1 (GPU) | 4000 | 4096 | Character dialogue, narration |
 | `small` | T2 (CPU) | 800 | 2048 | Quick decisions, auto-texts |
 | `router` | T3 (CPU) | 200 | 1024 | Intent classification |
-| `draft` | T3 | 128 | — | Speculative decoding |
-| `vision` | T1 (GPU) | — | — | VLM image analysis |
+| `draft` | T3 | 128 | -- | Speculative decoding |
+| `vision` | T1 (GPU) | -- | -- | VLM image analysis |
 
 ### Resolution Logic (LMSClient.resolve_model)
 
-1. If `config.lmstudio.models.<role>.key` is set → use it
+1. If `config.lmstudio.models.<role>.key` is set -> use it
 2. Query `/api/v1/models` for loaded models
-3. If default model configured and loaded → use it
-4. Else → use first loaded model
+3. If default model configured and loaded -> use it
+4. Else -> use first loaded model
 5. Cache for 30 seconds
 
 ### InferenceConfig Factory
@@ -639,7 +643,7 @@ LMStudio requires a bearer token for API access.
 
 1. Constructor parameter: `api_token` to `LMSClient.__init__()`
 2. Environment variable: `LMSTUDIO_API_TOKEN` or `LOCAL_LM_STUDIO_TOKEN`
-3. Config file: `config/default.yaml` → `lmstudio.api_token`
+3. Config file: `config/default.yaml` -> `lmstudio.api_token`
 
 ### Header Format
 
@@ -668,7 +672,7 @@ def _resolve_lmstudio_headers() -> Dict[str, str]:
 
 ### Token Generation
 
-Navigate to: **LMStudio → Developer → Server Settings → Manage Tokens**
+Navigate to: **LMStudio -> Developer -> Server Settings -> Manage Tokens**
 
 ---
 
@@ -785,7 +789,7 @@ Located in `engine/nexus/lms_task_bridge.py`.
 
 | Method | Purpose |
 |--------|---------|
-| `run_prompt(prompt, *, model, system_prompt, temperature, max_tokens, task_type, priority)` | Single prompt → TaskResult |
+| `run_prompt(prompt, *, model, system_prompt, temperature, max_tokens, task_type, priority)` | Single prompt -> TaskResult |
 | `run_batch(prompts, *, model, system_prompt, store_results)` | Batch of prompts |
 | `run_task(task_type, prompt, *, context, model, store_result)` | Structured task (evaluate/summarize/generate/classify/compare) |
 | `check_lmstudio()` | Health check |
@@ -854,7 +858,7 @@ result = bridge.run_task(
 
 | Skill | Purpose |
 |-------|---------|
-| `benchmark_model(prompt, model, iterations, max_tokens)` | Run benchmark → TPS, latency |
+| `benchmark_model(prompt, model, iterations, max_tokens)` | Run benchmark -> TPS, latency |
 | `store_benchmark(model, method, tps, latency_ms, ...)` | Store results in Nexus |
 | `get_leaderboard(method, limit)` | Retrieve benchmark leaderboard |
 | `check_lmstudio()` | Check LMStudio status |
@@ -1016,3 +1020,21 @@ print(sc.get_full_status())
 | Server control skills | 7 |
 | Inference/benchmark skills | 5 |
 | Vision skills | 4 |
+
+---
+
+## See Also
+
+- [Architecture](ARCHITECTURE.md) — System architecture, MCP pipeline, interceptor chain
+- [MCP Framework](MCP_FRAMEWORK.md) — Full MCP system, AgentGovernor, skill registration
+- [Training](TRAINING.md) — DataCollector, FinetuneOrchestrator, BenchmarkRunner
+- [Configuration](CONFIGURATION.md) — `lmstudio.*` config keys reference
+
+---
+
+## Change Log
+
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Updated to v1.50; fixed header version from v0.91b; confirmed v1 API, SSE streaming, response_id stateful; removed stale cross-refs |
+| v0.91b | 2025-08-01 | Initial LMStudio integration documentation |

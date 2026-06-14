@@ -25,6 +25,7 @@
 
     /* Text */
     --cs-text-primary:  #e5e7eb;
+    --cs-text-body:     #d1d5db;
     --cs-text-secondary:#9ca3af;
     --cs-text-muted:    #6b7280;
     --cs-text-dim:      #4b5563;
@@ -210,9 +211,10 @@
     --cs-weight-medium: 500;
     --cs-weight-bold:   700;
 
-    --cs-leading-tight: 1.2;
-    --cs-leading-normal:1.5;
-    --cs-leading-loose: 1.8;
+    --cs-leading-tight:   1.2;
+    --cs-leading-normal:  1.5;
+    --cs-leading-relaxed: 1.6;
+    --cs-leading-loose:   1.8;
 
     /* ── Border Radius ──────────────────────────────────────── */
     --cs-radius-sm:     4px;
@@ -421,3 +423,31 @@
 [data-scene="intel"]    { --cs-scene-accent: var(--cs-scene-intel);    --cs-scene-glow: rgba(6, 182, 212, 0.35); }
 [data-scene="admin"]    { --cs-scene-accent: var(--cs-scene-admin);    --cs-scene-glow: rgba(0, 255, 65, 0.35); }
 [data-scene="grid"]     { --cs-scene-accent: var(--cs-scene-grid);     --cs-scene-glow: rgba(0, 255, 136, 0.35); }
+
+/* v1.57.3 [2026-05-12] — 3-tier typography utility classes */
+/* ── 3-Tier Typography Utilities ──────────────────────────────── */
+/* Display: scene titles, section headings */
+.cs-typo-display {
+    font-family: 'Orbitron', var(--cs-font-mono);
+    font-size: calc(var(--cs-text-2xl) + 4px);   /* 28px */
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: var(--cs-leading-tight);
+    text-shadow: 0 0 20px var(--cs-scene-glow);
+}
+
+/* Body: paragraph text, chat messages */
+.cs-typo-body {
+    font-size: var(--cs-text-base);
+    line-height: var(--cs-leading-relaxed);
+    color: var(--cs-text-body);
+}
+
+/* Label: tags, status indicators, small caps */
+.cs-typo-label {
+    font-size: var(--cs-text-xs);
+    font-weight: 600;
+    color: var(--cs-scene-accent, var(--cs-accent));
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}

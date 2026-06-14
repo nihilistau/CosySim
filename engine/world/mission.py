@@ -14,6 +14,16 @@ Mission types:
 Reward types:
     credits, xp, reputation, items, faction_rep
 
+Living Systems (v1.60.0) additions:
+    * Consequences — completing/failing a mission now feeds back into the
+      world: success raises faction control + reputation; failure raises heat
+      and bleeds reputation. Heists are the loudest (extra heat/control).
+    * Mission chains — completion unlocks gated follow-up missions and branch
+      points (see engine/world/mission_chains.py).
+    * Skill scaling — difficulty and reward scale with the player's relevant
+      skill levels at accept time, so a maxed netrunner faces (and earns) more.
+    * Crew gating — assigning crew enforces availability via CrewManager.
+
 Usage::
 
     from engine.world.mission import get_mission_manager
@@ -22,6 +32,18 @@ Usage::
     mgr.accept("recon_01")           # accept available mission
     mgr.complete("recon_01", notes)  # complete with agent notes
     mgr.list_available()             # see what's on the board
+
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.60.0 [2026-06-13] — Closed the consequence loop: outcome-driven faction
+        control / heat / reputation via PlayerState; mission-chain unlocking +
+        prerequisite gating (mission_chains.py); skill-scaled difficulty &
+        reward at accept time; crew-availability enforcement in assign_crew.
+        All tunables read from config (mission.* keys).
+    v1.52.0 [2026-03-22] — Time-limited mission auto-fail enforcement.
+    v0.82    — Initial open-world mission board.
 """
 from __future__ import annotations
 
@@ -33,7 +55,7 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +63,73 @@ logger = logging.getLogger(__name__)
 def get_player_state():  # noqa: N802
     from engine.world.player_state import get_player_state as _get
     return _get()
+
+
+# ──── Configuration ──────────────────────────────────────────────────────────
+# Every consequence/scaling magic number is config-driven with a sensible
+# default so designers can retune the world without code changes. Keys live
+# under the ``mission.*`` namespace (see integration_requests).
+
+# Default tuning — mirrors what we request be added to config/default.yaml.
+_MISSION_DEFAULTS: Dict[str, Any] = {
+    "mission.consequences.enabled": True,
+    # Faction control gained on success (multiplied by difficulty).
+    "mission.consequences.control_per_difficulty": 3,
+    # Reputation gained on success (flat) and lost on failure (× difficulty).
+    "mission.consequences.rep_success": 4,
+    "mission.consequences.rep_fail_per_difficulty": 2,
+    # Heat gained on failure (× difficulty) and a small amount even on a loud
+    # success (heists leave a trail).
+    "mission.consequences.heat_fail_per_difficulty": 4,
+    "mission.consequences.heat_success_heist": 5,
+    # Extra faction control specifically for a successful heist (territory).
+    "mission.consequences.heist_control_bonus": 4,
+    # Skill scaling — difficulty/reward scale around the player's mean relevant
+    # skill (0–5). scale = 1 + slope * (mean_skill - pivot).
+    "mission.scaling.enabled": True,
+    "mission.scaling.pivot": 1.0,
+    "mission.scaling.reward_slope": 0.20,
+    "mission.scaling.difficulty_slope": 0.30,
+    "mission.scaling.min_difficulty": 1,
+    "mission.scaling.max_difficulty": 5,
+    # Crew enforcement on assignment. Only blocks crew that are *on the roster
+    # but busy*; unknown IDs fail open (the mission flow is never hard-blocked
+    # by an un-recruited NPC), so this is safe to leave on by default.
+    "mission.crew.enforce_availability": True,
+    # Chain gating: when True, gated follow-up missions are hidden from the
+    # board until their prerequisite unlocks them. Default False preserves the
+    # flat board for callers that pre-date chains; production turns this on.
+    "mission.chains.gating_enabled": False,
+}
+
+
+def _cfg(path: str) -> Any:
+    """Read a mission tunable from config, falling back to module defaults.
+
+    Args:
+        path: Dot-notation config key (e.g. ``mission.consequences.rep_success``).
+
+    Returns:
+        The configured value, or the baked-in default if unset / unavailable.
+    """
+    default = _MISSION_DEFAULTS.get(path)
+    try:
+        from engine.config import get_config
+
+        return get_config().get(path, default)
+    except Exception:  # pragma: no cover - config layer missing in some tests
+        return default
+
+
+# Which player skills are most relevant to each mission type. Used to scale
+# difficulty/reward and to flavour the consequence application.
+_TYPE_PRIMARY_SKILLS: Dict[str, List[str]] = {
+    "recon": ["stealth", "hacking", "tech"],
+    "heist": ["hacking", "stealth", "tech"],
+    "deal": ["social", "trading"],
+    "extraction": ["driving", "stealth", "combat"],
+    "hit": ["combat", "stealth"],
+}
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +216,17 @@ class Mission:
     completed_at: Optional[float] = None
     notes: str = ""                                   # agent / player outcome notes
 
+    # v1.60.0 [2026-06-13] — skill-scaling + chain bookkeeping
+    # base_difficulty / base_reward preserve the template values so scaling is
+    # idempotent (we scale the *base*, never compound on an already-scaled value).
+    base_difficulty: Optional[int] = None             # template difficulty before scaling
+    base_reward_credits: Optional[int] = None         # template credits before scaling
+    base_reward_xp: Optional[int] = None              # template xp before scaling
+    scaled: bool = False                              # True once skill-scaling applied
+    locked: bool = False                              # chain-gated: hidden until unlocked
+    unlocked_by: List[str] = field(default_factory=list)  # chain ancestry that opened it
+    consequences: Dict[str, Any] = field(default_factory=dict)  # applied outcome deltas
+
     # ── Computed ──────────────────────────────────────────────────────────
 
     @property
@@ -163,6 +263,14 @@ class Mission:
             "completed_at": self.completed_at,
             "notes": self.notes,
             "progress": self.progress,
+            # v1.60.0 — scaling + chain + consequence state
+            "base_difficulty": self.base_difficulty,
+            "base_reward_credits": self.base_reward_credits,
+            "base_reward_xp": self.base_reward_xp,
+            "scaled": self.scaled,
+            "locked": self.locked,
+            "unlocked_by": self.unlocked_by,
+            "consequences": self.consequences,
         }
 
     @classmethod
@@ -200,6 +308,13 @@ class Mission:
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
             notes=data.get("notes", ""),
+            base_difficulty=data.get("base_difficulty"),
+            base_reward_credits=data.get("base_reward_credits"),
+            base_reward_xp=data.get("base_reward_xp"),
+            scaled=data.get("scaled", False),
+            locked=data.get("locked", False),
+            unlocked_by=data.get("unlocked_by", []),
+            consequences=data.get("consequences", {}),
         )
 
 
@@ -450,7 +565,11 @@ class MissionManager:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._missions: Dict[str, Mission] = {}
+        # v1.60.0 — chain topology (entry missions ungated, follow-ups locked).
+        from engine.world.mission_chains import get_chain_registry
+        self._chains = get_chain_registry()
         self._load_or_seed()
+        self._apply_chain_gating()
 
     # ── Init ─────────────────────────────────────────────────────────────
 
@@ -485,6 +604,86 @@ class MissionManager:
         except Exception as exc:
             logger.error("MissionManager: save failed: %s", exc)
 
+    # ── Chains ────────────────────────────────────────────────────────────
+    # v1.60.0 [2026-06-13] — Mission-chain gating + unlock propagation.
+    # CONNECTS: engine.world.mission_chains.ChainRegistry
+    # CALLED BY: __init__ (gating), complete/fail (unlock)
+
+    def _apply_chain_gating(self) -> None:
+        """Lock any *available* mission that is a gated chain follow-up.
+
+        Entry missions stay available. Gated missions become ``locked`` and are
+        hidden from :meth:`list_available` until a prerequisite unlocks them.
+        Missions already started/completed are left untouched so reloads don't
+        re-lock in-progress work.
+
+        No-op unless ``mission.chains.gating_enabled`` is True.
+        """
+        if not bool(_cfg("mission.chains.gating_enabled")):
+            return
+        with self._lock:
+            for m in self._missions.values():
+                if m.status != MissionStatus.AVAILABLE:
+                    continue
+                if self._chains.is_gated(m.id):
+                    m.locked = True
+
+    def _propagate_unlocks(self, mission_id: str, ctx: Dict[str, Any]) -> List[str]:
+        """Unlock chain follow-ups for a finished mission.
+
+        Args:
+            mission_id: The mission that just completed/failed.
+            ctx: Completion context passed to branch conditions.
+
+        Returns:
+            List of mission IDs that were flipped locked → available.
+        """
+        unlocked: List[str] = []
+        for next_id in self._chains.resolve_unlocks(mission_id, ctx):
+            with self._lock:
+                nxt = self._missions.get(next_id)
+                if nxt is None:
+                    logger.warning(
+                        "[MissionManager] Chain unlock target missing (operation=unlock, target=%s)",
+                        next_id,
+                    )
+                    continue
+                if nxt.status == MissionStatus.AVAILABLE and nxt.locked:
+                    nxt.locked = False
+                    if mission_id not in nxt.unlocked_by:
+                        nxt.unlocked_by.append(mission_id)
+                    unlocked.append(next_id)
+        if unlocked:
+            logger.info(
+                "[MissionManager] Chain advanced (operation=unlock, from=%s): unlocked %s",
+                mission_id,
+                ", ".join(unlocked),
+            )
+            for uid in unlocked:
+                self._fire_event("mission_unlocked", uid, self._missions[uid].title)
+        return unlocked
+
+    def get_chain_overview(self) -> List[Dict[str, Any]]:
+        """Return the chain catalogue with per-stage live status for the HUD."""
+        overview: List[Dict[str, Any]] = []
+        for chain in self._chains.chains:
+            stages = []
+            for sid in chain.mission_ids:
+                m = self._missions.get(sid)
+                stages.append({
+                    "mission_id": sid,
+                    "title": m.title if m else sid,
+                    "status": m.status.value if m else "missing",
+                    "locked": m.locked if m else True,
+                })
+            overview.append({
+                "id": chain.id,
+                "title": chain.title,
+                "description": chain.description,
+                "stages": stages,
+            })
+        return overview
+
     # ── Queries ───────────────────────────────────────────────────────────
 
     def get_mission(self, mission_id: str) -> Optional[Mission]:
@@ -511,6 +710,8 @@ class MissionManager:
             result = []
             for m in self._missions.values():
                 if m.status != MissionStatus.AVAILABLE:
+                    continue
+                if m.locked:  # v1.60.0 — gated chain follow-up, not yet unlocked
                     continue
                 if location and m.location.upper() != location.upper():
                     continue
@@ -555,12 +756,78 @@ class MissionManager:
                 return {"success": False, "message": f"Mission {mission_id} not found."}
             if m.status != MissionStatus.AVAILABLE:
                 return {"success": False, "message": f"Mission is {m.status.value}, not available."}
+            if m.locked:  # v1.60.0 — chain-gated mission not yet unlocked
+                return {"success": False, "message": "Mission is locked — complete its prerequisite first."}
+            # v1.60.0 — scale difficulty/reward to the player's relevant skills.
+            self._scale_to_player(m)
             m.status = MissionStatus.ACTIVE
             m.started_at = time.time()
         self._save()
         self._fire_event("mission_accepted", mission_id, m.title)
-        logger.info("Mission accepted: %s", mission_id)
+        logger.info("Mission accepted: %s (difficulty=%d)", mission_id, m.difficulty)
         return {"success": True, "message": f"Mission '{m.title}' accepted. Good luck.", "mission": m.to_dict()}
+
+    # ── Skill Scaling ─────────────────────────────────────────────────────
+    # v1.60.0 [2026-06-13] — Scale difficulty & reward to player skill.
+    # CONNECTS: PlayerState.skills, get_skill
+    # CALLED BY: accept()
+
+    def _relevant_skill_mean(self, m: Mission) -> float:
+        """Return the mean (0–5) of the player's skills relevant to *m*.
+
+        Falls back to the scaling pivot when skills are unavailable so a missing
+        PlayerState never changes the numbers.
+        """
+        pivot = float(_cfg("mission.scaling.pivot"))
+        skills = _TYPE_PRIMARY_SKILLS.get(m.mission_type.value, [])
+        if not skills:
+            return pivot
+        try:
+            ps = get_player_state()
+            levels = [int(ps.get_skill(s)) for s in skills]
+        except Exception as exc:
+            logger.debug("[MissionManager] Skill read failed (operation=scale): %s", exc)
+            return pivot
+        return sum(levels) / len(levels) if levels else pivot
+
+    def _scale_to_player(self, m: Mission) -> None:
+        """Adjust *m*'s difficulty/reward in place based on player skill.
+
+        Idempotent: caches template values in ``base_*`` and always recomputes
+        from those, so re-accepting (or reloading) never compounds the scale.
+        Mutates ``m`` under the caller's lock.
+        """
+        if not bool(_cfg("mission.scaling.enabled")):
+            return
+        # Snapshot template baselines once.
+        if m.base_difficulty is None:
+            m.base_difficulty = m.difficulty
+        if m.base_reward_credits is None:
+            m.base_reward_credits = m.reward.credits
+        if m.base_reward_xp is None:
+            m.base_reward_xp = m.reward.xp
+
+        pivot = float(_cfg("mission.scaling.pivot"))
+        mean_skill = self._relevant_skill_mean(m)
+        delta = mean_skill - pivot
+
+        reward_scale = 1.0 + float(_cfg("mission.scaling.reward_slope")) * delta
+        diff_scale = 1.0 + float(_cfg("mission.scaling.difficulty_slope")) * delta
+        reward_scale = max(0.5, reward_scale)
+        diff_scale = max(0.5, diff_scale)
+
+        lo = int(_cfg("mission.scaling.min_difficulty"))
+        hi = int(_cfg("mission.scaling.max_difficulty"))
+        m.difficulty = max(lo, min(hi, round(m.base_difficulty * diff_scale)))
+        m.reward.credits = max(0, round(m.base_reward_credits * reward_scale))
+        m.reward.xp = max(0, round(m.base_reward_xp * reward_scale))
+        m.scaled = True
+        logger.info(
+            "[MissionManager] Scaled mission (operation=scale, mission=%s): "
+            "skill_mean=%.2f difficulty %s->%d credits %s->%d",
+            m.id, mean_skill, m.base_difficulty, m.difficulty,
+            m.base_reward_credits, m.reward.credits,
+        )
 
     def complete_objective(self, mission_id: str, objective_id: str) -> Dict[str, Any]:
         """Mark a single objective as completed.
@@ -612,6 +879,9 @@ class MissionManager:
             m.notes = notes
 
         self._apply_rewards(m)
+        consequences = self._apply_consequences(m, outcome="completed")
+        ctx = self._completion_context(m, "completed")
+        unlocked = self._propagate_unlocks(mission_id, ctx)
         self._save()
         self._fire_event("mission_complete", mission_id, m.title)
         logger.info("Mission completed: %s", mission_id)
@@ -619,6 +889,8 @@ class MissionManager:
             "success": True,
             "message": f"Mission '{m.title}' complete. Rewards applied.",
             "rewards": m.reward.to_dict(),
+            "consequences": consequences,
+            "unlocked": unlocked,
             "mission": m.to_dict(),
         }
 
@@ -641,8 +913,8 @@ class MissionManager:
         # Minor rep penalty
         try:
             get_player_state().adjust_reputation(-3, reason=f"abandoned:{mission_id}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[MissionManager] Rep penalty failed (operation=abandon): %s", e)
 
         self._save()
         self._fire_event("mission_abandoned", mission_id, m.title)
@@ -666,15 +938,58 @@ class MissionManager:
             m.completed_at = time.time()
             m.notes = reason
 
-        # Rep penalty scales with difficulty
-        try:
-            get_player_state().adjust_reputation(-(m.difficulty * 3), reason=f"failed:{mission_id}")
-        except Exception:
-            pass
+        # v1.60.0 — full failure consequences (heat + rep loss + faction hit),
+        # superseding the old flat rep penalty.
+        consequences = self._apply_consequences(m, outcome="failed")
+        ctx = self._completion_context(m, "failed")
+        unlocked = self._propagate_unlocks(mission_id, ctx)
 
         self._save()
         self._fire_event("mission_failed", mission_id, m.title)
-        return {"success": True, "message": f"Mission '{m.title}' failed. {reason}"}
+        return {
+            "success": True,
+            "message": f"Mission '{m.title}' failed. {reason}",
+            "consequences": consequences,
+            "unlocked": unlocked,
+        }
+
+    # v1.52.0 [2026-03-22] — Time-limited mission auto-fail enforcement
+    # CONNECTS: MissionStatus.ACTIVE, time_limit, started_at
+    # CALLED BY: NeonCity crew poll loop, or any periodic check
+
+    def check_expired(self) -> List[Dict[str, Any]]:
+        """Check all active missions for time limit expiry and auto-fail expired ones.
+
+        Returns:
+            List of dicts describing missions that were auto-failed.
+        """
+        failed: List[Dict[str, Any]] = []
+        now = time.time()
+
+        with self._lock:
+            active = [m for m in self._missions.values()
+                       if m.status == MissionStatus.ACTIVE
+                       and m.time_limit is not None
+                       and m.started_at is not None]
+
+        for m in active:
+            # time_limit is in game minutes; 1 real minute = 1 game hour (60 game min)
+            # So time_limit game minutes = time_limit real seconds
+            elapsed_secs = now - m.started_at
+            limit_secs = m.time_limit * 60  # convert game minutes to real seconds
+            if elapsed_secs >= limit_secs:
+                result = self.fail(m.id, reason=f"Time expired ({m.time_limit} min limit)")
+                if result.get("success"):
+                    failed.append({
+                        "mission_id": m.id,
+                        "title": m.title,
+                        "time_limit": m.time_limit,
+                        "message": result.get("message", ""),
+                    })
+                    logger.info("Mission auto-failed (expired): %s (%d min limit)",
+                                m.title, m.time_limit)
+
+        return failed
 
     def assign_crew(self, mission_id: str, crew_ids: List[str]) -> Dict[str, Any]:
         """Assign crew members to an active mission.
@@ -690,10 +1005,58 @@ class MissionManager:
             m = self._missions.get(mission_id)
             if not m or m.status != MissionStatus.ACTIVE:
                 return {"success": False, "message": "Mission not found or not active."}
+
+        # v1.60.0 — enforce crew availability via CrewManager before assigning.
+        # CONNECTS: engine.world.crew.CrewManager.get_member
+        if bool(_cfg("mission.crew.enforce_availability")):
+            ok, unavailable = self._check_crew_available(crew_ids)
+            if not ok:
+                return {
+                    "success": False,
+                    "message": f"Crew unavailable: {', '.join(unavailable)}",
+                    "unavailable": unavailable,
+                }
+
+        with self._lock:
             m.assigned_crew = list(set(m.assigned_crew + crew_ids))
 
         self._save()
+        logger.info(
+            "[MissionManager] Crew assigned (operation=assign_crew, mission=%s): %s",
+            mission_id, ", ".join(crew_ids),
+        )
         return {"success": True, "assigned_crew": m.assigned_crew}
+
+    def _check_crew_available(self, crew_ids: List[str]) -> Tuple[bool, List[str]]:
+        """Return ``(all_ok, unavailable_ids)`` for a proposed crew assignment.
+
+        A crew ID is *unavailable* only when CrewManager reports the member is
+        on the roster but busy (``available == False``). Unknown IDs fail open
+        (allowed) — assigning a not-yet-recruited contact is a higher layer's
+        concern, not a hard block here. If CrewManager itself is unavailable we
+        also fail open so the mission flow is never blocked by a missing
+        subsystem.
+
+        Args:
+            crew_ids: Proposed crew member IDs.
+
+        Returns:
+            Tuple of (everyone assignable, list of busy/blocking IDs).
+        """
+        try:
+            from engine.world.crew import get_crew_manager
+            cm = get_crew_manager()
+        except Exception as exc:
+            logger.debug("[MissionManager] CrewManager unavailable (operation=assign_crew): %s", exc)
+            return True, []
+
+        unavailable: List[str] = []
+        for cid in crew_ids:
+            member = cm.get_member(cid)
+            # Only block roster members that are explicitly busy. Unknown → allow.
+            if member is not None and not getattr(member, "available", True):
+                unavailable.append(cid)
+        return (not unavailable), unavailable
 
     # ── Custom Mission Creation ───────────────────────────────────────────
 
@@ -781,6 +1144,151 @@ class MissionManager:
                     inv.add_item(item_id, auto_equip=False)
             except Exception as exc:
                 logger.warning("MissionManager: inventory reward error: %s", exc)
+
+    # ── Consequences ──────────────────────────────────────────────────────
+    # v1.60.0 [2026-06-13] — Outcome feeds back into the world.
+    # CONNECTS: PlayerState.update_faction_standing / add_heat / update_reputation
+    # CALLED BY: complete(), fail()
+    # EMITS: hud_update (indirectly, via PlayerState) + populates m.consequences
+
+    def _completion_context(self, m: Mission, outcome: str) -> Dict[str, Any]:
+        """Build the context dict consumed by mission-chain branch conditions.
+
+        Args:
+            m: The finished mission.
+            outcome: ``"completed"`` or ``"failed"``.
+
+        Returns:
+            Dict with outcome plus a live snapshot of reputation / faction
+            standings / heat so branches can route on world state.
+        """
+        ctx: Dict[str, Any] = {
+            "outcome": outcome,
+            "mission_id": m.id,
+            "difficulty": m.difficulty,
+            "mission_type": m.mission_type.value,
+        }
+        try:
+            ps = get_player_state()
+            ctx["reputation"] = int(ps.reputation)
+            ctx["heat"] = int(ps.heat)
+            ctx["faction_standings"] = dict(ps.faction_standings)
+        except Exception as exc:
+            logger.debug("[MissionManager] Context snapshot failed (operation=consequence): %s", exc)
+            ctx["reputation"] = 0
+            ctx["heat"] = 0
+            ctx["faction_standings"] = {}
+        return ctx
+
+    def _apply_consequences(self, m: Mission, outcome: str) -> Dict[str, Any]:
+        """Apply world-state consequences for a finished mission.
+
+        Success → faction *control* (standing) + reputation gains; heists also
+        leave a heat trail and claim extra territory. Failure → heat spike and
+        reputation/faction bleed scaled by difficulty.
+
+        All magnitudes are config-driven (``mission.consequences.*``). The
+        applied deltas are recorded on ``m.consequences`` and returned for the
+        caller / HUD.
+
+        Args:
+            m: The finished mission.
+            outcome: ``"completed"`` or ``"failed"``.
+
+        Returns:
+            Dict of the deltas actually applied (``faction``, ``faction_delta``,
+            ``reputation_delta``, ``heat_delta``).
+        """
+        applied: Dict[str, Any] = {
+            "outcome": outcome,
+            "faction": m.reward.faction or None,
+            "faction_delta": 0,
+            "reputation_delta": 0,
+            "heat_delta": 0,
+        }
+        if not bool(_cfg("mission.consequences.enabled")):
+            m.consequences = applied
+            return applied
+
+        difficulty = max(1, int(m.difficulty))
+        is_heist = m.mission_type == MissionType.HEIST
+        faction = m.reward.faction or ""
+
+        try:
+            ps = get_player_state()
+        except Exception as exc:
+            logger.warning("[MissionManager] PlayerState unavailable (operation=consequence): %s", exc)
+            m.consequences = applied
+            return applied
+
+        if outcome == "completed":
+            # Faction control: the giver-faction gains territory/standing.
+            control = int(_cfg("mission.consequences.control_per_difficulty")) * difficulty
+            if is_heist:
+                control += int(_cfg("mission.consequences.heist_control_bonus"))
+            if faction and control:
+                try:
+                    ps.update_faction_standing(faction, control)
+                    applied["faction_delta"] = control
+                except Exception as exc:
+                    logger.warning("[MissionManager] Faction gain failed (operation=consequence): %s", exc)
+
+            # Reputation: flat success bump.
+            rep = int(_cfg("mission.consequences.rep_success"))
+            if rep:
+                try:
+                    ps.update_reputation(rep, reason=f"mission_success:{m.id}")
+                    applied["reputation_delta"] = rep
+                except Exception as exc:
+                    logger.warning("[MissionManager] Rep gain failed (operation=consequence): %s", exc)
+
+            # Heat: a loud heist still leaves a trail even on success.
+            if is_heist:
+                heat = int(_cfg("mission.consequences.heat_success_heist"))
+                if heat:
+                    try:
+                        ps.add_heat(heat, reason=f"heist_noise:{m.id}")
+                        applied["heat_delta"] = heat
+                    except Exception as exc:
+                        logger.warning("[MissionManager] Heat add failed (operation=consequence): %s", exc)
+
+        else:  # failed
+            # Heat spike scaled by difficulty.
+            heat = int(_cfg("mission.consequences.heat_fail_per_difficulty")) * difficulty
+            if heat:
+                try:
+                    ps.add_heat(heat, reason=f"mission_failed:{m.id}")
+                    applied["heat_delta"] = heat
+                except Exception as exc:
+                    logger.warning("[MissionManager] Heat add failed (operation=consequence): %s", exc)
+
+            # Reputation bleed scaled by difficulty.
+            rep = -int(_cfg("mission.consequences.rep_fail_per_difficulty")) * difficulty
+            if rep:
+                try:
+                    ps.update_reputation(rep, reason=f"mission_failed:{m.id}")
+                    applied["reputation_delta"] = rep
+                except Exception as exc:
+                    logger.warning("[MissionManager] Rep loss failed (operation=consequence): %s", exc)
+
+            # Faction loses confidence (half the difficulty-scaled control).
+            if faction:
+                fdelta = -int(_cfg("mission.consequences.control_per_difficulty")) * difficulty // 2
+                if fdelta:
+                    try:
+                        ps.update_faction_standing(faction, fdelta)
+                        applied["faction_delta"] = fdelta
+                    except Exception as exc:
+                        logger.warning("[MissionManager] Faction loss failed (operation=consequence): %s", exc)
+
+        m.consequences = applied
+        logger.info(
+            "[MissionManager] Consequences applied (operation=consequence, mission=%s, outcome=%s): "
+            "faction=%s%+d rep%+d heat%+d",
+            m.id, outcome, faction or "-", applied["faction_delta"],
+            applied["reputation_delta"], applied["heat_delta"],
+        )
+        return applied
 
     # ── Events ────────────────────────────────────────────────────────────
 

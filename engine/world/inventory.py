@@ -16,6 +16,21 @@ Usage::
     inv.add_item("neural_jack", quantity=1)
     inv.equip("neural_jack", slot="cyberware_1")
     snapshot = inv.to_dict()
+
+    # v1.60.0 — equipped gear now grants real mechanical bonuses, and any
+    # drug/stim/medkit/food item is consumable (no hardcoded per-item list):
+    bonuses = inv.get_equipment_bonuses()      # {"combat": 2, "hacking": 1, ...}
+    result  = inv.use_consumable("stim_pack", player_state)
+
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.60.0 [2026-06-13] — Equipment bonuses & generalized consumable effects.
+        Added InventoryManager.get_equipment_bonuses(),
+        InventoryManager.use_consumable(), and InventoryManager.is_consumable()
+        delegating to engine.world.equipment_effects. Closes the v1.59 audit
+        gap (equipped gear gave +0 bonus; consumables hardcoded for 9 items).
 """
 from __future__ import annotations
 
@@ -348,6 +363,72 @@ class InventoryManager:
         """Return number of unique item types in inventory."""
         with self._item_lock:
             return len(self._items)
+
+    # ── Equipment bonuses & consumables (v1.60.0) ──────────────────────────────
+    # CONNECTS: engine.world.equipment_effects, engine.world.player_state
+    # CALLED BY: scenes / skill-checks (e.g. neoncity api_inventory_use)
+    # Delegated to equipment_effects to keep the bonus/effect tables in one
+    # place while giving callers a single ergonomic entry point on the inventory.
+
+    def get_equipment_bonuses(self) -> Dict[str, int]:
+        """Aggregate skill/stat bonuses from every currently-equipped item.
+
+        Returns:
+            Dict of skill/stat key → integer delta (every known key present,
+            zeros included). E.g. an equipped Reflex Booster yields
+            ``{"combat": 2, ...}``. See
+            :func:`engine.world.equipment_effects.get_equipment_bonuses`.
+        """
+        # v1.60.0 [2026-06-13] — Equipped gear → mechanical bonuses
+        from engine.world.equipment_effects import get_equipment_bonuses
+
+        return get_equipment_bonuses(self)
+
+    def is_consumable(self, item_id: str) -> bool:
+        """Return True if *item_id* can be consumed (explicit or by category)."""
+        # v1.60.0 [2026-06-13] — Category-driven consumable detection
+        from engine.world.equipment_effects import is_consumable
+
+        return is_consumable(item_id)
+
+    def use_consumable(
+        self,
+        item_id: str,
+        player_state: Any,
+        consume_stack: bool = True,
+    ) -> Dict[str, Any]:
+        """Apply *item_id*'s consumable effect to *player_state* and consume it.
+
+        Works for ANY drug/stim/medkit/food item (category-driven) — not just a
+        hardcoded list. Removes one unit from the stack when *consume_stack*.
+
+        Args:
+            item_id: Inventory item identifier (must be owned).
+            player_state: PlayerState-like object to mutate.
+            consume_stack: If True, decrement the stack by one on success.
+
+        Returns:
+            Result dict from
+            :func:`engine.world.equipment_effects.apply_consumable`, plus an
+            ``error`` key when the item is not owned.
+        """
+        # v1.60.0 [2026-06-13] — Generalized consumable use loop
+        from engine.world.equipment_effects import apply_consumable
+
+        if not self.has_item(item_id):
+            return {
+                "success": False,
+                "error": f"Not in inventory: {item_id}",
+                "message": f"You don't have {item_id}.",
+                "changes": {},
+                "consumed": False,
+            }
+        return apply_consumable(
+            item_id,
+            player_state,
+            inventory=self,
+            consume_stack=consume_stack,
+        )
 
     # ── Serialization ─────────────────────────────────────────────────────────
 

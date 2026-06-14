@@ -340,8 +340,8 @@ def get_user_plan(cookies: Dict[str, str]) -> Dict[str, Any]:
             result["queries_remaining"] = ints[1]
         elif len(ints) == 1:
             result["queries_remaining"] = ints[0]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[NLMArchive] Quota parse failed (operation=parse_quota): %s", e)
 
     return result
 

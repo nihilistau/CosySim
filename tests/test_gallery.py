@@ -25,15 +25,12 @@ from content.scenes.gallery.gallery_scene import (
 #  Helpers — heavy external deps are patched out for every scene test
 # ══════════════════════════════════════════════════════════════════════
 
+# v1.51.0 [2026-03-22] — Updated patches for FlaskScene migration
 # All patches needed to safely instantiate GalleryScene without real services.
 _SCENE_PATCHES = {
     "db":        "content.scenes.gallery.gallery_scene.Database",
-    "flask":     "content.scenes.gallery.gallery_scene.Flask",
-    "sio":       "content.scenes.gallery.gallery_scene.SocketIO",
-    "shared":    "content.scenes.gallery.gallery_scene.register_shared_assets",
     "state_mgr": "content.scenes.gallery.gallery_scene.get_scene_state_manager",
     "tag_reg":   "content.scenes.gallery.gallery_scene.TagRegistry",
-    "nexus":     "content.scenes.gallery.gallery_scene.NexusSceneMixin.nexus_init",
     "overlay":   "engine.overlay.mount_overlay",
 }
 
@@ -43,22 +40,12 @@ def gallery():
     """Return a GalleryScene with all heavy deps mocked out."""
     with (
         patch(_SCENE_PATCHES["db"]) as mock_db_cls,
-        patch(_SCENE_PATCHES["flask"]) as mock_flask,
-        patch(_SCENE_PATCHES["sio"]) as mock_sio_cls,
-        patch(_SCENE_PATCHES["shared"]),
         patch(_SCENE_PATCHES["state_mgr"]),
         patch(_SCENE_PATCHES["tag_reg"]),
-        patch(_SCENE_PATCHES["nexus"]),
     ):
-        mock_app = MagicMock()
-        mock_app.secret_key = None
-        mock_flask.return_value = mock_app
-
-        mock_sio = MagicMock()
-        mock_sio_cls.return_value = mock_sio
-
         scene = GalleryScene(host="127.0.0.1", port=15560)
-        scene.socketio = mock_sio  # ensure the mock is wired
+        # Mock socketio for tests that assert on emit calls
+        scene.socketio = MagicMock()
         yield scene
 
         # Ensure ticker is stopped if any test started it
@@ -187,32 +174,25 @@ class TestGetPluginInfo:
 # ══════════════════════════════════════════════════════════════════════
 
 class TestLifecycle:
+    # v1.51.0 [2026-03-22] — Updated for FlaskScene migration
     @patch("content.scenes.gallery.gallery_scene.get_framework")
     @patch("content.scenes.gallery.gallery_scene.register_gallery_rules")
-    def test_start_seeds_characters_and_runs(self, mock_rules, mock_fw, gallery):
-        """start() seeds chars, inits MCP, and launches socketio.run."""
+    def test_on_before_serve_seeds_characters(self, mock_rules, mock_fw, gallery):
+        """on_before_serve() seeds chars and registers MCP rules."""
         gallery._seed_characters = MagicMock()
-        gallery._mcp_init = MagicMock()
         gallery._start_ticker = MagicMock()
 
-        # socketio.run blocks normally — mock it to return immediately
-        gallery.socketio.run = MagicMock()
-
-        gallery.start()
+        gallery.on_before_serve()
 
         gallery._seed_characters.assert_called_once()
-        gallery._mcp_init.assert_called_once()
         mock_rules.assert_called_once()
         gallery._start_ticker.assert_called_once()
-        gallery.socketio.run.assert_called_once()
 
     @patch("content.scenes.gallery.gallery_scene.get_framework")
-    def test_stop_sets_ticker_flag(self, mock_fw, gallery):
-        """stop() sets the ticker stop event and flushes nexus."""
-        gallery.nexus_flush = MagicMock()
-        gallery.stop()
+    def test_on_shutdown_sets_ticker_flag(self, mock_fw, gallery):
+        """on_shutdown() sets the ticker stop event."""
+        gallery.on_shutdown()
         assert gallery._ticker_stop.is_set()
-        gallery.nexus_flush.assert_called_once()
 
     @patch("content.scenes.gallery.gallery_scene.get_framework")
     def test_stop_joins_ticker_thread(self, mock_fw, gallery):
@@ -529,18 +509,14 @@ class TestStaticData:
 #  create_app factory
 # ══════════════════════════════════════════════════════════════════════
 
+# v1.51.0 [2026-03-22] — Updated for FlaskScene migration
 class TestCreateApp:
     def test_returns_gallery_scene(self):
         with (
             patch(_SCENE_PATCHES["db"]),
-            patch(_SCENE_PATCHES["flask"]) as mock_flask,
-            patch(_SCENE_PATCHES["sio"]),
-            patch(_SCENE_PATCHES["shared"]),
             patch(_SCENE_PATCHES["state_mgr"]),
             patch(_SCENE_PATCHES["tag_reg"]),
-            patch(_SCENE_PATCHES["nexus"]),
         ):
-            mock_flask.return_value = MagicMock()
             scene = create_app(host="0.0.0.0", port=9999)
             assert isinstance(scene, GalleryScene)
             assert scene.port == 9999

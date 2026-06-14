@@ -1,8 +1,17 @@
 """Nexus Query Router — Smart query routing through Nexus-first pipeline.
 
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Tier 2.5: Google File Search with grounded citations + auto-distill
+    v1.55.0 [2026-03-26] — Add agent_id tracking to query(), per-agent stats for VAM integration
+    v1.54.0 [2026-03-26] — Null guards on client in tier methods, defensive QueryRouter
+    v1.50.2 [2026-03-24] — Add vector store feature flag guard, provenance logging
+
 Routes all queries through a confidence-scored pipeline:
   1. Q&A Cache (instant, high confidence)
   2. Vector Semantic Search (Gemini Embedding 2 + ChromaDB, high confidence)
+  2.5. Google File Search (managed RAG with grounded citations)
   3. FTS Knowledge Search (fast, medium confidence)
   4. Nexus Smart Ask / NotebookLM-backed research
   5. Direct NotebookLM unified ask (when smart ask cannot answer)
@@ -66,23 +75,29 @@ class RouterStats:
     total_queries: int = 0
     cache_hits: int = 0
     vector_hits: int = 0
+    # v1.57.0 [2026-03-26] — File Search tier (Google managed RAG)
+    file_search_hits: int = 0
     search_hits: int = 0
     nlm_hits: int = 0
     llm_fallbacks: int = 0
     no_answer: int = 0
     total_tokens_saved: int = 0
     answers_stored: int = 0
+    # v1.55.0 [2026-03-26] — Per-agent query tracking for VAM integration
+    agent_queries: Dict[str, int] = field(default_factory=dict)
+    agent_hits: Dict[str, int] = field(default_factory=dict)
 
     def hit_rate(self) -> float:
         if self.total_queries == 0:
             return 0.0
-        return (self.cache_hits + self.vector_hits + self.search_hits + self.nlm_hits) / self.total_queries
+        return (self.cache_hits + self.vector_hits + self.file_search_hits + self.search_hits + self.nlm_hits) / self.total_queries
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "total_queries": self.total_queries,
             "cache_hits": self.cache_hits,
             "vector_hits": self.vector_hits,
+            "file_search_hits": self.file_search_hits,
             "search_hits": self.search_hits,
             "nlm_hits": self.nlm_hits,
             "llm_fallbacks": self.llm_fallbacks,
@@ -90,15 +105,18 @@ class RouterStats:
             "total_tokens_saved": self.total_tokens_saved,
             "answers_stored": self.answers_stored,
             "nexus_hit_rate": f"{self.hit_rate():.1%}",
+            "agent_queries": dict(self.agent_queries),
+            "agent_hits": dict(self.agent_hits),
         }
 
 
 class NexusQueryRouter:
     """Routes queries through Nexus-first pipeline with LLM fallback.
 
-    The router implements a 6-tier lookup:
+    The router implements a 7-tier lookup:
       1. Q&A Cache — exact or fuzzy match on previously answered questions
       2. Vector Search — semantic similarity via Gemini Embedding 2 + ChromaDB
+      2.5. File Search — Google managed RAG with grounded citations
       3. FTS Search — synthesise answer from matching knowledge entries
       4. Nexus Smart Ask — server-side cache → FTS → NotebookLM pipeline
       5. Direct NotebookLM ask — use the unified backend before local GPU
@@ -110,6 +128,8 @@ class NexusQueryRouter:
     # Confidence thresholds
     CACHE_CONFIDENCE = 0.90    # Q&A cache hit — very high confidence
     VECTOR_CONFIDENCE = 0.82   # Strong vector search match
+    # v1.57.0 [2026-03-26] — Tier 2.5: Google File Search with grounded citations
+    FILE_SEARCH_CONFIDENCE = 0.85  # High confidence — answers are grounded in uploaded docs
     SEARCH_HIGH = 0.75         # Strong search match
     SEARCH_MEDIUM = 0.50       # Decent search match
     SEARCH_LOW = 0.30          # Weak match
@@ -120,9 +140,19 @@ class NexusQueryRouter:
         self._llm_callback = llm_callback
         self._stats = RouterStats()
         self._lock = threading.Lock()
+        # Read config overrides, falling back to class defaults
+        cfg = get_config()
+        self.CACHE_CONFIDENCE = cfg.get("nexus.query_router.cache_confidence", self.CACHE_CONFIDENCE)
+        self.VECTOR_CONFIDENCE = cfg.get("nexus.query_router.vector_confidence", self.VECTOR_CONFIDENCE)
+        # v1.57.0 [2026-03-26] — File Search confidence from config
+        self.FILE_SEARCH_CONFIDENCE = cfg.get("nexus.query_router.file_search_confidence", self.FILE_SEARCH_CONFIDENCE)
+        self.SEARCH_HIGH = cfg.get("nexus.query_router.search_high", self.SEARCH_HIGH)
+        self.SEARCH_MEDIUM = cfg.get("nexus.query_router.search_medium", self.SEARCH_MEDIUM)
+        self.SEARCH_LOW = cfg.get("nexus.query_router.search_low", self.SEARCH_LOW)
+        self.MIN_ANSWER_LENGTH = cfg.get("nexus.query_router.min_answer_length", self.MIN_ANSWER_LENGTH)
         # Local answer cache to avoid repeated Nexus API calls within session
         self._local_cache: Dict[str, Tuple[QueryResult, float]] = {}
-        self._local_cache_ttl = 300  # 5 minutes
+        self._local_cache_ttl = cfg.get("nexus.query_router.local_cache_ttl", 300)
 
     def _get_client(self):
         """Lazy-load NexusClient."""
@@ -138,13 +168,39 @@ class NexusQueryRouter:
     def stats(self) -> RouterStats:
         return self._stats
 
+    # v1.55.0 [2026-03-26] — Provenance logging with agent_id tracking
+    def _log_resolution(self, question: str, result: "QueryResult",
+                        agent_id: Optional[str] = None) -> None:
+        """Log which tier resolved the query, for Oracle aggregation."""
+        agent_tag = f", agent={agent_id}" if agent_id else ""
+        if result.source == "none":
+            logger.info(
+                "[QueryRouter] No answer (operation=query, time_ms=%.1f%s): %s",
+                result.query_time_ms, agent_tag, question[:80],
+            )
+        else:
+            # v1.55.0 — Track per-agent hit counts
+            if agent_id and result.source != "none":
+                with self._lock:
+                    self._stats.agent_hits[agent_id] = (
+                        self._stats.agent_hits.get(agent_id, 0) + 1
+                    )
+            logger.info(
+                "[QueryRouter] Resolved (operation=query, tier=%s, confidence=%.2f, "
+                "time_ms=%.1f, tokens_saved=%d%s): %s",
+                result.source, result.confidence, result.query_time_ms,
+                result.tokens_saved, agent_tag, question[:80],
+            )
+
     # ── Main Query Method ───────────────────────────────────────────
 
+    # v1.55.0 [2026-03-26] — Added agent_id parameter for per-agent tracking
     def query(self, question: str, min_confidence: float = 0.3,
               use_llm: bool = True, category: str = "",
               tags: Optional[List[str]] = None,
               source_hint: str = "system",
-              depth: str = "auto") -> QueryResult:
+              depth: str = "auto",
+              agent_id: Optional[str] = None) -> QueryResult:
         """Route a query through the Nexus-first pipeline.
 
         Args:
@@ -155,6 +211,7 @@ class NexusQueryRouter:
             tags: Tags to apply when storing new answers.
             source_hint: Who's asking (system, agent, copilot, scene).
             depth: "shallow", "auto", or "deep" for the Nexus smart-ask tier.
+            agent_id: Optional agent identifier for per-agent stats tracking.
 
         Returns:
             QueryResult with answer, source, confidence, and metadata.
@@ -162,6 +219,11 @@ class NexusQueryRouter:
         start = time.time()
         with self._lock:
             self._stats.total_queries += 1
+            # v1.55.0 — Track per-agent query counts
+            if agent_id:
+                self._stats.agent_queries[agent_id] = (
+                    self._stats.agent_queries.get(agent_id, 0) + 1
+                )
 
         # Check local session cache
         cache_key = self._cache_key(question)
@@ -188,13 +250,30 @@ class NexusQueryRouter:
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
+            self._log_resolution(question, result, agent_id=agent_id)
             return result
 
         # Tier 2: Vector Semantic Search (Gemini Embedding 2 + ChromaDB)
-        result = self._try_vector_search(question)
+        # v1.50.2 [2026-03-24] — Respect vector_store.enabled feature flag
+        from engine.nexus.vector_store import is_vector_store_enabled
+        if not is_vector_store_enabled():
+            logger.debug("[QueryRouter] Vector search skipped (operation=query): disabled in config")
+            result = None
+        else:
+            result = self._try_vector_search(question)
         if result and result.confidence >= min_confidence:
             result.query_time_ms = (time.time() - start) * 1000
             self._store_local_cache(cache_key, result)
+            self._log_resolution(question, result, agent_id=agent_id)
+            return result
+
+        # Tier 2.5: Google File Search (managed RAG with grounded citations)
+        # v1.57.0 [2026-03-26] — Grounded answers from uploaded project docs
+        result = self._try_file_search(question)
+        if result and result.confidence >= min_confidence:
+            result.query_time_ms = (time.time() - start) * 1000
+            self._store_local_cache(cache_key, result)
+            self._log_resolution(question, result, agent_id=agent_id)
             return result
 
         # Tier 3: FTS Knowledge Search
@@ -238,34 +317,75 @@ class NexusQueryRouter:
         # No answer found
         with self._lock:
             self._stats.no_answer += 1
-        return QueryResult(
+        no_result = QueryResult(
             answer="",
             source="none",
             query_time_ms=(time.time() - start) * 1000,
         )
+        self._log_resolution(question, no_result, agent_id=agent_id)
+        return no_result
 
     # ── Pipeline Tiers ──────────────────────────────────────────────
 
+    # v1.56.1 [2026-03-26] — Relevance scoring for Q&A cache hits
+    @staticmethod
+    def _question_relevance(query: str, cached_question: str) -> float:
+        """Score 0.0-1.0 how relevant a cached question is to the query."""
+        q_words = set(query.lower().split())
+        c_words = set(cached_question.lower().split())
+        # Remove stop words
+        stop = {"a", "an", "the", "is", "are", "was", "were", "what", "how",
+                "does", "do", "in", "of", "to", "for", "and", "or", "it", "this",
+                "that", "with", "from", "on", "at", "by", "be", "has", "have", "i"}
+        q_words -= stop
+        c_words -= stop
+        if not q_words or not c_words:
+            return 0.0
+        overlap = q_words & c_words
+        # Jaccard-like: overlap relative to query size
+        return len(overlap) / max(len(q_words), 1)
+
     def _try_qa_cache(self, client, question: str) -> Optional[QueryResult]:
         """Tier 1: Check the Q&A cache for a matching answer."""
+        # v1.54.0 [2026-03-26] — Null guard on client
+        if client is None:
+            logger.debug("[QueryRouter] Nexus client unavailable, skipping cache tier")
+            return None
         try:
-            qa_results = client.find_qa(question, limit=3)
+            qa_results = client.find_qa(question, limit=5)
             if qa_results:
-                best = qa_results[0]
-                answer = best.get("answer", "")
-                if answer and len(answer) >= self.MIN_ANSWER_LENGTH:
-                    with self._lock:
-                        self._stats.cache_hits += 1
-                        tokens_saved = self._estimate_tokens(answer)
-                        self._stats.total_tokens_saved += tokens_saved
-                    return QueryResult(
-                        answer=answer,
-                        source="cache",
-                        confidence=self.CACHE_CONFIDENCE,
-                        cached=True,
-                        tokens_saved=tokens_saved,
-                        sources=[best.get("question", "")],
-                    )
+                # v1.56.1 — Score relevance instead of blindly taking first result
+                best = None
+                best_relevance = 0.0
+                for qa in qa_results:
+                    cached_q = qa.get("question", "")
+                    relevance = self._question_relevance(question, cached_q)
+                    if relevance > best_relevance:
+                        best_relevance = relevance
+                        best = qa
+
+                # Require at least 40% word overlap to consider it a real match
+                if best and best_relevance >= 0.4:
+                    answer = best.get("answer", "")
+                    if answer and len(answer) >= self.MIN_ANSWER_LENGTH:
+                        # Scale confidence by relevance (0.4 relevance → 0.72 conf, 1.0 → 0.90)
+                        confidence = min(self.CACHE_CONFIDENCE, 0.5 + best_relevance * 0.4)
+                        with self._lock:
+                            self._stats.cache_hits += 1
+                            tokens_saved = self._estimate_tokens(answer)
+                            self._stats.total_tokens_saved += tokens_saved
+                        return QueryResult(
+                            answer=answer,
+                            source="cache",
+                            confidence=confidence,
+                            cached=True,
+                            tokens_saved=tokens_saved,
+                            sources=[best.get("question", "")],
+                        )
+                    else:
+                        logger.debug("[QueryRouter] Cache hit too short (%d chars)", len(answer) if answer else 0)
+                else:
+                    logger.debug("[QueryRouter] Cache miss — best relevance %.2f < 0.4 threshold", best_relevance)
         except Exception as exc:
             logger.debug("Q&A cache lookup failed: %s", exc)
         return None
@@ -328,9 +448,73 @@ class NexusQueryRouter:
             logger.debug("Vector search failed: %s", exc)
         return None
 
+    # v1.57.0 [2026-03-26] — Tier 2.5: Google File Search with grounded citations
+    def _try_file_search(self, question: str) -> Optional[QueryResult]:
+        """Tier 2.5: Google File Search — managed RAG with citations.
+
+        Queries all available File Search stores for grounded answers.
+        Answers auto-distill to Nexus Q&A cache via the FileSearchClient.
+
+        CONNECTS: FileSearchClient, Google AI File Search stores
+        CALLED BY: query() pipeline (between Tier 2 vector and Tier 3 FTS)
+
+        Args:
+            question: The question to answer.
+
+        Returns:
+            QueryResult if a grounded answer is found, None otherwise.
+        """
+        try:
+            from engine.integrations.file_search_client import get_file_search_client
+            client = get_file_search_client()
+
+            # Get available stores — bail if none exist
+            stores = client.list_stores()
+            if not stores:
+                return None
+
+            # Try each store until we get a substantive grounded answer
+            for store in stores:
+                try:
+                    result = client.query(
+                        store["name"], question, distill_to_nexus=True,
+                    )
+                    answer = result.get("answer", "")
+                    if answer and len(answer) >= self.MIN_ANSWER_LENGTH:
+                        with self._lock:
+                            self._stats.file_search_hits += 1
+                            tokens_saved = self._estimate_tokens(answer)
+                            self._stats.total_tokens_saved += tokens_saved
+                        return QueryResult(
+                            answer=answer,
+                            source="file_search",
+                            confidence=self.FILE_SEARCH_CONFIDENCE,
+                            cached=False,
+                            tokens_saved=tokens_saved,
+                            sources=[store.get("display_name", store["name"])],
+                            metadata={
+                                "store": store["name"],
+                                "grounded": True,
+                            },
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "[QueryRouter] File Search store %s failed: %s",
+                        store.get("display_name", "?"), exc,
+                    )
+        except ImportError:
+            logger.debug("[QueryRouter] File Search not available (google-genai not installed)")
+        except Exception as exc:
+            logger.debug("[QueryRouter] File Search failed (operation=query): %s", exc)
+        return None
+
     def _try_fts_search(self, client, question: str,
                         category: str = "") -> Optional[QueryResult]:
         """Tier 3: Full-text search across knowledge entries."""
+        # v1.54.0 [2026-03-26] — Null guard on client
+        if client is None:
+            logger.debug("[QueryRouter] Nexus client unavailable, skipping FTS tier")
+            return None
         try:
             results = client.search(question, limit=5)
             if not results:
@@ -382,7 +566,11 @@ class NexusQueryRouter:
 
     def _try_nexus_ask(self, client, question: str,
                        category: str = "", depth: str = "auto") -> Optional[QueryResult]:
-        """Tier 3: Use Nexus server-side smart Q&A / NotebookLM pipeline."""
+        """Tier 4: Use Nexus server-side smart Q&A / NotebookLM pipeline."""
+        # v1.54.0 [2026-03-26] — Null guard on client
+        if client is None:
+            logger.debug("[QueryRouter] Nexus client unavailable, skipping Nexus ask tier")
+            return None
         try:
             ask_depth = depth if depth in {"shallow", "auto", "deep"} else "auto"
             result = client.ask(question, depth=ask_depth, category=category)
@@ -410,7 +598,11 @@ class NexusQueryRouter:
         return None
 
     def _try_direct_nlm(self, client, question: str) -> Optional[QueryResult]:
-        """Tier 4: Ask NotebookLM directly through the unified backend."""
+        """Tier 5: Ask NotebookLM directly through the unified backend."""
+        # v1.54.0 [2026-03-26] — Null guard on client
+        if client is None:
+            logger.debug("[QueryRouter] Nexus client unavailable, skipping NLM tier")
+            return None
         if not self._nlm_backend_available(client):
             return None
 
@@ -492,40 +684,19 @@ class NexusQueryRouter:
 
     # ── LMStudio Integration ───────────────────────────────────────
 
+    # v1.43.1 [2026-03-21] — Use unified chat()
     def _call_lmstudio(self, question: str) -> str:
-        """Call LMStudio v1 API for inference."""
-        cfg = get_config()
-        host = cfg.get("lmstudio.host", "localhost")
-        port = cfg.get("lmstudio.port", 1234)
-        url = f"http://{host}:{port}/api/v1/chat/completions"
-
-        payload = json.dumps({
-            "messages": [
-                {"role": "system", "content": (
-                    "You are a knowledgeable assistant for the CosySim project. "
-                    "Answer concisely and accurately. If unsure, say so."
-                )},
-                {"role": "user", "content": question},
-            ],
-            "temperature": 0.3,
-            "max_tokens": 500,
-            "stream": False,
-        }).encode()
-
-        import urllib.request
-        from engine.utils import get_lmstudio_headers
-        req = urllib.request.Request(url, data=payload)
-        for k, v in get_lmstudio_headers().items():
-            req.add_header(k, v)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode())
-                choices = data.get("choices", [])
-                if choices:
-                    return choices[0].get("message", {}).get("content", "")
-        except Exception as exc:
-            logger.warning("LMStudio call failed: %s", exc)
-        return ""
+        """Call LMStudio for inference via unified chat()."""
+        from engine.lmstudio.chat import chat
+        return chat(
+            [{"role": "user", "content": question}],
+            system=(
+                "You are a knowledgeable assistant for the CosySim project. "
+                "Answer concisely and accurately. If unsure, say so."
+            ),
+            temperature=0.3,
+            max_tokens=500,
+        )
 
     # ── Storage ─────────────────────────────────────────────────────
 

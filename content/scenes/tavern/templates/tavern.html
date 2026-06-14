@@ -1,181 +1,256 @@
 {% extends 'neon_base.html' %}
 {% set scene_key = 'tavern' %}
 {% set scene_display_name = 'THE RUSTY ANCHOR' %}
-{% set scene_accent = '#f97316' %}
-{% set scene_accent_rgb = '249 115 22' %}
+{% set scene_accent = '#d97706' %}
+{% set scene_accent_rgb = '217 119 6' %}
+
+{#
+  THE RUSTY ANCHOR — CosySim Tavern Scene (Kit Rebuild)
+  =====================================================
+  Rebuilt from tavern_rebuild.json via Creation Kit pattern.
+  Uses tavern_kit.js (TavernScene) + tavern_ext.js (game logic).
+  Original template archived as tavern_original.html.
+
+  Version: v1.50.0 [2026-03-22]
+  Change Log:
+    v1.50.0 [2026-03-22] — Kit rebuild. TavernScene class,
+                             tavern_ext.js extensions, new layout.
+#}
 
 {% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='tavern_kit.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='tavern.css') }}">
 {% endblock %}
 
 {% block scene_content %}
 
-  <!-- ══════════════════════════════════════════════════════════
-       TAVERN HEADER
+  <!-- ══════════════════════════════════════════════════════════════
+       SCENE HEADER — title, subtitle, HUD badges
+       v1.50.0 [2026-03-22] — Kit scene_header component
   ══════════════════════════════════════════════════════════════ -->
-  <header class="tavern-header">
-    <div class="tavern-identity">
-      <h1 class="tavern-name">⚓ THE RUSTY ANCHOR</h1>
-      <p class="tavern-tagline">Cheap ale. Cheaper lies. The best quests start here.</p>
+  <header class="ck-scene-header">
+    <div class="ck-scene-identity">
+      <h1 class="ck-scene-title">THE RUSTY ANCHOR</h1>
+      <p class="ck-scene-subtitle">Cheap ale. Cheaper lies.</p>
     </div>
-    <div class="tavern-hud">
-      <span class="time-badge" id="time-badge" data-time="evening">🌆 DUSK</span>
-      <span class="atm-pill" id="atm-pill">QUIET</span>
-      <span class="heat-meter">
-        🔥 <span id="heat-val">0</span><span class="heat-max">/100</span>
-      </span>
-      <span class="gold-counter">💰 <span id="gold-val">50</span>g</span>
-      <span class="turn-counter">Turn <span id="turn-val">0</span></span>
+    <div class="ck-scene-hud">
+      <span class="ck-hud-badge">&#x1F4B0; <span id="gold-val">50</span>g</span>
     </div>
   </header>
 
-  <!-- ══════════════════════════════════════════════════════════
-       MAIN 3-COLUMN LAYOUT
+  <!-- ══════════════════════════════════════════════════════════════
+       ATMOSPHERE BANNER
+       v1.50.0 [2026-03-22] — Kit alert_banner component
   ══════════════════════════════════════════════════════════════ -->
-  <div class="tavern-main">
+  <div class="ck-alert-banner" id="atm-banner" data-severity="info">
+    <span class="ck-alert-text">The tavern is quiet. Only a few patrons murmur.</span>
+  </div>
 
-    <!-- ─── LEFT: Quest Board ───────────────────────────────── -->
-    <aside class="quest-board-col">
-      <h2 class="col-heading">📋 Quest Board</h2>
-      <div class="quest-board" id="quest-board">
-        <!-- Quest cards injected by JS -->
-        <div class="quest-board-empty">Loading quests…</div>
-      </div>
-      <button class="btn-amber" id="refresh-quests">⟳ Refresh</button>
-    </aside>
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN 3-COLUMN LAYOUT
+       v1.50.0 [2026-03-22] — Kit column_layout (3 cols, 16px gap)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="ck-columns" data-cols="3">
 
-    <!-- ─── CENTER: Tavern Scene + Chat + Dice ───────────────── -->
-    <section class="tavern-center">
+    <!-- ─── COLUMN 1: Quest Board + Stats ─────────────────────── -->
+    <div class="ck-col">
 
-      <!-- Scene art / atmosphere panel -->
-      <div class="scene-panel" id="scene-panel">
-        <canvas id="embers-canvas"></canvas>
-        <div class="scene-overlay">
-          <div class="atmosphere-ring" id="atm-ring"></div>
-        </div>
-      </div>
-
-      <!-- Chat / event feed -->
-      <div class="chat-panel">
-        <div class="chat-feed" id="chat-feed">
-          <div class="chat-line system">⚓ Welcome to The Rusty Anchor. Mind the rats.</div>
-        </div>
-        <form class="chat-form" id="chat-form">
-          <input class="chat-input" id="chat-input" type="text"
-                 placeholder="Say something…" autocomplete="off" />
-          <button class="btn-amber" type="submit">Send</button>
-        </form>
-      </div>
-
-      <!-- Dice Area -->
-      <div class="dice-area" id="dice-area">
-        <div class="dice-3d" id="dice-3d">
-          <div class="dice-face">🎲</div>
-        </div>
-        <div class="dice-result hidden" id="dice-result">
-          <span class="dice-total" id="dice-total">—</span>
-          <span class="dice-label" id="dice-label">skill check</span>
-        </div>
-        <div class="dice-controls">
-          <select class="dice-sides-select" id="dice-sides">
-            <option value="4">d4</option>
-            <option value="6">d6</option>
-            <option value="8">d8</option>
-            <option value="10">d10</option>
-            <option value="12">d12</option>
-            <option value="20" selected>d20</option>
-            <option value="100">d100</option>
-          </select>
-          <input class="dice-reason-input" id="dice-reason" type="text"
-                 value="skill check" placeholder="Reason…" />
-          <button class="btn-amber btn-roll" id="btn-roll">🎲 ROLL</button>
+      <!-- Quest Board Panel -->
+      <div class="ck-glass-panel">
+        <div class="ck-glass-title">QUEST BOARD</div>
+        <div class="ck-glass-body">
+          <div class="ck-mission-board" id="quest-board">
+            <div class="ck-mission-empty">Loading quests...</div>
+          </div>
         </div>
       </div>
 
-    </section>
+      <!-- Adventurer Stats Panel -->
+      <div class="ck-glass-panel" style="margin-top: 12px;">
+        <div class="ck-glass-title">ADVENTURER</div>
+        <div class="ck-glass-body">
 
-    <!-- ─── RIGHT: Rumors + Investigation ───────────────────── -->
-    <aside class="rumors-col">
-      <h2 class="col-heading">🗣️ Rumors</h2>
-      <div class="rumor-stack" id="rumor-stack">
-        <div class="rumor-card">
-          <p class="rumor-text"><em>The old lighthouse blinks three times at midnight. No keeper lives there.</em></p>
-          <span class="rumor-source">— A fisherman</span>
-        </div>
-        <div class="rumor-card">
-          <p class="rumor-text"><em>Captain Marlowe's crew doesn't cast shadows. Been that way since the fog.</em></p>
-          <span class="rumor-source">— The barkeep</span>
-        </div>
-        <div class="rumor-card">
-          <p class="rumor-text"><em>Something's been eating the cargo. Not rats. Too big. Too quiet.</em></p>
-          <span class="rumor-source">— Dock worker</span>
+          <!-- Warmth stat bar -->
+          <div class="ck-stat-bar" id="stat-warmth">
+            <span class="ck-stat-label">Warmth</span>
+            <div class="ck-stat-track">
+              <div class="ck-stat-fill" style="width: 50%; background: #f97316;"></div>
+            </div>
+            <span class="ck-stat-val">50</span>
+          </div>
+
+          <!-- Courage stat bar -->
+          <div class="ck-stat-bar" id="stat-courage">
+            <span class="ck-stat-label">Courage</span>
+            <div class="ck-stat-track">
+              <div class="ck-stat-fill" style="width: 50%; background: #ef4444;"></div>
+            </div>
+            <span class="ck-stat-val">50</span>
+          </div>
+
+          <!-- Clarity stat bar -->
+          <div class="ck-stat-bar" id="stat-clarity">
+            <span class="ck-stat-label">Clarity</span>
+            <div class="ck-stat-track">
+              <div class="ck-stat-fill" style="width: 50%; background: #3b82f6;"></div>
+            </div>
+            <span class="ck-stat-val">50</span>
+          </div>
+
+          <!-- Charm stat bar -->
+          <div class="ck-stat-bar" id="stat-charm">
+            <span class="ck-stat-label">Charm</span>
+            <div class="ck-stat-track">
+              <div class="ck-stat-fill" style="width: 50%; background: #8b5cf6;"></div>
+            </div>
+            <span class="ck-stat-val">50</span>
+          </div>
+
         </div>
       </div>
-      <button class="btn-amber btn-sm" id="btn-investigate">🔍 Investigate</button>
-      <div class="investigation-count hidden" id="investigation-count">
-        Clues on board: <span id="clue-count">0</span>
+
+    </div>
+
+    <!-- ─── COLUMN 2: Chat + Dice Table ───────────────────────── -->
+    <div class="ck-col">
+
+      <!-- Tavern Comms (Chat Log) -->
+      <div class="ck-chat-panel">
+        <div class="ck-chat-title">TAVERN COMMS</div>
+        <div class="ck-chat-feed" id="chat-feed">
+          <div class="chat-line system">Welcome to The Rusty Anchor. Mind the rats.</div>
+        </div>
+        <div class="ck-chat-input-row">
+          <input class="ck-chat-input" id="chat-input" type="text"
+                 placeholder="Say something..." autocomplete="off" />
+        </div>
       </div>
-    </aside>
+
+      <!-- Dice Table Panel -->
+      <div class="ck-glass-panel ck-glass-panel--glow" style="margin-top: 12px;">
+        <div class="ck-glass-title">DICE TABLE</div>
+        <div class="ck-glass-body dice-table-body">
+          <div class="dice-visual-wrap">
+            <div class="dice-visual" id="dice-visual">?</div>
+            <div class="dice-result-text hidden" id="dice-result-text"></div>
+          </div>
+          <div class="dice-controls" id="dice-controls">
+            <select class="ck-dice-select" id="dice-sides">
+              <option value="4">d4</option>
+              <option value="6">d6</option>
+              <option value="8">d8</option>
+              <option value="10">d10</option>
+              <option value="12">d12</option>
+              <option value="20" selected>d20</option>
+              <option value="100">d100</option>
+            </select>
+            <input class="ck-dice-reason" id="dice-reason" type="text"
+                   value="skill check" placeholder="Reason..." />
+            <button class="ck-btn ck-btn--accent" id="btn-roll">ROLL DICE</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ─── COLUMN 3: Rumors & Investigation ──────────────────── -->
+    <div class="ck-col">
+
+      <!-- Rumors & Whispers Panel -->
+      <div class="ck-glass-panel">
+        <div class="ck-glass-title">RUMORS &amp; WHISPERS</div>
+        <div class="ck-glass-body">
+          <div class="ck-event-feed" id="rumor-stack">
+            <!-- Rumor cards injected by tavern_ext.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Investigate Button -->
+      <button class="ck-btn ck-btn--hack" id="btn-investigate" style="margin-top: 8px; width: 100%;">
+        INVESTIGATE
+      </button>
+
+    </div>
 
   </div>
 
-  <!-- ══════════════════════════════════════════════════════════
-       BOTTOM BAR: Drinks + Active Quest + Bench HUD
+  <!-- ══════════════════════════════════════════════════════════════
+       DIVIDER
+       v1.50.0 [2026-03-22] — Kit divider_line component
   ══════════════════════════════════════════════════════════════ -->
-  <footer class="tavern-footer">
+  <hr class="ck-divider" />
 
-    <!-- Drink menu -->
-    <div class="drink-menu">
-      <h3 class="footer-heading">🍺 Order a Drink</h3>
-      <div class="drink-row" id="drink-row">
-        <button class="drink-btn" data-drink="ale">🍺 Ale <span class="drink-price">3g</span></button>
-        <button class="drink-btn" data-drink="wine">🍷 Wine <span class="drink-price">8g</span></button>
-        <button class="drink-btn" data-drink="mead">🍯 Mead <span class="drink-price">5g</span></button>
-        <button class="drink-btn" data-drink="spirits">🔥 Spirits <span class="drink-price">12g</span></button>
-        <button class="drink-btn" data-drink="tea">🍵 Tea <span class="drink-price">2g</span></button>
-        <button class="drink-btn featured" data-drink="mystery">🌀 Stranger's Draught <span class="drink-price">15g</span></button>
+  <!-- ══════════════════════════════════════════════════════════════
+       FOOTER 2-COLUMN: Drinks + Economy/Progress
+       v1.50.0 [2026-03-22] — Kit column_layout (2 cols)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="ck-columns" data-cols="2">
+
+    <!-- ─── Footer Column 1: Drink Menu ───────────────────────── -->
+    <div class="ck-col">
+      <div class="ck-glass-panel ck-glass-panel--strong">
+        <div class="ck-glass-title">ORDER A DRINK</div>
+        <div class="ck-glass-body drink-menu-grid">
+          <button class="ck-btn" id="drink-ale">Ale 3g</button>
+          <button class="ck-btn" id="drink-wine">Wine 8g</button>
+          <button class="ck-btn" id="drink-mead">Mead 5g</button>
+          <button class="ck-btn ck-btn--danger" id="drink-spirits">Spirits 12g</button>
+          <button class="ck-btn" id="drink-tea">Tea 2g</button>
+          <button class="ck-btn ck-btn--hack" id="drink-mystery">Mystery 15g</button>
+        </div>
       </div>
     </div>
 
-    <!-- Active quest status -->
-    <div class="active-quest-panel" id="active-quest-panel">
-      <h3 class="footer-heading">⚔️ Active Quest</h3>
-      <div class="active-quest-content" id="active-quest-content">
-        <span class="no-quest-text">No active quest — check the board.</span>
+    <!-- ─── Footer Column 2: Economy + Progress Tracker ───────── -->
+    <div class="ck-col">
+
+      <!-- Economy Panel -->
+      <div class="ck-economy-panel">
+        <span class="ck-economy-label">Gold</span>
+        <span class="ck-economy-val" id="gold-val-footer">50</span>
+        <span class="ck-economy-label">g</span>
       </div>
+
+      <!-- Quest Progress Tracker -->
+      <div class="ck-progress-tracker" id="quest-progress" style="margin-top: 8px;">
+        <div class="ck-step">Accept</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">Investigate</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">Resolve</div>
+        <div class="ck-step-connector"></div>
+        <div class="ck-step">Reward</div>
+      </div>
+
     </div>
 
-    <!-- Bench HUD (populated by register_bench_route) -->
-    <div class="bench-hud" id="bench-hud">
-      <h3 class="footer-heading">📊 Scene Stats</h3>
-      <div class="bench-metrics" id="bench-metrics">
-        <span class="bench-item">NPCs: <b id="npc-count">0</b></span>
-        <span class="bench-item">Drinks: <b id="drinks-count">0</b></span>
-        <span class="bench-item">Atm: <b id="atm-label">quiet</b></span>
-      </div>
-    </div>
+  </div>
 
-  </footer>
-
-  <!-- Quest card detail modal -->
+  <!-- ══════════════════════════════════════════════════════════════
+       QUEST DETAIL MODAL
+       v1.50.0 [2026-03-22] — Reusable quest inspection modal
+  ══════════════════════════════════════════════════════════════ -->
   <div class="quest-modal hidden" id="quest-modal">
     <div class="quest-modal-inner">
-      <button class="modal-close" id="modal-close">✕</button>
+      <button class="modal-close" id="modal-close">&times;</button>
       <div class="quest-type-tag" id="modal-type-tag">QUEST</div>
       <h2 class="modal-title" id="modal-title">Quest Title</h2>
-      <p class="modal-description" id="modal-description">Quest description…</p>
-      <div class="modal-reward" id="modal-reward">Reward: —</div>
-      <button class="btn-amber btn-accept" id="btn-accept-quest">⚔️ Accept Quest</button>
+      <p class="modal-description" id="modal-description">Quest description...</p>
+      <div class="modal-reward" id="modal-reward">Reward: --</div>
+      <button class="ck-btn ck-btn--accent" id="btn-accept-quest" style="width: 100%; margin-top: 12px;">
+        Accept Quest
+      </button>
     </div>
   </div>
 
-  <!-- Toast notification -->
-  <div class="toast hidden" id="toast"></div>
+  <!-- ── Toast Container ──────────────────────────────────────── -->
+  <div class="ck-toast-container ck-toast--bottom-center" id="toast-container"></div>
 
   <!-- ── Consequences Panel ──────────────────────────────────────── -->
   <div id="consequences-panel" class="consequences-panel">
     <button class="consequences-toggle" onclick="toggleConsequences()" title="Consequences">
-      ⚡ <span class="csq-label">Consequences</span> <span id="consequences-count"></span>
+      &#9889; <span class="csq-label">Consequences</span> <span id="consequences-count"></span>
     </button>
     <div class="consequences-body" id="consequences-body">
       <div class="consequences-section">
@@ -191,7 +266,7 @@
   <style>
     .consequences-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);width:36px;background:rgba(0,0,0,.82);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-right:none;border-radius:8px 0 0 8px;z-index:900;overflow:hidden;transition:width .25s ease;}
     .consequences-panel.open{width:290px;}
-    .consequences-toggle{display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;color:var(--accent,#f59e0b);font-size:.7rem;letter-spacing:.08em;padding:10px 8px;cursor:pointer;white-space:nowrap;}
+    .consequences-toggle{display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;color:var(--scene-accent,#92400e);font-size:.7rem;letter-spacing:.08em;padding:10px 8px;cursor:pointer;white-space:nowrap;}
     .csq-label,.consequences-body{display:none;}
     .consequences-panel.open .csq-label,.consequences-panel.open .consequences-body{display:block;}
     .consequences-body{padding:0 12px 12px;}
@@ -220,13 +295,8 @@
 {% endblock %}
 
 {% block body_scripts %}
-<script src="{{ url_for('static', filename='tavern.js') }}"></script>
+<script src="{{ url_for('static', filename='tavern_kit.js') }}"></script>
+<script src="{{ url_for('static', filename='tavern_ext.js') }}"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    window.scene = new RustyAnchorScene();
-    window.scene.init();
-  });
-</script>
 <script>window.SCENE_PARTICLE_CONFIG = { scene: 'tavern' };</script>
 {% endblock %}

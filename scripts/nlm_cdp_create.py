@@ -1,6 +1,6 @@
 """
 Create a NotebookLM notebook via CDP using the already-running Chrome.
-Connects to Chrome's remote debugging port (9222).
+Connects to Chrome's remote debugging port (9223).
 
 Usage:
     python scripts/nlm_cdp_create.py --screenshot
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import requests
 
-CDP_HOST = "http://localhost:9222"
+CDP_HOST = "http://localhost:9223"
 NLM_URL = "https://notebooklm.google.com/"
 
 
@@ -143,7 +143,7 @@ def main() -> None:
         print(f"Chrome CDP available: {len(tabs)} tabs")
     except Exception as e:
         print(f"ERROR: Chrome CDP not available at {CDP_HOST}: {e}")
-        print("Start Chrome with: --remote-debugging-port=9222")
+        print("Start Chrome with: --remote-debugging-port=9223")
         sys.exit(1)
 
     tab = get_or_open_nlm_tab()

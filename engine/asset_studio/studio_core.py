@@ -269,8 +269,8 @@ class AssetStudioCore:
                     "url": result.get("url", ""),
                     "error": result.get("error", ""),
                 })
-        except Exception:
-            pass  # Socket emission is best-effort.
+        except Exception as e:
+            logger.debug("[StudioCore] Socket event emission failed (operation=emit_event): %s", e)
 
     # ── Generator factory ─────────────────────────────────────────────────────
 
@@ -302,7 +302,8 @@ class AssetStudioCore:
         if flags.get("asset_studio.comfyui_enabled"):
             try:
                 import requests  # noqa: PLC0415
-                comfyui_url = self._cfg.get("art.comfyui_url", "http://localhost:8188")
+                # v1.49.1 [2026-03-22] — Use comfyui.base_url (was stale art.comfyui_url)
+                comfyui_url = self._cfg.get("comfyui.base_url", "http://localhost:8188")
                 resp = requests.get(f"{comfyui_url}/system_stats", timeout=3)
                 backends["comfyui"] = {"status": "online", "code": resp.status_code}
             except Exception as e:
@@ -317,14 +318,11 @@ class AssetStudioCore:
             except Exception as e:
                 backends["tts"] = {"status": "offline", "error": str(e)}
 
-        # LMStudio.
+        # v1.43.1 [2026-03-21] — LMStudio status via unified client
         if flags.get("asset_studio.lms_enabled"):
             try:
-                import requests  # noqa: PLC0415
-                lms_url = f"http://{self._cfg.get('lmstudio.host', 'localhost')}:{self._cfg.get('lmstudio.port', 1234)}"
-                from engine.utils import get_lmstudio_headers  # noqa: PLC0415
-                resp = requests.get(f"{lms_url}/api/v1/models", headers=get_lmstudio_headers(), timeout=3)
-                backends["lmstudio"] = {"status": "online"}
+                from engine.lmstudio.chat import is_ready  # noqa: PLC0415
+                backends["lmstudio"] = {"status": "online" if is_ready() else "offline"}
             except Exception as e:
                 backends["lmstudio"] = {"status": "offline", "error": str(e)}
 

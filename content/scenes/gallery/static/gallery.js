@@ -35,6 +35,18 @@ class ObscuraScene {
       this.socket.emit('get_gallery_state');
     });
 
+    // v1.49.3 [2026-03-22] — Disconnect + reconnect handlers
+    this.socket.on('disconnect', () => {
+      console.debug('[Gallery] Socket disconnected');
+    });
+    this.socket.io.on('reconnect', (attempt) => {
+      console.debug('[Gallery] Reconnected after ' + attempt + ' attempt(s)');
+      this.socket.emit('get_gallery_state');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) console.debug('[Gallery] Reconnecting... (attempt ' + attempt + ')');
+    });
+
     this.socket.on('gallery_state', (data) => this._onGalleryState(data));
 
     this.socket.on('piece_detail', (data) => this._openDetailPanel(data));

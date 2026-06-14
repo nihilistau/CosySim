@@ -1,13 +1,16 @@
 # Character System
 
+> CosySim Documentation — v1.52.0 [2026-03-26]
+>
 > Consolidated reference for character identity, stats, memory, reputation, player profile,
-> relationships, and the interceptor pipeline. v1.42 (three-pillar architecture, 20 scenes, 178+ skills).
+> relationships, and the interceptor pipeline. Covers ~1,000 skills across 95 packs,
+> 24 interceptors, 32 launch targets, and the three-pillar architecture.
 
 ---
 
 ## Architecture
 
-The character system spans five subsystems:
+The character system spans six subsystems:
 
 | Subsystem | Module | Responsibility |
 |-----------|--------|----------------|
@@ -587,7 +590,7 @@ Pack `player_profile` in `engine/skills/builtin/player_profile_skills.py`:
 
 ## Interceptor Pipeline (Character-Related)
 
-Lower priority number = runs first.
+Lower priority number = runs first. CosySim has 24 interceptors total across the full pipeline; the character-related subset is listed below.
 
 | Priority | Interceptor | Phase | Description |
 |----------|-------------|-------|-------------|
@@ -602,13 +605,13 @@ Lower priority number = runs first.
 ### System Prompt Assembly Order
 
 ```
-1. [CHARACTER MEMORY]           ← CharacterMemoryInterceptor (pri 7)
-2. [CHARACTER IDENTITY]         ← CharacterRegistryInterceptor (pri 8)
-3. [Inner feeling: ...]         ← NaturalMoodDriftInterceptor (pri 5)
-4. [REPUTATION]                 ← ReputationInterceptor (pri 22)
-5. [RELATIONSHIP CONTEXT]      ← RelationshipContextInterceptor (pri 30)
-6. [CONVERSATION VARIETY]      ← ConversationVarietyInterceptor (pri 55)
-   └── [CONVERSATION HEAT]     ← ConversationHeat.get_directive()
+1. [CHARACTER MEMORY]           <- CharacterMemoryInterceptor (pri 7)
+2. [CHARACTER IDENTITY]         <- CharacterRegistryInterceptor (pri 8)
+3. [Inner feeling: ...]         <- NaturalMoodDriftInterceptor (pri 5)
+4. [REPUTATION]                 <- ReputationInterceptor (pri 22)
+5. [RELATIONSHIP CONTEXT]      <- RelationshipContextInterceptor (pri 30)
+6. [CONVERSATION VARIETY]      <- ConversationVarietyInterceptor (pri 55)
+   └── [CONVERSATION HEAT]     <- ConversationHeat.get_directive()
 7. {personality.system_prompt}
 8. {scene-specific rules}
 9. {Director directive (if any)}
@@ -652,6 +655,20 @@ The `DialogSystem` injects `ResponseDirective` objects to steer character respon
 
 ---
 
-*See [SCENE_GUIDE.md](./SCENE_GUIDE.md) for per-scene emotion stat usage.*
-*See [INTERCEPTORS.md](./INTERCEPTORS.md) for the full interceptor pipeline.*
-*See [MCP_FRAMEWORK.md](./MCP_FRAMEWORK.md) for ResponseDirective and DialogSystem.*
+## See Also
+
+- [MCP Framework](MCP_FRAMEWORK.md) — ResponseDirective and DialogSystem
+- [Interceptors](INTERCEPTORS.md) — Full interceptor pipeline
+- [Skills](SKILLS.md) — `@skill` decorator, pack registration, ~1,000 skills across 95 packs
+- [Scenes](SCENES.md) — Per-scene emotion stat usage
+- [Architecture](ARCHITECTURE.md) — BaseScene, MCP pipeline, 32 launch targets
+
+---
+
+## Change Log
+
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Updated to v1.50; fixed counts (~1,000 skills / 95 packs, 24 interceptors, 32 targets); removed stale cross-refs |
+| v1.42 | 2025-12-15 | Consolidated reference from three-pillar architecture merge |
+| v1.04b | 2025-09-01 | Initial character system documentation |

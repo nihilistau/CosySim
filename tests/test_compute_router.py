@@ -288,21 +288,11 @@ def test_route_prefers_tunnel_when_active() -> None:
 
 
 def test_route_falls_back_to_lmstudio() -> None:
-    """No tunnel, no colab account → uses LMStudio."""
+    """No tunnel, no colab account → uses LMStudio via unified chat()."""
     router = ComputeRouter()
 
     mock_server = MagicMock()
     mock_server._sessions = {}
-
-    models_resp = MagicMock()
-    models_resp.status_code = 200
-    models_resp.json.return_value = {"data": [{"id": "qwen3"}]}
-
-    chat_resp = MagicMock()
-    chat_resp.status_code = 200
-    chat_resp.json.return_value = {
-        "output": [{"type": "message", "content": "local response"}]
-    }
 
     with patch(
         "engine.integrations.colab_tunnel_server.get_tunnel_server",
@@ -312,28 +302,18 @@ def test_route_falls_back_to_lmstudio() -> None:
             "engine.integrations.colab_client.get_colab_client", return_value=None
         ):
             with patch(
-                "engine.integrations.compute_router._resolve_lmstudio_base_url",
-                return_value="http://lmstudio.internal:4321",
+                "engine.lmstudio.chat.is_ready", return_value=True
             ):
                 with patch(
-                    "engine.integrations.compute_router._resolve_lmstudio_headers",
-                    return_value={},
+                    "engine.lmstudio.chat.chat", return_value="local response"
                 ):
-                    with patch("requests.get", return_value=models_resp) as mock_get:
-                        with patch("requests.post", return_value=chat_resp) as mock_post:
-                            result = router.route_inference("hello", fallback_to_local=True)
+                    result = router.route_inference("hello", fallback_to_local=True)
 
     assert result["backend"] == "lmstudio"
     assert result["response"] == "local response"
     assert result["degraded"] is True
     assert any("copilot unavailable" in item for item in result["degraded_backends"])
     assert any("colab_agent unavailable" in item for item in result["degraded_backends"])
-    mock_get.assert_called_once_with("http://lmstudio.internal:4321/api/v1/models", timeout=2)
-    mock_post.assert_called_once_with(
-        "http://lmstudio.internal:4321/api/v1/chat",
-        json={"model": "qwen3", "input": "hello", "stream": False},
-        timeout=60,
-    )
 
 
 def test_route_raises_when_all_unavailable() -> None:
@@ -355,7 +335,7 @@ def test_route_raises_when_all_unavailable() -> None:
             with patch(
                 "engine.integrations.colab_client.get_colab_client", return_value=None
             ):
-                with patch("requests.get", side_effect=Exception("no lmstudio")):
+                with patch("engine.lmstudio.chat.is_ready", return_value=False):
                     with pytest.raises(ComputeUnavailableError):
                         router.route_inference("hello")
 

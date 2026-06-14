@@ -21,6 +21,7 @@ Chain lifecycle:
   5. (optional) delete_chain(chain_id) → prune old chains after compaction
 """
 
+import logging
 import uuid
 import json
 from datetime import datetime
@@ -32,6 +33,8 @@ from engine.paths import ROOT as project_root
 sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -191,8 +194,8 @@ class EventChain:
                 scene=scene_id,
                 data={"event_type": event_type, "chain_id": effective_chain, "character_id": character_id, "event_id": event_id},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[EventChain] ActivityBus publish failed (operation=log_event): %s", e)
 
         return event_id
 

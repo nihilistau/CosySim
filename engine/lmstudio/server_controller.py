@@ -13,6 +13,14 @@ Channels used:
 The ServerController is wired into the InferenceOrchestrator and exposed
 via MCP skills so agents can self-manage their model instances.
 
+Version: v1.56.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.56.0 [2026-03-26] — Per-model health metrics via get_model_health()
+    v1.50.1 [2026-03-22] — Auto-unload idle agent instances
+    v1.49.3 [2026-03-22] — Initial ServerController with SDK/CLI channels
+
 Usage::
 
     from engine.lmstudio.server_controller import get_server_controller
@@ -177,7 +185,8 @@ class ServerController:
         self._cli_manager = None
         self._lmlink_manager = None
 
-        logger.info("ServerController initialized")
+        # v1.49.3 [2026-03-22] — Structured logging context
+        logger.info("[ServerController] Initialized (operation=init)")
 
     # ── Lazy component access ────────────────────────────────────────
 
@@ -269,6 +278,75 @@ class ServerController:
         self._metrics["health_checks"] += 1
         return health
 
+    # v1.56.0 [2026-03-26] — Per-model health metrics for monitoring
+    # CONNECTS: get_server_status(), SDK/CLI model listing
+    # CALLED BY: Oracle diagnostics, /api/oracle/health, admin overlay
+    # EMITS: structured dict with per-model VRAM/context/loaded status
+    def get_model_health(self) -> Dict[str, Any]:
+        """Return health metrics for all loaded models.
+
+        Queries the server for loaded models and returns per-model details
+        including VRAM usage estimates and context lengths, plus aggregate
+        totals.  Falls back gracefully if the server is unreachable.
+
+        Returns:
+            Dict with ``models`` list, ``total_vram_mb``, ``model_count``,
+            and ``server_reachable`` flag.
+        """
+        try:
+            status = self.get_server_status()
+            models: List[Dict[str, Any]] = []
+
+            # Build per-model entries from loaded model names + instance data
+            for model_name in status.model_names:
+                instance = self._instances.get(model_name)
+                vram_estimate = 0.0
+                ctx = 0
+                if instance:
+                    # Use actual instance config if available
+                    gpu_frac = instance.gpu_offload
+                    vram_estimate = 4000 * gpu_frac  # ~4GB base per model * GPU fraction
+                    ctx = instance.context_length
+                else:
+                    # Estimate from config defaults
+                    gpu_frac = float(
+                        self._config.get("lmstudio.default_load_opts.gpu", 0.9)
+                    )
+                    vram_estimate = 4000 * gpu_frac
+                    ctx = int(
+                        self._config.get("lmstudio.default_load_opts.context_length", 4096)
+                    )
+
+                models.append({
+                    "id": model_name,
+                    "loaded": True,
+                    "vram_mb": round(vram_estimate, 1),
+                    "context_length": ctx,
+                    "request_count": instance.request_count if instance else 0,
+                    "total_tokens": instance.total_tokens if instance else 0,
+                    "idle_seconds": round(instance.idle_seconds, 1) if instance else 0,
+                })
+
+            total_vram = sum(m["vram_mb"] for m in models)
+            logger.debug(
+                "[ServerController] Model health check (operation=get_model_health, "
+                "model_count=%d, total_vram_mb=%.1f)",
+                len(models), total_vram,
+            )
+
+            return {
+                "models": models,
+                "total_vram_mb": round(total_vram, 1),
+                "model_count": len(models),
+                "server_reachable": True,
+            }
+        except Exception as exc:
+            logger.warning(
+                "[ServerController] Model health check failed (operation=get_model_health): %s",
+                exc,
+            )
+            return {"server_reachable": False, "error": str(exc), "models": []}
+
     # ── Model lifecycle ──────────────────────────────────────────────
 
     def load_model(
@@ -327,9 +405,9 @@ class ServerController:
                     eval_batch_size=eval_batch_size,
                     ttl=ttl,
                 )
-                logger.info("Loaded model via SDK: %s (ctx=%d, gpu=%.1f)", model_key, ctx, gpu)
+                logger.info("[ServerController] Loaded model via SDK (operation=load_model, model=%s, ctx=%d, gpu=%.1f)", model_key, ctx, gpu)
             except Exception as e:
-                logger.warning("SDK load failed, trying CLI: %s", e)
+                logger.warning("[ServerController] SDK load failed, trying CLI (operation=load_model, model=%s): %s", model_key, e)
                 self.cli.load_model(
                     model_key,
                     gpu=gpu,
@@ -382,11 +460,11 @@ class ServerController:
                     del self._agent_instances[aid]
                 self._metrics["total_unloads"] += 1
 
-            logger.info("Unloaded model: %s", model_key)
+            logger.info("[ServerController] Unloaded model (operation=unload_model, model=%s)", model_key)
             return True
 
         except Exception as e:
-            logger.error("Failed to unload '%s': %s", model_key, e)
+            logger.error("[ServerController] Failed to unload model (operation=unload_model, model=%s): %s", model_key, e)
             self._metrics["errors"] += 1
             return False
 
@@ -477,7 +555,7 @@ class ServerController:
             self._metrics["total_config_changes"] += 1
 
         logger.info(
-            "Configured inference for '%s': stop_strings=%s, temp=%s, max_tokens=%s",
+            "[ServerController] Configured inference (operation=configure, model=%s, stop_strings=%s, temp=%s, max_tokens=%s)",
             model_key,
             stop_strings,
             temperature,
@@ -543,14 +621,14 @@ class ServerController:
                 )
             except Exception as e:
                 logger.warning(
-                    "SDK instance isolation failed for agent '%s': %s — "
+                    "[ServerController] SDK instance isolation failed (operation=create_instance, agent_id=%s): %s — "
                     "falling back to shared model",
                     agent_id, e,
                 )
                 instance_id = model_key
         else:
             logger.info(
-                "SDK unavailable — agent '%s' will share model '%s'",
+                "[ServerController] SDK unavailable — agent will share model (operation=create_instance, agent_id=%s, model=%s)",
                 agent_id, model_key,
             )
             instance_id = model_key
@@ -570,7 +648,7 @@ class ServerController:
             self._metrics["total_instance_creates"] += 1
 
         logger.info(
-            "Created agent instance: agent=%s, model=%s, id=%s, ctx=%d",
+            "[ServerController] Created agent instance (operation=create_instance, agent_id=%s, model=%s, instance_id=%s, ctx=%d)",
             agent_id, model_key, instance_id, context_length,
         )
         return instance
@@ -604,7 +682,7 @@ class ServerController:
         if is_isolated:
             return self.unload_model(instance_id)
 
-        logger.info("Released shared instance for agent '%s'", agent_id)
+        logger.info("[ServerController] Released shared instance (operation=release_instance, agent_id=%s)", agent_id)
         return True
 
     def list_agent_instances(self) -> Dict[str, Dict[str, Any]]:
@@ -635,7 +713,7 @@ class ServerController:
         )
         self._health_thread.start()
         logger.info(
-            "Started LMStudio health monitoring (interval=%ds)",
+            "[ServerController] Started health monitoring (operation=start_health, interval=%ds)",
             self._health_check_interval,
         )
 
@@ -645,7 +723,7 @@ class ServerController:
         if self._health_thread is not None:
             self._health_thread.join(timeout=5)
             self._health_thread = None
-        logger.info("Stopped LMStudio health monitoring")
+        logger.info("[ServerController] Stopped health monitoring (operation=stop_health)")
 
     def _health_loop(self) -> None:
         """Background health check loop."""
@@ -655,7 +733,34 @@ class ServerController:
             except Exception:
                 logger.debug("Health check error", exc_info=True)
 
+            # v1.50.1 [2026-03-22] — Auto-unload idle agent instances
+            try:
+                self._reap_idle_instances()
+            except Exception:
+                logger.debug("Idle reaper error", exc_info=True)
+
             self._health_stop.wait(self._health_check_interval)
+
+    def _reap_idle_instances(self) -> None:
+        """Unload agent instances that have been idle longer than jit_ttl_seconds."""
+        ttl = float(self._config.get("lmstudio.jit_ttl_seconds", 300))
+        if ttl <= 0:
+            return
+        with self._lock:
+            idle_keys = [
+                key for key, inst in self._instances.items()
+                if inst.agent_id and inst.idle_seconds > ttl
+            ]
+        for key in idle_keys:
+            inst = self._instances.get(key)
+            if not inst:
+                continue
+            logger.info("[ServerController] Reaping idle instance: %s (agent=%s, idle=%.0fs, ttl=%.0fs) (operation=reap_idle)",
+                        key, inst.agent_id, inst.idle_seconds, ttl)
+            try:
+                self.release_agent_instance(inst.agent_id)
+            except Exception as exc:
+                logger.warning("[ServerController] Failed to reap %s (operation=reap_idle): %s", key, exc)
 
     @property
     def last_health(self) -> Optional[ServerHealth]:
@@ -784,7 +889,7 @@ class ServerController:
             self._instances.clear()
             self._agent_instances.clear()
 
-        logger.info("ServerController shut down")
+        logger.info("[ServerController] Shut down (operation=shutdown)")
 
 
 # ── Singleton ────────────────────────────────────────────────────────────

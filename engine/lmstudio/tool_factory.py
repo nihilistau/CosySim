@@ -356,31 +356,28 @@ def run_with_tools(
     return ""
 
 
+# v1.44.0 [2026-03-21] — Uses LMSClient.chat() which returns tool_calls in LMSResponse
 def _raw_chat(client, messages, tools, model, temperature, max_tokens, integrations) -> Optional[Dict]:
     """
-    Issue a raw HTTP request and return the full parsed JSON body.
-    Needed to extract ``tool_calls`` which ``ChatResponse`` doesn't carry.
+    Issue a chat request and return a dict with content and tool_calls.
+
+    Uses ``LMSClient.chat()`` which already handles auth, URL, and
+    returns ``LMSResponse.tool_calls`` for MCP function calling.
     """
-    import httpx
-    from engine.utils import get_lmstudio_headers  # noqa: PLC0415
-    payload = client._build_payload(
-        messages,
-        model=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        tools=tools,
-        integrations=integrations,
-        stream=False,
-    )
     try:
-        r = client._client.post(
-            f"{client.base_url}/api/v1/chat/completions",
-            json=payload,
-            headers=get_lmstudio_headers(),
-            timeout=client.timeout,
+        resp = client.chat(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            integrations=integrations,
         )
-        r.raise_for_status()
-        return r.json()
+        return {
+            "content": resp.content or "",
+            "tool_calls": resp.tool_calls or [],
+            "finish_reason": resp.finish_reason or "stop",
+            "model": resp.model or "",
+        }
     except Exception as exc:
         logger.error("_raw_chat failed: %s", exc)
         return None
