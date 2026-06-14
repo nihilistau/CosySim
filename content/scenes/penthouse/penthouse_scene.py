@@ -17,9 +17,8 @@ Director tools
 • Adjust Stat    — tweak any stat for any character directly
 """
 
-from flask import Flask, render_template, jsonify, request
-from flask_socketio import SocketIO, emit
-from flask_cors import CORS
+from flask import render_template, jsonify, request
+from flask_socketio import emit
 from typing import Optional, Dict, List, Any
 from dataclasses import dataclass, field, asdict
 import json, random, threading, time
@@ -34,16 +33,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin
+from engine.scenes.flask_scene import FlaskScene
 from engine.agents.agent_loop import AgentLoop
 from content.scenes.penthouse.penthouse_rules import register_penthouse_rules
 from engine.spatial.location import Location
 from engine.spatial.scene_map import SceneMap
 from content.simulation.database.db import Database
 from content.simulation.character_system.character import Character
-from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
 from engine.mcp.interaction_trees import PENTHOUSE_INTERACTIONS, get_interaction_result
@@ -57,6 +53,10 @@ from content.scenes.penthouse.penthouse_anim_studio_mixin import PenthouseAnimSt
 # ══════════════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════════════
+
+SCENE_ID = "penthouse"
+
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 
 POSITIONS = [
     "standing", "sitting", "kneeling", "laying down", "crouching",
@@ -730,18 +730,18 @@ class CharacterProfile:
 #  ROLEPLAY PROMPT BUILDER
 # ══════════════════════════════════════════════════════════════════════
 
-def build_roleplay_system_prompt(
-    character: Character,
+def _build_others_context(
     profile: "CharacterProfile",
-    scene_state: Dict,
     all_profiles: Dict,
-    story_beats: List[str],
+    scene_state: Dict,
     active_scenario: Optional[str] = None,
-) -> str:
-    stats = profile.stats
-    p_info = PERSONALITY_PROFILES.get(profile.personality_key, PERSONALITY_PROFILES["playful_tease"])
-    compliance = stats.compliance_score(p_info.get("compliance_mod", 0))
+    story_beats: Optional[List[str]] = None,
+) -> tuple:
+    """Build context text for other characters, scenario, story beats, and props.
 
+    Returns:
+        Tuple of (others_text, scenario_context, beats_text, props_text).
+    """
     other_chars = []
     for cid, pr in all_profiles.items():
         if pr is not profile:
@@ -749,12 +749,6 @@ def build_roleplay_system_prompt(
                 "name": scene_state.get("characters", {}).get(cid, {}).get("name", "Unknown"),
                 "profile": pr,
             })
-
-    loc_name = scene_state.get("characters", {}).get(character.id, {}).get("location", "the penthouse")
-    loc_id   = scene_state.get("characters", {}).get(character.id, {}).get("location_id", "bed")
-    loc_data = scene_state.get("locations", {}).get(loc_id, {})
-    available_actions = loc_data.get("interactions", [])
-    room_props = scene_state.get("room_props", [])
 
     scenario_context = ""
     if active_scenario and active_scenario in PREMADE_SCENARIOS:
@@ -766,6 +760,7 @@ def build_roleplay_system_prompt(
         beats_text = "\n\nUPCOMING STORY BEATS:\n"
         beats_text += "\n".join(f"• {b}" for b in story_beats[:5])
 
+    room_props = scene_state.get("room_props", [])
     props_text = ""
     if room_props:
         props_desc = [
@@ -782,7 +777,17 @@ def build_roleplay_system_prompt(
         if op.props_held:
             others_text += f" They're holding: {', '.join(op.props_held)}."
 
-    stat_desc = stats.describe()
+    return others_text, scenario_context, beats_text, props_text
+
+
+def _build_compliance_text(stats: "AgentStats", personality_key: str) -> str:
+    """Compute compliance score and return a human-readable compliance description.
+
+    Returns:
+        A string describing the character's current compliance level.
+    """
+    p_info = PERSONALITY_PROFILES.get(personality_key, PERSONALITY_PROFILES["playful_tease"])
+    compliance = stats.compliance_score(p_info.get("compliance_mod", 0))
     compliance_txt = (
         "highly compliant right now — open and willing"
         if compliance > 75 else
@@ -792,6 +797,31 @@ def build_roleplay_system_prompt(
         if compliance > 25 else
         "feeling very resistant and defiant tonight"
     )
+    return compliance_txt
+
+
+def build_roleplay_system_prompt(
+    character: Character,
+    profile: "CharacterProfile",
+    scene_state: Dict,
+    all_profiles: Dict,
+    story_beats: List[str],
+    active_scenario: Optional[str] = None,
+) -> str:
+    stats = profile.stats
+    p_info = PERSONALITY_PROFILES.get(profile.personality_key, PERSONALITY_PROFILES["playful_tease"])
+
+    loc_name = scene_state.get("characters", {}).get(character.id, {}).get("location", "the penthouse")
+    loc_id   = scene_state.get("characters", {}).get(character.id, {}).get("location_id", "bed")
+    loc_data = scene_state.get("locations", {}).get(loc_id, {})
+    available_actions = loc_data.get("interactions", [])
+
+    others_text, scenario_context, beats_text, props_text = _build_others_context(
+        profile, all_profiles, scene_state, active_scenario, story_beats,
+    )
+
+    stat_desc = stats.describe()
+    compliance_txt = _build_compliance_text(stats, profile.personality_key)
 
     prompt = f"""You are {character.name}, a fully embodied character in an immersive adult roleplay simulation.
 
@@ -876,7 +906,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=3,
             properties={
                 "privacy": 0.95, "comfort": 1.0, "spiciness": 10,
-                "pos": {"x": -5, "y": 0, "z": -1},
+                "pos": {"x": -5, "y": 0.7, "z": -1},  # v1.49.2 — bed surface height
                 "mountable": True,
                 "mount_positions": [
                     "laying down", "on all fours", "straddling", "riding",
@@ -903,7 +933,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.5, "comfort": 0.85, "spiciness": 8,
-                "pos": {"x": 5.5, "y": 0, "z": 0},
+                "pos": {"x": 5.5, "y": 0.5, "z": 0},  # v1.49.2 — couch seat height
                 "mountable": True,
                 "mount_positions": [
                     "sitting", "straddling", "bent over", "riding",
@@ -928,7 +958,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.35, "comfort": 0.5, "spiciness": 6,
-                "pos": {"x": -3, "y": 0, "z": -5.5},
+                "pos": {"x": -3, "y": 0.9, "z": -5.5},  # v1.49.2 — bar stool height
                 "mountable": True,
                 "mount_positions": [
                     "sitting", "standing", "leaning", "bent over",
@@ -953,7 +983,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 1.0, "comfort": 0.8, "spiciness": 10,
-                "pos": {"x": 6.5, "y": 0, "z": -4.5},
+                "pos": {"x": 6.5, "y": 0.4, "z": -4.5},  # v1.49.2 — bath edge height
                 "mountable": True,
                 "mount_positions": [
                     "standing", "kneeling", "bent over", "against the wall",
@@ -979,7 +1009,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.15, "comfort": 0.45, "spiciness": 8,
-                "pos": {"x": 5, "y": 0, "z": 5.5},
+                "pos": {"x": 5, "y": 0, "z": 5.5},  # balcony — ground level OK
                 "mountable": True,
                 "mount_positions": [
                     "standing", "leaning", "bent over", "against the wall",
@@ -1005,7 +1035,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.4, "comfort": 0.5, "spiciness": 9,
-                "pos": {"x": 3, "y": 0, "z": -5.8},
+                "pos": {"x": 3, "y": 0.7, "z": -5.8},  # v1.49.2 — vanity stool height
                 "mountable": True,
                 "mount_positions": [
                     "standing", "sitting", "kneeling", "bent over",
@@ -1029,7 +1059,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.1, "comfort": 0.2, "spiciness": 7,
-                "pos": {"x": 7.5, "y": 0, "z": 3},
+                "pos": {"x": 7.5, "y": 0, "z": 3},  # shower — ground level OK
                 "mountable": True,
                 "mount_positions": [
                     "standing", "leaning", "against the wall",
@@ -1056,7 +1086,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.7, "comfort": 0.9, "spiciness": 8,
-                "pos": {"x": -2, "y": 0, "z": 4},
+                "pos": {"x": -2, "y": 0, "z": 4},  # v1.49.2 — fireplace hearth at floor level, characters stand/sit on rug
                 "mountable": True,
                 "mount_positions": [
                     "lying down", "sitting", "kneeling", "on all fours",
@@ -1074,7 +1104,8 @@ def _build_penthouse_map() -> SceneMap:
     return sm
 
 
-class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInventoryMixin, PenthouseSocialMixin, BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="penthouse"):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene (replaced BaseScene+MCPSceneMixin+NexusSceneMixin)
+class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCombatMixin, PenthouseDialogMixin, PenthouseInventoryMixin, PenthouseSocialMixin, FlaskScene):
     """Adult multi-agent roleplay penthouse — v4."""
 
     SCENE_METADATA = {
@@ -1096,8 +1127,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = 5556):
-        super().__init__(scene_name="penthouse", host=host, port=port)
+        super().__init__(host=host, port=port)
         self.db = Database()
         self.scene_map = _build_penthouse_map()
 
@@ -1141,32 +1173,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         }
         self._refresh_location_state()
 
-        # Nexus knowledge integration
-        self.nexus_init("penthouse")
-
-        # Flask
-        self.app = Flask(
-            __name__,
-            template_folder=str(Path(__file__).parent / "templates"),
-            static_folder=str(Path(__file__).parent / "static"),
-        )
-        # Multi-folder Jinja loader: scene templates + shared templates
-        import jinja2
-        _shared_tmpl = str(Path(__file__).parent.parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
-        self.register_bench_route(self.app, None)# socketio not yet created
-        self.register_tts_route(self.app)
+        # v1.51.0 — FlaskScene handles Flask, SocketIO, Nexus, MCP, health/hud/announcer/inventory/tts
         self.app.config["SECRET_KEY"] = "penthouse_v4_roleplay_secret"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", manage_session=False)
+        self.register_bench_route(self.app, self.socketio)
 
         # Mount control overlay
         from engine.overlay import mount_overlay
@@ -1174,7 +1183,6 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
         self._setup_routes()
         self._setup_socketio()
-        self._mcp_init()
         register_penthouse_rules()
 
         # SceneStateManager — bridge penthouse state to MCP framework
@@ -1321,123 +1329,73 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                 "type": msg_type,
             })
 
+    # v1.43.1 [2026-03-21] — Rewritten to use engine.lmstudio.chat()
     def _generate_chat_response(self, sender_name: str, message: str) -> None:
-        """Generate an immediate agent response to a player chat message.
+        """Generate an agent response to a player chat message.
 
-        Picks the most appropriate loaded character, runs inference via
-        the agent loop pipeline, and emits the result over Socket.IO.
-        Designed to run in a daemon thread so the chat handler returns
-        immediately.
+        Uses the unified ``engine.lmstudio.chat()`` — one function,
+        one code path, no scattered HTTP calls.  Runs in a daemon
+        thread so the Socket.IO handler returns immediately.
         """
-        # v1.43.0 — If no characters loaded, use default agent via orchestrator
-        if not self.characters:
-            char_id = "aria"
-            char_name = "Aria"
-        else:
+        from engine.lmstudio.chat import chat
+
+        # Pick responding character
+        if self.characters:
             char_id, char = next(iter(self.characters.items()))
             char_name = getattr(char, "name", char_id)
+        else:
+            char_id, char_name = "aria", "Aria"
 
         self.socketio.emit("agent_typing", {"character_name": char_name})
 
-        # v1.43.0 [2026-03-21] — Use orchestrator/conversation manager for inference
-        # Falls back through: agent_loop → orchestrator → conversation manager
-        response_text = ""
-        try:
-            if self.agent_loop and char_id in self.agent_loop._characters:
-                # Path 1: Full agent loop with interceptor pipeline
-                from engine.agents.virtual_agent import InferenceRequest
-                from engine.agents.stream_processor import strip_token_artifacts
+        # Build system prompt from character profile
+        profile = self.profiles.get(char_id)
+        system_prompt = (
+            f"You are {char_name}, a character in The Penthouse scene. "
+            f"Stay in character. Be expressive and engaging. "
+            f"Respond naturally to the player."
+        )
+        if profile and hasattr(profile, "personality"):
+            system_prompt += f"\nPersonality: {profile.personality}"
 
-                recent: List[Dict[str, Any]] = []
-                if hasattr(self.agent_loop, "_log_lock"):
-                    with self.agent_loop._log_lock:
+        # Gather recent conversation context
+        recent_lines = ""
+        if self.agent_loop and hasattr(self.agent_loop, "shared_log"):
+            try:
+                log_lock = getattr(self.agent_loop, "_log_lock", None)
+                if log_lock:
+                    with log_lock:
                         recent = list(self.agent_loop.shared_log[-8:])
-                elif self.agent_loop.shared_log:
+                else:
                     recent = list(self.agent_loop.shared_log[-8:])
-
-                log_lines = "\n".join(
+                recent_lines = "\n".join(
                     f"  {e.get('name', '?')}: {e.get('text', '')}"
                     for e in recent
                 )
+            except Exception:
+                pass
 
-                prompt = (
-                    f"Recent conversation:\n{log_lines}\n\n"
-                    f"{sender_name} just said: {message}\n\n"
-                    f"Respond as {char_name} in character."
-                )
+        # Build the user message with context
+        user_content = f"{sender_name}: {message}"
+        if recent_lines:
+            user_content = (
+                f"Recent conversation:\n{recent_lines}\n\n"
+                f"{sender_name} just said: {message}\n\n"
+                f"Respond as {char_name} in character."
+            )
 
-                conv_id = f"penthouse_chat_{char_id}"
-                request = InferenceRequest(
-                    agent_id=char_id,
-                    messages=[{"role": "user", "content": prompt}],
-                    conversation_id=conv_id,
-                    temperature=0.85,
-                    max_output_tokens=300,
-                    store=True,
-                    priority=1,
-                    metadata={
-                        "type": "penthouse_chat_response",
-                        "scene": "penthouse",
-                        "sender": sender_name,
-                    },
-                )
-
-                proc = self.agent_loop._infer(request)
-                response_text = strip_token_artifacts(
-                    proc.clean_text or proc.raw_text or ""
-                )
-
-                if proc.mood_tags:
-                    try:
-                        profile = self.profiles.get(char_id)
-                        if profile and hasattr(profile, "stats"):
-                            profile.stats.adjust(mood=5)
-                    except Exception:
-                        pass
-            else:
-                # Path 2: Direct orchestrator inference (no agent loop needed)
-                import sys as _sys
-                print(f"[PENTHOUSE CHAT] Path 2: orchestrator for {char_id}", file=_sys.stderr, flush=True)
-                from engine.lmstudio import get_orchestrator
-                orch = get_orchestrator()
-
-                # Build character system prompt from profile
-                profile = self.profiles.get(char_id)
-                system_prompt = (
-                    f"You are {char_name}, a character in The Penthouse scene. "
-                    f"Stay in character. Be expressive and engaging. "
-                    f"Respond naturally to the player."
-                )
-                if profile and hasattr(profile, "personality"):
-                    system_prompt += f"\nPersonality: {profile.personality}"
-
-                resp = orch.infer(
-                    agent_id=char_id,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"{sender_name}: {message}"},
-                    ],
-                    task_type="chat",
-                    priority="interactive",
-                    temperature=0.85,
-                    max_tokens=300,
-                )
-                if resp and hasattr(resp, "content"):
-                    response_text = resp.content or ""
-                elif resp and hasattr(resp, "text"):
-                    response_text = resp.text or ""
-                elif isinstance(resp, str):
-                    response_text = resp
-                logger.info("Penthouse chat via orchestrator: %d chars", len(response_text))
-
-        except Exception as exc:
-            import sys as _sys, traceback as _tb
-            print(f"[PENTHOUSE CHAT] EXCEPTION: {exc}", file=_sys.stderr, flush=True)
-            _tb.print_exc(file=_sys.stderr)
-            logger.warning("Chat response inference failed for %s: %s", char_id, exc)
+        # One call — the unified chat() function
+        response_text = chat(
+            [{"role": "user", "content": user_content}],
+            system=system_prompt,
+            temperature=0.85,
+            max_tokens=300,
+        )
 
         if not response_text:
             response_text = f"*{char_name} looks at you thoughtfully*"
+
+        logger.info("[%s] Chat response generated (operation=chat, agent=%s, chars=%d)", SCENE_ID, char_id, len(response_text))
 
         ts = datetime.now().isoformat()
         self.socketio.emit("chat_response", {
@@ -1454,6 +1412,30 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
     # ── Routes ──────────────────────────────────────────────────────────
     def _setup_routes(self) -> None:
         """Register all Flask routes — core routes here, groups via mixins."""
+        self._setup_core_routes()
+        self._setup_api_routes()
+
+        # ── YAML Config API routes ──────────────────────────────────────
+        self._setup_config_routes()
+
+        # Delegate route groups to mixins
+        self._setup_character_routes()
+        self._setup_stat_routes()
+        self._setup_outfit_routes()
+        self._setup_spatial_routes()
+        self._setup_props_routes()
+        self._setup_director_routes()
+        self._setup_bedgame_routes()
+        self._setup_scenario_routes()
+        self._setup_conversation_routes()
+        self._setup_event_routes()
+        self._setup_agent_routes()
+        self._setup_utility_routes()
+        self._setup_model_routes()
+        self._setup_anim_studio_routes()
+
+    def _setup_core_routes(self) -> None:
+        """Register core Flask routes — index, classic, scene state, time, lighting, furniture, locations."""
 
         @self.app.route("/")
         def index():
@@ -1536,6 +1518,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                 }
             return jsonify(locs)
 
+    def _setup_api_routes(self) -> None:
+        """Register API routes — economy, world context endpoints."""
+
         @self.app.route("/api/economy")
         def api_economy():
             """Return current economy state for this scene."""
@@ -1550,32 +1535,13 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/world/context")
         def api_world_context():
             """Return living world context for the penthouse scene."""
             return jsonify(self._get_world_context_for_character())
-
-        # ── YAML Config API routes ──────────────────────────────────────
-        self._setup_config_routes()
-
-        # Delegate route groups to mixins
-        self._setup_character_routes()
-        self._setup_stat_routes()
-        self._setup_outfit_routes()
-        self._setup_spatial_routes()
-        self._setup_props_routes()
-        self._setup_director_routes()
-        self._setup_bedgame_routes()
-        self._setup_scenario_routes()
-        self._setup_conversation_routes()
-        self._setup_event_routes()
-        self._setup_agent_routes()
-        self._setup_utility_routes()
-        self._setup_model_routes()
-        self._setup_anim_studio_routes()
 
     # ── YAML Config API ────────────────────────────────────────────────
     def _setup_config_routes(self) -> None:
@@ -1630,6 +1596,13 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
     # ── SocketIO─────────────────────────────────────────────────────────
     def _setup_socketio(self):
+        self._setup_socketio_core()
+        self._setup_socketio_stats()
+        self._setup_socketio_director()
+        self._setup_socketio_economy()
+
+    def _setup_socketio_core(self):
+        """Register connect, disconnect, request_state, chat_message handlers."""
 
         @self.socketio.on("connect")
         def handle_connect():
@@ -1663,11 +1636,11 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
 
             def _respond() -> None:
                 try:
-                    logger.info("[CHAT] Generating response for: %s", msg[:50])
+                    logger.info("[%s] Generating chat response (operation=chat): %s", SCENE_ID, msg[:50])
                     self._generate_chat_response(name, msg)
-                    logger.info("[CHAT] Response emitted successfully")
+                    logger.info("[%s] Chat response emitted (operation=chat)", SCENE_ID)
                 except Exception as exc:
-                    logger.error("[CHAT] Response generation FAILED: %s", exc, exc_info=True)
+                    logger.error("[%s] Chat response generation FAILED (operation=chat): %s", SCENE_ID, exc, exc_info=True)
                     try:
                         from engine.observability.structured_logger import get_structured_logger, LogLevel
                         get_structured_logger().log(
@@ -1681,6 +1654,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                         pass
 
             threading.Thread(target=_respond, daemon=True, name="chat-respond").start()
+
+    def _setup_socketio_stats(self):
+        """Register quick_stat handler."""
 
         @self.socketio.on("quick_stat")
         def handle_quick_stat(data):
@@ -1696,7 +1672,8 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                     pass
                 self._broadcast_state()
 
-        # ── Penthouse v0.68 — new socket handlers ──────────────────────
+    def _setup_socketio_director(self):
+        """Register get_scenarios, load_scenario, director_nudge handlers."""
 
         @self.socketio.on("get_scenarios")
         def handle_get_scenarios(data):
@@ -1788,6 +1765,9 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                 "direction": direction,
             })
 
+    def _setup_socketio_economy(self):
+        """Register get_economy, spend_credits, world_tick handlers."""
+
         @self.socketio.on("get_economy")
         def handle_get_economy(data):
             """Return current player credit balance."""
@@ -1853,13 +1833,10 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
             "tags": ["penthouse", "penthouse", "roleplay", "adult", "multi-agent", "spatial", "intimate", "mcp"],
         }
 
-    def start(self) -> None:
-        logger.info("THE PENTHOUSE — v0.68 Dark Renaissance — igniting...")
-        logger.info(f"Access at: http://{self.host}:{self.port}")
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-        # Re-register bench with socketio now available
-        self.register_bench_route(self.app, self.socketio)
-
+    def on_before_serve(self) -> None:
+        """Hook: wire all engine subsystems before serving."""
         # Wire up framework event bus
         try:
             from engine.mcp.framework import get_framework
@@ -1937,13 +1914,10 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
             if not npc_sched._running:
                 npc_sched.start()
             self._npc_scheduler = npc_sched
-            logger.info("NPC scheduler wired to penthouse")
+            logger.info("[%s] NPC scheduler wired (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
-            logger.warning("NPC scheduler init failed: %s", exc)
+            logger.warning("[%s] NPC scheduler init failed (operation=lifecycle): %s", SCENE_ID, exc)
             self._npc_scheduler = None
-
-        self.socketio.run(self.app, host=self.host, port=self.port,
-                          debug=False, allow_unsafe_werkzeug=True)
 
     # ── New engine event handlers ─────────────────────────────────────
 
@@ -1961,7 +1935,8 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         except Exception:
             pass
 
-    def stop(self) -> None:
+    def on_shutdown(self) -> None:
+        """Hook: stop agent loop, NPC scheduler, and save framework state."""
         if self.agent_loop:
             self.agent_loop.stop()
         # Stop NPC scheduler if we started it
@@ -1976,9 +1951,6 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
             get_framework().save_state()
         except Exception:
             pass
-        # Flush Nexus event buffer
-        self.nexus_flush()
-        logger.info("Penthouse scene stopped.")
 
 if __name__ == "__main__":
     scene = PenthouseScene(host="0.0.0.0", port=5556)

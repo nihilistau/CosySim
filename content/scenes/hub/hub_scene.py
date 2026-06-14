@@ -1,12 +1,20 @@
 """
-Central Hub — Main Launcher & Navigation
-=========================================
+Central Hub
+============
+
+Main Launcher & Navigation.
 
 The central hub for the CosySim system.  Provides:
 - Scene launcher with live status indicators
 - Categorized scenes (Core · Showcase · Tools)
 - Quick system health monitoring
 - Asset browser, tutorials, and settings
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 
 import streamlit as st

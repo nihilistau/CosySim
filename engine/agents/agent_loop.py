@@ -16,6 +16,19 @@ Usage::
     loop.register_character(char_a)
     loop.register_character(char_b)
     loop.start(interval=30)
+
+Version: v1.56.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.56.0 [2026-03-26] — Auto-register scene agents with Nexus agent_registry
+    v1.55.0 [2026-03-26] — Hook agent decisions into DataCollector for
+                            self-improvement training loop
+    v1.54.0 [2026-03-26] — Upgrade unregister_character debug→warning for MCP leave_scene failure
+    v1.49.3 [2026-03-22] — Structured logging context: [AgentLoop] prefix,
+                            operation= and entity= context on all log calls
+    v1.49.1 [2026-03-22] — Audit: type guard for batch responses, upgrade error
+                            logging from debug→warning, structured context in logs
 """
 from __future__ import annotations
 
@@ -112,7 +125,8 @@ class AgentLoop:
             get_framework().get_character(character.id).enter_scene(self.scene_id)
             logger.debug("AgentLoop: MCP registered %s → %s", character.id, self.scene_id)
         except Exception as _exc:
-            logger.debug("AgentLoop.register_character MCP sync failed: %s", _exc)
+            # v1.49.1 [2026-03-22] — MCP sync failures should be visible
+            logger.warning("[AgentLoop] MCP sync failed (operation=register, character=%s, scene=%s): %s", character.name, self.scene_id, _exc)
 
     def unregister_character(self, character_id: str) -> None:
         self._characters.pop(character_id, None)
@@ -123,8 +137,9 @@ class AgentLoop:
         try:
             from engine.mcp.framework import get_framework
             get_framework().get_character(character_id).leave_scene()
-        except Exception:
-            logger.debug("AgentLoop.unregister_character MCP leave_scene failed for %s", character_id, exc_info=True)
+        except Exception as exc:
+            # v1.54.0 [2026-03-26] — Upgrade debug→warning for MCP leave_scene failure
+            logger.warning("[AgentLoop] MCP leave_scene failed (operation=unregister, character=%s): %s", character_id, exc)
 
     def set_action_callback(self, fn: Callable) -> None:
         """Set a callback ``fn(character_id, action_dict)`` fired after every action."""
@@ -144,8 +159,47 @@ class AgentLoop:
             try:
                 return mgr.infer_with_pipeline(request)
             except Exception:
-                logger.debug("AgentLoop._infer pipeline inference failed, falling back to infer_processed", exc_info=True)
+                # v1.49.1 [2026-03-22] — Surface pipeline failures
+                logger.warning("[AgentLoop] Pipeline inference failed, falling back to infer_processed (operation=infer, scene=%s)", self.scene_id, exc_info=True)
         return mgr.infer_processed(request)
+
+    # ── Nexus Agent Registration ──────────────────────────────────────────
+
+    # v1.56.0 [2026-03-26] — Auto-register scene agents with Nexus agent_registry
+    # CONNECTS: NexusClient (agent_registry API), AGENT_TYPES
+    # CALLED BY: start()
+    # EMITS: Nexus /api/agents/register POST per character
+    def _register_agents_with_nexus(self) -> None:
+        """Register all characters as scene_agent type in Nexus agent registry.
+
+        Best-effort: failures are logged at debug level and never block
+        scene startup. Characters are registered with agent_type=scene_agent
+        and tier=worker so the governance system can resolve them from the
+        registry instead of relying on heuristic prefix matching.
+        """
+        try:
+            from engine.nexus.client import get_nexus_client
+            client = get_nexus_client()
+            if not client.is_available(timeout=2):
+                return
+            count = 0
+            for cid in self._characters:
+                char = self._characters[cid]
+                client._post("/api/agents/register", {
+                    "agent_id": cid,
+                    "display_name": getattr(char, "name", cid),
+                    "agent_type": "scene_agent",
+                    "model_size": "",
+                    "tier": "worker",
+                })
+                count += 1
+            if count:
+                logger.info(
+                    "[AgentLoop] Registered %d agents with Nexus (operation=register, scene=%s)",
+                    count, self.scene_id,
+                )
+        except Exception as exc:
+            logger.debug("[AgentLoop] Nexus agent registration skipped: %s", exc)
 
     # ── Loop control ────────────────────────────────────────────────────
     def start(self, interval: float = 30.0) -> None:
@@ -154,18 +208,22 @@ class AgentLoop:
             return
         self._running = True
         self._stop_event.clear()
+
+        # v1.56.0 — Register scene agents with Nexus before starting tick loop
+        self._register_agents_with_nexus()
+
         self._thread = threading.Thread(
             target=self._run, args=(interval,), daemon=True, name="AgentLoop"
         )
         self._thread.start()
-        logger.info("AgentLoop started (interval=%.1fs, %d characters)", interval, len(self._characters))
+        logger.info("[AgentLoop] Started (operation=start, scene=%s, interval=%.1fs, characters=%d)", self.scene_id, interval, len(self._characters))
 
     def stop(self) -> None:
         self._running = False
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
-        logger.info("AgentLoop stopped after %d ticks", self._tick_count)
+        logger.info("[AgentLoop] Stopped (operation=stop, scene=%s, ticks=%d)", self.scene_id, self._tick_count)
 
     @property
     def is_running(self) -> bool:
@@ -176,7 +234,7 @@ class AgentLoop:
             try:
                 self.tick()
             except Exception as e:
-                logger.error("AgentLoop tick error: %s", e)
+                logger.error("[AgentLoop] Tick error (operation=tick, scene=%s, tick=%d): %s", self.scene_id, self._tick_count, e)
             self._stop_event.wait(timeout=interval)
 
     # ── Core tick ───────────────────────────────────────────────────────
@@ -198,7 +256,7 @@ class AgentLoop:
                 try:
                     contexts[cid] = self._perceive(cid)
                 except Exception as e:
-                    logger.warning("Perceive error for %s: %s", cid, e)
+                    logger.warning("[AgentLoop] Perceive error (operation=perceive, character_id=%s, scene=%s): %s", cid, self.scene_id, e)
 
         # Phase 2: Batch decide (all characters in parallel via manager)
         decisions: Dict[str, Dict] = {}
@@ -207,14 +265,14 @@ class AgentLoop:
             try:
                 decisions = self._decide_batch(decidable, contexts)
             except Exception as e:
-                logger.warning("Batch decide failed, falling back to sequential: %s", e)
+                logger.warning("[AgentLoop] Batch decide failed, falling back to sequential (operation=decide_batch, scene=%s): %s", self.scene_id, e)
         # Sequential fallback for any missing decisions
         for cid in decidable:
             if cid not in decisions:
                 try:
                     decisions[cid] = self._decide(cid, contexts[cid])
                 except Exception as e:
-                    logger.warning("Decide error for %s: %s", cid, e)
+                    logger.warning("[AgentLoop] Decide error (operation=decide, character_id=%s, scene=%s): %s", cid, self.scene_id, e)
                     decisions[cid] = {"action": "idle", "target": "", "message": ""}
 
         # Phase 3: Execute all decisions
@@ -225,8 +283,10 @@ class AgentLoop:
                 actions.append(result)
                 if self._on_action:
                     self._on_action(cid, result)
+                # v1.55.0 — Log decision for training pipeline
+                self._log_decision_for_training(cid, contexts.get(cid, ""), decision, result)
             except Exception as e:
-                logger.warning("Execute error for %s: %s", cid, e)
+                logger.warning("[AgentLoop] Execute error (operation=execute, character_id=%s, scene=%s): %s", cid, self.scene_id, e)
                 actions.append({"character_id": cid, "action": "idle", "error": str(e)})
 
         # Emit tick summary to UI
@@ -242,7 +302,8 @@ class AgentLoop:
             from engine.mcp.framework import get_framework
             get_framework().tick()
         except Exception:
-            logger.debug("MCPFramework tick failed during agent loop step", exc_info=True)
+            # v1.49.1 [2026-03-22] — Framework tick failures affect game state
+            logger.warning("[AgentLoop] MCPFramework tick failed (operation=framework_tick, scene=%s)", self.scene_id, exc_info=True)
 
         # ActivityBus: publish tick summary
         try:
@@ -256,7 +317,7 @@ class AgentLoop:
                 data={"tick": self._tick_count, "action_count": len(actions)},
             )
         except Exception:
-            logger.debug("Failed to publish agent_loop_tick to ActivityBus for scene %s", self.scene_id, exc_info=True)
+            logger.debug("Failed to publish agent_loop_tick to ActivityBus for scene %s", self.scene_id)
 
         return actions
 
@@ -387,7 +448,7 @@ class AgentLoop:
                 if response:
                     return self._parse_decision(response)
             except Exception as e:
-                logger.debug("agent.quick_query failed: %s", e)
+                logger.warning("[AgentLoop] quick_query failed (operation=decide, character_id=%s, scene=%s): %s", character_id, self.scene_id, e)
 
         # Use VirtualAgentManager with pipeline for rich response
         try:
@@ -418,7 +479,7 @@ class AgentLoop:
                     decision["extra_actions"] = list(proc.action_tags)
                 return decision
         except Exception as e:
-            logger.debug("VirtualAgentManager decide failed: %s", e)
+            logger.warning("[AgentLoop] VAM decide failed (operation=decide, character_id=%s, scene=%s): %s", character_id, self.scene_id, e)
 
         return self._random_action(character_id)
 
@@ -430,8 +491,9 @@ class AgentLoop:
             char_node = fw.get_character(character_id)
             if char_node:
                 char_node.update_state({"mood": mood, "last_mood_source": "agent_loop"})
-        except Exception:
-            logger.debug("Failed to update mood in MCP framework for %s", character_id, exc_info=True)
+        except Exception as exc:
+            # v1.49.1 [2026-03-22] — Mood sync failures should be visible
+            logger.warning("[AgentLoop] Mood sync failed (operation=update_mood, character_id=%s, scene=%s): %s", character_id, self.scene_id, exc)
 
     def _decide_batch(self, char_ids: List[str], contexts: Dict[str, str]) -> Dict[str, Dict]:
         """Batch-decide actions for multiple characters in parallel."""
@@ -470,8 +532,18 @@ class AgentLoop:
             return {}
 
         responses = mgr.infer_batch(requests)
+        # v1.49.1 [2026-03-22] — Type guard: verify response count matches request count
+        if len(responses) != len(ordered_ids):
+            logger.warning(
+                "[AgentLoop] Batch decide response count mismatch (operation=decide_batch, expected=%d, got=%d, scene=%s)",
+                len(ordered_ids), len(responses), self.scene_id,
+            )
         results = {}
         for cid, resp in zip(ordered_ids, responses):
+            if resp is None:
+                logger.warning("[AgentLoop] Batch decide null response (operation=decide_batch, character_id=%s, scene=%s)", cid, self.scene_id)
+                results[cid] = self._random_action(cid)
+                continue
             text = resp.content or resp.reasoning_content or ""
             if text:
                 results[cid] = self._parse_decision(text)
@@ -545,100 +617,120 @@ class AgentLoop:
         }
 
         if action == "move":
-            loc = self.scene_map.get_location_by_name(target)
-            if loc:
-                success = self.scene_map.move_character(character_id, loc.id)
-                result["success"] = success
-                result["description"] = f"{character.name} moved to the {target}." if success else f"{target} is full."
-            else:
-                result["success"] = False
-                result["description"] = f"{character.name} doesn't know where '{target}' is."
-
+            self._execute_move(result, character, target, timestamp)
         elif action == "speak":
-            # Stateful dialog: generate actual speech with conversation memory
-            dialog = self._generate_dialog(character_id, decision)
-            if dialog:
-                message = dialog
-                result["message"] = dialog
+            self._execute_speak(result, character_id, character, decision, timestamp)
+        elif action in ("flirt", "touch", "kiss", "cuddle", "intimate"):
+            self._execute_physical(result, character_id, character, action, target, timestamp)
+        elif action == "interact":
+            self._execute_interact(result, character, message, timestamp)
+        else:  # idle
+            self._execute_idle(result, character)
+
+        self._post_execute(character_id, character, action, target, message, result)
+
+        return result
+
+    def _execute_move(self, result: Dict, character: Any, target: str, timestamp: str) -> None:
+        """Handle the 'move' action — relocate character to a named location."""
+        loc = self.scene_map.get_location_by_name(target)
+        if loc:
+            success = self.scene_map.move_character(result["character_id"], loc.id)
+            result["success"] = success
+            result["description"] = f"{character.name} moved to the {target}." if success else f"{target} is full."
+        else:
+            result["success"] = False
+            result["description"] = f"{character.name} doesn't know where '{target}' is."
+
+    def _execute_speak(self, result: Dict, character_id: str, character: Any, decision: Dict, timestamp: str) -> None:
+        """Handle the 'speak' action — generate dialog and log to shared conversation."""
+        dialog = self._generate_dialog(character_id, decision)
+        message = dialog if dialog else result["message"]
+        if dialog:
+            result["message"] = dialog
+        with self._log_lock:
+            self.shared_log.append({
+                "name": character.name, "text": message,
+                "timestamp": timestamp, "type": "speech",
+            })
+            self.shared_log = self.shared_log[-self._shared_log_max:]
+        result["description"] = f'{character.name} says: "{message}"'
+
+        # Emit character_speaking so the UI chat panel shows the speech
+        if self.socketio and message:
+            self.socketio.emit("character_speaking", {
+                "character_id": character_id,
+                "character_name": character.name,
+                "message": message,
+                "timestamp": timestamp,
+            })
+
+    def _execute_physical(self, result: Dict, character_id: str, character: Any, action: str, target: str, timestamp: str) -> None:
+        """Handle physical interaction actions (flirt/touch/kiss/cuddle/intimate)."""
+        nearby = self.scene_map.get_nearby_characters(character_id)
+        target_id = None
+        for nid in nearby:
+            other = self._characters.get(nid)
+            if other and (other.name.lower() == target.lower() or not target):
+                target_id = nid
+                break
+        if target_id:
+            other = self._characters[target_id]
+            desc_map = {
+                "flirt": f"{character.name} flirts with {other.name}",
+                "touch": f"{character.name} gently touches {other.name}",
+                "kiss": f"{character.name} kisses {other.name}",
+                "cuddle": f"{character.name} cuddles up to {other.name}",
+                "intimate": f"{character.name} and {other.name} share an intimate moment",
+            }
+            result["description"] = desc_map.get(action, f"{character.name} interacts with {other.name}")
             with self._log_lock:
                 self.shared_log.append({
-                    "name": character.name, "text": message,
-                    "timestamp": timestamp, "type": "speech",
+                    "name": character.name, "text": f"*{result['description']}*",
+                    "timestamp": timestamp, "type": "action",
                 })
                 self.shared_log = self.shared_log[-self._shared_log_max:]
-            result["description"] = f'{character.name} says: "{message}"'
+            arousal_boost = {"flirt": 0.05, "touch": 0.08, "kiss": 0.12, "cuddle": 0.10, "intimate": 0.20}
+            delta = arousal_boost.get(action, 0.05)
+            for cid in (character_id, target_id):
+                c = self._characters.get(cid)
+                if c and hasattr(c, 'adjust_arousal'):
+                    c.adjust_arousal(delta)
+        else:
+            result["success"] = False
+            result["description"] = f"No one nearby to {action} with."
 
-            # Emit character_speaking so the UI chat panel shows the speech
-            if self.socketio and message:
-                self.socketio.emit("character_speaking", {
-                    "character_id": character_id,
-                    "character_name": character.name,
-                    "message": message,
-                    "timestamp": timestamp,
+    def _execute_interact(self, result: Dict, character: Any, message: str, timestamp: str) -> None:
+        """Handle the 'interact' action — perform a location-based activity."""
+        loc = self.scene_map.get_character_location(result["character_id"])
+        if loc and loc.interactions:
+            activity = random.choice(loc.interactions) if not message else message
+            result["description"] = f"{character.name} {activity} at the {loc.name}."
+            with self._log_lock:
+                self.shared_log.append({
+                    "name": character.name, "text": f"*{result['description']}*",
+                    "timestamp": timestamp, "type": "action",
                 })
+                self.shared_log = self.shared_log[-self._shared_log_max:]
+        else:
+            result["description"] = f"{character.name} looks around."
 
-        elif action in ("flirt", "touch", "kiss", "cuddle", "intimate"):
-            # Physical interaction — check proximity
-            nearby = self.scene_map.get_nearby_characters(character_id)
-            target_id = None
-            for nid in nearby:
-                other = self._characters.get(nid)
-                if other and (other.name.lower() == target.lower() or not target):
-                    target_id = nid
-                    break
-            if target_id:
-                other = self._characters[target_id]
-                desc_map = {
-                    "flirt": f"{character.name} flirts with {other.name}",
-                    "touch": f"{character.name} gently touches {other.name}",
-                    "kiss": f"{character.name} kisses {other.name}",
-                    "cuddle": f"{character.name} cuddles up to {other.name}",
-                    "intimate": f"{character.name} and {other.name} share an intimate moment",
-                }
-                result["description"] = desc_map.get(action, f"{character.name} interacts with {other.name}")
-                with self._log_lock:
-                    self.shared_log.append({
-                        "name": character.name, "text": f"*{result['description']}*",
-                        "timestamp": timestamp, "type": "action",
-                    })
-                    self.shared_log = self.shared_log[-self._shared_log_max:]
-                arousal_boost = {"flirt": 0.05, "touch": 0.08, "kiss": 0.12, "cuddle": 0.10, "intimate": 0.20}
-                delta = arousal_boost.get(action, 0.05)
-                for cid in (character_id, target_id):
-                    c = self._characters.get(cid)
-                    if c and hasattr(c, 'adjust_arousal'):
-                        c.adjust_arousal(delta)
-            else:
-                result["success"] = False
-                result["description"] = f"No one nearby to {action} with."
+    def _execute_idle(self, result: Dict, character: Any) -> None:
+        """Handle the 'idle' action — pick a random idle description."""
+        loc = self.scene_map.get_character_location(result["character_id"])
+        loc_name = loc.name if loc else "the room"
+        idle_descs = [
+            f"{character.name} looks around the {loc_name} thoughtfully.",
+            f"{character.name} stretches and relaxes at the {loc_name}.",
+            f"{character.name} checks their phone.",
+            f"{character.name} gazes out the window.",
+            f"{character.name} hums softly to themselves.",
+            f"{character.name} adjusts their hair in a nearby mirror.",
+        ]
+        result["description"] = random.choice(idle_descs)
 
-        elif action == "interact":
-            loc = self.scene_map.get_character_location(character_id)
-            if loc and loc.interactions:
-                activity = random.choice(loc.interactions) if not message else message
-                result["description"] = f"{character.name} {activity} at the {loc.name}."
-                with self._log_lock:
-                    self.shared_log.append({
-                        "name": character.name, "text": f"*{result['description']}*",
-                        "timestamp": timestamp, "type": "action",
-                    })
-                    self.shared_log = self.shared_log[-self._shared_log_max:]
-            else:
-                result["description"] = f"{character.name} looks around."
-
-        else:  # idle
-            loc = self.scene_map.get_character_location(character_id)
-            loc_name = loc.name if loc else "the room"
-            idle_descs = [
-                f"{character.name} looks around the {loc_name} thoughtfully.",
-                f"{character.name} stretches and relaxes at the {loc_name}.",
-                f"{character.name} checks their phone.",
-                f"{character.name} gazes out the window.",
-                f"{character.name} hums softly to themselves.",
-                f"{character.name} adjusts their hair in a nearby mirror.",
-            ]
-            result["description"] = random.choice(idle_descs)
-
+    def _post_execute(self, character_id: str, character: Any, action: str, target: str, message: str, result: Dict) -> None:
+        """Shared post-execution: log to EventChain, publish to ActivityBus, emit to UI."""
         # Log to EventChain
         self._log_action(result)
 
@@ -659,7 +751,43 @@ class AgentLoop:
         if self.socketio:
             self.socketio.emit("agent_action", result)
 
-        return result
+    # ── Training Data Hook ────────────────────────────────────────────
+
+    # v1.55.0 [2026-03-26] — Feed agent decisions to DataCollector for self-improvement loop
+    # CONNECTS: DataCollector, training pipeline (auto_train.py)
+    # CALLED BY: tick() Phase 3 after _execute()
+    def _log_decision_for_training(
+        self, character_id: str, context: str, decision: Dict, result: Dict
+    ) -> None:
+        """Feed agent decisions to training pipeline.
+
+        Captures situation→action pairs with quality signals so the
+        self-improvement pipeline can learn from real agent behavior.
+        Wrapped in try/except so training collection never crashes the loop.
+
+        Args:
+            character_id: Character who made the decision.
+            context: Perception context string (truncated for storage).
+            decision: The structured decision dict from Phase 2.
+            result: The execution result dict from Phase 3.
+        """
+        try:
+            from training.data_collector import get_data_collector
+            dc = get_data_collector()
+            dc.collect_agent_decision(
+                situation=context[:500],  # truncate for storage
+                action=f"{decision.get('action', 'idle')}: {decision.get('message', '')[:200]}",
+                character_id=character_id,
+                scene=self.scene_id,
+                quality=1.0 if result.get("success") else 0.3,
+                model=getattr(self, "_current_model", ""),
+            )
+        except Exception as exc:
+            logger.debug(
+                "[AgentLoop] Training data logging failed "
+                "(operation=collect_decision, character_id=%s, scene=%s): %s",
+                character_id, self.scene_id, exc,
+            )
 
     def _log_action(self, result: Dict) -> None:
         """Log action to EventChain (best-effort)."""

@@ -2,6 +2,11 @@
    Tablet UI Styles — CosySim
    Internal tablet-frame + message bubbles + game mechanics UI.
    Root layout lives in phone_ui.html <style> block.
+
+   Version: v1.51.1 [2026-03-25]
+
+   Change Log:
+     v1.51.1 [2026-03-25] — Desktop mode: tab bar, email, files, music player styles
    ═══════════════════════════════════════════════════════════════════ */
 
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
@@ -814,3 +819,240 @@ body {
 .gallery-icon-btn:active {
     transform: scale(0.9);
 }
+
+/* ── Desktop Mode Tab Bar ──────────────────────────────── */
+/* v1.51.1 [2026-03-25] — Tab bar for desktop mode (Messages, Email, Files, Music) */
+
+.app-tabbar {
+  display: flex;
+  background: rgba(8, 14, 20, 0.95);
+  border-bottom: 1px solid var(--sep, rgba(16,185,129,.15));
+  flex-shrink: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--label2, rgba(192,216,204,.6));
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tab-btn:hover {
+  background: rgba(16, 185, 129, .05);
+  color: var(--label, #c0d8cc);
+}
+
+.tab-btn.active {
+  color: var(--accent, #10b981);
+  border-bottom-color: var(--accent, #10b981);
+  background: rgba(16, 185, 129, .08);
+}
+
+.tab-icon { font-size: 14px; }
+
+.tab-badge {
+  font-size: 9px;
+  background: var(--accent2, #06b6d4);
+  color: #000;
+  border-radius: 8px;
+  padding: 1px 5px;
+  font-weight: 700;
+  min-width: 14px;
+  text-align: center;
+}
+
+.tab-badge:empty { display: none; }
+
+/* ── Email List ──────────────────────────────────────── */
+/* v1.51.1 [2026-03-25] */
+.email-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sep);
+  cursor: pointer;
+  transition: background .15s;
+}
+.email-item:hover { background: var(--glass); }
+.email-item.unread { border-left: 3px solid var(--accent2); }
+.email-item.starred .email-star { color: #f59e0b; }
+
+.email-sender {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--label);
+}
+.email-subject {
+  font-size: 12px;
+  color: var(--label2);
+  margin-top: 2px;
+}
+.email-date {
+  font-size: 10px;
+  color: var(--label3);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.email-star {
+  cursor: pointer;
+  color: var(--label3);
+  font-size: 14px;
+}
+
+.email-detail {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.email-detail-header {
+  border-bottom: 1px solid var(--sep);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+.email-detail-from { font-weight: 600; color: var(--accent); }
+.email-detail-subject { font-size: 16px; font-weight: 700; color: var(--label); margin: 8px 0 4px; }
+.email-detail-date { font-size: 11px; color: var(--label3); }
+.email-detail-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--label);
+  white-space: pre-wrap;
+}
+
+/* ── File Browser ────────────────────────────────────── */
+/* v1.51.1 [2026-03-25] */
+.file-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--label3);
+  border-bottom: 1px solid var(--sep);
+  overflow-x: auto;
+}
+.file-breadcrumb-part {
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.file-breadcrumb-part:hover { text-decoration: underline; }
+.file-breadcrumb-sep { color: var(--label3); }
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--sep);
+  cursor: pointer;
+  transition: background .15s;
+}
+.file-item:hover { background: var(--glass); }
+.file-icon { font-size: 18px; width: 24px; text-align: center; }
+.file-name { font-size: 13px; color: var(--label); flex: 1; }
+.file-size { font-size: 11px; color: var(--label3); }
+.file-type-dir .file-name { font-weight: 600; color: var(--accent); }
+
+.file-content {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.file-content-header {
+  font-size: 11px;
+  color: var(--label3);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sep);
+  margin-bottom: 8px;
+}
+.file-content-body {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--label);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Music Player ────────────────────────────────────── */
+/* v1.51.1 [2026-03-25] */
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sep);
+  cursor: pointer;
+  transition: background .15s;
+}
+.playlist-item:hover { background: var(--glass); }
+
+.playlist-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--glass2), var(--glass));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.playlist-info { flex: 1; min-width: 0; }
+.playlist-name { font-size: 13px; font-weight: 600; color: var(--label); }
+.playlist-meta { font-size: 11px; color: var(--label3); margin-top: 2px; }
+
+.song-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--sep);
+  cursor: pointer;
+  transition: background .15s;
+}
+.song-item:hover { background: var(--glass); }
+.song-item.playing { background: rgba(16, 185, 129, .1); }
+.song-index { font-size: 11px; color: var(--label3); width: 20px; text-align: center; }
+.song-title { font-size: 13px; color: var(--label); flex: 1; }
+.song-artist { font-size: 11px; color: var(--label2); }
+
+.now-playing-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(8, 14, 20, 0.95);
+  border-top: 1px solid var(--accent);
+  flex-shrink: 0;
+}
+.now-playing-bar:empty { display: none; }
+.now-playing-info { flex: 1; min-width: 0; }
+.now-playing-title { font-size: 12px; font-weight: 600; color: var(--label); }
+.now-playing-artist { font-size: 10px; color: var(--label2); }
+.now-playing-controls { display: flex; gap: 12px; }
+.now-playing-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+}
+.now-playing-btn:hover { color: var(--label); }

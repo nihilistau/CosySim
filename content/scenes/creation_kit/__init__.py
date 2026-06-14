@@ -1,0 +1,1 @@
+"""CosySim scene: CREATION KIT."""

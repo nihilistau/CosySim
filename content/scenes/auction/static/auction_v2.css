@@ -1,0 +1,195 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   THE AUCTION HOUSE — auction_v2.css
+   Dark Renaissance v2 glow-up layer (loaded LAST — wins the cascade)
+   ════════════════════════════════════════════════════════════════════════
+   Gold-amber luxury auction: #fbbf24 podium light over the void, credits
+   in mono gold (₵), gavel-moment scan-sweep, glass-deep podium panel.
+   Extrapolated from docs/DESIGN_SYSTEM_V2.md (no kit): [data-scene]
+   accent + the 4-layer background recipe from artifacts/new-assets/styles.css.
+
+   Version: v1.58.0 [2026-06-11]
+   Author:  CosySim Team
+
+   Change Log:
+     v1.58.0 [2026-06-11] — Initial v2 layer: palette re-pointed to
+                              var(--cs-scene-accent) tokens; 4-layer
+                              background stack (grid drift + podium glow);
+                              Orbitron gold-gradient marquee; credits/bids
+                              in mono gold with ₵ symbol (--cs-credit-*);
+                              gold-glow hover lift on lot + NPC cards;
+                              bid pulse on the price podium; gavel-moment
+                              scan-sweep (reuses cs-scan-sweep-anim);
+                              glass-deep podium panel tinting.
+
+   CONNECTS: auction.css (--auction-* vars), design_tokens_v2.css
+             ([data-scene="auction"]), cosysim-animations.css
+             (cs-scan-sweep-anim, cs-pulse-glow, cs-flash-gold, cs-slide-up),
+             cosysim-components.css (glass-deep)
+   CALLED BY: auction.html {% block head_css %} (after auction.css)
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ──── 1 · Palette → v2 tokens ───────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — --auction-* family now flows from the scene
+   accent injected by neon_base.html; raw hex kept as fallback only. */
+:root {
+  --auction-accent: var(--cs-scene-accent, #fbbf24);
+  --auction-accent-rgb: var(--cs-scene-accent-rgb, 251 191 36);
+  --auction-glow: rgb(var(--auction-accent-rgb) / 0.25);
+  --auction-border: rgb(var(--auction-accent-rgb) / 0.14);
+  /* House gold — the money voice (economy convention: gold, ₵, mono) */
+  --auction-credit: var(--cs-credit-color, #f59e0b);
+  --auction-credit-glow: var(--cs-credit-glow, rgba(245, 158, 11, 0.4));
+  /* v2 typography voices */
+  --auction-font-display: var(--cs-font-display, 'Orbitron', sans-serif);
+  --auction-font-mono: var(--cs-font-mono, 'JetBrains Mono', monospace);
+}
+
+/* ──── 2 · 4-layer background stack (v2 recipe) ──────────────────────── */
+/* v1.58.0 [2026-06-11] — black #02030a base → 80px drift grid → radial
+   gold podium glow rising from the auction floor. Layer 4 (CRT scanlines)
+   is global via .neon-scanlines in neon_base. */
+.auction-scene {
+  background:
+    repeating-linear-gradient(90deg, rgb(var(--auction-accent-rgb) / 0.035) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--auction-accent-rgb) / 0.035) 0 1px, transparent 1px 80px),
+    radial-gradient(ellipse at 50% 88%, rgb(var(--auction-accent-rgb) / 0.10) 0%, transparent 60%),
+    #02030a;
+  animation: auction-grid-drift 30s linear infinite;
+}
+/* Grid drifts on the scene container itself — no pseudo-element needed,
+   can never paint over the lot panel. */
+@keyframes auction-grid-drift {
+  from { background-position: 0 0,    0 0,    0 0; }
+  to   { background-position: 0 80px, 0 80px, 0 0; }
+}
+
+/* ──── 3 · Marquee — THE AUCTION HOUSE in gold-foil Orbitron ─────────── */
+/* v1.58.0 [2026-06-11] — Gold-tipped gradient wordmark + ambient glow. */
+.auction-title {
+  font-family: var(--auction-font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  background: linear-gradient(135deg, #fde68a 0%, var(--auction-accent) 45%, #b45309 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 14px rgb(var(--auction-accent-rgb) / 0.35));
+}
+.auction-header {
+  border-bottom: 1px solid rgb(var(--auction-accent-rgb) / 0.25);
+  box-shadow: 0 12px 32px -18px rgb(var(--auction-accent-rgb) / 0.25);
+}
+
+/* ──── 4 · Credits — ALWAYS gold, ₵, mono (economy convention) ───────── */
+/* v1.58.0 [2026-06-11] — ₵ symbol injected via ::before so auction.js can
+   keep writing plain numbers into textContent. */
+.credits-value,
+.price-value,
+.feed-amount,
+.summary-value {
+  font-family: var(--auction-font-mono);
+  color: var(--auction-credit);
+  text-shadow: 0 0 12px var(--auction-credit-glow);
+}
+.credits-value::before,
+.price-value::before,
+.feed-amount::before {
+  content: var(--cs-credit-symbol, "₵");
+  margin-right: 2px;
+  opacity: 0.85;
+  font-size: 0.8em;
+}
+
+/* ──── 5 · Podium — glass-deep lot panel ─────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Lot panel carries shared .glass-deep (template);
+   here we retint its chrome to the gold house voice. */
+.lot-panel.glass-deep {
+  background:
+    linear-gradient(180deg, rgb(var(--auction-accent-rgb) / 0.05) 0%, transparent 18%),
+    rgba(10, 12, 8, 0.78);
+  border: 1px solid rgb(var(--auction-accent-rgb) / 0.18);
+  box-shadow:
+    0 0 32px -8px rgb(var(--auction-accent-rgb) / 0.18),
+    var(--cs-shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.7));
+}
+
+/* Bid pulse — the podium price block breathes gold while a lot is live.
+   Reuses shared cs-pulse-glow keyframes (box-shadow pulse on scene glow). */
+.current-price-block {
+  border-color: rgb(var(--auction-accent-rgb) / 0.3);
+  animation: cs-pulse-glow 2.8s ease-in-out infinite;
+}
+.price-winner.is-player {
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+}
+
+/* Player bid lands in the feed with a gold flash (shared cs-flash-gold). */
+.feed-entry.feed-player-bid {
+  animation: feed-in 0.3s ease-out, cs-flash-gold 0.9s ease-out;
+}
+
+/* ──── 6 · Gavel moment — scan-sweep on the narration bar ────────────── */
+/* v1.58.0 [2026-06-11] — auction.js adds .gavel-highlight on every gavel
+   line; with the shared .anim-scan-sweep base (template) this fires the
+   light band once per gavel moment. Reuses cs-scan-sweep-anim keyframes. */
+.gavel-bar.anim-scan-sweep.gavel-highlight::after {
+  animation: cs-scan-sweep-anim 0.9s ease-in-out forwards;
+}
+.gavel-bar {
+  background: linear-gradient(90deg, rgb(var(--auction-accent-rgb) / 0.10), transparent 80%);
+  border-left: 3px solid var(--auction-accent);
+  box-shadow: -2px 0 12px -4px rgb(var(--auction-accent-rgb) / 0.4);
+}
+.gavel-icon {
+  filter: none;
+  text-shadow: 0 0 10px rgb(var(--auction-accent-rgb) / 0.6);
+}
+
+/* ──── 7 · Lot cards + NPC bidders — gold-glow hover lift ────────────── */
+/* v1.58.0 [2026-06-11] — Luxury catalogue feel: cards lift and rim-light
+   in gold on hover; live bidders pulse their gold edge. */
+.lot-progress-item,
+.npc-card {
+  transition: background 0.2s var(--cs-ease, ease),
+              transform 0.2s var(--cs-ease, ease),
+              box-shadow 0.2s var(--cs-ease, ease);
+}
+.lot-progress-item:hover,
+.npc-card:hover {
+  background: rgb(var(--auction-accent-rgb) / 0.07);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px -6px rgb(var(--auction-accent-rgb) / 0.4);
+}
+.npc-card.npc-bidding {
+  box-shadow: inset 2px 0 0 var(--auction-accent), 0 0 14px -4px rgb(var(--auction-accent-rgb) / 0.5);
+}
+.lot-progress-item.lot-current {
+  box-shadow: inset 2px 0 0 var(--auction-accent), 0 0 12px -5px rgb(var(--auction-accent-rgb) / 0.5);
+}
+
+/* ──── 8 · CTAs — gold gavel buttons ─────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Start button breathes (shared cs-pulse-glow via
+   .cs-anim-pulse-glow in template); BID button gets a hot gold press. */
+.btn-start-auction,
+.btn-place-bid {
+  background: linear-gradient(135deg, #fde68a 0%, var(--auction-accent) 40%, #d97706 100%);
+  box-shadow: 0 2px 16px -4px rgb(var(--auction-accent-rgb) / 0.45);
+}
+.btn-place-bid:hover:not(:disabled) {
+  box-shadow: 0 4px 22px -2px rgb(var(--auction-accent-rgb) / 0.6);
+}
+
+/* ──── 9 · Panel chrome — label voice on side panels ─────────────────── */
+/* v1.58.0 [2026-06-11] — Side panels recede (subtle gold border), titles
+   take the accent label voice. */
+.panel-title {
+  color: rgb(var(--auction-accent-rgb) / 0.8);
+  letter-spacing: 0.16em;
+  border-bottom-color: rgb(var(--auction-accent-rgb) / 0.18);
+}
+.npc-panel,
+.feed-panel,
+.lots-panel {
+  border-color: rgb(var(--auction-accent-rgb) / 0.10);
+}

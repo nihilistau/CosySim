@@ -1,1115 +1,788 @@
-/* ============================================================
-   NeonCity — v0.68 "Dark Renaissance"
-   Scene-specific styles. Cyan accent: #06b6d4
-   ============================================================ */
+/*
+ * NeonCity v1.58.0 — Dark Renaissance Alignment
+ * ================================
+ * Bloomberg Terminal meets Blade Runner. Dense, dark, information-rich.
+ * Clean grid. No conflicts with neon_base.css or shared HUD.
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Dark Renaissance v2 alignment: palette re-pointed
+ *                            at --cs-scene-accent tokens, Orbitron display
+ *                            logo, kit 4-layer drift background, credits
+ *                            pill, filled inventory slots, crew/mission
+ *                            card kit treatments (previously unstyled)
+ *   v1.57.3 [2026-05-12] — NeonCity polish: pulse glow, ambient header,
+ *                            district scan+stagger, stat/faction bar animations
+ *   v1.52.0 [2026-03-22] — District online/offline indicators, faction bar
+ *                            transitions, credit animations, NPC typing
+ *                            indicator, enhanced hover effects, glass toasts.
+ *   v1.51.0 [2026-03-22] — Full rebuild from scratch. Eliminated 2723
+ *                            lines of conflicting CSS. Self-contained
+ *                            with nc- prefixed classes.
+ */
 
-/* ── Design tokens ────────────────────────────────────────── */
+/* ── Palette ─────────────────────────────────────────────────────────── */
 :root {
-    --nc-bg:          #050509;
-    --nc-panel:       #0a0a12;
-    --nc-panel-2:     #0e0e1a;
-    --nc-border:      #1a1a2e;
-    --nc-accent:      #06b6d4;
-    --nc-accent-rgb:  6 182 212;
-    --nc-accent-dim:  #0891a2;
-    --nc-text:        #d0d8e4;
-    --nc-muted:       #4a5568;
-    --nc-mono:        'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-    --nc-sans:        'Segoe UI', system-ui, -apple-system, sans-serif;
-
-    /* Faction accent colours */
-    --faction-corp:   #3b82f6;
-    --faction-tech:   #8b5cf6;
-    --faction-black:  #f97316;
-    --faction-ghost:  #22c55e;
-    --faction-synth:  #ec4899;
-    --faction-deep:   #06b6d4;
-}
-
-/* ── Reset ────────────────────────────────────────────────── */
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
-html, body {
-    height: 100%;
-    background: var(--nc-bg);
-    color: var(--nc-text);
-    font-family: var(--nc-sans);
-    font-size: 14px;
-    overflow-x: hidden;
-}
-
-/* ── Particle canvas ──────────────────────────────────────── */
-.particle-canvas {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.35;
-}
-
-/* ── Top-level layout ─────────────────────────────────────── */
-.neoncity-layout {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-}
-
-/* ══════════════════════════════════════════════════════════
-   CITY HEADER
-══════════════════════════════════════════════════════════ */
-.neoncity-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 20px;
-    background: linear-gradient(180deg, #080810 0%, rgba(5,5,9,0.92) 100%);
-    border-bottom: 2px solid var(--nc-accent);
-    box-shadow: 0 0 24px rgba(var(--nc-accent-rgb) / 0.25);
-    gap: 16px;
-    flex-shrink: 0;
-}
-
-.header-left {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-}
-
-.city-title {
-    font-family: var(--nc-mono);
-    font-size: 1.9rem;
-    font-weight: 900;
-    letter-spacing: 6px;
-    text-transform: uppercase;
-    line-height: 1;
-}
-
-.title-neon {
-    color: var(--nc-accent);
-    text-shadow:
-        0 0 8px var(--nc-accent),
-        0 0 20px rgba(var(--nc-accent-rgb) / 0.6),
-        0 0 40px rgba(var(--nc-accent-rgb) / 0.25);
-}
-
-.title-city {
-    color: #e2e8f0;
-    text-shadow: 0 0 6px rgba(255,255,255,0.15);
-    margin-left: 8px;
-}
-
-.city-version {
-    font-size: 0.7rem;
-    color: var(--nc-muted);
-    font-family: var(--nc-mono);
-    letter-spacing: 2px;
-}
-
-.city-version .accent {
-    color: var(--nc-accent);
-}
-
-.header-center {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-}
-
-.world-clock {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--nc-mono);
-    font-size: 0.85rem;
-    color: var(--nc-accent);
-    letter-spacing: 1px;
-}
-
-.clock-icon {
-    animation: clock-pulse 2s ease-in-out infinite;
-    font-size: 0.7rem;
-}
-
-@keyframes clock-pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.3; }
-}
-
-.tension-summary {
-    display: flex;
-    gap: 8px;
-    font-size: 0.7rem;
-    letter-spacing: 2px;
-}
-
-.tension-label {
-    color: var(--nc-muted);
-    text-transform: uppercase;
-}
-
-.tension-value {
-    color: #f97316;
-    font-family: var(--nc-mono);
-}
-
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-
-.credit-display {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--nc-mono);
-    font-size: 1.1rem;
-    color: #facc15;
-    text-shadow: 0 0 8px rgba(250,204,21,0.4);
-}
-
-.credit-icon {
-    font-size: 0.9rem;
-    opacity: 0.8;
-}
-
-.btn-board-game {
-    padding: 6px 14px;
-    background: transparent;
-    border: 1px solid var(--nc-accent);
-    color: var(--nc-accent);
-    font-family: var(--nc-mono);
-    font-size: 0.7rem;
-    letter-spacing: 2px;
-    cursor: pointer;
-    border-radius: 3px;
-    transition: all 0.2s;
-}
-
-.btn-board-game:hover {
-    background: rgba(var(--nc-accent-rgb) / 0.12);
-    box-shadow: 0 0 10px rgba(var(--nc-accent-rgb) / 0.3);
-}
-
-/* ══════════════════════════════════════════════════════════
-   TICKER
-══════════════════════════════════════════════════════════ */
-.neoncity-ticker {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    background: #08080f;
-    border-bottom: 1px solid var(--nc-border);
-    height: 32px;
-    overflow: hidden;
-    flex-shrink: 0;
-}
-
-.ticker-label {
-    flex-shrink: 0;
-    padding: 0 12px;
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-    letter-spacing: 3px;
-    color: var(--nc-accent);
-    background: rgba(var(--nc-accent-rgb) / 0.1);
-    border-right: 1px solid var(--nc-accent);
-    height: 100%;
-    display: flex;
-    align-items: center;
-}
-
-.ticker-track {
-    flex: 1;
-    overflow: hidden;
-    height: 100%;
-    position: relative;
-}
-
-.ticker-inner {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    white-space: nowrap;
-    animation: ticker-scroll 40s linear infinite;
-    will-change: transform;
-}
-
-.ticker-item {
-    padding: 0 40px;
-    font-family: var(--nc-mono);
-    font-size: 0.72rem;
-    color: #94a3b8;
-    letter-spacing: 0.5px;
-}
-
-.ticker-item:first-child { color: var(--nc-text); }
-
-@keyframes ticker-scroll {
-    0%   { transform: translateX(100%); }
-    100% { transform: translateX(-100%); }
-}
-
-/* ── District Alerts ticker ───────────────────────────────── */
-.district-alerts-ticker {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    background: rgba(239, 68, 68, 0.06);
-    border-bottom: 1px solid rgba(239, 68, 68, 0.4);
-    height: 30px;
-    overflow: hidden;
-    flex-shrink: 0;
-}
-
-.ticker-label.alert {
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.12);
-    border-right-color: #ef4444;
-}
-
-.district-alerts-ticker .ticker-item {
-    color: #fca5a5;
-}
-
-/* ── Faction territory indicator ─────────────────────────── */
-.faction-territory {
-    flex-shrink: 0;
-    font-size: 0.75rem;
-    font-weight: 700;
-    min-width: 18px;
-    text-align: center;
-    color: #4a5568;
-    cursor: default;
-    transition: color 0.3s ease;
-}
-
-/* ══════════════════════════════════════════════════════════
-   MAIN CONTENT
-══════════════════════════════════════════════════════════ */
-.neoncity-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    padding: 16px 20px;
-    overflow-y: auto;
-}
-
-.section-title {
-    font-family: var(--nc-mono);
-    font-size: 0.7rem;
-    letter-spacing: 3px;
-    color: var(--nc-accent);
-    text-transform: uppercase;
-    margin-bottom: 10px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(var(--nc-accent-rgb) / 0.2);
-}
-
-/* ══════════════════════════════════════════════════════════
-   DISTRICT GRID
-══════════════════════════════════════════════════════════ */
-.neoncity-districts { }
-
-.district-cards {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 12px;
-}
-
-@media (max-width: 1200px) {
-    .district-cards { grid-template-columns: repeat(3, 1fr); }
-}
-@media (max-width: 800px) {
-    .district-cards { grid-template-columns: repeat(2, 1fr); }
-}
-
-/* ── District card ────────────────────────────────────────── */
-.district-card {
-    position: relative;
-    background: var(--nc-panel);
-    border: 1px solid var(--district-color, var(--nc-accent));
-    border-radius: 6px;
-    padding: 14px;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.district-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 6px;
-    background: linear-gradient(135deg,
-        rgba(255,255,255,0.03) 0%,
-        transparent 60%);
-    pointer-events: none;
-}
-
-.card-glow {
-    position: absolute;
-    top: -20px;
-    right: -20px;
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: var(--district-color, var(--nc-accent));
-    opacity: 0.06;
-    filter: blur(20px);
-    transition: opacity 0.2s;
-    pointer-events: none;
-}
-
-.district-card:hover {
-    transform: translateY(-3px) perspective(800px) rotateX(2deg);
-    box-shadow:
-        0 8px 24px rgba(0,0,0,0.5),
-        0 0 20px rgba(var(--nc-accent-rgb) / 0.08),
-        inset 0 0 0 1px rgba(255,255,255,0.05);
-    border-color: color-mix(in srgb, var(--district-color) 80%, white 20%);
-}
-
-.district-card:hover .card-glow {
-    opacity: 0.14;
-}
-
-.card-icon {
-    font-size: 1.6rem;
-    line-height: 1;
-}
-
-.card-body {
-    flex: 1;
-}
-
-.card-name {
-    font-family: var(--nc-mono);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--district-color, var(--nc-accent));
-    margin-bottom: 4px;
-}
-
-.card-faction {
-    font-size: 0.68rem;
-    color: var(--nc-muted);
-    font-family: var(--nc-mono);
-    letter-spacing: 1px;
-    margin-bottom: 6px;
-}
-
-.card-desc {
-    font-size: 0.72rem;
-    color: #64748b;
-    line-height: 1.45;
-}
-
-.card-activity {
-    margin-top: 8px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-    letter-spacing: 2px;
-    color: var(--nc-muted);
-}
-
-.activity-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    animation: dot-blink 2s ease-in-out infinite;
-}
-
-.activity-dot.busy      { background: #22c55e; }
-.activity-dot.quiet     { background: #3b82f6; }
-.activity-dot.dangerous { background: #ef4444; animation-duration: 0.8s; }
-
-@keyframes dot-blink {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.3; }
-}
-
-.card-npcs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-
-.npc-tag {
-    padding: 2px 6px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--nc-border);
-    border-radius: 3px;
-    font-family: var(--nc-mono);
-    font-size: 0.58rem;
-    color: #64748b;
-    letter-spacing: 0.5px;
-}
-
-.card-action {
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-    letter-spacing: 2px;
-    color: var(--district-color, var(--nc-accent));
-    opacity: 0;
-    transition: opacity 0.2s;
-    text-align: right;
-}
-
-.district-card:hover .card-action { opacity: 1; }
-
-/* ── Active district highlight ────────────────────────────── */
-.district-card.active {
-    border-color: color-mix(in srgb, var(--district-color) 70%, white 30%);
-    box-shadow: 0 0 16px rgba(var(--nc-accent-rgb) / 0.2);
-}
-
-/* ══════════════════════════════════════════════════════════
-   FACTION BARS
-══════════════════════════════════════════════════════════ */
-.faction-bars {
-    background: var(--nc-panel);
-    border: 1px solid var(--nc-border);
-    border-radius: 6px;
-    padding: 14px 16px;
-}
-
-.faction-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.faction-row {
-    display: grid;
-    grid-template-columns: 110px 1fr 40px 90px;
-    align-items: center;
-    gap: 10px;
-    transition: opacity 0.3s;
-}
-
-.faction-name {
-    font-family: var(--nc-mono);
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 1px;
-    white-space: nowrap;
-}
-
-.faction-bar-track {
-    height: 8px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-.faction-bar-fill {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 6px currentColor;
-}
-
-.faction-power {
-    font-family: var(--nc-mono);
-    font-size: 0.75rem;
-    color: #94a3b8;
-    text-align: right;
-}
-
-.faction-standing {
-    font-size: 0.68rem;
-    color: var(--nc-muted);
-    font-family: var(--nc-mono);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* ── Faction tension animation ────────────────────────────── */
-.faction-row.shifting .faction-bar-fill {
-    animation: bar-flash 0.6s ease-in-out 2;
-}
-
-@keyframes bar-flash {
-    0%, 100% { filter: brightness(1); }
-    50%       { filter: brightness(1.8); }
-}
-
-/* ══════════════════════════════════════════════════════════
-   BOTTOM ROW
-══════════════════════════════════════════════════════════ */
-.neoncity-bottom {
-    display: grid;
-    grid-template-columns: 1fr 340px 280px;
-    gap: 12px;
-}
-
-@media (max-width: 1100px) {
-    .neoncity-bottom { grid-template-columns: 1fr 1fr; }
-    .events-panel    { grid-column: 1 / -1; }
-}
-@media (max-width: 720px) {
-    .neoncity-bottom { grid-template-columns: 1fr; }
-}
-
-/* ── Chat panel ───────────────────────────────────────────── */
-.neoncity-chat {
-    background: var(--nc-panel);
-    border: 1px solid var(--nc-border);
-    border-radius: 6px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    min-height: 240px;
-}
-
-.chat-district-label {
-    color: var(--nc-accent);
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-}
-
-.chat-log {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    max-height: 200px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--nc-accent) transparent;
-}
-
-.chat-entry {
-    font-size: 0.73rem;
-    line-height: 1.45;
-    padding: 4px 6px;
-    border-left: 2px solid transparent;
-    border-radius: 2px;
-}
-
-.chat-entry.system    { color: var(--nc-muted); border-left-color: var(--nc-accent); }
-.chat-entry.player    { color: #e2e8f0; border-left-color: #facc15; }
-.chat-entry.npc       { color: #94a3b8; border-left-color: var(--nc-muted); }
-.chat-entry.event     { color: #f97316; border-left-color: #f97316; }
-
-.entry-src {
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-    color: var(--nc-accent);
-    margin-right: 6px;
-}
-
-.chat-input-row {
-    display: flex;
-    gap: 8px;
-}
-
-.chat-input {
-    flex: 1;
-    padding: 7px 10px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--nc-border);
-    border-radius: 4px;
-    color: var(--nc-text);
-    font-family: var(--nc-mono);
-    font-size: 0.78rem;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-.chat-input:focus { border-color: var(--nc-accent); }
-.chat-input::placeholder { color: var(--nc-muted); }
-
-.btn-send {
-    padding: 7px 16px;
-    background: var(--nc-accent-dim);
-    border: none;
-    border-radius: 4px;
-    color: #fff;
-    font-family: var(--nc-mono);
-    font-size: 0.72rem;
-    letter-spacing: 2px;
-    cursor: pointer;
-    transition: background 0.2s, box-shadow 0.2s;
-}
-
-.btn-send:hover {
-    background: var(--nc-accent);
-    box-shadow: 0 0 12px rgba(var(--nc-accent-rgb) / 0.4);
-}
-
-/* ── Economy panel ────────────────────────────────────────── */
-.economy-panel {
-    background: var(--nc-panel);
-    border: 1px solid var(--nc-border);
-    border-radius: 6px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.econ-balance {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    background: rgba(250,204,21,0.05);
-    border: 1px solid rgba(250,204,21,0.15);
-    border-radius: 4px;
-}
-
-.econ-label {
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-    letter-spacing: 3px;
-    color: var(--nc-muted);
-}
-
-.econ-value {
-    font-family: var(--nc-mono);
-    font-size: 1.1rem;
-    color: #facc15;
-    text-shadow: 0 0 8px rgba(250,204,21,0.4);
-}
-
-.intel-buy, .exchange-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.intel-row {
-    display: flex;
-    gap: 6px;
-}
-
-.intel-input {
-    flex: 1;
-    padding: 6px 8px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--nc-border);
-    border-radius: 4px;
-    color: var(--nc-text);
-    font-size: 0.75rem;
-    font-family: var(--nc-mono);
-    outline: none;
-}
-
-.intel-input:focus { border-color: var(--nc-accent); }
-.intel-input::placeholder { color: var(--nc-muted); }
-
-.intel-cost-input {
-    width: 60px;
-    padding: 6px 8px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--nc-border);
-    border-radius: 4px;
-    color: var(--nc-text);
-    font-size: 0.75rem;
-    font-family: var(--nc-mono);
-    outline: none;
-    text-align: right;
-}
-
-.btn-intel {
-    padding: 6px 10px;
-    background: rgba(6,182,212,0.12);
-    border: 1px solid var(--nc-accent);
-    border-radius: 4px;
-    color: var(--nc-accent);
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-    letter-spacing: 1px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s;
-}
-
-.btn-intel:hover {
-    background: rgba(6,182,212,0.22);
-    box-shadow: 0 0 8px rgba(var(--nc-accent-rgb) / 0.3);
-}
-
-.intel-result {
-    font-family: var(--nc-mono);
-    font-size: 0.7rem;
-    color: #94a3b8;
-    min-height: 32px;
-    padding: 6px;
-    background: rgba(255,255,255,0.02);
-    border-radius: 3px;
-    border-left: 2px solid var(--nc-accent);
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
-.exchange-row {
-    flex-direction: row;
-    align-items: center;
-}
-
-.exchange-input {
-    flex: 1;
-    padding: 6px 8px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--nc-border);
-    border-radius: 4px;
-    color: var(--nc-text);
-    font-size: 0.75rem;
-    font-family: var(--nc-mono);
-    outline: none;
-}
-
-.exchange-dir {
-    padding: 6px 8px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--nc-border);
-    border-radius: 4px;
-    color: var(--nc-text);
-    font-size: 0.75rem;
-    outline: none;
-    cursor: pointer;
-}
-
-.btn-exchange {
-    padding: 6px 12px;
-    background: rgba(250,204,21,0.1);
-    border: 1px solid rgba(250,204,21,0.4);
-    border-radius: 4px;
-    color: #facc15;
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-    letter-spacing: 1px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s;
-}
-
-.btn-exchange:hover {
-    background: rgba(250,204,21,0.2);
-    box-shadow: 0 0 8px rgba(250,204,21,0.25);
-}
-
-/* ── Events panel ─────────────────────────────────────────── */
-.events-panel {
-    background: var(--nc-panel);
-    border: 1px solid var(--nc-border);
-    border-radius: 6px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.events-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    max-height: 180px;
-}
-
-.event-item {
-    padding: 6px 8px;
-    background: rgba(255,255,255,0.02);
-    border-left: 2px solid var(--nc-border);
-    border-radius: 2px;
-    font-size: 0.72rem;
-    line-height: 1.4;
-    color: #64748b;
-}
-
-.event-item.active {
-    border-left-color: #f97316;
-    color: #f97316;
-    background: rgba(249,115,22,0.04);
-}
-
-.event-item.system { color: var(--nc-muted); }
-
-.btn-refresh-events {
-    padding: 6px 0;
-    background: transparent;
-    border: 1px solid var(--nc-border);
-    border-radius: 4px;
-    color: var(--nc-muted);
-    font-family: var(--nc-mono);
-    font-size: 0.65rem;
-    letter-spacing: 2px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.btn-refresh-events:hover {
-    border-color: var(--nc-accent);
-    color: var(--nc-accent);
-}
-
-/* ══════════════════════════════════════════════════════════
-   DISTRICT MODAL
-══════════════════════════════════════════════════════════ */
-.district-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 9500;  /* v1.43.0 — above navbar (9100) and all overlays */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-overlay {
-    position: absolute;
-    inset: 0;
-    background: rgba(0,0,0,0.75);
-    backdrop-filter: blur(4px);
-}
-
-.modal-content {
-    position: relative;
-    background: var(--nc-panel-2);
-    border: 1px solid var(--nc-accent);
-    border-radius: 8px;
-    width: min(520px, 92vw);
-    box-shadow: 0 0 40px rgba(var(--nc-accent-rgb) / 0.2);
-    animation: modal-in 0.2s ease-out;
-}
-
-@keyframes modal-in {
-    from { opacity: 0; transform: scale(0.96) translateY(-8px); }
-    to   { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-.modal-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 20px 12px;
-    border-bottom: 1px solid var(--nc-border);
-}
-
-.modal-icon { font-size: 1.5rem; }
-
-.modal-title {
-    flex: 1;
-    font-family: var(--nc-mono);
-    font-size: 0.95rem;
-    font-weight: 700;
-    letter-spacing: 4px;
-    color: var(--nc-accent);
-}
-
-.modal-close {
-    background: transparent;
-    border: none;
-    color: var(--nc-muted);
-    font-size: 1rem;
-    cursor: pointer;
-    line-height: 1;
-    transition: color 0.2s;
-}
-
-.modal-close:hover { color: var(--nc-text); }
-
-.modal-body {
-    padding: 16px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-
-.modal-desc {
-    font-size: 0.82rem;
-    color: #94a3b8;
-    line-height: 1.55;
-}
-
-.modal-faction {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.modal-faction-label, .modal-npcs-label {
-    font-family: var(--nc-mono);
-    font-size: 0.62rem;
-    letter-spacing: 3px;
-    color: var(--nc-muted);
-    text-transform: uppercase;
-}
-
-.modal-faction-name {
-    font-family: var(--nc-mono);
-    font-size: 0.82rem;
-    color: var(--nc-accent);
-}
-
-.modal-faction-bar {
-    height: 6px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.modal-faction-fill {
-    height: 100%;
-    background: var(--nc-accent);
-    border-radius: 3px;
-    transition: width 0.6s ease;
-}
-
-.modal-npcs {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.modal-npc-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
+  --nc: #06b6d4;
+  --nc-rgb: 6 182 212;
+  --nc-dim: #047a91;
+  --nc-glow: rgba(6, 182, 212, 0.25);
+  --nc-bg: #080a10;
+  --nc-panel: rgba(10, 14, 22, 0.85);
+  --nc-border: rgba(6, 182, 212, 0.12);
+  --nc-text: #c0c8d8;
+  --nc-muted: #4a5568;
+  --nc-mono: 'Oxanium', 'Share Tech Mono', 'JetBrains Mono', monospace;
+  --nc-sans: 'Rajdhani', 'Segoe UI', sans-serif;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+/* v1.57.3 [2026-05-12] — Ambient radial gradient added to header */
+.nc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background:
+    radial-gradient(ellipse at top left, rgba(6,182,212,0.07) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(6,182,212,0.06) 0%, transparent 100%);
+  border-bottom: 1px solid var(--nc-border);
+  gap: 16px;
+}
+.nc-header__left, .nc-header__center, .nc-header__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.nc-logo {
+  font-family: var(--nc-mono);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin: 0;
+  line-height: 1;
+}
+/* v1.57.3 [2026-05-12] — Logo pulse-glow + stronger spread */
+.nc-logo__neon {
+  color: var(--nc);
+  text-shadow: 0 0 30px var(--nc-glow), 0 0 60px rgba(6,182,212,0.05);
+  animation: cs-pulse-glow-text 3s ease-in-out infinite;
+}
+.nc-logo__city { color: #fff; }
+.nc-version {
+  font-size: 0.55rem;
+  color: var(--nc-muted);
+  font-family: var(--nc-mono);
+  letter-spacing: 1px;
+}
+.nc-version em { color: var(--nc-dim); font-style: normal; }
+
+.nc-clock { display: flex; align-items: center; gap: 4px; font-family: var(--nc-mono); font-size: 0.75rem; color: var(--nc); }
+.nc-clock__icon { font-size: 0.6rem; }
+.nc-tension { display: flex; align-items: center; gap: 6px; }
+.nc-tension__label { font-size: 0.5rem; color: var(--nc-muted); text-transform: uppercase; letter-spacing: 1px; font-family: var(--nc-mono); }
+.nc-tension__val { font-size: 0.8rem; font-weight: 700; color: #ef4444; font-family: var(--nc-mono); }
+.nc-credits { display: flex; align-items: center; gap: 4px; font-family: var(--nc-mono); }
+.nc-credits__icon { color: #fbbf24; font-size: 0.9rem; }
+.nc-credits__val { color: #fbbf24; font-weight: 700; font-size: 0.85rem; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+.nc-btn {
+  font-family: var(--nc-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  background: rgba(6,182,212,0.08);
+  border: 1px solid rgba(6,182,212,0.25);
+  border-radius: 3px;
+  color: var(--nc);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.nc-btn:hover { background: rgba(6,182,212,0.18); border-color: var(--nc); }
+.nc-btn--ghost { background: transparent; }
+.nc-btn--sm { font-size: 0.55rem; padding: 3px 8px; }
+.nc-btn--xs { font-size: 0.5rem; padding: 2px 6px; }
+.nc-btn--full { width: 100%; }
+.nc-btn--green { color: #22c55e; border-color: rgba(34,197,94,0.3); }
+.nc-btn--green:hover { background: rgba(34,197,94,0.12); border-color: #22c55e; }
+.nc-btn--red { color: #ef4444; border-color: rgba(239,68,68,0.3); }
+.nc-btn--red:hover { background: rgba(239,68,68,0.12); border-color: #ef4444; }
+.nc-btn-row { display: flex; gap: 4px; margin-top: 6px; }
+
+/* ── Inputs ──────────────────────────────────────────────────────────── */
+.nc-input {
+  font-family: var(--nc-mono);
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--nc-border);
+  border-radius: 3px;
+  color: var(--nc-text);
+}
+.nc-input:focus { outline: none; border-color: var(--nc); }
+.nc-input--sm { width: 60px; }
+.nc-select { font-family: var(--nc-mono); font-size: 0.65rem; padding: 4px 6px; background: rgba(0,0,0,0.4); border: 1px solid var(--nc-border); border-radius: 3px; color: var(--nc-text); }
+.nc-tabs { display: flex; gap: 2px; margin-bottom: 6px; }
+.nc-tab {
+  font-family: var(--nc-mono);
+  font-size: 0.55rem;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--nc-border);
+  border-radius: 3px;
+  color: var(--nc-muted);
+  cursor: pointer;
+}
+.nc-tab.active, .nc-tab:hover { color: var(--nc); border-color: var(--nc); background: rgba(6,182,212,0.06); }
+
+/* ── Ticker ──────────────────────────────────────────────────────────── */
+.nc-ticker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 16px;
+  background: rgba(6,182,212,0.03);
+  border-bottom: 1px solid var(--nc-border);
+  font-family: var(--nc-mono);
+  font-size: 0.6rem;
+  overflow: hidden;
+  height: 22px;
+}
+.nc-ticker__label {
+  font-weight: 700;
+  color: var(--nc);
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+.nc-ticker__label--alert { color: #ef4444; }
+.nc-ticker--alert { background: rgba(239,68,68,0.04); border-color: rgba(239,68,68,0.15); }
+.nc-ticker__track { flex: 1; overflow: hidden; }
+.nc-ticker__inner {
+  display: flex;
+  gap: 40px;
+  white-space: nowrap;
+  animation: nc-scroll 40s linear infinite;
+  color: var(--nc-muted);
+}
+@keyframes nc-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ── Dashboard Grid ──────────────────────────────────────────────────── */
+/* v1.52.1 [2026-03-26] — Override neon_base.css .neon-main flex-column
+   that was collapsing the 3-column grid into a single column */
+.nc-dash {
+  display: grid !important;
+  grid-template-columns: 220px 1fr 240px;
+  gap: 0;
+  min-height: calc(100vh - 140px);
+  flex: 1;
+}
+
+/* ── Sidebars ────────────────────────────────────────────────────────── */
+.nc-side {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+.nc-side--left { border-right: 1px solid var(--nc-border); }
+.nc-side--right { border-left: 1px solid var(--nc-border); }
+
+/* ── Panels ──────────────────────────────────────────────────────────── */
+.nc-panel {
+  background: var(--nc-panel);
+  border: 1px solid var(--nc-border);
+  border-radius: 4px;
+  padding: 10px;
+}
+/* v1.57.3 [2026-05-12] — Panel/section title glow */
+.nc-panel__title {
+  font-family: var(--nc-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--nc);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-shadow: 0 0 16px rgba(6,182,212,0.4);
+}
+.nc-section-title {
+  font-family: var(--nc-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--nc);
+  letter-spacing: 0.1em;
+  margin: 0 0 8px;
+  text-shadow: 0 0 16px rgba(6,182,212,0.4);
+}
+.nc-empty { font-size: 0.65rem; color: var(--nc-muted); padding: 8px 0; }
+
+/* ── Stats ───────────────────────────────────────────────────────────── */
+.nc-stat { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.nc-stat__label { font-family: var(--nc-mono); font-size: 0.55rem; font-weight: 600; color: var(--nc-muted); width: 24px; letter-spacing: 1px; }
+.nc-stat__track { flex: 1; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+.nc-stat__fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+.nc-stat__fill--hp { background: #22c55e; }
+.nc-stat__fill--en { background: #3b82f6; }
+.nc-stat__fill--ht { background: #ef4444; }
+.nc-stat__fill--rep { background: #8b5cf6; }
+.nc-stat__val { font-family: var(--nc-mono); font-size: 0.6rem; font-weight: 600; color: var(--nc-text); width: 24px; text-align: right; }
+
+.nc-location { font-family: var(--nc-mono); font-size: 0.6rem; color: var(--nc-dim); margin-top: 6px; }
+.nc-location__icon { color: var(--nc); }
+.nc-district-tag { font-size: 0.5rem; color: var(--nc-muted); margin-left: 4px; }
+
+/* ── Inventory ───────────────────────────────────────────────────────── */
+.nc-inv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+.nc-inv__slot {
+  aspect-ratio: 1;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(6,182,212,0.08);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--nc-muted);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.nc-inv__slot:hover { border-color: var(--nc); }
+
+/* ── Center Column ───────────────────────────────────────────────────── */
+.nc-center { padding: 10px 14px; overflow-y: auto; }
+
+/* ── Districts ───────────────────────────────────────────────────────── */
+.nc-districts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+/* v1.57.3 [2026-05-12] — Faction left-border + border-color transition */
+.nc-district {
+  background: var(--nc-panel);
+  border: 1px solid rgba(var(--nc-rgb) / 0.1);
+  border-left: 3px solid var(--dc, var(--nc));
+  border-radius: 4px;
+  padding: 10px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s, transform 0.2s;
+  position: relative;
+}
+.nc-district__icon { font-size: 1.3rem; margin-bottom: 4px; }
+.nc-district__name { font-family: var(--nc-mono); font-size: 0.7rem; font-weight: 700; color: var(--dc, var(--nc)); letter-spacing: 1px; }
+.nc-district__faction { font-size: 0.55rem; color: var(--nc-muted); font-family: var(--nc-mono); }
+.nc-district__desc { font-size: 0.6rem; color: var(--nc-text); margin: 4px 0; line-height: 1.4; }
+.nc-district__meta { display: flex; align-items: center; justify-content: space-between; gap: 4px; flex-wrap: wrap; }
+.nc-district__activity { font-family: var(--nc-mono); font-size: 0.5rem; font-weight: 600; letter-spacing: 1px; }
+.nc-district__activity--busy { color: #f59e0b; }
+.nc-district__activity--quiet { color: #22c55e; }
+.nc-district__activity--dangerous { color: #ef4444; }
+.activity-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 2px; vertical-align: middle; }
+.activity-dot.busy { background: #f59e0b; box-shadow: 0 0 4px #f59e0b; }
+.activity-dot.quiet { background: #22c55e; }
+.activity-dot.dangerous { background: #ef4444; box-shadow: 0 0 4px #ef4444; animation: nc-pulse 1.5s ease-in-out infinite; }
+@keyframes nc-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.nc-district__npcs { display: flex; gap: 3px; flex-wrap: wrap; }
+.nc-npc-tag {
+  font-family: var(--nc-mono);
+  font-size: 0.45rem;
+  padding: 1px 4px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 2px;
+  color: var(--nc-muted);
+  letter-spacing: 0.5px;
+}
+.nc-district__actions { display: flex; gap: 4px; margin-top: 6px; }
+
+/* v1.52.0 — District online/offline status indicators */
+.nc-district__status {
+  font-family: var(--nc-mono);
+  font-size: 0.45rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.status-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.status-dot.online { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
+.status-dot.offline { background: #ef4444; box-shadow: 0 0 4px #ef4444; }
+.status-dot.checking { background: #f59e0b; animation: nc-pulse 1.2s ease-in-out infinite; }
+.status-label.online { color: #22c55e; }
+.status-label.offline { color: #ef4444; }
+.status-label.checking { color: #f59e0b; }
+.nc-district.district-offline {
+  opacity: 0.55;
+  filter: grayscale(0.3);
+}
+.nc-district.district-offline::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(239, 68, 68, 0.04) 8px,
+    rgba(239, 68, 68, 0.04) 16px
+  );
+  pointer-events: none;
+  border-radius: 4px;
+}
+
+/* v1.57.3 [2026-05-12] — District hover: faction glow + left accent spread */
+.nc-district:hover {
+  background: rgba(var(--nc-rgb) / 0.06);
+  border-color: rgba(var(--nc-rgb) / 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 0 16px rgb(var(--nc-rgb) / 0.15), -2px 0 12px rgb(var(--nc-rgb) / 0.1), 0 4px 16px rgba(0,0,0,0.3);
+}
+
+/* v1.52.0 — Credit balance flash animation */
+@keyframes nc-credit-flash-up { 0% { color: #22c55e; text-shadow: 0 0 6px #22c55e; } 100% { color: inherit; text-shadow: none; } }
+@keyframes nc-credit-flash-down { 0% { color: #ef4444; text-shadow: 0 0 6px #ef4444; } 100% { color: inherit; text-shadow: none; } }
+.nc-credits__val.flash-up { animation: nc-credit-flash-up 0.8s ease-out; }
+.nc-credits__val.flash-down { animation: nc-credit-flash-down 0.8s ease-out; }
+
+/* v1.52.0 — NPC typing indicator */
+.nc-typing {
+  display: inline-flex;
+  gap: 3px;
+  padding: 6px 10px;
+  align-items: center;
+}
+.nc-typing__dot {
+  width: 4px;
+  height: 4px;
+  background: var(--nc);
+  border-radius: 50%;
+  animation: nc-typing-bounce 1.4s ease-in-out infinite;
+}
+.nc-typing__dot:nth-child(2) { animation-delay: 0.16s; }
+.nc-typing__dot:nth-child(3) { animation-delay: 0.32s; }
+@keyframes nc-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* v1.52.0 — Event card slide-in */
+.event-card {
+  animation: nc-slide-in 0.3s ease-out;
+}
+@keyframes nc-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* v1.52.0 — Glass morphism toast */
+.world-event-toast {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(10, 14, 22, 0.85);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 12px var(--nc-glow);
+  animation: nc-toast-in 0.3s ease-out;
+}
+@keyframes nc-toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* v1.52.0 — Item context menu glass effect */
+.item-context-menu {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(10, 14, 22, 0.9);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  padding: 8px;
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  max-width: 220px;
+}
+.ctx-title { font-family: var(--nc-mono); font-size: 0.7rem; font-weight: 700; color: var(--nc); margin-bottom: 4px; }
+.ctx-desc { font-size: 0.6rem; color: var(--nc-text); line-height: 1.4; margin-bottom: 6px; }
+.ctx-meta { display: flex; justify-content: space-between; font-size: 0.5rem; color: var(--nc-muted); margin-bottom: 8px; font-family: var(--nc-mono); }
+.ctx-price { color: #22c55e; }
+.ctx-qty { color: #f59e0b; }
+.ctx-actions { display: flex; gap: 4px; }
+.ctx-btn { font-family: var(--nc-mono); font-size: 0.55rem; padding: 3px 8px; border: 1px solid var(--nc-border); background: rgba(6,182,212,0.06); color: var(--nc); border-radius: 2px; cursor: pointer; letter-spacing: 0.5px; }
+.ctx-btn:hover { background: rgba(6,182,212,0.15); }
+.ctx-btn.use { border-color: rgba(34,197,94,0.3); color: #22c55e; }
+.ctx-btn.equip { border-color: rgba(139,92,246,0.3); color: #8b5cf6; }
+.ctx-btn.sell { border-color: rgba(249,115,22,0.3); color: #f97316; }
+
+/* v1.52.0 — Crew dismiss button */
+.crew-dismiss { font-size: 0.5rem; padding: 1px 4px; opacity: 0.4; transition: opacity 0.2s; }
+.crew-dismiss:hover { opacity: 1; color: #ef4444; }
+
+/* v1.52.0 — NPC Relationship standings */
+.nc-relationships { max-height: 180px; overflow-y: auto; }
+.nc-rep-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.05);
+  font-family: var(--nc-mono);
+  font-size: 0.5rem;
+}
+.nc-rep-name { flex: 1; color: var(--nc-text); letter-spacing: 0.5px; }
+.nc-rep-label { font-size: 0.45rem; letter-spacing: 0.5px; }
+.nc-rep-val { min-width: 30px; text-align: right; font-weight: 600; }
+
+/* v1.52.0 — Clickable mission objectives */
+.mm-obj-row.clickable { cursor: pointer; transition: background 0.2s; border-radius: 2px; padding: 2px 4px; }
+.mm-obj-row.clickable:hover { background: rgba(6, 182, 212, 0.08); }
+.mm-obj-row.checked { opacity: 0.5; }
+.mm-obj-row.checked .mm-obj-check { color: #22c55e; }
+.obj-optional { font-size: 0.45rem; color: var(--nc-muted); font-family: var(--nc-mono); }
+
+/* ── Factions ────────────────────────────────────────────────────────── */
+.nc-factions { margin-bottom: 14px; }
+.nc-faction {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+.nc-faction__name { font-family: var(--nc-mono); font-size: 0.6rem; font-weight: 600; width: 80px; flex-shrink: 0; }
+.nc-faction__track { flex: 1; height: 5px; background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; }
+.nc-faction__fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+.nc-faction__power { font-family: var(--nc-mono); font-size: 0.55rem; font-weight: 600; color: var(--nc-text); width: 22px; text-align: right; }
+.nc-faction__standing { font-size: 0.5rem; color: var(--nc-muted); width: 50px; }
+.nc-faction__territory { font-size: 0.5rem; color: var(--nc-muted); }
+
+/* ── Bottom Row ──────────────────────────────────────────────────────── */
+.nc-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.nc-chat, .nc-economy, .nc-events {
+  background: var(--nc-panel);
+  border: 1px solid var(--nc-border);
+  border-radius: 4px;
+  padding: 10px;
+}
+
+/* Chat */
+.nc-chat__district { font-size: 0.55rem; color: var(--nc-muted); margin-left: 6px; }
+.nc-chat__log {
+  height: 140px;
+  overflow-y: auto;
+  font-size: 0.65rem;
+  line-height: 1.6;
+  color: var(--nc-text);
+  scrollbar-width: thin;
+  scrollbar-color: var(--nc-border) transparent;
+  margin-bottom: 6px;
+}
+.nc-chat__log .chat-entry { padding: 2px 0; }
+.nc-chat__log .chat-entry.system { color: var(--nc-muted); }
+.nc-chat__log .entry-src { color: var(--nc); font-weight: 600; }
+.nc-chat__input { display: flex; gap: 4px; }
+.nc-chat__input input {
+  flex: 1;
+  font-family: var(--nc-mono);
+  font-size: 0.65rem;
+  padding: 5px 8px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--nc-border);
+  border-radius: 3px;
+  color: var(--nc-text);
+}
+.nc-chat__input input:focus { outline: none; border-color: var(--nc); }
+
+/* Economy */
+.nc-economy__balance { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--nc-muted); margin-bottom: 6px; }
+.nc-economy__val { color: #fbbf24; font-weight: 700; font-family: var(--nc-mono); }
+.nc-economy__intel { display: flex; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
+.nc-economy__result { font-size: 0.6rem; color: var(--nc-text); padding: 4px 0; }
+.nc-economy__exchange { display: flex; gap: 4px; margin-top: 6px; }
+
+/* Events */
+.nc-events__list {
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 0.65rem;
+  color: var(--nc-text);
+  margin-bottom: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--nc-border) transparent;
+}
+.nc-events__list .event-item { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.nc-events__list .event-item.system { color: var(--nc-muted); }
+
+/* ── Progress bar ────────────────────────────────────────────────────── */
+.nc-progress { display: flex; align-items: center; gap: 6px; font-family: var(--nc-mono); font-size: 0.55rem; color: var(--nc-muted); margin: 8px 0; }
+.nc-progress__track { flex: 1; height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; }
+.nc-progress__fill { height: 100%; background: var(--nc); border-radius: 2px; transition: width 0.4s; }
+
+/* ── Modals ──────────────────────────────────────────────────────────── */
+.nc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.nc-modal__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(4px);
+}
+.nc-modal__content {
+  position: relative;
+  width: min(520px, 90vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  background: #0c0e14;
+  border: 1px solid rgba(6,182,212,0.2);
+  border-radius: 6px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 0 30px var(--nc-glow);
+}
+.nc-modal__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--nc-border);
+  font-family: var(--nc-mono);
+}
+.nc-modal__header h3 { flex: 1; font-size: 0.8rem; color: var(--nc); margin: 0; letter-spacing: 1px; }
+.nc-modal__type { font-size: 0.55rem; padding: 2px 6px; background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.2); border-radius: 3px; color: var(--nc); letter-spacing: 1px; }
+.nc-modal__close { background: none; border: none; color: var(--nc-muted); font-size: 1rem; cursor: pointer; }
+.nc-modal__close:hover { color: #ef4444; }
+.nc-modal__body { padding: 16px; font-size: 0.7rem; color: var(--nc-text); line-height: 1.6; }
+.nc-modal__body h4 { font-family: var(--nc-mono); font-size: 0.6rem; color: var(--nc); letter-spacing: 1px; margin: 12px 0 6px; }
+.nc-modal__meta { display: flex; gap: 12px; font-size: 0.6rem; color: var(--nc-muted); margin-bottom: 8px; }
+.nc-modal__footer { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--nc-border); }
+
+/* v1.52.0 — NPC cards in district modal with recruit buttons */
+.modal-npc-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px;
+}
+.nc-btn--gift { border-color: rgba(236, 72, 153, 0.3); color: #ec4899; }
+.nc-btn--gift:hover { background: rgba(236, 72, 153, 0.15); box-shadow: 0 0 8px rgba(236, 72, 153, 0.3); }
 
 .modal-npc-tag {
-    padding: 3px 10px;
-    border: 1px solid var(--nc-border);
-    border-radius: 3px;
-    font-family: var(--nc-mono);
-    font-size: 0.68rem;
-    color: var(--nc-text);
-    background: rgba(255,255,255,0.04);
+  font-family: var(--nc-mono);
+  font-size: 0.5rem;
+  padding: 2px 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 2px;
+  color: var(--nc);
+  letter-spacing: 0.5px;
 }
 
-.modal-ticker {
-    font-family: var(--nc-mono);
-    font-size: 0.7rem;
-    color: #64748b;
-    line-height: 1.8;
-    padding: 8px 10px;
-    background: rgba(255,255,255,0.02);
-    border-radius: 4px;
-    border-left: 2px solid var(--nc-accent);
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+.nc-side::-webkit-scrollbar, .nc-center::-webkit-scrollbar,
+.nc-chat__log::-webkit-scrollbar, .nc-events__list::-webkit-scrollbar { width: 3px; }
+.nc-side::-webkit-scrollbar-thumb, .nc-center::-webkit-scrollbar-thumb { background: var(--nc-border); border-radius: 2px; }
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+/* v1.52.1 [2026-03-26] — Lowered breakpoints to keep 3-col grid on
+   smaller viewports (NUC at 764px was collapsing to single column) */
+@media (max-width: 1100px) {
+  .nc-dash { grid-template-columns: 170px 1fr 190px; }
+}
+@media (max-width: 900px) {
+  .nc-dash { grid-template-columns: 150px 1fr 170px; }
+  .nc-side { padding: 6px; }
+}
+@media (max-width: 700px) {
+  .nc-dash { grid-template-columns: 140px 1fr; }
+  .nc-side--right { display: none; }
+  .nc-bottom { grid-template-columns: 1fr; }
+}
+@media (max-width: 500px) {
+  .nc-dash { grid-template-columns: 1fr; }
+  .nc-side--left, .nc-side--right { border: none; border-bottom: 1px solid var(--nc-border); }
+  .nc-bottom { grid-template-columns: 1fr; }
 }
 
-.modal-footer {
-    padding: 12px 20px 16px;
-    border-top: 1px solid var(--nc-border);
+/* ════════════════════════════════════════════════════════════════════════
+   v1.58.0 [2026-06-11] — DARK RENAISSANCE ALIGNMENT (ui_kits_v2/neoncity)
+   ════════════════════════════════════════════════════════════════════════
+   Alignment pass only — v1.57.3 polish (logo pulse, district stagger,
+   faction bars) is kept as-is. This section:
+     1. Re-points the local --nc palette at the shared --cs-* v2 tokens
+        so the scene accent has a single source of truth (neon_base inject).
+     2. Promotes the wordmark to the Orbitron display voice (kit .nc-logo).
+     3. Adds the kit's 4-layer drifting grid background + radial accent
+        glow onto the shared .neon-grid-bg element (scoped: this stylesheet
+        only loads on the NeonCity page).
+     4. Ports kit details the scene lacked: amber credits pill, filled
+        inventory slot state, crew row + mission row card treatments
+        (.crew-card / .mission-card were generated by neoncity.js but had
+        no styles since the v1.51 rebuild dropped neoncity_v146.css).
+   CONNECTS: design_tokens_v2.css ([data-scene="neoncity"]), neon_base.html
+   CALLED BY: neoncity.html (sole stylesheet), neoncity.js (markup gen)
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* ── 1 · Token alignment — local palette derives from v2 scene tokens ── */
+:root {
+  --nc: var(--cs-scene-accent, #06b6d4);
+  --nc-rgb: var(--cs-scene-accent-rgb, 6 182 212);
+  --nc-glow: var(--cs-scene-glow, rgba(6, 182, 212, 0.25));
+  --nc-border: rgb(var(--nc-rgb) / 0.12);
+  /* v2 mono voice (JetBrains) replaces Oxanium webfont dependency */
+  --nc-mono: var(--cs-font-mono, 'JetBrains Mono', 'Share Tech Mono', monospace);
 }
 
-.btn-enter-district {
-    width: 100%;
-    padding: 10px;
-    background: rgba(var(--nc-accent-rgb) / 0.12);
-    border: 1px solid var(--nc-accent);
-    border-radius: 4px;
-    color: var(--nc-accent);
-    font-family: var(--nc-mono);
-    font-size: 0.78rem;
-    letter-spacing: 3px;
-    cursor: pointer;
-    transition: all 0.2s;
+/* ── 2 · Orbitron display wordmark (kit .nc-logo) ────────────────────── */
+.nc-logo {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-weight: 800;
+  letter-spacing: 3px;
 }
 
-.btn-enter-district:hover {
-    background: rgba(var(--nc-accent-rgb) / 0.22);
-    box-shadow: 0 0 16px rgba(var(--nc-accent-rgb) / 0.3);
+/* ── 3 · Kit 4-layer drifting background ─────────────────────────────────
+   black base → 80px drift grid → radial accent glow. Scanlines come from
+   the shared .neon-scanlines overlay (neon_base). */
+.neon-grid-bg {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(var(--nc-rgb) / 0.07) 0%, transparent 70%),
+    repeating-linear-gradient(90deg, rgb(var(--nc-rgb) / 0.04) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg, rgb(var(--nc-rgb) / 0.04) 0 1px, transparent 1px 80px),
+    #02030a;
+  background-size: 100% 100%, 80px 80px, 80px 80px, 100% 100%;
+  animation: nc-bg-drift 20s linear infinite;
+}
+@keyframes nc-bg-drift {
+  0%   { background-position: 0 0, 0 0,    0 0,    0 0; }
+  100% { background-position: 0 0, 0 80px, 0 80px, 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .neon-grid-bg { animation: none; }
 }
 
-/* ══════════════════════════════════════════════════════════
-   WORLD EVENT NOTIFICATION TOAST
-══════════════════════════════════════════════════════════ */
-.world-event-toast {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    z-index: 200;
-    max-width: 340px;
-    background: var(--nc-panel-2);
-    border: 1px solid #f97316;
-    border-radius: 6px;
-    padding: 12px 16px;
-    box-shadow: 0 0 24px rgba(249,115,22,0.3);
-    animation: toast-in 0.3s ease-out;
+/* ── 4 · Kit credits pill (amber, rounded — kit .nv-credits) ─────────── */
+.nc-credits {
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.10);
+  border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
-@keyframes toast-in {
-    from { opacity: 0; transform: translateX(24px); }
-    to   { opacity: 1; transform: translateX(0); }
+/* ── 5 · Filled inventory slot (kit .nc-inv__slot.filled) ────────────── */
+.nc-inv__slot.filled {
+  color: var(--nc);
+  background: rgb(var(--nc-rgb) / 0.06);
+  border-color: rgb(var(--nc-rgb) / 0.2);
 }
 
-.toast-title {
-    font-family: var(--nc-mono);
-    font-size: 0.68rem;
-    letter-spacing: 2px;
-    color: #f97316;
-    margin-bottom: 4px;
+/* ── 6 · Crew roster cards (kit .crew__row — left accent rail) ───────── */
+.crew-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgb(var(--nc-rgb) / 0.08);
+  border-left: 3px solid var(--nc);
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
 }
+.crew-card:hover {
+  background: rgb(var(--nc-rgb) / 0.06);
+  border-color: rgb(var(--nc-rgb) / 0.3);
+}
+.crew-card.unavailable { opacity: 0.55; border-left-color: var(--nc-muted); }
+.crew-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.crew-icon { font-size: 1rem; line-height: 1; }
+.crew-name { font-size: 0.65rem; font-weight: 700; color: var(--nc-text); }
+.crew-role {
+  font-family: var(--nc-mono);
+  font-size: 0.5rem;
+  color: var(--nc);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.crew-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.crew-avail { font-family: var(--nc-mono); font-size: 0.45rem; letter-spacing: 0.5px; }
+.crew-avail.available { color: #22c55e; }
+.crew-avail.busy { color: #f59e0b; }
+.crew-level {
+  font-family: var(--nc-mono);
+  font-size: 0.45rem;
+  padding: 1px 4px;
+  border: 1px solid rgb(var(--nc-rgb) / 0.2);
+  border-radius: 2px;
+  color: var(--nc);
+}
+.crew-empty { font-size: 0.6rem; color: var(--nc-muted); padding: 6px 0; }
 
-.toast-body {
-    font-size: 0.78rem;
-    color: var(--nc-text);
-    line-height: 1.45;
+/* ── 7 · Mission board cards (kit .miss — accent name, gold pay) ─────── */
+.mission-card {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgb(var(--nc-rgb) / 0.08);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-
-/* ══════════════════════════════════════════════════════════
-   SCROLLBARS
-══════════════════════════════════════════════════════════ */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-    background: rgba(var(--nc-accent-rgb) / 0.3);
-    border-radius: 2px;
+.mission-card:hover {
+  border-color: rgb(var(--nc-rgb) / 0.3);
+  box-shadow: 0 0 12px rgb(var(--nc-rgb) / 0.1);
 }
-::-webkit-scrollbar-thumb:hover {
-    background: rgba(var(--nc-accent-rgb) / 0.6);
+.mission-title {
+  font-family: var(--nc-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--nc);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-
-/* ══════════════════════════════════════════════════════════
-   v1.43 — Dangerous district pulsing border
-   ══════════════════════════════════════════════════════════ */
-@keyframes nc-danger-pulse {
-    0%, 100% { border-color: var(--district-color, var(--nc-accent)); }
-    50%      { border-color: rgba(244, 63, 94, 0.6); box-shadow: 0 0 16px rgba(244, 63, 94, 0.15); }
+.mission-meta { display: flex; justify-content: space-between; gap: 4px; margin-top: 2px; }
+.mission-type {
+  font-family: var(--nc-mono);
+  font-size: 0.45rem;
+  padding: 1px 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  color: var(--nc-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
-.district-card--dangerous {
-    animation: nc-danger-pulse 2.5s ease-in-out infinite;
-}
-
-/* Faction color glow bleed on hover */
-.district-card:hover .card-glow {
-    opacity: 0.25;
-    width: 120px;
-    height: 120px;
-    filter: blur(30px);
-}
-
-/* Active district indicator */
-.district-card.active::after {
-    content: '◉';
-    position: absolute;
-    top: 8px;
-    right: 10px;
-    color: var(--district-color, var(--nc-accent));
-    font-size: 10px;
-    text-shadow: 0 0 8px var(--district-color, var(--nc-accent));
-    animation: nc-active-dot 1.5s ease-in-out infinite;
-}
-@keyframes nc-active-dot {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: 0.4; }
+.mission-difficulty { font-size: 0.5rem; color: #f59e0b; }
+.mission-reward {
+  font-family: var(--nc-mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #fbbf24;
+  margin-top: 2px;
 }

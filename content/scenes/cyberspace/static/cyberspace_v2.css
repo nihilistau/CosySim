@@ -1,0 +1,181 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   CYBERSPACE — cyberspace_v2.css
+   Dark Renaissance v2 glow-up layer (loaded LAST — wins the cascade)
+   ════════════════════════════════════════════════════════════════════════
+   Hack-green matrix space: #00ff41 over the void. --cs-hack-* CRT system,
+   token-driven scanlines + flicker, Share Tech Mono terminal voice on all
+   data readouts, neon-green border-trace on active grid nodes.
+   Extrapolated from docs/DESIGN_SYSTEM_V2.md (no kit): [data-scene]
+   accent + the 4-layer background recipe from artifacts/new-assets/styles.css.
+
+   Version: v1.58.0 [2026-06-11]
+   Author:  CosySim Team
+
+   Change Log:
+     v1.58.0 [2026-06-11] — Initial v2 layer: scene palette re-pointed to
+                              the --cs-hack-* CRT token system; 4-layer
+                              background stack (black → drift grid →
+                              radial uplink glow); CRT scanline overlay
+                              re-pointed to --cs-crt-scanline + shared
+                              cs-crt-flicker; --cs-font-terminal voice on
+                              HUD values, datastream + stolen-data panes;
+                              neon border-trace ring on the player node
+                              (reuses shared cs-rotate) and hot targeting
+                              edge on targetable nodes; panel rim-light;
+                              splash title CRT glow.
+
+   CONNECTS: cyberspace.css (scene-local --cs-* palette),
+             design_tokens.css (--cs-hack-*, --cs-crt-scanline,
+             --cs-font-terminal), cosysim-animations.css (cs-rotate,
+             cs-crt-flicker, cs-scan-sweep-anim)
+   CALLED BY: cyberspace.html {% block head_css %} (after cyberspace.css)
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ──── 1 · Palette → --cs-hack-* CRT token system ────────────────────── */
+/* v1.58.0 [2026-06-11] — The scene's local green family now flows from
+   the canonical hack-green tokens; raw hex stays as fallback only. */
+:root {
+  --cs-green: var(--cs-hack-green, #00ff41);
+  --cs-green-dim: var(--cs-hack-green-dim, #00cc33);
+  --cs-green-glow: var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+  --cs-green-faint: var(--cs-hack-green-soft, rgba(0, 255, 65, 0.08));
+  --cs-red: var(--cs-hack-red, #ff1744);
+  --cs-red-glow: var(--cs-hack-red-glow, rgba(255, 23, 68, 0.5));
+  --cs-border: var(--cs-hack-border, rgba(0, 255, 65, 0.15));
+  /* Terminal voice — Share Tech Mono CRT */
+  --cs-font-mono: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+
+/* ──── 2 · 4-layer background stack (v2 recipe) ──────────────────────── */
+/* v1.58.0 [2026-06-11] — black #02030a base → 80px hack-green drift grid
+   → radial uplink glow rising from the grid floor. Scanlines are layered
+   by the CRT overlay below (token-driven, replaces the old inline value). */
+.cyberspace-scene {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 255, 65, 0.035) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgba(0, 255, 65, 0.035) 0 1px, transparent 1px 80px),
+    radial-gradient(ellipse at 50% 88%, rgba(0, 255, 65, 0.08) 0%, transparent 60%),
+    #02030a;
+  animation: cyber-grid-drift 30s linear infinite;
+}
+@keyframes cyber-grid-drift {
+  from { background-position: 0 0,    0 0,    0 0; }
+  to   { background-position: 0 80px, 0 80px, 0 0; }
+}
+
+/* CRT scanline overlay — canonical token + shared flicker. */
+.cyberspace-scene::before {
+  background: var(--cs-crt-scanline, repeating-linear-gradient(
+    to bottom, transparent 0px, transparent 2px,
+    rgba(0, 0, 0, 0.12) 2px, rgba(0, 0, 0, 0.12) 4px));
+  opacity: 0.6;
+  animation: cs-crt-flicker 8s infinite;
+}
+
+/* ──── 3 · Splash — CRT phosphor title ───────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Hotter phosphor bloom + breathing jack-in CTA
+   (scene-local cs-pulse-glow keyframes already drive .cs-pulse). */
+.cs-splash-title {
+  text-shadow:
+    0 0 6px var(--cs-hack-green, #00ff41),
+    0 0 24px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4)),
+    0 0 64px rgba(0, 255, 65, 0.2);
+}
+.cs-splash-ascii pre {
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.25);
+}
+
+/* ──── 4 · Terminal voice — data readouts in Share Tech Mono ─────────── */
+/* v1.58.0 [2026-06-11] — HUD values, datastream and stolen-data panes
+   speak CRT. Credits keep the gold economy voice. */
+.cs-hud-value,
+.cs-narration-feed,
+.cs-data-item,
+.cs-gameover-stat-value {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+.cs-hud-value {
+  text-shadow: 0 0 8px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+}
+.cs-credits,
+.cs-gameover-stat-value {
+  color: var(--cs-credit-color, #f59e0b);
+  text-shadow: 0 0 10px var(--cs-credit-glow, rgba(245, 158, 11, 0.4));
+}
+
+/* HUD strip — glass over the void instead of flat panel green */
+.cs-hud {
+  background: rgba(2, 12, 4, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--cs-hack-border, rgba(0, 255, 65, 0.15));
+  box-shadow: 0 10px 28px -16px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+}
+
+/* ──── 5 · Network grid — neon node states ───────────────────────────── */
+/* v1.58.0 [2026-06-11] — Player node carries a rotating neon border-trace
+   ring (conic gradient spun by the shared cs-rotate keyframes, injected
+   as an overlay so it never fights .cs-node-hacked's ::before). */
+.cs-grid {
+  background: rgba(0, 10, 3, 0.7);
+  border-color: rgba(0, 255, 65, 0.25);
+  box-shadow:
+    0 0 28px -6px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4)),
+    inset 0 0 32px rgba(0, 255, 65, 0.04);
+}
+.cs-node-player {
+  border-color: var(--cs-hack-green, #00ff41);
+  box-shadow:
+    0 0 12px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4)),
+    inset 0 0 10px var(--cs-hack-green-soft, rgba(0, 255, 65, 0.08));
+  overflow: hidden;
+}
+/* Border-trace ring: conic light arc orbiting the player cell. */
+.cs-node-player::after {
+  background:
+    conic-gradient(from 0deg,
+      transparent 0deg,
+      var(--cs-hack-green, #00ff41) 40deg,
+      transparent 90deg) border-box;
+  border: none;
+  border-radius: 0;
+  inset: -22px;
+  width: auto;
+  height: auto;
+  opacity: 0.35;
+  mix-blend-mode: screen;
+  animation: cs-rotate 3s linear infinite;
+}
+/* Targetable nodes: hot neon edge + existing target pulse. */
+.cs-node-targetable {
+  border-color: var(--cs-hack-green, #00ff41);
+  box-shadow: 0 0 10px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+}
+
+/* ──── 6 · Panels — receding hack glass + scan-sweep sweep-on-hover ──── */
+/* v1.58.0 [2026-06-11] — Sidebar panels (template adds .anim-scan-sweep)
+   get a dark hack-glass body with a green rim. */
+.cs-panel {
+  background: rgba(2, 13, 4, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--cs-hack-border, rgba(0, 255, 65, 0.15));
+  box-shadow: 0 4px 20px -10px rgba(0, 0, 0, 0.8);
+}
+.cs-panel-title {
+  text-shadow: 0 0 10px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+  letter-spacing: 2px;
+}
+
+/* ──── 7 · Game-over — CRT slam ──────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Deeper void + phosphor burn on the verdict. */
+.cs-gameover-overlay {
+  background:
+    var(--cs-crt-scanline, repeating-linear-gradient(
+      to bottom, transparent 0px, transparent 2px,
+      rgba(0, 0, 0, 0.12) 2px, rgba(0, 0, 0, 0.12) 4px)),
+    rgba(1, 4, 2, 0.92);
+}
+.cs-gameover-title {
+  animation: cs-pulse-glow-text 2.4s ease-in-out infinite;
+}

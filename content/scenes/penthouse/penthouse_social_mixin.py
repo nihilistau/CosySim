@@ -1,4 +1,15 @@
-"""penthouse scene social, character, spatial, and scenario mixin."""
+"""
+Penthouse Social Mixin
+======================
+Character lifecycle, stats, spatial movement, scenarios, and utility routes.
+
+Version: v1.53.1 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.53.1 [2026-03-26] — Hot-register characters with running agent loop
+    v1.50.0 [2026-03-24] — Initial extraction from penthouse_scene.py
+"""
 from __future__ import annotations
 
 import logging
@@ -62,6 +73,16 @@ class PenthouseSocialMixin:
             fw.get_character(char.id).enter_scene("penthouse")
         except Exception:
             pass
+
+        # v1.53.0 [2026-03-26] — Hot-register with running agent loop so new
+        # characters participate immediately instead of standing idle
+        if getattr(self, "agent_loop", None) and self.agent_loop.is_running:
+            try:
+                self._register_char_with_loop(char)
+                logger.info("[penthouse] Hot-registered %s with running agent loop (operation=hot_register)", char.name)
+            except Exception as exc:
+                logger.warning("[penthouse] Hot-register failed for %s (operation=hot_register): %s", char.name, exc)
+
         return char
 
     # ── Character state refresh ─────────────────────────────────────────

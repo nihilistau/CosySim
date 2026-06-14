@@ -1,6 +1,20 @@
 /* ═══════════════════════════════════════════════════════════════
-   THE SCORE — Heist Scene v0.68 "Dark Renaissance"
-   Crimson #e11d48 accent | Blueprint planning-room aesthetic
+   THE SCORE — Heist Scene "Dark Renaissance"
+   Accent: var(--cs-scene-accent) #f59e0b (template wins over kit
+   crimson per docs/DESIGN_SYSTEM_V2.md) | Blueprint planning room
+
+   Version: v1.58.0 [2026-06-11]
+   Change Log:
+     v1.58.0 [2026-06-11] — Dark Renaissance glow-up (appended
+                             section): palette re-pointed at --cs-*
+                             v2 tokens (amber), Orbitron job name +
+                             timer, kit ▸ panel titles, blueprint
+                             board frame, crew left rails, gold
+                             payout, kit-style phase buttons;
+                             enrichment: kit signature phase board —
+                             stepper dots become numbered Orbitron
+                             chips (kit .phase/.phase__n, ✓ on done)
+     v0.68               — Original crimson blueprint stylesheet
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
@@ -760,3 +774,201 @@ body {
   from { opacity: 0; transform: translateY(5px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.58.0 [2026-06-11] — DARK RENAISSANCE GLOW-UP (ui_kits_v2/heist)
+   ════════════════════════════════════════════════════════════════════════
+   Kit ideas applied: Orbitron display voice on the job wordmark + clock
+   (kit .job-name / .timer), JetBrains-mono ▸ panel titles in accent (kit
+   .panel__title), blueprint-blue framed board (kit .bp-view), crew cards
+   with status left rail (kit .crew__row), gold glowing payout (kit
+   PAYOUT panel), kit-style accent-tinted action buttons, alert-style
+   pulsing phase badge. Palette re-pointed at the v2 scene tokens injected
+   by neon_base (--cs-scene-accent = #f59e0b from heist.html — template
+   wins over the kit's #e11d48 per docs/DESIGN_SYSTEM_V2.md; crimson
+   stays for the heat-max + arrested status stops).
+   CONNECTS: design_tokens_v2.css, cosysim-animations.css (keyframes reused)
+   CALLED BY: heist.html (sole scene stylesheet), heist.js (markup gen)
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* ── 1 · Token alignment — accent derives from v2 scene tokens ───────── */
+:root {
+  --score-accent:      var(--cs-scene-accent, #e11d48);
+  --score-accent-rgb:  var(--cs-scene-accent-rgb, 225 29 72);
+  --score-accent-glow: var(--cs-scene-glow, rgba(225, 29, 72, 0.30));
+  --score-accent-dim:  rgb(var(--score-accent-rgb) / 0.65);
+  --score-border:      rgb(var(--score-accent-rgb) / 0.20);
+  /* heat-max + arrested stay crimson — heat is a status scale, not accent */
+}
+
+/* ── 2 · Header — Orbitron wordmark + clock (kit .job-name/.timer) ───── */
+.job-name {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-size: 16px;
+  text-shadow: 0 0 16px var(--score-accent-glow);
+}
+.timer-value {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--score-accent);
+  text-shadow: 0 0 12px var(--score-accent-glow);
+}
+.job-label, .heat-label, .timer-label, .tension-label {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+}
+.job-label::before, .heat-label::before, .timer-label::before { content: '\25B8 '; opacity: 0.6; }
+.heist-header {
+  background:
+    radial-gradient(ellipse at top left, rgb(var(--score-accent-rgb) / 0.06) 0%, transparent 55%),
+    var(--score-surface);
+}
+
+/* ── 3 · Panel titles — kit ▸ accent mono treatment ──────────────────── */
+.panel-title {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  color: var(--score-accent);
+  letter-spacing: 0.18em;
+}
+.panel-title::before { content: '\25B8 '; opacity: 0.6; }
+
+/* ── 4 · Investigation board — kit blueprint frame (.bp-view) ────────── */
+.investigation-board {
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 4px;
+  margin: 8px;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 50%, rgb(var(--score-accent-rgb) / 0.03) 0%, transparent 70%),
+    linear-gradient(rgba(96, 165, 250, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96, 165, 250, 0.04) 1px, transparent 1px),
+    #0a0d16;
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+}
+.board-empty-hint {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-style: normal;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(96, 165, 250, 0.45);
+}
+
+/* ── 5 · Crew cards — kit status left rail (.crew__row) ──────────────── */
+.crew-card {
+  border-left: 3px solid var(--score-accent);
+  border-radius: 0 4px 4px 0;
+}
+.crew-card:has(.status-badge.ready)       { border-left-color: var(--status-ready); }
+.crew-card:has(.status-badge.compromised),
+.crew-card:has(.status-badge.injured)     { border-left-color: var(--status-compromised); }
+.crew-card:has(.status-badge.arrested)    { border-left-color: var(--status-arrested); }
+.crew-role-badge { font-family: var(--cs-font-mono, 'JetBrains Mono', monospace); }
+.crew-avatar { border-color: rgb(var(--score-accent-rgb) / 0.4); }
+
+/* ── 6 · Payout — kit gold glow (PAYOUT · ESTIMATED panel) ───────────── */
+.job-meta-value.payout {
+  color: #fbbf24;
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-weight: 800;
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+}
+
+/* ── 7 · Phase badge — kit alert pulse (reuses shared keyframe idea) ─── */
+.phase-badge {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  animation: cs-pulse-glow 2.5s ease-in-out infinite;
+}
+
+/* ── 8 · Action buttons — kit CALL THE SCORE treatment ───────────────── */
+.btn-phase, .btn-abort, .btn-tick {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  letter-spacing: 0.14em;
+  border-radius: 3px;
+}
+.btn-phase {
+  background: rgb(var(--score-accent-rgb) / 0.15);
+  border: 1px solid var(--score-accent);
+  color: var(--score-accent);
+}
+.btn-phase:hover {
+  background: rgb(var(--score-accent-rgb) / 0.28);
+  box-shadow: 0 0 12px var(--score-accent-glow);
+  color: #fff;
+}
+.btn-abort { border-color: rgba(239, 68, 68, 0.5); color: #ef4444; }
+.btn-abort:hover { background: rgba(239, 68, 68, 0.10); box-shadow: 0 0 10px rgba(239, 68, 68, 0.25); }
+
+/* ── 9 · Footer stepper — mono labels + accent glow on active ────────── */
+.step-label { font-family: var(--cs-font-mono, 'JetBrains Mono', monospace); }
+.phase-step.active .step-label { text-shadow: 0 0 8px var(--score-accent-glow); }
+
+/* ── 10 · Chat — terminal voice for crew comms ───────────────────────── */
+.chat-message .msg-name {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chat-message { border-left: 2px solid rgb(var(--score-accent-rgb) / 0.35); padding-left: 7px; }
+.chat-message.mastermind { border-left-color: rgba(96, 165, 250, 0.4); }
+
+/* ── 11 · Full-width layout fix ──────────────────────────────────────────
+   v1.58.0 [2026-06-11] — heist.css sets body{display:flex}; as a flex
+   item, the shared .neon-layout (margin:auto) shrank to fit-content
+   (~900px centered). Force full width so the kit's dense 3-column
+   planning room fills the viewport like ui_kits_v2/heist. Scoped: this
+   stylesheet only loads on the heist page. */
+.neon-layout { width: 100%; }
+
+/* ── 12 · Phase board — kit signature numbered chips ─────────────────────
+   v1.58.0 [2026-06-11] — Enrichment: the kit's phase board renders each
+   phase as a card with a big Orbitron number (kit .phase / .phase__n,
+   green ✓ once done, accent glow while active). The production footer
+   stepper keeps its markup (.phase-step / .step-dot / .step-label —
+   heist.js _renderPhases() toggles .active/.done) and the 10px dots are
+   re-dressed into numbered chips via CSS counters. Overrides the dot
+   rules above.
+   CALLED BY: heist.js _renderPhases() — class contract unchanged */
+.phase-stepper { counter-reset: heist-phase; }
+.phase-step { counter-increment: heist-phase; }
+.step-dot {
+  width: 34px;
+  height: 26px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.step-dot::before {
+  content: counter(heist-phase, decimal-leading-zero);
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--score-text-faint);
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.phase-step.active .step-dot {
+  background: rgb(var(--score-accent-rgb) / 0.10);
+  border-color: var(--score-accent);
+  box-shadow: 0 0 16px var(--score-accent-glow);
+}
+.phase-step.active .step-dot::before {
+  color: var(--score-accent);
+  text-shadow: 0 0 10px var(--score-accent-glow);
+}
+.phase-step.done .step-dot {
+  background: rgba(16, 185, 129, 0.06);
+  border-color: var(--status-ready);
+  box-shadow: none;
+}
+.phase-step.done .step-dot::before {
+  content: '\2713';                       /* kit .phase__check */
+  font-size: 12px;
+  color: var(--status-ready);
+}
+/* connector meets the chip's vertical center (chip 26px + gap 4 + label) */
+.step-connector { margin-bottom: 16px; width: 22px; }

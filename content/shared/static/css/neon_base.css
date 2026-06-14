@@ -759,3 +759,84 @@
     display: none;
   }
 }
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+/* v1.51.1 [2026-03-25] — Scene footer with version, shortcuts, links */
+
+.cs-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: rgba(4, 5, 10, 0.9);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  z-index: 9800;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.cs-footer-version {
+  color: var(--cs-scene-accent, rgba(255, 255, 255, 0.4));
+  font-weight: 600;
+}
+
+.cs-footer-scene {
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
+.cs-footer-sep {
+  color: rgba(255, 255, 255, 0.1);
+}
+
+.cs-footer-keys {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cs-footer-keys kbd {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.cs-footer-links {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.cs-footer-link {
+  color: rgba(255, 255, 255, 0.3);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.cs-footer-link:hover {
+  color: var(--cs-scene-accent, rgba(255, 255, 255, 0.7));
+}
+
+/* v1.52.0 [2026-03-26] — Footer mobile breakpoint */
+@media (max-width: 640px) {
+  .cs-footer {
+    flex-wrap: wrap;
+    justify-content: center;
+    height: auto;
+    padding: 4px 8px;
+  }
+  .cs-footer-keys { display: none; }
+  .cs-footer-links { margin-left: 0; }
+}

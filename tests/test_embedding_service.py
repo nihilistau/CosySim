@@ -117,13 +117,13 @@ class TestGeminiEmbeddingProvider:
         mock_get.return_value = mock_client
 
         provider = GeminiEmbeddingProvider(
-            model="gemini-embedding-exp-03-07",
+            model="gemini-embedding-2-preview",
             output_dimensions=768,
         )
         result = provider.embed("test text", task_type="RETRIEVAL_DOCUMENT")
 
         mock_client.embed_content.assert_called_once_with(
-            model="gemini-embedding-exp-03-07",
+            model="gemini-embedding-2-preview",
             content="test text",
             task_type="RETRIEVAL_DOCUMENT",
             output_dimensionality=768,
@@ -161,47 +161,43 @@ class TestGeminiEmbeddingProvider:
 
     def test_properties(self) -> None:
         provider = GeminiEmbeddingProvider(
-            model="gemini-embedding-exp-03-07",
+            model="gemini-embedding-2-preview",
             output_dimensions=1536,
         )
-        assert provider.name == "gemini:gemini-embedding-exp-03-07"
+        assert provider.name == "gemini:gemini-embedding-2-preview"
         assert provider.dimensions == 1536
 
 
 # ──── LMStudioEmbeddingProvider tests ────────────────────────────────────────
 
 class TestLMStudioEmbeddingProvider:
-    @patch("engine.nexus.embedding_service.LMStudioEmbeddingProvider._get_sdk")
-    def test_embed_single(self, mock_get) -> None:
-        mock_sdk = MagicMock()
-        mock_sdk.embed.return_value = [0.5, 0.5]
-        mock_get.return_value = mock_sdk
-
+    # v1.49.3 [2026-03-22] — Rewritten: mock _post() instead of removed _get_sdk()
+    @patch.object(LMStudioEmbeddingProvider, "_post")
+    def test_embed_single(self, mock_post) -> None:
+        mock_post.return_value = {"data": [{"embedding": [0.5, 0.5]}]}
         provider = LMStudioEmbeddingProvider(model_key="test-model")
         result = provider.embed("hello")
-
-        mock_sdk.embed.assert_called_once_with("hello", model_key="test-model")
         assert result == [0.5, 0.5]
+        mock_post.assert_called_once()
 
-    @patch("engine.nexus.embedding_service.LMStudioEmbeddingProvider._get_sdk")
-    def test_embed_batch_calls_individually(self, mock_get) -> None:
-        mock_sdk = MagicMock()
-        mock_sdk.embed.side_effect = [[0.1], [0.2], [0.3]]
-        mock_get.return_value = mock_sdk
-
+    @patch.object(LMStudioEmbeddingProvider, "_post")
+    def test_embed_batch_calls_post(self, mock_post) -> None:
+        mock_post.return_value = {"data": [
+            {"embedding": [0.1]}, {"embedding": [0.2]}, {"embedding": [0.3]}
+        ]}
         provider = LMStudioEmbeddingProvider()
         result = provider.embed_batch(["a", "b", "c"])
-
         assert len(result) == 3
-        assert mock_sdk.embed.call_count == 3
+        assert result == [[0.1], [0.2], [0.3]]
 
     def test_name_with_model(self) -> None:
         provider = LMStudioEmbeddingProvider(model_key="nomic-embed")
         assert provider.name == "lmstudio:nomic-embed"
 
-    def test_name_auto(self) -> None:
+    def test_name_default(self) -> None:
         provider = LMStudioEmbeddingProvider()
-        assert provider.name == "lmstudio:auto"
+        # Default model_key is "text-embedding"
+        assert provider.name == "lmstudio:text-embedding"
 
 
 # ──── EmbeddingService tests ────────────────────────────────────────────────
@@ -210,46 +206,53 @@ class TestEmbeddingService:
     def setup_method(self) -> None:
         reset_embedding_service()
 
-    @patch("engine.nexus.embedding_service.GeminiEmbeddingProvider.embed")
-    @patch("engine.nexus.embedding_service.GeminiEmbeddingProvider._get_client")
-    def test_embed_uses_cache(self, mock_client, mock_embed) -> None:
-        mock_embed.return_value = [0.1, 0.2, 0.3]
-        svc = EmbeddingService(provider="gemini")
+    # v1.49.3 [2026-03-22] — Rewritten: inject mock provider via _providers list
+    def test_embed_uses_cache(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.name = "mock"
+        mock_provider.embed.return_value = [0.1, 0.2, 0.3]
 
-        # First call should hit the provider
+        svc = EmbeddingService(provider="gemini")
+        svc._providers = [mock_provider]
+
         result1 = svc.embed("test query", purpose="knowledge")
         assert result1 == [0.1, 0.2, 0.3]
-        assert mock_embed.call_count == 1
+        assert mock_provider.embed.call_count == 1
 
         # Second call should hit cache
         result2 = svc.embed("test query", purpose="knowledge")
         assert result2 == [0.1, 0.2, 0.3]
-        assert mock_embed.call_count == 1  # still 1 — cache hit
+        assert mock_provider.embed.call_count == 1  # still 1 — cache hit
 
-    @patch("engine.nexus.embedding_service.GeminiEmbeddingProvider.embed")
-    @patch("engine.nexus.embedding_service.GeminiEmbeddingProvider._get_client")
-    def test_purpose_maps_to_task_type(self, mock_client, mock_embed) -> None:
-        mock_embed.return_value = [0.1]
+    def test_purpose_maps_to_task_type(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.name = "mock"
+        mock_provider.embed.return_value = [0.1]
+
         svc = EmbeddingService(provider="gemini")
+        svc._providers = [mock_provider]
 
-        svc.embed("test", purpose="query")
-        mock_embed.assert_called_with("test", task_type="RETRIEVAL_QUERY")
+        svc.embed("test_q", purpose="query")
+        mock_provider.embed.assert_called_with("test_q", task_type="RETRIEVAL_QUERY")
 
-        svc.embed("test", purpose="code")
-        mock_embed.assert_called_with("test", task_type="CODE_RETRIEVAL_QUERY")
+        svc.embed("test_c", purpose="code")
+        mock_provider.embed.assert_called_with("test_c", task_type="CODE_RETRIEVAL_QUERY")
 
-    @patch("engine.nexus.embedding_service.GeminiEmbeddingProvider.embed_batch")
-    @patch("engine.nexus.embedding_service.GeminiEmbeddingProvider._get_client")
-    def test_embed_batch_caches_results(self, mock_client, mock_batch) -> None:
-        mock_batch.return_value = [[0.1], [0.2]]
+    def test_embed_batch_caches_results(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.name = "mock"
+        mock_provider.embed_batch.return_value = [[0.1], [0.2]]
+
         svc = EmbeddingService(provider="gemini")
+        svc._providers = [mock_provider]
 
         result = svc.embed_batch(["a", "b"], purpose="knowledge")
         assert len(result) == 2
-        assert mock_batch.call_count == 1
+        assert mock_provider.embed_batch.call_count == 1
 
         # Now "a" should be cached
-        svc._cache.get("a", "RETRIEVAL_DOCUMENT", svc._dimensions)
+        cached = svc._cache.get("a", "RETRIEVAL_DOCUMENT", svc._dimensions)
+        assert cached == [0.1]
 
     def test_cosine_similarity_identical(self) -> None:
         svc = EmbeddingService(provider="gemini")
@@ -297,19 +300,23 @@ class TestEmbeddingService:
         result = svc.embed_batch([], purpose="knowledge")
         assert result == []
 
-    @patch("engine.nexus.embedding_service.GeminiEmbeddingProvider.embed")
-    @patch("engine.nexus.embedding_service.LMStudioEmbeddingProvider.embed")
-    @patch("engine.nexus.embedding_service.GeminiEmbeddingProvider._get_client")
-    @patch("engine.nexus.embedding_service.LMStudioEmbeddingProvider._get_sdk")
-    def test_fallback_on_provider_failure(
-        self, mock_sdk, mock_client, mock_lms_embed, mock_gemini_embed
-    ) -> None:
-        mock_gemini_embed.side_effect = RuntimeError("API down")
-        mock_lms_embed.return_value = [0.5, 0.5]
+    # v1.49.3 [2026-03-22] — Rewritten: inject mock providers for fallback test
+    def test_fallback_on_provider_failure(self) -> None:
+        failing_provider = MagicMock()
+        failing_provider.name = "gemini"
+        failing_provider.embed.side_effect = RuntimeError("API down")
+
+        fallback_provider = MagicMock()
+        fallback_provider.name = "lmstudio"
+        fallback_provider.embed.return_value = [0.5, 0.5]
 
         svc = EmbeddingService(provider="auto")
+        svc._providers = [failing_provider, fallback_provider]
+
         result = svc.embed("test", purpose="knowledge")
         assert result == [0.5, 0.5]
+        assert failing_provider.embed.call_count == 1
+        assert fallback_provider.embed.call_count == 1
 
     def test_active_provider_name_default(self) -> None:
         svc = EmbeddingService(provider="gemini")

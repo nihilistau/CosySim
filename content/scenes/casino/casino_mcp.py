@@ -140,57 +140,58 @@ def pick_random_event() -> Dict:
 #  RULE REGISTRATION
 # ══════════════════════════════════════════════════════════════════════
 
+# v1.58.0 [2026-06-11] — Table-driven action specs; converted to RuleEffect
+# stat_adjust entries by register_casino_rules() below.
+_CASINO_ACTIONS = [
+    ("bet",           "Place a Bet",    "Wager chips on the current hand",
+     0, {"recklessness": 3},                    None),
+    ("bluff",         "Bluff",          "Attempt to mislead opponents about your hand",
+     0, {"confidence": 5, "recklessness": 5},   None),
+    ("fold",          "Fold",           "Surrender the hand",
+     0, {"confidence": -5},                     None),
+    ("order_drink",   "Order a Drink",  "Order from the casino bar",
+     0, {},                                     None),
+    ("read_opponent", "Read Opponent",  "Study your opponent for tells",
+     0, {"focus": 5},                           None),
+    ("side_bet",      "Side Bet",       "Make a personal wager with another player",
+     1, {"recklessness": 10, "charm": 5},       None),
+    ("all_in",        "Go All In",      "Push all your chips into the pot — ultimate risk",
+     0, {"recklessness": 20, "confidence": 15}, {"confidence": 30}),
+]
+
+
 def register_casino_rules() -> None:
-    """Register casino-specific rules with the MCP framework."""
+    """Register casino-specific actions with the SceneRulesEngine.
+
+    v1.58.0 [2026-06-11] — Rewritten to the real engine API. The old code
+    called nonexistent ``register_action()`` with nonexistent
+    ``stat_effects=``/``conditions=`` kwargs, so casino actions silently
+    failed to register on every startup.
+    """
     try:
-        from engine.mcp.scene_rules_engine import get_rules_engine, RuleDefinition, ActionDefinition, RuleCondition
+        from engine.mcp.scene_rules_engine import (
+            ActionDefinition, RuleCondition, RuleEffect, get_rules_engine,
+        )
 
         eng = get_rules_engine()
+        for action_id, label, desc, intimacy, stat_effects, thresholds in _CASINO_ACTIONS:
+            eng.add_action(ActionDefinition(
+                action_id=action_id,
+                scene=SCENE_ID,
+                label=label,
+                description=desc,
+                intimacy_level=intimacy,
+                category="game",
+                effects=[
+                    RuleEffect("stat_adjust", {"stat": stat, "delta": delta})
+                    for stat, delta in stat_effects.items()
+                ],
+                condition=(RuleCondition(stat_thresholds=thresholds)
+                           if thresholds else None),
+            ))
 
-        eng.register_action(SCENE_ID, ActionDefinition(
-            action_id="bet", label="Place a Bet",
-            description="Wager chips on the current hand",
-            intimacy_level=0,
-            stat_effects={"recklessness": 3},
-        ))
-        eng.register_action(SCENE_ID, ActionDefinition(
-            action_id="bluff", label="Bluff",
-            description="Attempt to mislead opponents about your hand",
-            intimacy_level=0,
-            stat_effects={"confidence": 5, "recklessness": 5},
-        ))
-        eng.register_action(SCENE_ID, ActionDefinition(
-            action_id="fold", label="Fold",
-            description="Surrender the hand",
-            intimacy_level=0,
-            stat_effects={"confidence": -5},
-        ))
-        eng.register_action(SCENE_ID, ActionDefinition(
-            action_id="order_drink", label="Order a Drink",
-            description="Order from the casino bar",
-            intimacy_level=0,
-            stat_effects={},
-        ))
-        eng.register_action(SCENE_ID, ActionDefinition(
-            action_id="read_opponent", label="Read Opponent",
-            description="Study your opponent for tells",
-            intimacy_level=0,
-            stat_effects={"focus": 5},
-        ))
-        eng.register_action(SCENE_ID, ActionDefinition(
-            action_id="side_bet", label="Side Bet",
-            description="Make a personal wager with another player",
-            intimacy_level=1,
-            stat_effects={"recklessness": 10, "charm": 5},
-        ))
-        eng.register_action(SCENE_ID, ActionDefinition(
-            action_id="all_in", label="Go All In",
-            description="Push all your chips into the pot — ultimate risk",
-            intimacy_level=0,
-            stat_effects={"recklessness": 20, "confidence": 15},
-            conditions=RuleCondition(thresholds={"confidence": 30}),
-        ))
-
-        logger.info("Casino rules registered")
+        logger.info("[%s] Registered %d casino actions (operation=rules_init)",
+                    SCENE_ID, len(_CASINO_ACTIONS))
     except Exception as exc:
-        logger.warning("Casino rule registration failed: %s", exc)
+        logger.warning("[%s] Casino rule registration failed (operation=rules_init): %s",
+                       SCENE_ID, exc)

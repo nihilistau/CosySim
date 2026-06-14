@@ -49,28 +49,43 @@ def _mock_engine_modules() -> None:
     metaclass machinery does not raise a conflict when ``NeonCityScene`` inherits
     from them.
     """
+    # v1.51.0 [2026-03-22] — Updated for FlaskScene migration
     # Real type objects — avoids MagicMock metaclass conflicts in class bodies
     _FakeBase = type("BaseScene", (), {
         "__init__": lambda self, *a, **kw: None,
         "get_health": lambda self: {},
     })
-    _FakeMCP = type("MCPSceneMixin", (), {
-        "__init_subclass__": classmethod(lambda cls, mcp_scene_id=None, **kw: None),
-        "_mcp_init": lambda self: None,
-        "_mcp_deregister_scene": lambda self: None,
-        "mount_overlay": lambda self, *a, **kw: None,
-        "mount_skills_server": lambda self, *a, **kw: None,
-        "mcp": MagicMock(),
-    })
     _FakeNexus = type("NexusSceneMixin", (), {
         "nexus_init": lambda self, *a: None,
         "nexus_flush": lambda self: None,
     })
+    _FakeFlaskScene = type("FlaskScene", (_FakeBase, _FakeNexus), {
+        "__init__": lambda self, *a, **kw: None,
+        "SCENE_METADATA": {},
+        "_connect_mcp": lambda self: None,
+        "_connect_nexus": lambda self: None,
+        "_mcp_deregister_scene": lambda self: None,
+        "mount_overlay": lambda self, *a, **kw: None,
+        "mount_skills_server": lambda self, *a, **kw: None,
+        "register_health_route": lambda self, *a, **kw: None,
+        "register_hud_route": lambda self, *a, **kw: None,
+        "register_announcer_route": lambda self, *a, **kw: None,
+        "register_inventory_route": lambda self, *a, **kw: None,
+        "register_bench_route": lambda self, *a, **kw: None,
+        "register_tts_route": lambda self, *a, **kw: None,
+        "register_hack_route": lambda self, *a, **kw: None,
+        "register_world_events_route": lambda self, *a, **kw: None,
+        "register_shop_route": lambda self, *a, **kw: None,
+        "mcp": MagicMock(),
+        "app": MagicMock(),
+        "socketio": MagicMock(),
+    })
 
     stubs: Dict[str, Any] = {
+        "engine.scenes.flask_scene":              MagicMock(FlaskScene=_FakeFlaskScene),
         "engine.scenes.base_scene":               MagicMock(BaseScene=_FakeBase, get_active_scene=MagicMock(return_value=None)),
         "engine.scenes.nexus_mixin":              MagicMock(NexusSceneMixin=_FakeNexus),
-        "engine.mcp.framework":                   MagicMock(MCPSceneMixin=_FakeMCP, get_framework=MagicMock()),
+        "engine.mcp.framework":                   MagicMock(get_framework=MagicMock()),
         "engine.mcp.scene_state":                 MagicMock(),
         "engine.mcp.tag_registry":                MagicMock(),
         "engine.events.event_bus":                MagicMock(),

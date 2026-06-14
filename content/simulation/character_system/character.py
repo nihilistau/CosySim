@@ -2,6 +2,7 @@
 Character Class for Virtual Companion System
 Manages character attributes, state, memory, and behavior
 """
+import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import uuid
@@ -13,6 +14,8 @@ sys.path.insert(0, str(project_root))
 
 from content.simulation.database.db import Database
 from content.simulation.database.rag import RAGMemory
+
+logger = logging.getLogger(__name__)
 
 
 class Character:
@@ -63,9 +66,9 @@ class Character:
                     "mood":  self._state.get("mood", "neutral"),
                     "scene": "unknown",
                 })
-        except Exception:
-            pass
-    
+        except Exception as e:
+            logger.debug("[Character] MCP registry sync failed (operation=init): %s", e)
+
     # ============= PROPERTIES =============
     
     @property
@@ -362,8 +365,8 @@ class Character:
             try:
                 from engine.mcp.character_registry import get_character_registry
                 get_character_registry().set_state(self.id, dict(kwargs))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[Character] Registry state sync failed (operation=update_state): %s", e)
         return success
     
     def set_mood(self, mood: str) -> bool:
@@ -379,8 +382,8 @@ class Character:
                     scene="unknown",
                     data={"mood": mood},
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[Character] ActivityBus publish failed (operation=set_mood): %s", e)
         return result
     
     def adjust_relationship(self, delta: float) -> bool:

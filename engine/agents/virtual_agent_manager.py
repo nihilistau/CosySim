@@ -1,9 +1,19 @@
 """
-VirtualAgentManager v3.3 — Centralised agent call server for CosySim.
+VirtualAgentManager v3.4 — Centralised agent call server for CosySim.
+
+Version: v1.56.0 [2026-03-26]
+
+Change Log:
+    v1.56.0 [2026-03-26] — Structured nexus_first dict in get_stats() with gpu_calls_saved
+    v1.55.0 [2026-03-26] — Nexus-first inference: check knowledge cache before GPU
+    v1.55.0 [2026-03-26] — Added on_model_promoted() for training pipeline hot-reload
+    v3.3    [2026-03-19] — Three-tier InferenceRouter, SDK + REST dual channel
 
 All VirtualAgent LLM calls are routed through this manager, giving us full
 control over:
 
+* **Nexus-first inference** — check Nexus knowledge cache before hitting
+  GPU, saving latency and compute for known questions (v3.4)
 * **Model routing** — which model handles which agent
 * **Concurrency** — multiple agents can share a single loaded model
 * **JIT loading** — load a model on demand, unload after TTL
@@ -28,6 +38,8 @@ Architecture::
          ▼  InferenceRequest
     VirtualAgentManager.infer()
          │
+         ├── Nexus-first (v3.4: knowledge cache before GPU)
+         │    └── QueryRouter.query() → InferenceResponse (if cache hit)
          ├── InferenceRouter (v3.3: priority queue, tier selection)
          │    ├── SDK channel (.respond, .act, .stream)
          │    └── REST channel (/api/v1/chat, stateful)
@@ -109,9 +121,189 @@ class VirtualAgentManager:
         self._pipeline_init_attempted = False
         self._pipeline_lock = threading.Lock()
 
+        # v1.55.0 [2026-03-26] — Hot-reload: promoted models from training pipeline
+        self._promoted_models: Dict[str, Dict[str, str]] = {}
+
+        # v1.55.0 [2026-03-26] — Nexus-first inference: knowledge cache before GPU
+        self._nexus_first_enabled = False
+        self._nexus_first_min_confidence = 0.75
+        self._nexus_first_skip_tool_calls = True
+        self._nexus_first_skip_system_only = True
+        self._nexus_hits = 0
+        self._nexus_misses = 0
+        self._init_nexus_first()
+
         # Request hooks — called before/after every inference
         self._pre_hooks: List[Callable] = []
         self._post_hooks: List[Callable] = []
+
+    # ── Nexus-First Inference ──────────────────────────────────────────
+
+    # v1.55.0 [2026-03-26] — Read config for Nexus-first agent cache
+    # CONNECTS: NexusQueryRouter, engine.config
+    # CALLED BY: __init__()
+    def _init_nexus_first(self) -> None:
+        """Load Nexus-first config from nexus.agent_cache settings."""
+        try:
+            from engine.config import get_config
+            cfg = get_config()
+            ac = cfg.get("nexus.agent_cache", {})
+            self._nexus_first_enabled = ac.get("enabled", True)
+            self._nexus_first_min_confidence = ac.get("min_confidence", 0.75)
+            self._nexus_first_skip_tool_calls = ac.get("skip_tool_calls", True)
+            self._nexus_first_skip_system_only = ac.get("skip_system_only", True)
+            if self._nexus_first_enabled:
+                logger.info(
+                    "[VAM] Nexus-first inference enabled "
+                    "(operation=init_nexus_first, min_confidence=%.2f)",
+                    self._nexus_first_min_confidence,
+                )
+        except Exception as exc:
+            # Config not available yet — keep defaults (enabled=False)
+            logger.debug("[VAM] Nexus-first config load failed: %s", exc)
+
+    # v1.55.0 [2026-03-26] — Check Nexus knowledge cache before GPU inference
+    # CONNECTS: NexusQueryRouter, InferenceResponse
+    # CALLED BY: infer(), infer_processed()
+    # EMITS: Oracle log events for cache hit/miss
+    def _try_nexus_first(self, request: InferenceRequest) -> Optional[InferenceResponse]:
+        """Check Nexus knowledge cache before sending to GPU.
+
+        Extracts the user message from the request, queries the Nexus
+        QueryRouter, and returns an InferenceResponse if a high-confidence
+        answer is found. Returns None to fall through to the normal LLM path.
+
+        Skips the check for:
+        - Requests with tool/MCP integrations (need tool execution, not cached text)
+        - Requests with structured_schema (need JSON output, not prose)
+        - Requests with no user message (system-only prompts)
+        - Requests with store=False and no conversation_id (one-off internal queries)
+
+        Args:
+            request: The inference request to check.
+
+        Returns:
+            InferenceResponse if Nexus had a good answer, None otherwise.
+        """
+        # Guard: skip tool-calling requests — they need actual tool execution
+        if self._nexus_first_skip_tool_calls and (
+            request.use_mcp or request.integrations
+        ):
+            return None
+
+        # Guard: skip structured output requests — Nexus returns prose, not JSON
+        if request.structured_schema:
+            return None
+
+        # Extract the user message (last user-role message in the list)
+        user_message = ""
+        for msg in reversed(request.messages):
+            if msg.get("role") == "user":
+                user_message = msg.get("content", "")
+                break
+
+        # Guard: no user message means system-only prompt — skip
+        if not user_message or (
+            self._nexus_first_skip_system_only and not user_message.strip()
+        ):
+            return None
+
+        # Guard: very short messages are unlikely to be knowledge queries
+        # (e.g. "hi", "ok", "yes") — let the LLM handle social chatter
+        if len(user_message.strip()) < 15:
+            return None
+
+        try:
+            # Lazy import to avoid circular dependency at module load time
+            from engine.nexus.query_router import get_query_router
+
+            router = get_query_router()
+            result = router.query(
+                question=user_message,
+                min_confidence=self._nexus_first_min_confidence,
+                use_llm=False,  # Never fall through to LLM here — we ARE the LLM path
+                source_hint="agent",
+                agent_id=request.agent_id,
+            )
+
+            # Check if we got a usable answer
+            if (
+                result.answer
+                and result.confidence >= self._nexus_first_min_confidence
+                and result.source != "none"
+            ):
+                self._nexus_hits += 1
+                logger.info(
+                    "[VirtualAgentManager] Nexus cache hit "
+                    "(operation=nexus_first, agent=%s, tier=%s, "
+                    "confidence=%.2f, tokens_saved=%d)",
+                    request.agent_id, result.source,
+                    result.confidence, result.tokens_saved,
+                )
+                return InferenceResponse(
+                    content=result.answer,
+                    model=f"nexus:{result.source}",
+                    input_tokens=0,
+                    output_tokens=result.tokens_saved,
+                    latency_ms=result.query_time_ms,
+                )
+
+            # Cache miss — fall through to LLM
+            self._nexus_misses += 1
+            logger.debug(
+                "[VirtualAgentManager] Nexus cache miss "
+                "(operation=nexus_first, agent=%s, confidence=%.2f)",
+                request.agent_id, result.confidence,
+            )
+            return None
+
+        except Exception as exc:
+            # Nexus unavailable or error — gracefully fall through to LLM
+            self._nexus_misses += 1
+            logger.debug(
+                "[VirtualAgentManager] Nexus-first check failed "
+                "(operation=nexus_first, agent=%s): %s",
+                request.agent_id, exc,
+            )
+            return None
+
+    # ── Model Hot-Reload ─────────────────────────────────────────────
+
+    # v1.55.0 [2026-03-26] — Accept live model updates from training pipeline
+    def on_model_promoted(self, model_type: str, model_id: str, adapter_path: str) -> None:
+        """Hot-reload a promoted micro-model without restart.
+
+        Called by ModelRegistry.promote() when a new model is activated.
+        Stores the model info so the next inference for this type uses
+        the updated model/adapter.
+
+        Args:
+            model_type: Micro-model type (qa_evaluator, router_v2, etc.).
+            model_id: Registry ID of the promoted model.
+            adapter_path: Path to the LoRA adapter directory.
+
+        CONNECTS: ModelRegistry, InferenceRouter
+        CALLED BY: ModelRegistry.promote() via _notify_virtual_agents()
+        """
+        self._promoted_models[model_type] = {
+            "model_id": model_id,
+            "adapter_path": adapter_path,
+        }
+        logger.info(
+            "[VirtualAgentManager] Model update received (operation=hot_reload, type=%s, model=%s)",
+            model_type, model_id,
+        )
+
+    def get_promoted_model(self, model_type: str) -> Optional[Dict[str, str]]:
+        """Return the latest promoted model info for a type, if any.
+
+        Args:
+            model_type: Micro-model type to look up.
+
+        Returns:
+            Dict with model_id and adapter_path, or None.
+        """
+        return self._promoted_models.get(model_type)
 
     # ── Router integration ─────────────────────────────────────────
 
@@ -195,7 +387,8 @@ class VirtualAgentManager:
 
                 self._router.start()
                 self._router_enabled = True
-                logger.info("InferenceRouter started with %d tiers", len(tiers))
+                # v1.49.3 [2026-03-22] — Structured logging context
+                logger.info("[VAM] InferenceRouter started (operation=init_router, tiers=%d)", len(tiers))
                 return self._router
 
             except Exception as exc:
@@ -266,7 +459,7 @@ class VirtualAgentManager:
                     tool_executor=tool_executor,
                     on_metrics=on_metrics,
                 )
-                logger.info("VirtualPipeline initialized (watcher=%s, kill=%s)",
+                logger.info("[VAM] VirtualPipeline initialized (operation=init_pipeline, watcher=%s, kill=%s)",
                             config.watcher_enabled, config.kill_switch_enabled)
                 return self._pipeline
 
@@ -388,7 +581,7 @@ class VirtualAgentManager:
 
             self._agents[agent.id] = agent
             logger.info(
-                "Registered VirtualAgent: %s (scene=%s, model=%s)",
+                "[VAM] Registered VirtualAgent (operation=register, agent=%s, scene=%s, model=%s)",
                 agent.name, agent.scene, agent.model,
             )
 
@@ -404,7 +597,7 @@ class VirtualAgentManager:
                     get_conversation_manager().delete(agent.conversation_id or "")
                 except Exception:
                     logger.debug("Suppressed exception", exc_info=True)
-                logger.info("Unregistered VirtualAgent: %s", agent.name)
+                logger.info("[VAM] Unregistered VirtualAgent (operation=unregister, agent=%s)", agent.name)
             return agent
 
     def get_agent(self, agent_id: str) -> Optional[VirtualAgent]:
@@ -432,13 +625,25 @@ class VirtualAgentManager:
             except Exception as exc:
                 logger.debug("Pre-hook error: %s", exc)
 
+        # v1.55.0 [2026-03-26] — Nexus-first: check knowledge cache before GPU
+        if self._nexus_first_enabled:
+            cached = self._try_nexus_first(request)
+            if cached:
+                # Run post-hooks even for cached responses
+                for hook in self._post_hooks:
+                    try:
+                        hook(request, cached)
+                    except Exception as exc:
+                        logger.debug("Post-hook error: %s", exc)
+                return cached
+
         t0 = time.perf_counter()
         try:
             response = self._execute_request(request)
         except Exception as exc:
             self._total_errors += 1
             response = InferenceResponse.from_error(str(exc))
-            logger.warning("Inference failed for agent %s: %s", request.agent_id, exc)
+            logger.warning("[VAM] Inference failed (operation=infer, agent_id=%s): %s", request.agent_id, exc)
 
         elapsed_ms = (time.perf_counter() - t0) * 1000
         if not response.latency_ms:
@@ -531,7 +736,7 @@ class VirtualAgentManager:
             return responses
 
         except Exception as exc:
-            logger.error("Batch inference failed: %s", exc)
+            logger.error("[VAM] Batch inference failed (operation=infer_batch, count=%d): %s", len(requests), exc)
             return [InferenceResponse.from_error(str(exc)) for _ in requests]
 
     # ── Streaming inference ────────────────────────────────────────
@@ -688,6 +893,22 @@ class VirtualAgentManager:
 
         Real-time callbacks fire as events arrive during streaming.
         """
+        # v1.55.0 [2026-03-26] — Nexus-first: check knowledge cache before GPU
+        if self._nexus_first_enabled:
+            cached = self._try_nexus_first(request)
+            if cached:
+                from engine.agents.stream_processor import ProcessedResponse
+                # Fire the on_delta callback so callers see the text arriving
+                if on_delta and cached.content:
+                    on_delta(cached.content)
+                return ProcessedResponse(
+                    raw_text=cached.content,
+                    clean_text=cached.content,
+                    model=cached.model,
+                    output_tokens=cached.output_tokens,
+                    latency_ms=cached.latency_ms,
+                )
+
         from engine.agents.stream_processor import StreamProcessor
 
         proc = StreamProcessor(
@@ -732,7 +953,7 @@ class VirtualAgentManager:
         """High-level: build request, infer, process response."""
         agent = self._agents.get(agent_id)
         if not agent:
-            logger.warning("Agent %s not registered", agent_id)
+            logger.warning("[VAM] Agent not registered (operation=reply, agent_id=%s)", agent_id)
             return ""
         return agent.reply(
             user_message,
@@ -785,7 +1006,7 @@ class VirtualAgentManager:
             client.load_model(model, **kwargs)
             return True
         except Exception as exc:
-            logger.error("Failed to load model %s: %s", model, exc)
+            logger.error("[VAM] Failed to load model (operation=load_model, model=%s): %s", model, exc)
             return False
 
     def unload_model(self, model: str) -> bool:
@@ -796,7 +1017,7 @@ class VirtualAgentManager:
             client.unload_model(model)
             return True
         except Exception as exc:
-            logger.error("Failed to unload model %s: %s", model, exc)
+            logger.error("[VAM] Failed to unload model (operation=unload_model, model=%s): %s", model, exc)
             return False
 
     # ── Hooks ───────────────────────────────────────────────────────
@@ -836,6 +1057,24 @@ class VirtualAgentManager:
             ),
             "router_enabled": self._router_enabled,
             "pipeline_enabled": self._pipeline is not None,
+            # v1.55.0 [2026-03-26] — Nexus-first cache stats (flat)
+            "nexus_first_enabled": self._nexus_first_enabled,
+            "nexus_hits": self._nexus_hits,
+            "nexus_misses": self._nexus_misses,
+            "nexus_hit_rate": (
+                f"{self._nexus_hits / (self._nexus_hits + self._nexus_misses):.1%}"
+                if (self._nexus_hits + self._nexus_misses) > 0 else "0.0%"
+            ),
+            # v1.56.0 [2026-03-26] — Structured Nexus-first cache effectiveness
+            "nexus_first": {
+                "enabled": self._nexus_first_enabled,
+                "hits": self._nexus_hits,
+                "misses": self._nexus_misses,
+                "hit_rate": (
+                    f"{self._nexus_hits / max(1, self._nexus_hits + self._nexus_misses) * 100:.1f}%"
+                ),
+                "gpu_calls_saved": self._nexus_hits,
+            },
         }
         if self._router:
             stats["router"] = self._router.get_metrics()
@@ -1014,7 +1253,7 @@ class VirtualAgentManager:
             temperature=max(0.3, (cfg.temperature or 0.7) - 0.2 * (attempt + 1)),
         ))
         logger.info(
-            "Conversation repair attempt %d for %s (temp=%.2f)",
+            "[VAM] Conversation repair attempt (operation=repair, attempt=%d, agent_id=%s, temp=%.2f)",
             attempt + 1, request.agent_id, retry_cfg.temperature or 0.7,
         )
 

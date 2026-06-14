@@ -30,7 +30,11 @@ def lib_db(tmp_path):
         mock_cfg.return_value = MagicMock()
         mock_cfg.return_value.get = lambda k, d=None: d
         from engine.asset_studio.asset_library import AssetLibrary
-        return AssetLibrary(db_path=str(tmp_path / "test_lib.db"))
+        lib = AssetLibrary(db_path=str(tmp_path / "test_lib.db"))
+        yield lib
+        # Force cleanup of SQLite connections before tmp_path removal
+        import gc
+        gc.collect()
 
 
 class TestAssetLibrary:
@@ -636,14 +640,10 @@ class TestInjectToSceneRoutes:
 def test_asset_studio_scene_list_uses_canonical_registry():
     from content.scenes.asset_studio.asset_studio_scene import AssetStudioScene
 
-    with patch.object(AssetStudioScene, "_mcp_init", return_value=None), \
-         patch.object(AssetStudioScene, "mount_overlay", return_value=None), \
+    # v1.51.0 [2026-03-22] — Updated mocks for FlaskScene migration (no more _mcp_init)
+    with patch.object(AssetStudioScene, "mount_overlay", return_value=None), \
          patch.object(AssetStudioScene, "mount_skills_server", return_value=None), \
-         patch.object(AssetStudioScene, "register_health_route", return_value=None), \
-         patch.object(AssetStudioScene, "register_hud_route", return_value=None), \
-         patch.object(AssetStudioScene, "register_announcer_route", return_value=None), \
          patch.object(AssetStudioScene, "register_bench_route", return_value=None), \
-         patch.object(AssetStudioScene, "register_tts_route", return_value=None), \
          patch.object(AssetStudioScene, "_register_socket_events", return_value=None):
         scene = AssetStudioScene(host="127.0.0.1")
 

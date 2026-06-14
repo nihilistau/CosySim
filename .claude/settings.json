@@ -1,0 +1,66 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/cosysim-hooks.py",
+            "timeout": 8,
+            "async": true,
+            "statusMessage": "Oracle scanning..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/session-end.py --from-stdin",
+            "timeout": 30,
+            "async": true,
+            "statusMessage": "Syncing session to NEXUS..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/post-tool.py",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/cosysim-hooks.py",
+            "timeout": 5,
+            "async": true,
+            "statusMessage": "Syntax checking..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Files/Models/CosySim/.claude/hooks/cosysim-hooks.py",
+            "timeout": 8,
+            "async": true,
+            "statusMessage": "Oracle checking..."
+          }
+        ]
+      }
+    ]
+  }
+}

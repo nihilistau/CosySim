@@ -6,7 +6,7 @@ named sequence of stages that move data between services, with Drive as the
 intermediate
 storage / movement layer and Nexus as the final knowledge destination.
 
-Stages (30):
+Stages (33):
     nlm_research       — Research a topic via NotebookLM
     create_doc         — Create a Google Doc (optionally with Gemini content)
     create_sheet       — Create or populate a Google Sheet
@@ -37,6 +37,9 @@ Stages (30):
     aistudio_generate_image — Generate images via AI Studio
     appscript_run      — Run an Apps Script function
     appscript_deploy   — Deploy an Apps Script project
+    file_search_upload — Upload files to a Google File Search store
+    file_search_query  — Query a File Search store with multiple questions
+    file_search_distill— Distill File Search answers into Nexus Q&A
 
 Pipeline Engine v2 Meta-Stages (v1.26):
     Retry/Backoff — Stage-level retry with exponential/linear backoff
@@ -70,6 +73,7 @@ Pipelines (17):
     news_full_cycle        — News → enrich → NLM → Sheet + Doc → Drive → Nexus
     doc_structure_extract  — Doc → extract structured data → Sheet → Nexus
     sheet_knowledge_report — Sheet → doc report → NLM → Drive → Nexus
+    knowledge_sync         — File Search upload → query → distill → Nexus
 """
 
 from __future__ import annotations
@@ -1292,6 +1296,136 @@ def _stage_appscript_get_project(params: Dict[str, Any], context: Dict[str, Any]
         return {"error": str(exc), "info": {}}
 
 
+# ──── File Search Stages (v1.53.1) ───────────────────────────────────────────
+# CONNECTS: FileSearchClient, Nexus Q&A cache
+# CALLED BY: WorkspacePipeline dispatcher (knowledge-sync pipeline)
+# EMITS: Nexus Q&A entries (file_search_distilled category)
+
+
+# v1.53.1 [2026-03-26] — Upload files to a Google File Search store
+def _stage_file_search_upload(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Upload files to a Google File Search store.
+
+    Supports glob patterns to match multiple files.  Skips files that fail to
+    upload (non-critical) and returns the total upload count.
+
+    Params:
+        store: Display name for the target store (default: "cosysim-architecture").
+        files: List of file path globs (e.g. ["docs/*.md", "engine/nexus/*.py"]).
+
+    Returns:
+        Dict with ``uploaded`` count and ``store`` resource name.
+    """
+    from engine.integrations.file_search_client import get_file_search_client
+    from pathlib import Path
+
+    client = get_file_search_client()
+    store_display = params.get("store", context.get("store", "cosysim-architecture"))
+    store_name = client.get_or_create_store(store_display)
+
+    files = params.get("files", context.get("files", []))
+    uploaded = 0
+    for pattern in files:
+        for path in Path(".").glob(pattern):
+            if path.is_file():
+                try:
+                    client.upload_document(store_name, str(path))
+                    uploaded += 1
+                except Exception as exc:
+                    logger.warning(
+                        "[Pipeline] File Search upload failed (operation=file_search_upload): %s — %s",
+                        path, exc,
+                    )
+
+    return {"uploaded": uploaded, "store": store_name}
+
+
+# v1.53.1 [2026-03-26] — Query a File Search store with multiple questions
+def _stage_file_search_query(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Query a File Search store with multiple questions.
+
+    If no store is specified, uses the first available store.  Each question
+    is sent as a grounded query; distill_to_nexus is enabled by default so
+    answers are cached locally for offline reuse.
+
+    Params:
+        store: Store resource name or display name (optional — auto-detects).
+        questions: List of question strings to ask.
+
+    Returns:
+        Dict with ``answers`` list (question/answer pairs) and ``count``.
+    """
+    from engine.integrations.file_search_client import get_file_search_client
+
+    client = get_file_search_client()
+    store_name = params.get("store", context.get("store", ""))
+
+    # Resolve display name → resource name if needed
+    if store_name and not store_name.startswith("fileSearchStores/"):
+        store_name = client.get_or_create_store(store_name)
+    elif not store_name:
+        stores = client.list_stores()
+        store_name = stores[0]["name"] if stores else ""
+
+    if not store_name:
+        return {"answers": [], "count": 0, "error": "no store available"}
+
+    questions = params.get("questions", context.get("questions", []))
+    answers: List[Dict[str, str]] = []
+    for q in questions:
+        try:
+            result = client.query(store_name, q, distill_to_nexus=True)
+            answers.append({"question": q, "answer": result.get("answer", "")})
+        except Exception as exc:
+            logger.warning(
+                "[Pipeline] File Search query failed (operation=file_search_query): %s — %s",
+                q[:60], exc,
+            )
+            answers.append({"question": q, "answer": f"[error: {exc}]"})
+
+    return {"answers": answers, "count": len(answers)}
+
+
+# v1.53.1 [2026-03-26] — Distill File Search answers into Nexus Q&A
+def _stage_file_search_distill(params: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Distill File Search answers from previous stage into Nexus Q&A.
+
+    Reads the ``answers`` list from the pipeline context (typically left by a
+    preceding ``file_search_query`` stage).  Only stores answers with at least
+    20 characters to filter out empty/trivial responses.
+
+    Returns:
+        Dict with ``stored`` count and ``total`` answers processed.
+    """
+    from engine.nexus.client import get_nexus_client
+
+    client = get_nexus_client()
+
+    # Get answers from context (populated by previous file_search_query stage)
+    answers = context.get("answers", params.get("answers", []))
+
+    stored = 0
+    for item in answers:
+        q = item.get("question", "")
+        a = item.get("answer", "")
+        if q and a and len(a) >= 20:
+            try:
+                client.add_qa(
+                    question=q,
+                    answer=a,
+                    category="file_search_distilled",
+                    tags=["pipeline", "file-search"],
+                )
+                stored += 1
+            except Exception as exc:
+                logger.warning(
+                    "[Pipeline] File Search distill failed (operation=file_search_distill): %s — %s",
+                    q[:60], exc,
+                )
+
+    return {"stored": stored, "total": len(answers)}
+
+
 # ──── Stage Registry ──────────────────────────────────────────────────────────
 
 STAGE_REGISTRY: Dict[str, Callable] = {
@@ -1328,6 +1462,10 @@ STAGE_REGISTRY: Dict[str, Callable] = {
     "appscript_run": _stage_appscript_run,
     "appscript_deploy": _stage_appscript_deploy,
     "appscript_get_project": _stage_appscript_get_project,
+    # File Search (v1.53.1)
+    "file_search_upload": _stage_file_search_upload,
+    "file_search_query": _stage_file_search_query,
+    "file_search_distill": _stage_file_search_distill,
 }
 
 
@@ -1583,6 +1721,48 @@ PIPELINE_TEMPLATES: Dict[str, List[Dict[str, Any]]] = {
         {"stage": "create_sheet", "params": {}},
         {"stage": "aistudio_generate", "params": {"prompt": "Analyse and summarise the data from the Apps Script execution"}},
         {"stage": "nexus_store", "params": {"category": "data", "content_type": "note", "tags": ["appscript", "data", "pipeline"]}},
+    ],
+
+    # ── File Search Pipeline Templates (v1.53.1) ─────────────────────────────
+
+    "knowledge_sync": [
+        {"stage": "file_search_upload", "params": {
+            "store": "cosysim-architecture",
+            "files": [
+                "CLAUDE.md", "context.md", "README.md", "CHANGELOG.md",
+                "docs/ARCHITECTURE.md", "docs/NEXUS.md", "docs/NEXUS_SYSTEM.md",
+                "docs/MCP_FRAMEWORK.md", "docs/SKILLS.md", "docs/CONFIGURATION.md",
+            ],
+        }},
+        {"stage": "file_search_upload", "params": {
+            "store": "cosysim-codebase",
+            "files": [
+                "engine/nexus/client.py", "engine/nexus/query_router.py",
+                "engine/agents/agent_loop.py", "engine/agents/virtual_agent_manager.py",
+                "engine/lmstudio/router.py", "engine/skills/skill.py",
+            ],
+        }},
+        {"stage": "file_search_query", "params": {
+            "store": "cosysim-architecture",
+            "questions": [
+                "What are the 8 agent types and their access tiers?",
+                "How does the 7-tier query pipeline work?",
+                "What is the self-improvement training loop?",
+                "How does Nexus-first agent inference save GPU calls?",
+                "What are the key singletons in CosySim?",
+            ],
+        }},
+        {"stage": "file_search_query", "params": {
+            "store": "cosysim-codebase",
+            "questions": [
+                "How does _try_qa_cache check relevance in query_router.py?",
+                "What does the AgentGovernor reply pipeline do step by step?",
+                "How does the training feedback loop collect agent decisions?",
+                "What error handling patterns does NexusClient use?",
+                "How does the embedding circuit breaker work?",
+            ],
+        }},
+        {"stage": "file_search_distill", "params": {}},
     ],
 }
 

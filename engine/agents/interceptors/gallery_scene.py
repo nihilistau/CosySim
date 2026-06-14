@@ -49,8 +49,9 @@ class GallerySceneInterceptor(InterceptorBase):
                 mood = snapshot.get("mood", "neutral")
                 energy = snapshot.get("energy", 50)
                 lines.append(f"Your current mood: {mood} (energy: {energy}%)")
-        except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+        except Exception as exc:
+            # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+            logger.warning("[GalleryInterceptor] Context enrichment failed (operation=pre_call): %s", exc)
 
         try:
             # ── Scene narrative ────────────────────────────────────
@@ -60,8 +61,9 @@ class GallerySceneInterceptor(InterceptorBase):
             if narrative:
                 events = [e["event"] for e in narrative]
                 lines.append("Recent gallery events: " + " | ".join(events[-3:]))
-        except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+        except Exception as exc:
+            # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+            logger.warning("[GalleryInterceptor] Context enrichment failed (operation=pre_call): %s", exc)
 
         try:
             # ── ConversationHeat pacing ────────────────────────────
@@ -71,8 +73,9 @@ class GallerySceneInterceptor(InterceptorBase):
             directive = heat.get_directive(conv_key)
             if directive:
                 lines.append(f"[Conversation pacing] {directive}")
-        except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+        except Exception as exc:
+            # v1.54.0 [2026-03-26] — Upgrade debug→warning with Oracle context
+            logger.warning("[GalleryInterceptor] Context enrichment failed (operation=pre_call): %s", exc)
 
         if lines:
             injection = "\n\n[GALLERY CONTEXT]\n" + "\n".join(lines) + "\n[/GALLERY CONTEXT]"

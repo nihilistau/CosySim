@@ -1,0 +1,279 @@
+/*
+ * signal.css — SIGNAL Cyberdeck Terminal
+ * =======================================
+ * Your lifeline in NeonCity. Green-on-black hacker terminal aesthetic.
+ *
+ * "Every frequency tells a story. Most of them are lies."
+ *
+ * Version: v1.52.0 [2026-03-22]
+ * Author:  CosySim Team
+ */
+
+/* ── Palette ────────────────────────────────────────────────────────── */
+:root {
+  --sig: #10b981;
+  --sig-rgb: 16 185 129;
+  --sig-dim: #059669;
+  --sig-glow: rgba(16, 185, 129, 0.25);
+  --sig-cyan: #06b6d4;
+  --sig-magenta: #ec4899;
+  --sig-bg: #050a08;
+  --sig-panel: rgba(8, 14, 10, 0.9);
+  --sig-border: rgba(16, 185, 129, 0.12);
+  --sig-text: #c0d8cc;
+  --sig-muted: #3a5548;
+  --sig-mono: 'JetBrains Mono', 'Fira Code', 'Share Tech Mono', monospace;
+  --sig-sans: 'Rajdhani', 'Segoe UI', sans-serif;
+}
+
+/* ── Scene ──────────────────────────────────────────────────────────── */
+.signal-scene {
+  padding: 8px 12px;
+  color: var(--sig-text);
+  min-height: calc(100vh - 60px);
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(16, 185, 129, 0.04) 0%, transparent 60%),
+    var(--sig-bg);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.sig-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--sig-border);
+}
+.sig-header__left { display: flex; align-items: center; gap: 8px; }
+.sig-logo {
+  font-size: 1.2rem;
+  color: var(--sig);
+  text-shadow: 0 0 12px var(--sig-glow);
+  animation: sig-pulse 3s ease-in-out infinite;
+}
+.sig-title {
+  font-family: var(--sig-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--sig);
+  letter-spacing: 3px;
+  margin: 0;
+}
+.sig-version { font-family: var(--sig-mono); font-size: 0.45rem; color: var(--sig-muted); letter-spacing: 1px; }
+.sig-status { font-family: var(--sig-mono); font-size: 0.5rem; color: var(--sig); letter-spacing: 1px; }
+
+/* ── Grid Layout ────────────────────────────────────────────────────── */
+.sig-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr 200px;
+  gap: 10px;
+  height: calc(100vh - 120px);
+}
+
+/* ── Contacts Panel ─────────────────────────────────────────────────── */
+.sig-contacts {
+  background: var(--sig-panel);
+  border: 1px solid var(--sig-border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sig-contacts__header {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-family: var(--sig-mono);
+  font-size: 0.6rem;
+  color: var(--sig);
+  letter-spacing: 1.5px;
+  border-bottom: 1px solid var(--sig-border);
+}
+.sig-contacts__count { color: var(--sig-muted); }
+.sig-contacts__list { flex: 1; overflow-y: auto; }
+
+.sig-contact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.05);
+  transition: background 0.15s;
+}
+.sig-contact:hover { background: rgba(16, 185, 129, 0.06); }
+.sig-contact.active { background: rgba(16, 185, 129, 0.1); border-left: 2px solid var(--sig); }
+.sig-contact__avatar { font-size: 1rem; }
+.sig-contact__name { font-family: var(--sig-mono); font-size: 0.6rem; color: var(--sig-text); flex: 1; }
+.sig-contact__badge {
+  font-family: var(--sig-mono);
+  font-size: 0.4rem;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--sig);
+  letter-spacing: 0.5px;
+}
+
+/* ── Thread Panel ───────────────────────────────────────────────────── */
+.sig-thread {
+  background: var(--sig-panel);
+  border: 1px solid var(--sig-border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sig-thread__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--sig-border);
+  font-family: var(--sig-mono);
+}
+.sig-thread__name { font-size: 0.7rem; color: var(--sig); font-weight: 600; letter-spacing: 1px; }
+.sig-thread__status { font-size: 0.5rem; color: var(--sig-muted); }
+
+.sig-thread__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.sig-welcome {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--sig-muted);
+}
+.sig-welcome__icon { font-size: 2rem; margin-bottom: 8px; }
+.sig-welcome__text { font-family: var(--sig-mono); font-size: 0.7rem; letter-spacing: 1px; color: var(--sig-text); }
+.sig-welcome__sub { font-size: 0.55rem; margin-top: 4px; }
+
+/* Messages */
+.sig-msg {
+  margin-bottom: 8px;
+  animation: sig-msg-in 0.3s ease-out;
+}
+.sig-msg--user { text-align: right; }
+.sig-msg__bubble {
+  display: inline-block;
+  max-width: 80%;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  line-height: 1.5;
+}
+.sig-msg--user .sig-msg__bubble {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--sig-text);
+}
+.sig-msg--other .sig-msg__bubble {
+  background: rgba(6, 182, 212, 0.08);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  color: var(--sig-text);
+}
+.sig-msg__meta {
+  font-family: var(--sig-mono);
+  font-size: 0.4rem;
+  color: var(--sig-muted);
+  margin-top: 2px;
+}
+
+/* Typing indicator */
+.sig-thread__typing {
+  padding: 4px 12px;
+  font-size: 0.55rem;
+  color: var(--sig-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sig-typing { display: inline-flex; gap: 3px; }
+.sig-typing__dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--sig);
+  animation: sig-typing-bounce 1.4s ease-in-out infinite;
+}
+.sig-typing__dot:nth-child(2) { animation-delay: 0.16s; }
+.sig-typing__dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* Input */
+.sig-thread__input {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--sig-border);
+}
+.sig-thread__input input {
+  flex: 1;
+  background: rgba(16, 185, 129, 0.04);
+  border: 1px solid var(--sig-border);
+  border-radius: 3px;
+  padding: 6px 10px;
+  color: var(--sig-text);
+  font-family: var(--sig-mono);
+  font-size: 0.65rem;
+}
+.sig-thread__input input::placeholder { color: var(--sig-muted); }
+.sig-thread__input input:focus { outline: none; border-color: rgba(16, 185, 129, 0.3); box-shadow: 0 0 8px var(--sig-glow); }
+
+.sig-btn {
+  font-family: var(--sig-mono);
+  font-size: 0.6rem;
+  padding: 6px 12px;
+  border: 1px solid var(--sig-border);
+  background: rgba(16, 185, 129, 0.06);
+  color: var(--sig);
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+.sig-btn:hover { background: rgba(16, 185, 129, 0.15); box-shadow: 0 0 8px var(--sig-glow); }
+
+/* ── Info Panel ─────────────────────────────────────────────────────── */
+.sig-info { display: flex; flex-direction: column; gap: 10px; }
+.sig-panel {
+  background: var(--sig-panel);
+  border: 1px solid var(--sig-border);
+  border-radius: 4px;
+  padding: 10px;
+}
+.sig-panel__title {
+  font-family: var(--sig-mono);
+  font-size: 0.55rem;
+  color: var(--sig);
+  letter-spacing: 1.5px;
+  margin: 0 0 8px;
+}
+.sig-empty { font-size: 0.55rem; color: var(--sig-muted); font-style: italic; text-align: center; padding: 12px; }
+
+.sig-map-links a {
+  display: block;
+  font-family: var(--sig-mono);
+  font-size: 0.55rem;
+  color: var(--sig-text);
+  padding: 3px 0;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.05);
+}
+.sig-map-links a:hover { color: var(--sig); }
+
+/* ── Animations ─────────────────────────────────────────────────────── */
+@keyframes sig-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes sig-msg-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sig-typing-bounce { 0%,60%,100% { transform: translateY(0); opacity: 0.3; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+/* ── Scrollbar ──────────────────────────────────────────────────────── */
+.sig-contacts__list::-webkit-scrollbar, .sig-thread__messages::-webkit-scrollbar { width: 3px; }
+.sig-contacts__list::-webkit-scrollbar-thumb, .sig-thread__messages::-webkit-scrollbar-thumb { background: var(--sig-border); border-radius: 2px; }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 900px) { .sig-grid { grid-template-columns: 160px 1fr 160px; } }
+@media (max-width: 600px) {
+  .sig-grid { grid-template-columns: 1fr; }
+  .sig-contacts, .sig-info { max-height: 200px; }
+}

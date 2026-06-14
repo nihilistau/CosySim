@@ -1,0 +1,297 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   THE VELVET PIT — lounge_v2.css
+   Dark Renaissance v2 glow-up layer (loaded LAST — wins the cascade)
+   ════════════════════════════════════════════════════════════════════════
+   Pink speakeasy: smoky jazz velvet. #ec4899 neon over deep wine-black,
+   gold art-deco trim ("Est. 1924"), breathing stage spotlight, neon-sign
+   title flicker. Extrapolated from docs/DESIGN_SYSTEM_V2.md (no kit):
+   [data-scene="lounge"] accent + the 4-layer background recipe from
+   artifacts/new-assets/styles.css.
+
+   Version: v1.58.0 [2026-06-11]
+   Author:  CosySim Team
+
+   Change Log:
+     v1.58.0 [2026-06-11] — Pulse-glow on primary CTAs (.ck-btn--accent)
+                              reusing shared cs-pulse-glow keyframes.
+     v1.58.0 [2026-06-11] — Initial v2 layer: scene palette re-pointed to
+                              var(--cs-scene-accent) pink tokens; velvet
+                              panel tones; 4-layer background stack; v2
+                              typography voices (Orbitron display, Inter
+                              body, JetBrains Mono data); neon-sign title
+                              flicker; stage spotlight cone + breathing;
+                              gold trim accents; literal amber rgba()
+                              overrides from lounge_kit.css; page scroll
+                              restored (kit layout flows, the old fixed
+                              layout's overflow:hidden cut the footer).
+
+   CONNECTS: lounge_kit.css (--scene-* palette), lounge.css (legacy vars),
+             design_tokens_v2.css ([data-scene="lounge"])
+   CALLED BY: lounge.html {% block head_css %} (after lounge.css)
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ──── 1 · Scene palette → v2 pink velvet tokens ─────────────────────── */
+/* v1.58.0 [2026-06-11] — Re-points the kit palette (was amber #f59e0b)
+   to the [data-scene="lounge"] accent. Raw hex kept as fallback only. */
+:root {
+  --scene-accent:        var(--cs-scene-accent, #ec4899);
+  --scene-accent-rgb:    var(--cs-scene-accent-rgb, 236 72 153);
+  --scene-accent-dim:    #be185d;
+  --scene-accent-light:  #f472b6;
+  --scene-accent-faint:  rgb(var(--scene-accent-rgb) / 0.08);
+  --scene-accent-glow:   rgb(var(--scene-accent-rgb) / 0.25);
+  --scene-accent-border: rgb(var(--scene-accent-rgb) / 0.3);
+  /* Velvet darks — wine-black instead of the kit's tobacco browns */
+  --scene-bg:     #0a040c;
+  --scene-panel:  #160a14;
+  --scene-border: #2d1424;
+  /* Smoky rose-cream text over velvet */
+  --scene-text:   #dcc8d4;
+  --scene-muted:  #8a6580;
+  /* Art-deco gold trim (Est. 1924) */
+  --pit-gold:       #d4a933;
+  --pit-gold-light: #e8c45c;
+}
+
+/* ──── 2 · 4-layer background stack (v2 recipe, smoke-tuned) ─────────── */
+/* v1.58.0 [2026-06-11] — black #02030a base → 80px drift grid → radial
+   pink stage glow. Layer 4 (CRT scanlines) is global via .neon-scanlines.
+   Grid drifts via animated background-position on body — no extra
+   pseudo-element, can never paint over content. Also restores page
+   scroll: the kit layout flows, but legacy lounge.css (fixed layout era)
+   left html/body overflow:hidden which amputated the BAR MENU footer. */
+html, body {
+  overflow: auto;
+  overflow-x: hidden;
+  height: auto;
+  min-height: 100%;
+}
+body {
+  font-family: var(--cs-font-sans, 'Inter', 'Segoe UI', sans-serif);
+  background:
+    repeating-linear-gradient(90deg, rgb(var(--scene-accent-rgb) / 0.035) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--scene-accent-rgb) / 0.035) 0 1px, transparent 1px 80px),
+    radial-gradient(ellipse at 50% 0%, rgb(var(--scene-accent-rgb) / 0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 100%, rgba(212, 169, 51, 0.05) 0%, transparent 50%),
+    #02030a;
+  animation: pit-grid-drift 30s linear infinite;
+}
+@keyframes pit-grid-drift {
+  from { background-position: 0 0,    0 0,    0 0, 0 0; }
+  to   { background-position: 0 80px, 0 80px, 0 0, 0 0; }
+}
+
+/* ──── 3 · Scene header — velvet curtain + neon sign ─────────────────── */
+/* v1.58.0 [2026-06-11] — Wine gradient header, pink neon underline */
+.ck-scene-header {
+  background: linear-gradient(90deg, #170812 0%, #0c0410 55%, #170812 100%);
+  border-bottom: 2px solid rgb(var(--scene-accent-rgb) / 0.5);
+  box-shadow: 0 0 24px rgb(var(--scene-accent-rgb) / 0.18);
+}
+
+/* Neon sign title — Orbitron display voice, italic, sign flicker.
+   Reuses the shared cs-neon-flicker keyframes (cosysim-animations.css). */
+.ck-scene-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-style: italic;
+  letter-spacing: 0.12em;
+  color: var(--scene-accent-light);
+  text-shadow:
+    0 0 8px  rgb(var(--scene-accent-rgb) / 0.8),
+    0 0 22px rgb(var(--scene-accent-rgb) / 0.5),
+    0 0 48px rgb(var(--scene-accent-rgb) / 0.25);
+  animation: cs-neon-flicker 7s ease-in-out infinite;
+}
+
+/* Gold art-deco subtitle — "Underground Lounge · Est. 1924" */
+.ck-scene-subtitle {
+  color: var(--pit-gold);
+  letter-spacing: 0.32em;
+  opacity: 0.85;
+}
+
+/* ──── 4 · Glass panels — velvet tiers ───────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Wine glass with a soft top sheen (velvet nap) */
+.ck-glass-panel {
+  background:
+    linear-gradient(180deg, rgb(var(--scene-accent-rgb) / 0.05) 0%, transparent 18%),
+    rgba(18, 7, 16, 0.85);
+  /* v1.58.0 [2026-06-11] — kit-convention 0.14 border; titles carry the accent */
+  border: 1px solid rgb(var(--scene-accent-rgb) / 0.14);
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.ck-glass-panel:hover {
+  border-color: rgb(var(--scene-accent-rgb) / 0.35);
+  box-shadow: 0 0 16px rgb(var(--scene-accent-rgb) / 0.10);
+}
+.ck-glass-panel--glow {
+  box-shadow: 0 0 16px rgb(var(--scene-accent-rgb) / 0.15),
+              inset 0 0 8px rgb(var(--scene-accent-rgb) / 0.05);
+}
+.ck-glass-panel--strong {
+  background:
+    linear-gradient(180deg, rgb(var(--scene-accent-rgb) / 0.07) 0%, transparent 20%),
+    rgba(34, 12, 28, 0.92);
+  border-color: rgb(var(--scene-accent-rgb) / 0.5);
+}
+
+/* Panel titles — Orbitron display voice with gold leading glyph room */
+.ck-glass-title,
+.ck-chat-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.16em;
+  color: var(--scene-accent-light);
+  border-bottom: 1px solid rgb(var(--scene-accent-rgb) / 0.15);
+  text-shadow: 0 0 10px rgb(var(--scene-accent-rgb) / 0.35);
+}
+
+/* ──── 5 · Kit literal-amber overrides → pink token alphas ───────────── */
+/* v1.58.0 [2026-06-11] — lounge_kit.css hardcodes rgba(245,158,11,a) in
+   these rules; re-issued here with the pink accent triplet. */
+.ck-stat-track       { background: rgb(var(--scene-accent-rgb) / 0.12); }
+.chat-line           { border-bottom: 1px solid rgb(var(--scene-accent-rgb) / 0.08); }
+.chat-line.action    { color: var(--pit-gold-light); }
+.ck-btn--accent:hover { box-shadow: 0 0 12px rgb(var(--scene-accent-rgb) / 0.5); }
+.ck-event-item       { border: 1px solid rgb(var(--scene-accent-rgb) / 0.15); }
+.ck-event-item::before { background: linear-gradient(90deg, var(--scene-accent), transparent); }
+.ck-drink-card:hover { box-shadow: 0 0 10px rgb(var(--scene-accent-rgb) / 0.25); }
+.event-entry         { border-bottom: 1px solid rgb(var(--scene-accent-rgb) / 0.06); }
+.ck-step             { border-bottom: 2px solid rgb(var(--scene-accent-rgb) / 0.15); }
+.ck-step-connector   { background: rgb(var(--scene-accent-rgb) / 0.2); }
+.ck-hud-badges {
+  background: rgb(var(--scene-accent-rgb) / 0.04);
+  border: 1px solid rgb(var(--scene-accent-rgb) / 0.12);
+}
+.ck-overlay-box {
+  border: 1px solid rgb(var(--scene-accent-rgb) / 0.5);
+  box-shadow: 0 0 18px rgb(var(--scene-accent-rgb) / 0.18);
+  /* Art-deco double frame — gold inner line */
+  outline: 1px solid rgba(212, 169, 51, 0.25);
+  outline-offset: -6px;
+}
+.ck-stage-area { border: 1px solid rgb(var(--scene-accent-rgb) / 0.2); }
+
+/* Heat rail glow (lounge.css hardcodes the amber shadow) */
+.heat-meter { box-shadow: 0 0 8px rgb(var(--scene-accent-rgb) / 0.6); }
+
+/* Seating map tables — pink hover halo (lounge.css hardcodes amber) */
+.table-node:hover {
+  border-color: var(--scene-accent);
+  box-shadow: 0 0 12px rgb(var(--scene-accent-rgb) / 0.4);
+  background: rgb(var(--scene-accent-rgb) / 0.10);
+}
+.table-node.table-occupied {
+  border-color: var(--scene-accent-dim);
+  background: rgb(var(--scene-accent-rgb) / 0.12);
+  box-shadow: 0 0 6px rgb(var(--scene-accent-rgb) / 0.25);
+}
+
+/* ──── 6 · The Stage — spotlight cone + breathing (signature wow) ────── */
+/* v1.58.0 [2026-06-11] — A smoky spotlight cone falls from the proscenium
+   onto the song title; it breathes with the music. The kit's 4px ellipse
+   spotlight becomes the hot floor spot under the cone. */
+.ck-stage-area {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(20, 7, 18, 0.92) 0%, #0a040c 100%);
+}
+.ck-stage-area::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 220px;
+  height: 100%;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg,
+    rgb(var(--scene-accent-rgb) / 0.16) 0%,
+    rgb(var(--scene-accent-rgb) / 0.05) 55%,
+    transparent 100%);
+  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+  animation: pit-spot-breathe 6s ease-in-out infinite;
+}
+@keyframes pit-spot-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.ck-stage-spotlight {
+  position: relative;
+  z-index: 1;
+  margin-left: auto;
+  margin-right: auto;
+  background: radial-gradient(ellipse, var(--scene-accent-light), transparent 80%);
+  animation: pit-spot-breathe 6s ease-in-out infinite;
+}
+.ck-stage-label {
+  position: relative;
+  z-index: 1;
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  color: var(--pit-gold);
+  text-align: center;
+}
+.ck-stage-song {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  color: #f3e6ee;
+  text-shadow: 0 0 14px rgb(var(--scene-accent-rgb) / 0.45);
+}
+.ck-song-progress { background: rgba(45, 20, 36, 0.8); }
+.ck-song-progress-fill {
+  background: linear-gradient(90deg, var(--scene-accent-dim), var(--scene-accent-light));
+  box-shadow: 0 0 6px rgb(var(--scene-accent-rgb) / 0.5);
+}
+
+/* ──── 7 · Staff, chat & drinks — speakeasy cast ─────────────────────── */
+/* v1.58.0 [2026-06-11] — Lola sings in rose-cream, Viktor talks in dim
+   wine; drink prices are gold (the bar takes cash). */
+.chat-line.from-lola   { color: #f3e6ee; }
+.chat-line.from-viktor { color: #c98bb0; }
+.chat-line.system      { color: var(--scene-accent-light); }
+.ck-staff-name { color: var(--scene-accent-light); }
+.ck-staff-mood { color: var(--scene-text); }
+.ck-drink-card-name  { color: #f3e6ee; }
+.ck-drink-card-price {
+  color: var(--pit-gold);
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+}
+
+/* ──── 8 · Data voice — money & trust in JetBrains Mono ──────────────── */
+/* v1.58.0 [2026-06-11] — numbers are data; credits get a gold cast */
+.ck-economy-val,
+.ck-stat-val,
+.ck-hud-badge span {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+}
+.ck-economy-val { color: var(--pit-gold-light); text-shadow: 0 0 10px rgba(212, 169, 51, 0.35); }
+
+/* Trust ladder — current rung burns gold */
+.ck-step.active  { color: var(--scene-accent-light); border-bottom-color: var(--scene-accent); }
+.ck-step.current { color: var(--pit-gold-light); border-bottom-color: var(--pit-gold); }
+
+/* ──── 9 · Scrollbars & divider — velvet rails ───────────────────────── */
+/* v1.58.0 [2026-06-11] */
+::-webkit-scrollbar-track { background: var(--scene-bg); }
+::-webkit-scrollbar-thumb { background: var(--scene-accent-dim); }
+.ck-chat-feed { scrollbar-color: var(--scene-accent-dim) var(--scene-bg); }
+.ck-drink-menu { scrollbar-color: var(--scene-accent-dim) var(--scene-panel); }
+.ck-divider {
+  background: linear-gradient(90deg, transparent, var(--scene-accent), var(--pit-gold), var(--scene-accent), transparent);
+  opacity: 0.35;
+}
+
+/* ──── 10 · Primary CTAs — breathing pulse-glow ──────────────────────── */
+/* v1.58.0 [2026-06-11] — Primary action buttons (send ▶, overlay ENTER /
+   CLOSE) breathe with the shared cs-pulse-glow keyframes
+   (cosysim-animations.css). --cs-scene-glow is the pink lounge glow via
+   the template's [data-scene] injection. Pauses on hover so the kit's
+   own hover shadow reads cleanly. */
+.ck-btn--accent {
+  animation: cs-pulse-glow 2.8s ease-in-out infinite;
+}
+.ck-btn--accent:hover,
+.ck-btn--accent:disabled {
+  animation: none;
+}

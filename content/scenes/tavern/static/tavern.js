@@ -1,9 +1,21 @@
 /**
  * THE RUSTY ANCHOR — tavern.js
- * v0.68 "Dark Renaissance"
+ * =============================
  *
- * class RustyAnchorScene — Socket.IO client, dice animation, quest board,
- * embers particle system.
+ * Standalone RustyAnchorScene class — Socket.IO client, dice animation,
+ * quest board, embers particle system.
+ *
+ * NOTE: The active scene template (tavern.html) uses TavernScene (tavern_kit.js)
+ * + extensions (tavern_ext.js). This file is retained as a fallback/reference
+ * implementation. Visual polish changes (stat bars, dice wow, rumor stagger)
+ * are applied in tavern_ext.js for the live scene.
+ *
+ * Version: v1.57.3 [2026-05-12]
+ * Change Log:
+ *   v1.57.3 [2026-05-12] — Header updated; stat bar CSS var approach,
+ *                           dice wow (screen shake + bloom), rumor stagger.
+ *                           Functional polish applied in tavern_ext.js.
+ *   v0.68   [2026-03-22] — "Dark Renaissance". Embers, quest board, dice.
  */
 
 "use strict";

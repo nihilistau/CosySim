@@ -1,95 +1,678 @@
 <!DOCTYPE html>
 <html lang="en">
+<!--
+  NeonCity Board Game — v1.46 "Interactive Systems"
+  =================================================
+  12x12 hex grid with Glitch Storm, combat, hacking, AI opponents.
+  Click-to-move with range highlighting, storm gradient visualization,
+  player health overlays, turn transitions, and victory/defeat screen.
+
+  Version: v1.46.0 [2026-03-21]
+  Change Log:
+    v1.46.0 [2026-03-21] — Complete visual overhaul: movement range,
+                            storm gradient, health overlays, loot toasts,
+                            combat flash, turn banners, game over screen
+    v1.45.0 [2026-03-21] — Initial board game page (basic grid + controls)
+-->
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NeonCity — CosySim</title>
+<title>NeonCity Board Game — CosySim</title>
 <link rel="stylesheet" href="/shared/css/design_tokens.css">
 <script src="/shared/js/socket.io.min.js"></script>
 <script src="/shared/js/cosysim-core.js" defer></script>
 <style>
+/* ── Design tokens ──────────────────────────────────────── */
 :root {
-  --bg: #0a0a0f; --panel: #12121f; --accent: #00fff7; --pink: #ff2d95;
-  --purple: #a855f7; --green: #22c55e; --red: #ef4444; --yellow: #facc15;
-  --text: #e0e0e0; --muted: #666; --border: #1e1e3f; --cell: 40px;
-  --font: 'Segoe UI', system-ui, sans-serif; --mono: 'Cascadia Code', monospace;
+  --bg: #050509;
+  --panel: #0a0a14;
+  --panel-2: #0e0e1a;
+  --accent: #00fff7;
+  --accent-rgb: 0 255 247;
+  --pink: #ff2d95;
+  --pink-rgb: 255 45 149;
+  --purple: #a855f7;
+  --purple-rgb: 168 85 247;
+  --green: #22c55e;
+  --red: #ef4444;
+  --red-rgb: 239 68 68;
+  --yellow: #facc15;
+  --text: #d0d8e4;
+  --muted: #4a5568;
+  --border: #1a1a2e;
+  --cell: 42px;
+  --font: 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:var(--bg); color:var(--text); font-family:var(--font); height:100vh; overflow:hidden; }
 
-.neon-app { display:grid; grid-template-columns:260px 1fr 240px; grid-template-rows:auto 1fr; height:100vh; }
-.top-bar { grid-column:1/-1; background:var(--panel); padding:8px 16px; display:flex; align-items:center; gap:16px; border-bottom:2px solid var(--accent); }
-.top-bar h1 { font-size:1.2rem; color:var(--accent); text-shadow:0 0 10px var(--accent); }
-.top-bar .info { font-size:0.8rem; color:var(--muted); }
-.top-bar .turn { color:var(--yellow); font-family:var(--mono); }
+/* ── Reset ──────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  height: 100vh;
+  overflow: hidden;
+}
 
-/* LEFT: Player stats */
-.sidebar { background:var(--panel); border-right:1px solid var(--border); overflow-y:auto; padding:12px; }
-.sidebar h3 { font-size:0.75rem; text-transform:uppercase; color:var(--accent); letter-spacing:2px; margin:12px 0 6px; }
-.stat-row { display:flex; justify-content:space-between; font-size:0.8rem; padding:2px 0; }
-.stat-row .v { color:var(--accent); font-family:var(--mono); }
-.hp-bar { height:6px; background:#222; border-radius:3px; margin:4px 0; }
-.hp-bar .fill { height:100%; background: linear-gradient(90deg, var(--red), var(--pink)); border-radius:3px; transition:width 0.3s; }
-.item-list { list-style:none; }
-.item-list li { font-size:0.75rem; padding:3px 6px; background:var(--bg); margin:2px 0; border-radius:3px; border-left:2px solid var(--accent); }
+/* ── App layout ─────────────────────────────────────────── */
+.neon-app {
+  display: grid;
+  grid-template-columns: 250px 1fr 260px;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
 
-/* CENTER: Grid */
-.grid-area { display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:auto; position:relative; }
-.grid-container { display:grid; gap:1px; background:var(--border); padding:1px; border-radius:4px; }
-.cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:0.7rem; cursor:pointer; position:relative; transition:all 0.15s; border-radius:2px; }
-.cell.street { background:#111122; }
-.cell.building { background:#1a1a2e; cursor:default; }
-.cell.alley { background:#0d0d1a; }
-.cell.target { background:#1a0a2e; border:1px solid var(--purple); animation:targetPulse 2s infinite; }
-.cell.storm { background:#200a0a; opacity:0.5; }
-.cell:hover:not(.building):not(.storm) { outline:1px solid var(--accent); z-index:1; }
-.cell .prefab { position:absolute; font-size:0.9rem; }
-.cell .player { position:absolute; font-size:1rem; font-weight:bold; text-shadow:0 0 8px currentColor; }
-.cell .player.human { color:var(--accent); }
-.cell .player.ai { color:var(--pink); }
-@keyframes targetPulse { 0%,100%{box-shadow:0 0 5px var(--purple)} 50%{box-shadow:0 0 15px var(--purple)} }
+/* ── Top bar ────────────────────────────────────────────── */
+.top-bar {
+  grid-column: 1 / -1;
+  background: linear-gradient(180deg, #080810 0%, rgba(5,5,9,0.95) 100%);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 2px solid var(--accent);
+  box-shadow: 0 0 24px rgba(var(--accent-rgb) / 0.2);
+}
+.top-bar h1 {
+  font-family: var(--mono);
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: 0 0 12px var(--accent);
+  letter-spacing: 3px;
+}
+.top-bar .info-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.03);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.top-bar .info-label {
+  font-size: 0.6rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.top-bar .info-val {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.turn-val { color: var(--yellow); }
+.storm-val { color: var(--red); }
+.firewall-val { color: var(--purple); }
+.phase-val { color: var(--accent); }
+.btn-back {
+  margin-left: auto;
+  padding: 5px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.btn-back:hover { border-color: var(--accent); color: var(--accent); }
 
-/* RIGHT: Log + Controls */
-.right-panel { background:var(--panel); border-left:1px solid var(--border); overflow:hidden; padding:12px; display:flex; flex-direction:column; gap:8px; }
-.event-log { flex:1; min-height:0; overflow-y:auto; font-size:0.75rem; line-height:1.5; }
-.event-log .entry { padding:4px; border-bottom:1px solid #1a1a2e; }
-.event-log .entry.combat { color:var(--red); }
-.event-log .entry.loot { color:var(--green); }
-.event-log .entry.event { color:var(--yellow); }
-.event-log .entry.narration { color:var(--purple); font-style:italic; }
-.ctrl-btn { width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:4px; cursor:pointer; font-size:0.8rem; transition:all 0.15s; }
-.ctrl-btn:hover { border-color:var(--accent); color:var(--accent); }
-.ctrl-btn.primary { border-color:var(--accent); color:var(--accent); }
-.ctrl-btn.danger { border-color:var(--red); color:var(--red); }
-.target-select { width:100%; padding:6px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:4px; font-size:0.8rem; }
+/* ── Storm indicator blink ──────────────────────────────── */
+.storm-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  background: var(--red);
+  border-radius: 50%;
+  animation: blink 1.2s infinite;
+  margin-right: 4px;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
 
-/* Start screen */
-.start-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
-.start-screen h2 { font-size:2.5rem; color:var(--accent); text-shadow:0 0 30px var(--accent); }
-.start-screen p { color:var(--muted); max-width:400px; text-align:center; }
-.start-btn { padding:14px 40px; background:transparent; border:2px solid var(--accent); color:var(--accent); font-size:1.1rem; border-radius:8px; cursor:pointer; transition:all 0.2s; }
-.start-btn:hover { background:var(--accent); color:var(--bg); box-shadow:0 0 20px var(--accent); }
+/* ── Left sidebar — Player stats ────────────────────────── */
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar h3 {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--accent);
+  letter-spacing: 2px;
+  margin: 14px 0 5px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(var(--accent-rgb) / 0.15);
+}
+.sidebar h3:first-child { margin-top: 0; }
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  padding: 2px 0;
+}
+.stat-row .v {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.hp-bar {
+  height: 8px;
+  background: #111;
+  border-radius: 4px;
+  margin: 4px 0 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.hp-bar .fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--red), var(--pink));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 6px rgba(var(--red-rgb) / 0.4);
+}
+.item-list { list-style: none; }
+.item-list li {
+  font-size: 0.72rem;
+  padding: 4px 7px;
+  background: var(--bg);
+  margin: 2px 0;
+  border-radius: 3px;
+  border-left: 2px solid var(--accent);
+  transition: border-color 0.2s;
+}
+.item-list li:hover { border-left-color: var(--pink); }
 
-/* Scrollbar */
-::-webkit-scrollbar { width:4px; }
-::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+/* Opponent cards */
+.opponent-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  margin: 3px 0;
+  border-left: 2px solid var(--pink);
+}
+.opp-name { font-size: 0.72rem; color: var(--pink); flex: 1; }
+.opp-hp {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text);
+}
+.opp-hp-bar {
+  width: 40px; height: 4px;
+  background: #222;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.opp-hp-bar .fill {
+  height: 100%;
+  background: var(--pink);
+  transition: width 0.3s;
+}
+.opp-dead { opacity: 0.3; border-left-color: var(--muted); }
+.opp-dead .opp-name { text-decoration: line-through; color: var(--muted); }
 
-.storm-indicator { display:inline-block; width:8px; height:8px; background:var(--red); border-radius:50%; animation:blink 1s infinite; margin-right:4px; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+/* ── Center — Grid area ─────────────────────────────────── */
+.grid-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  position: relative;
+  background: radial-gradient(ellipse at center, #0a0a18 0%, var(--bg) 70%);
+}
+.grid-container {
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+  padding: 1px;
+  border-radius: 6px;
+  box-shadow:
+    0 0 40px rgba(var(--accent-rgb) / 0.06),
+    inset 0 0 30px rgba(0,0,0,0.3);
+}
+
+/* ── Cell styles ────────────────────────────────────────── */
+.cell {
+  width: var(--cell);
+  height: var(--cell);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  border-radius: 2px;
+}
+.cell.street   { background: #0d0d1a; }
+.cell.building { background: #141428; cursor: default; }
+.cell.building::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.02) 3px, rgba(255,255,255,0.02) 4px);
+  pointer-events: none;
+}
+.cell.alley    { background: #080812; }
+.cell.target   {
+  background: #1a0a2e;
+  border: 1px solid var(--purple);
+  animation: targetPulse 2s infinite;
+}
+@keyframes targetPulse {
+  0%,100% { box-shadow: 0 0 5px var(--purple); }
+  50% { box-shadow: 0 0 18px var(--purple), inset 0 0 8px rgba(var(--purple-rgb) / 0.15); }
+}
+
+/* Storm cells — red glow gradient based on distance to center */
+.cell.storm {
+  background: #1a0808;
+  opacity: 0.4;
+  cursor: default;
+}
+.cell.storm-edge {
+  background: linear-gradient(135deg, #1a0808 30%, #0d0d1a 100%);
+  opacity: 0.6;
+  box-shadow: inset 0 0 8px rgba(var(--red-rgb) / 0.2);
+}
+
+/* Movement range highlight */
+.cell.in-range {
+  outline: 1px solid rgba(var(--accent-rgb) / 0.45);
+  background: rgba(var(--accent-rgb) / 0.06) !important;
+}
+.cell.in-range:hover {
+  outline: 2px solid var(--accent);
+  background: rgba(var(--accent-rgb) / 0.12) !important;
+  z-index: 2;
+}
+.cell:hover:not(.building):not(.storm):not(.in-range) {
+  outline: 1px solid rgba(255,255,255,0.15);
+  z-index: 1;
+}
+
+/* Prefab icons */
+.cell .prefab {
+  position: absolute;
+  font-size: 1rem;
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.3));
+  z-index: 1;
+}
+.cell .prefab-looted {
+  opacity: 0.2;
+  filter: grayscale(1);
+}
+
+/* Player markers */
+.cell .player-marker {
+  position: absolute;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: bold;
+  z-index: 3;
+  transition: all 0.3s ease;
+}
+.cell .player-marker.human {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb) / 0.15);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb) / 0.4);
+  text-shadow: 0 0 8px var(--accent);
+}
+.cell .player-marker.ai {
+  color: var(--pink);
+  background: rgba(var(--pink-rgb) / 0.12);
+  border: 2px solid var(--pink);
+  box-shadow: 0 0 8px rgba(var(--pink-rgb) / 0.3);
+  text-shadow: 0 0 6px var(--pink);
+}
+/* Mini HP bar under player marker */
+.cell .player-hp {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px; height: 3px;
+  background: #222;
+  border-radius: 2px;
+  overflow: hidden;
+  z-index: 4;
+}
+.cell .player-hp .fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.cell .player-hp .fill.human { background: var(--accent); }
+.cell .player-hp .fill.ai { background: var(--pink); }
+
+/* Combat flash on cell */
+@keyframes combatFlash {
+  0% { background: rgba(var(--red-rgb) / 0.3); }
+  100% { background: transparent; }
+}
+.cell.combat-flash { animation: combatFlash 0.4s ease-out; }
+
+/* Loot flash */
+@keyframes lootFlash {
+  0% { background: rgba(var(--accent-rgb) / 0.25); }
+  100% { background: transparent; }
+}
+.cell.loot-flash { animation: lootFlash 0.5s ease-out; }
+
+/* ── Right panel — Actions + Event log ──────────────────── */
+.right-panel {
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.right-panel h3 {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--accent);
+  letter-spacing: 2px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(var(--accent-rgb) / 0.15);
+}
+.ctrl-btn {
+  width: 100%;
+  padding: 9px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: var(--font);
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+}
+.ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ctrl-btn:disabled { opacity: 0.3; cursor: default; }
+.ctrl-btn.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 8px rgba(var(--accent-rgb) / 0.1);
+}
+.ctrl-btn.primary:hover {
+  background: rgba(var(--accent-rgb) / 0.08);
+  box-shadow: 0 0 14px rgba(var(--accent-rgb) / 0.2);
+}
+.ctrl-btn.danger { border-color: var(--red); color: var(--red); }
+.ctrl-btn.danger:hover { background: rgba(var(--red-rgb) / 0.08); }
+.ctrl-btn.hack-btn { border-color: var(--purple); color: var(--purple); }
+.ctrl-btn.hack-btn:hover { background: rgba(var(--purple-rgb) / 0.08); }
+
+.target-select {
+  width: 100%;
+  padding: 7px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: var(--font);
+}
+.weapon-select {
+  width: 100%;
+  padding: 5px;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 0.7rem;
+  margin-bottom: 4px;
+}
+
+/* Event log */
+.event-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  padding-right: 2px;
+}
+.event-log .entry {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-left: 2px solid transparent;
+  transition: background 0.2s;
+}
+.event-log .entry:hover { background: rgba(255,255,255,0.02); }
+.event-log .entry.combat { color: var(--red); border-left-color: var(--red); }
+.event-log .entry.loot   { color: var(--green); border-left-color: var(--green); }
+.event-log .entry.event  { color: var(--yellow); border-left-color: var(--yellow); }
+.event-log .entry.narration { color: var(--purple); font-style: italic; border-left-color: var(--purple); }
+.event-log .entry.system { color: var(--muted); }
+
+/* ── Start screen ───────────────────────────────────────── */
+.start-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+}
+.start-title {
+  font-family: var(--mono);
+  font-size: 3rem;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: 0 0 40px rgba(var(--accent-rgb) / 0.5), 0 0 80px rgba(var(--accent-rgb) / 0.2);
+  letter-spacing: 8px;
+}
+.start-subtitle {
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 440px;
+  line-height: 1.6;
+}
+.start-btn {
+  padding: 16px 48px;
+  background: transparent;
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 3px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-transform: uppercase;
+}
+.start-btn:hover {
+  background: var(--accent);
+  color: var(--bg);
+  box-shadow: 0 0 30px rgba(var(--accent-rgb) / 0.4);
+  transform: translateY(-2px);
+}
+.start-rules {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 500px;
+  margin-top: 10px;
+}
+.start-rule {
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-align: center;
+}
+.start-rule .rule-icon { font-size: 1.4rem; margin-bottom: 4px; }
+.start-rule .rule-text { font-size: 0.65rem; color: var(--muted); line-height: 1.4; }
+
+/* ── Turn banner overlay ────────────────────────────────── */
+.turn-banner {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  font-family: var(--mono);
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: 4px;
+  padding: 12px 40px;
+  background: rgba(0,0,0,0.85);
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 0 40px rgba(var(--accent-rgb) / 0.3);
+  color: var(--accent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.turn-banner.show {
+  opacity: 1;
+  animation: bannerPop 0.4s ease-out;
+}
+@keyframes bannerPop {
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+.turn-banner.ai-turn { border-color: var(--pink); color: var(--pink); box-shadow: 0 0 40px rgba(var(--pink-rgb) / 0.3); }
+
+/* ── Game over overlay ──────────────────────────────────── */
+.game-over-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(0,0,0,0.88);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+.game-over-overlay.show { opacity: 1; pointer-events: all; }
+.go-title {
+  font-family: var(--mono);
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: 6px;
+}
+.go-win { color: var(--accent); text-shadow: 0 0 40px var(--accent); }
+.go-lose { color: var(--red); text-shadow: 0 0 40px var(--red); }
+.go-subtitle { font-size: 1rem; color: var(--muted); }
+.go-stats {
+  display: flex;
+  gap: 20px;
+  margin-top: 8px;
+}
+.go-stat {
+  text-align: center;
+  padding: 10px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.go-stat .go-num {
+  font-family: var(--mono);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.go-stat .go-label {
+  font-size: 0.6rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ── Loot toast ─────────────────────────────────────────── */
+.loot-toast {
+  position: absolute;
+  z-index: 50;
+  background: rgba(0,0,0,0.9);
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 0.75rem;
+  color: var(--green);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+.loot-toast.show { opacity: 1; transform: translateY(0); }
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Legend ──────────────────────────────────────────────── */
+.grid-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 0.6rem;
+  color: var(--muted);
+}
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-swatch {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
 </style>
 </head>
 <body>
 <div class="neon-app" id="app">
+
+  <!-- ── Top bar ────────────────────────────────────────── -->
   <div class="top-bar">
-    <h1>🌃 NEONCITY</h1>
-    <span class="turn" id="turn-info">Turn 0</span>
-    <span class="info" id="phase-info">Setup</span>
-    <span class="info"><span class="storm-indicator"></span>Storm: <span id="storm-info">--</span></span>
-    <span class="info" id="firewall-info">Firewall: --</span>
+    <h1>NEONCITY</h1>
+
+    <div class="info-group">
+      <span class="info-label">Turn</span>
+      <span class="info-val turn-val" id="turn-info">0</span>
+    </div>
+    <div class="info-group">
+      <span class="info-label">Phase</span>
+      <span class="info-val phase-val" id="phase-info">Setup</span>
+    </div>
+    <div class="info-group">
+      <span class="storm-dot"></span>
+      <span class="info-label">Storm</span>
+      <span class="info-val storm-val" id="storm-info">--</span>
+    </div>
+    <div class="info-group">
+      <span class="info-label">Firewall</span>
+      <span class="info-val firewall-val" id="firewall-info">--</span>
+    </div>
+
+    <a href="/" class="btn-back">&#9666; DASHBOARD</a>
   </div>
 
+  <!-- ── Left sidebar — Player stats ────────────────────── -->
   <div class="sidebar" id="sidebar" style="display:none;">
-    <h3>🏃 Runner</h3>
+    <h3>&#9670; RUNNER</h3>
     <div class="stat-row"><span>HP</span><span class="v" id="p-hp">100/100</span></div>
     <div class="hp-bar"><div class="fill" id="p-hp-fill" style="width:100%"></div></div>
     <div class="stat-row"><span>Credits</span><span class="v" id="p-credits">50</span></div>
@@ -99,57 +682,128 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); height:
     <div class="stat-row"><span>Hack</span><span class="v" id="p-hack">5</span></div>
     <div class="stat-row"><span>AGI</span><span class="v" id="p-agi">5</span></div>
 
-    <h3>🔫 Weapons</h3>
-    <ul class="item-list" id="weapon-list"></ul>
-    <h3>💾 Programs</h3>
-    <ul class="item-list" id="program-list"></ul>
-    <h3>🦾 Implants</h3>
-    <ul class="item-list" id="implant-list"></ul>
+    <h3>&#9670; WEAPONS</h3>
+    <ul class="item-list" id="weapon-list"><li style="color:var(--muted)">None</li></ul>
+    <h3>&#9670; PROGRAMS</h3>
+    <ul class="item-list" id="program-list"><li style="color:var(--muted)">None</li></ul>
+    <h3>&#9670; IMPLANTS</h3>
+    <ul class="item-list" id="implant-list"><li style="color:var(--muted)">None</li></ul>
 
-    <h3>👥 Opponents</h3>
+    <h3>&#9670; OPPONENTS</h3>
     <div id="opponent-list"></div>
   </div>
 
+  <!-- ── Center — Grid area ─────────────────────────────── -->
   <div class="grid-area" id="grid-area">
+    <!-- Start screen -->
     <div id="start-screen" class="start-screen">
-      <h2>NEONCITY</h2>
-      <p>A rogue AI has spawned in the city center. Race through the neon-lit streets, gear up, and breach its firewalls before your rivals — or the Glitch Storm — consume you.</p>
-      <button class="start-btn" onclick="Neon.startGame()">⚡ JACK IN</button>
+      <div class="start-title">NEONCITY</div>
+      <p class="start-subtitle">
+        A rogue AI has spawned in the city center. Race through neon-lit streets,
+        loot gear, and breach its firewalls before your rivals — or the Glitch Storm — consume you.
+      </p>
+      <div class="start-rules">
+        <div class="start-rule">
+          <div class="rule-icon">&#9889;</div>
+          <div class="rule-text">3 moves per turn. Click cells to move. Loot prefabs for gear.</div>
+        </div>
+        <div class="start-rule">
+          <div class="rule-icon">&#9760;</div>
+          <div class="rule-text">Storm shrinks each turn. Caught inside = damage every round.</div>
+        </div>
+        <div class="start-rule">
+          <div class="rule-icon">&#128274;</div>
+          <div class="rule-text">Reach the target. Hack 3 firewalls to win. Or eliminate all rivals.</div>
+        </div>
+      </div>
+      <button class="start-btn" onclick="Neon.startGame()">JACK IN</button>
     </div>
+
+    <!-- Grid + overlays -->
     <div id="grid-container" class="grid-container" style="display:none;"></div>
+    <div class="grid-legend" id="grid-legend" style="display:none;">
+      <div class="legend-item"><div class="legend-swatch" style="background:#0d0d1a"></div> Street</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#141428"></div> Building</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#080812"></div> Alley</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#1a0a2e;border-color:var(--purple)"></div> Target</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#1a0808"></div> Storm</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:rgba(var(--accent-rgb)/.06);border-color:rgba(var(--accent-rgb)/.45)"></div> In Range</div>
+    </div>
+
+    <!-- Turn banner -->
+    <div class="turn-banner" id="turn-banner"></div>
+
+    <!-- Game over overlay -->
+    <div class="game-over-overlay" id="game-over">
+      <div class="go-title" id="go-title">GAME OVER</div>
+      <div class="go-subtitle" id="go-subtitle"></div>
+      <div class="go-stats" id="go-stats"></div>
+      <button class="start-btn" onclick="Neon.startGame()" style="margin-top:12px">PLAY AGAIN</button>
+      <a href="/" class="btn-back" style="color:var(--muted)">&#9666; Return to Dashboard</a>
+    </div>
   </div>
 
+  <!-- ── Right panel — Actions + Event log ──────────────── -->
   <div class="right-panel" id="right-panel" style="display:none;">
-    <h3 style="color:var(--accent);font-size:0.75rem;letter-spacing:2px;">ACTIONS</h3>
+    <h3>&#9670; ACTIONS</h3>
     <select class="target-select" id="attack-target"></select>
-    <button class="ctrl-btn danger" onclick="Neon.attack()">⚔️ Attack</button>
-    <button class="ctrl-btn" onclick="Neon.hack()">🔓 Hack Target</button>
-    <button class="ctrl-btn primary" onclick="Neon.endTurn()">⏭️ End Turn</button>
+    <select class="weapon-select" id="weapon-select"><option value="0">Default weapon</option></select>
+    <button class="ctrl-btn danger" id="btn-attack" onclick="Neon.attack()">&#9876; ATTACK</button>
+    <button class="ctrl-btn hack-btn" id="btn-hack" onclick="Neon.hack()">&#128274; HACK TARGET</button>
+    <button class="ctrl-btn primary" id="btn-end-turn" onclick="Neon.endTurn()">&#9654; END TURN</button>
 
-    <h3 style="color:var(--accent);font-size:0.75rem;letter-spacing:2px;margin-top:12px;">EVENT LOG</h3>
+    <h3 style="margin-top:8px">&#9670; EVENT LOG</h3>
     <div class="event-log" id="event-log"></div>
   </div>
+
 </div>
 
 <script>
+/**
+ * NeonCity Board Game Controller — v1.46.0 [2026-03-21]
+ *
+ * Interactive hex grid with movement range highlighting, storm gradient,
+ * player health overlays, combat flash, turn banners, and game over screen.
+ *
+ * CONNECTS: /api/game/* REST endpoints, Socket.IO game_state events
+ * CALLED BY: DOM onclick handlers, Socket.IO listeners
+ * EMITS: DOM updates to grid, sidebar, event log
+ */
+'use strict';
+
 const socket = io();
+
+// v1.46.0 — Prefab data from Jinja context
+const PREFABS = {{ prefabs | tojson }};
+
 const Neon = {
   state: null,
   grid: null,
+  _animating: false,
+
+  // ── Game lifecycle ───────────────────────────────────────────────
 
   async startGame() {
-    const res = await fetch('/api/game/new', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ai_players:3})});
+    const res = await fetch('/api/game/new', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ai_players: 3 })
+    });
     const data = await res.json();
-    if (data.success) {
-      document.getElementById('start-screen').style.display='none';
-      document.getElementById('grid-container').style.display='grid';
-      document.getElementById('sidebar').style.display='block';
-      document.getElementById('right-panel').style.display='flex';
-      this.state = data.state;
-      this.loadGrid();
-      this.updateUI();
-      if (data.narration) this.log(data.narration, 'narration');
-    }
+    if (!data.success) { this.log('Failed to start game', 'combat'); return; }
+
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('grid-container').style.display = 'grid';
+    document.getElementById('grid-legend').style.display = 'flex';
+    document.getElementById('sidebar').style.display = 'flex';
+    document.getElementById('right-panel').style.display = 'flex';
+    document.getElementById('game-over').classList.remove('show');
+
+    this.state = data.state;
+    await this.loadGrid();
+    this.updateUI();
+    if (data.narration) this.log(data.narration, 'narration');
+    this._showTurnBanner('YOUR TURN', false);
   },
 
   async loadGrid() {
@@ -159,58 +813,158 @@ const Neon = {
     this.renderGrid();
   },
 
+  // ── Grid rendering ───────────────────────────────────────────────
+
   renderGrid() {
     const container = document.getElementById('grid-container');
     const size = this.state?.grid_size || 12;
     container.style.gridTemplateColumns = `repeat(${size}, var(--cell))`;
     container.innerHTML = '';
+
+    // Pre-compute storm center and radius for edge detection
+    const cx = Math.floor(size / 2);
+    const cy = Math.floor(size / 2);
+    const sr = this.state?.storm_radius || size;
+
+    // Pre-compute movement range for human player
+    const rangeSet = this._getMovementRange();
+
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const cell = this.grid?.[y]?.[x] || {};
         const div = document.createElement('div');
-        div.className = `cell ${cell.terrain || 'street'}${cell.in_storm ? ' storm' : ''}`;
+
+        // Base terrain class
+        let cls = `cell ${cell.terrain || 'street'}`;
+
+        // Storm classification: fully in storm, or edge (1 cell outside)
+        if (cell.in_storm) {
+          cls += ' storm';
+        } else {
+          const dist = Math.abs(x - cx) + Math.abs(y - cy);
+          if (dist >= sr - 1 && sr < size) {
+            cls += ' storm-edge';
+          }
+        }
+
+        // Movement range highlight
+        const key = `${x},${y}`;
+        if (rangeSet.has(key) && !cell.in_storm && cell.terrain !== 'building') {
+          cls += ' in-range';
+        }
+
+        div.className = cls;
         div.dataset.x = x;
         div.dataset.y = y;
-        // Prefab
-        if (cell.prefab && !cell.prefab_looted) {
-          const prefabs = {{ prefabs | tojson }};
-          const info = prefabs[cell.prefab];
-          if (info) { const s = document.createElement('span'); s.className='prefab'; s.textContent=info.icon; s.title=info.label; div.appendChild(s); }
+
+        // Prefab icon
+        if (cell.prefab) {
+          const info = PREFABS[cell.prefab];
+          if (info) {
+            const s = document.createElement('span');
+            s.className = cell.prefab_looted ? 'prefab prefab-looted' : 'prefab';
+            s.textContent = info.icon;
+            s.title = cell.prefab_looted ? `${info.label} (looted)` : `${info.label} — ${info.description}`;
+            div.appendChild(s);
+          }
         }
+
         div.onclick = () => this.onCellClick(x, y);
         container.appendChild(div);
       }
     }
-    this.renderPlayers();
+    this._renderPlayerMarkers();
   },
 
-  renderPlayers() {
-    // Clear existing player markers
-    document.querySelectorAll('.cell .player').forEach(e=>e.remove());
+  /** Compute set of reachable cells for the human player. */
+  _getMovementRange() {
+    const range = new Set();
+    if (!this.state) return range;
+    const p = this.state.players?.find(pl => pl.id === 'player');
+    if (!p || !p.alive || this.state.current_player !== 'player') return range;
+    const mp = p.movement_points || 0;
+    if (mp <= 0) return range;
+    const size = this.state.grid_size || 12;
+
+    for (let dy = -mp; dy <= mp; dy++) {
+      for (let dx = -mp; dx <= mp; dx++) {
+        if (Math.abs(dx) + Math.abs(dy) > mp || (dx === 0 && dy === 0)) continue;
+        const nx = p.x + dx;
+        const ny = p.y + dy;
+        if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+          range.add(`${nx},${ny}`);
+        }
+      }
+    }
+    return range;
+  },
+
+  /** Render player markers with mini HP bars on the grid. */
+  _renderPlayerMarkers() {
+    document.querySelectorAll('.cell .player-marker, .cell .player-hp').forEach(e => e.remove());
     if (!this.state) return;
-    (this.state.players||[]).forEach(p => {
-      if (!p.alive) return;
-      const idx = p.y * this.state.grid_size + p.x;
-      const cells = document.querySelectorAll('.cell');
-      if (cells[idx]) {
-        const s = document.createElement('span');
-        s.className = `player ${p.is_ai?'ai':'human'}`;
-        s.textContent = p.is_ai ? '◆' : '◉';
-        s.title = p.name;
-        cells[idx].appendChild(s);
+
+    const size = this.state.grid_size || 12;
+    const cells = document.querySelectorAll('.cell');
+
+    (this.state.players || []).forEach(p => {
+      const idx = p.y * size + p.x;
+      if (!cells[idx]) return;
+
+      // Player marker circle
+      const marker = document.createElement('span');
+      const isHuman = !p.is_ai;
+      marker.className = `player-marker ${isHuman ? 'human' : 'ai'}`;
+      marker.textContent = isHuman ? '&#9673;' : '&#9670;';
+      marker.innerHTML = isHuman ? '&#9673;' : '&#9670;';
+      marker.title = `${p.name} (${p.hp}/${p.max_hp} HP)`;
+
+      if (!p.alive) {
+        marker.style.opacity = '0.2';
+        marker.style.borderStyle = 'dashed';
+        marker.title += ' [DEAD]';
+      }
+
+      cells[idx].appendChild(marker);
+
+      // Mini HP bar
+      if (p.alive) {
+        const hpWrap = document.createElement('div');
+        hpWrap.className = 'player-hp';
+        const hpFill = document.createElement('div');
+        hpFill.className = `fill ${isHuman ? 'human' : 'ai'}`;
+        hpFill.style.width = `${(p.hp / p.max_hp) * 100}%`;
+        hpWrap.appendChild(hpFill);
+        cells[idx].appendChild(hpWrap);
       }
     });
   },
 
+  // ── Player actions ───────────────────────────────────────────────
+
   async onCellClick(x, y) {
-    if (!this.state || this.state.ended) return;
-    const cp = this.state.players?.find(p=>p.id===this.state.current_player);
+    if (!this.state || this.state.ended || this._animating) return;
+    const cp = this.state.players?.find(p => p.id === this.state.current_player);
     if (!cp || cp.is_ai) return;
-    const res = await fetch('/api/game/move', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({x,y})});
+
+    const res = await fetch('/api/game/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ x, y })
+    });
     const data = await res.json();
-    if (data.error) { this.log(`⚠️ ${data.error}`, 'combat'); return; }
-    this.log(`Moved to (${x},${y})`, 'loot');
-    if (data.loot) this.log(`📦 Loot: ${data.loot.type} — ${JSON.stringify(data.loot.item||data.loot.effect||'')}`, 'loot');
+    if (data.error) { this.log(data.error, 'combat'); return; }
+
+    this.log(`Moved to (${x},${y}) — ${data.movement_left || 0} moves left`, 'system');
+
+    // Loot feedback
+    if (data.loot) {
+      const item = data.loot.item;
+      const lootText = item?.name || item?.id || data.loot.type || 'item';
+      this.log(`LOOT: ${data.loot.type} — ${lootText}`, 'loot');
+      this._flashCell(x, y, 'loot-flash');
+    }
+
     if (data.narration) this.log(data.narration, 'narration');
     if (data.state) { this.state = data.state; this.updateUI(); }
     await this.loadGrid();
@@ -219,88 +973,256 @@ const Neon = {
   async attack() {
     const sel = document.getElementById('attack-target');
     if (!sel.value) return;
-    const res = await fetch('/api/game/attack', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({target_id:sel.value, weapon_idx:0})});
+    const wIdx = parseInt(document.getElementById('weapon-select').value) || 0;
+
+    const res = await fetch('/api/game/attack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_id: sel.value, weapon_idx: wIdx })
+    });
     const data = await res.json();
-    if (data.error) { this.log(`⚠️ ${data.error}`, 'combat'); return; }
-    this.log(data.hit ? `💥 Hit ${sel.value} for ${data.damage} dmg${data.killed?' — ELIMINATED!':''}` : `💨 Missed ${sel.value}!`, 'combat');
+    if (data.error) { this.log(data.error, 'combat'); return; }
+
+    if (data.hit) {
+      const suffix = data.killed ? ' — ELIMINATED!' : '';
+      this.log(`HIT ${sel.value} for ${data.damage} dmg${suffix}`, 'combat');
+      // Flash the target's cell
+      const target = this.state?.players?.find(p => p.id === sel.value);
+      if (target) this._flashCell(target.x, target.y, 'combat-flash');
+    } else {
+      this.log(`Missed ${sel.value}!`, 'combat');
+    }
+    if (data.effect) this.log(`Effect: ${data.effect}`, 'event');
     if (data.narration) this.log(data.narration, 'narration');
+
+    // Refresh state after attack
+    const stateRes = await fetch('/api/game/state');
+    const stateData = await stateRes.json();
+    if (stateData) { this.state = stateData; this.updateUI(); this.renderGrid(); }
   },
 
   async hack() {
-    const res = await fetch('/api/game/hack', {method:'POST'});
+    const res = await fetch('/api/game/hack', { method: 'POST' });
     const data = await res.json();
-    if (data.error) { this.log(`⚠️ ${data.error}`, 'combat'); return; }
-    this.log(data.success ? `🔓 Firewall breached! ${data.firewall_remaining||0} remaining` : `❌ Hack failed (${data.roll} vs DC ${data.dc})`, data.breached?'loot':'combat');
+    if (data.error) { this.log(data.error, 'combat'); return; }
+
+    if (data.success) {
+      this.log(`FIREWALL BREACHED! ${data.firewall_remaining || 0} remaining (roll ${data.roll} vs DC ${data.dc})`, 'loot');
+    } else {
+      this.log(`Hack failed — roll ${data.roll} vs DC ${data.dc}`, 'combat');
+    }
     if (data.narration) this.log(data.narration, 'narration');
-    if (data.breached) this.log('🎉 YOU WIN! The AI yields to your will.', 'loot');
+    if (data.breached) {
+      this.log('YOU WIN! The AI core yields.', 'loot');
+      this._showGameOver(true);
+    }
   },
 
   async endTurn() {
-    const res = await fetch('/api/game/end_turn', {method:'POST'});
+    this._animating = true;
+    this._disableControls(true);
+
+    const res = await fetch('/api/game/end_turn', { method: 'POST' });
     const data = await res.json();
-    // Log AI actions
-    (data.ai_actions||[]).forEach(ai => {
-      ai.actions.forEach(a => {
-        if (a.action==='move') this.log(`${ai.name} moves`, 'event');
-        if (a.action==='attack') this.log(`${ai.name} attacks! ${a.hit?`Hit for ${a.damage}`:'Missed'}`, 'combat');
-        if (a.action==='hack') this.log(`${ai.name} hacks: ${a.success?'Success':'Failed'}`, 'event');
-      });
-    });
-    if (data.event) this.log(`⚡ ${data.event.event.label}: ${data.event.event.description}`, 'event');
+
+    // Process AI actions with staggered logging
+    const aiActions = data.ai_actions || [];
+    for (const ai of aiActions) {
+      for (const a of ai.actions) {
+        if (a.action === 'move') {
+          this.log(`${ai.name} moves to (${a.x},${a.y})`, 'event');
+        } else if (a.action === 'attack') {
+          this.log(`${ai.name} attacks! ${a.hit ? `Hit for ${a.damage}` : 'Missed'}`, 'combat');
+        } else if (a.action === 'hack') {
+          this.log(`${ai.name} hacks: ${a.success ? 'SUCCESS' : 'Failed'}`, a.success ? 'loot' : 'event');
+        }
+      }
+    }
+
+    // Random event
+    if (data.event?.event) {
+      const ev = data.event.event;
+      this.log(`EVENT: ${ev.label} — ${ev.description}`, 'event');
+    }
+
     if (data.narration) this.log(data.narration, 'narration');
     if (data.state) { this.state = data.state; this.updateUI(); }
     await this.loadGrid();
-    if (this.state?.ended) this.log(`🏆 GAME OVER — Winner: ${this.state.winner||'None'}`, 'loot');
+
+    // Check game end
+    if (this.state?.ended) {
+      const isWinner = this.state.winner === 'player';
+      this._showGameOver(isWinner);
+    } else {
+      // Show turn banner
+      const isPlayerTurn = this.state?.current_player === 'player';
+      this._showTurnBanner(isPlayerTurn ? 'YOUR TURN' : 'AI TURN', !isPlayerTurn);
+    }
+
+    this._animating = false;
+    this._disableControls(false);
   },
+
+  // ── UI updates ───────────────────────────────────────────────────
 
   updateUI() {
     if (!this.state) return;
-    const p = this.state.players?.find(p=>p.id==='player');
+    const p = this.state.players?.find(pl => pl.id === 'player');
     if (p) {
       document.getElementById('p-hp').textContent = `${p.hp}/${p.max_hp}`;
-      document.getElementById('p-hp-fill').style.width = `${(p.hp/p.max_hp)*100}%`;
+      document.getElementById('p-hp-fill').style.width = `${(p.hp / p.max_hp) * 100}%`;
       document.getElementById('p-credits').textContent = p.credits;
       document.getElementById('p-move').textContent = p.movement_points;
       document.getElementById('p-atk').textContent = p.attack;
       document.getElementById('p-def').textContent = p.defense;
       document.getElementById('p-hack').textContent = p.hacking;
       document.getElementById('p-agi').textContent = p.agility;
+
       // Weapons
       const wl = document.getElementById('weapon-list');
-      wl.innerHTML = (p.weapons||[]).map(w=>`<li>${w.name} (${w.damage}dmg)</li>`).join('');
-      document.getElementById('program-list').innerHTML = (p.programs||[]).map(pr=>`<li>${pr.name}</li>`).join('');
-      document.getElementById('implant-list').innerHTML = (p.implants||[]).map(i=>`<li>${i}</li>`).join('');
+      const ws = document.getElementById('weapon-select');
+      if (p.weapons?.length) {
+        wl.innerHTML = p.weapons.map(w => `<li>${w.name} (${w.damage}dmg)</li>`).join('');
+        ws.innerHTML = p.weapons.map((w, i) => `<option value="${i}">${w.name} (${w.damage})</option>`).join('');
+      } else {
+        wl.innerHTML = '<li style="color:var(--muted)">None</li>';
+        ws.innerHTML = '<option value="0">Fists (10dmg)</option>';
+      }
+      document.getElementById('program-list').innerHTML = (p.programs?.length)
+        ? p.programs.map(pr => `<li>${pr.name} (+${pr.power || '?'})</li>`).join('')
+        : '<li style="color:var(--muted)">None</li>';
+      document.getElementById('implant-list').innerHTML = (p.implants?.length)
+        ? p.implants.map(i => `<li>${typeof i === 'string' ? i : i.name}</li>`).join('')
+        : '<li style="color:var(--muted)">None</li>';
     }
-    // Opponents
+
+    // Opponents with HP bars
     const ol = document.getElementById('opponent-list');
     const sel = document.getElementById('attack-target');
     ol.innerHTML = '';
     sel.innerHTML = '';
-    (this.state.players||[]).filter(p=>p.id!=='player'&&p.alive).forEach(op => {
-      ol.innerHTML += `<div class="stat-row"><span style="color:var(--pink)">${op.name}</span><span class="v">${op.hp}HP</span></div>`;
-      const o = document.createElement('option'); o.value=op.id; o.textContent=op.name; sel.appendChild(o);
+    (this.state.players || []).filter(pl => pl.id !== 'player').forEach(op => {
+      const pct = op.max_hp > 0 ? (op.hp / op.max_hp) * 100 : 0;
+      ol.innerHTML += `<div class="opponent-card ${op.alive ? '' : 'opp-dead'}">
+        <span class="opp-name">${op.name}</span>
+        <span class="opp-hp">${op.hp}</span>
+        <div class="opp-hp-bar"><div class="fill" style="width:${pct}%"></div></div>
+      </div>`;
+      if (op.alive) {
+        const o = document.createElement('option');
+        o.value = op.id;
+        o.textContent = `${op.name} (${op.hp}HP)`;
+        sel.appendChild(o);
+      }
     });
+
     // Top bar
-    document.getElementById('turn-info').textContent = `Turn ${this.state.turn_number}`;
-    document.getElementById('phase-info').textContent = this.state.current_player === 'player' ? 'Your Turn' : 'AI Turn';
+    document.getElementById('turn-info').textContent = this.state.turn_number;
+    document.getElementById('phase-info').textContent =
+      this.state.current_player === 'player' ? 'YOUR TURN' : 'AI TURN';
     document.getElementById('storm-info').textContent = `R${this.state.storm_radius}`;
-    document.getElementById('firewall-info').textContent = `Firewall: ${this.state.target?.firewall||0}`;
-    this.renderPlayers();
+    document.getElementById('firewall-info').textContent = this.state.target?.firewall || 0;
+
+    // Disable controls during AI turn
+    const isMyTurn = this.state.current_player === 'player' && !this.state.ended;
+    this._disableControls(!isMyTurn);
   },
 
-  log(msg, type='') {
+  // ── Visual feedback helpers ──────────────────────────────────────
+
+  /** Flash a cell with a CSS animation class. */
+  _flashCell(x, y, cls) {
+    const size = this.state?.grid_size || 12;
+    const idx = y * size + x;
+    const cells = document.querySelectorAll('.cell');
+    if (cells[idx]) {
+      cells[idx].classList.add(cls);
+      setTimeout(() => cells[idx].classList.remove(cls), 500);
+    }
+  },
+
+  /** Show a turn transition banner. */
+  _showTurnBanner(text, isAi) {
+    const banner = document.getElementById('turn-banner');
+    banner.textContent = text;
+    banner.className = `turn-banner show ${isAi ? 'ai-turn' : ''}`;
+    setTimeout(() => banner.classList.remove('show'), 1400);
+  },
+
+  /** Show game over overlay. */
+  _showGameOver(isWin) {
+    const overlay = document.getElementById('game-over');
+    const title = document.getElementById('go-title');
+    const sub = document.getElementById('go-subtitle');
+    const stats = document.getElementById('go-stats');
+
+    title.className = `go-title ${isWin ? 'go-win' : 'go-lose'}`;
+    title.textContent = isWin ? 'VICTORY' : 'DEFEATED';
+    sub.textContent = isWin
+      ? 'You breached the AI core. NeonCity bows to your will.'
+      : `${this.state?.winner || 'Unknown'} breached the AI core first.`;
+
+    const p = this.state?.players?.find(pl => pl.id === 'player');
+    stats.innerHTML = `
+      <div class="go-stat"><div class="go-num">${this.state?.turn_number || 0}</div><div class="go-label">Turns</div></div>
+      <div class="go-stat"><div class="go-num">${p?.hp || 0}</div><div class="go-label">HP Left</div></div>
+      <div class="go-stat"><div class="go-num">${p?.credits || 0}</div><div class="go-label">Credits</div></div>
+      <div class="go-stat"><div class="go-num">${p?.visited_prefabs?.length || 0}</div><div class="go-label">Looted</div></div>
+    `;
+
+    overlay.classList.add('show');
+  },
+
+  /** Enable/disable action buttons. */
+  _disableControls(disabled) {
+    ['btn-attack', 'btn-hack', 'btn-end-turn'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = disabled;
+    });
+  },
+
+  // ── Event log ────────────────────────────────────────────────────
+
+  log(msg, type = '') {
     const el = document.getElementById('event-log');
+    if (!el) return;
     const div = document.createElement('div');
     div.className = `entry ${type}`;
     div.textContent = msg;
     el.appendChild(div);
     el.scrollTop = el.scrollHeight;
+
+    // Keep log from growing too large
+    while (el.children.length > 100) el.removeChild(el.firstChild);
   }
 };
 
-socket.on('game_state', d => { if(d) { Neon.state=d; Neon.updateUI(); } });
-socket.on('turn_update', d => { if(d) { Neon.state=d; Neon.updateUI(); } });
-socket.on('game_won', d => { Neon.log(`🏆 ${d.winner} wins NeonCity!`, 'loot'); });
+// ── Socket.IO listeners ────────────────────────────────────────────
+socket.on('game_state', d => { if (d) { Neon.state = d; Neon.updateUI(); } });
+socket.on('turn_update', d => { if (d) { Neon.state = d; Neon.updateUI(); } });
+socket.on('game_won', d => {
+  Neon.log(`${d.winner} wins NeonCity!`, 'loot');
+  Neon._showGameOver(d.winner === 'player');
+});
+
+// ── Check for existing game on load ────────────────────────────────
+(async function checkExistingGame() {
+  try {
+    const res = await fetch('/api/game/state');
+    const data = await res.json();
+    if (data && data.turn_number > 0 && !data.ended) {
+      document.getElementById('start-screen').style.display = 'none';
+      document.getElementById('grid-container').style.display = 'grid';
+      document.getElementById('grid-legend').style.display = 'flex';
+      document.getElementById('sidebar').style.display = 'flex';
+      document.getElementById('right-panel').style.display = 'flex';
+      Neon.state = data;
+      await Neon.loadGrid();
+      Neon.updateUI();
+      Neon.log('Resumed existing game session.', 'system');
+    }
+  } catch (e) { /* No existing game — show start screen */ }
+})();
 </script>
 <script src="/shared/js/cosysim-voice.js"></script>
 </body>

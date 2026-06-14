@@ -6,6 +6,8 @@
 
 {% block head_css %}
   <link rel="stylesheet" href="/intel_hub/static/css/intel_hub.css">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 layer (must load last) #}
+  <link rel="stylesheet" href="/intel_hub/static/css/intel_hub_v2.css">
 {% endblock %}
 
 {% block scene_content %}
@@ -761,7 +763,7 @@
   <!-- ══════════════════════════════════════════════
        SCRIPTS
   ══════════════════════════════════════════════ -->
-  <script src="/shared/js/cosysim-bench.js"></script>
+  <!-- v1.54.0 [2026-03-26] — BenchHUD removed; replaced by cs-footer in neon_base -->
   <script>
     window.SCENE_PORT = {{ port }};
     window.SCENE_ACCENT = "{{ scene_accent|default('#06b6d4') }}";

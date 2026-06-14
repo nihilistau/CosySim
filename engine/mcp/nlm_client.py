@@ -174,8 +174,9 @@ class NLMClient:
                             break
                     if nid:
                         notebooks.append({"id": nid, "name": name})
-        except (IndexError, TypeError):
-            pass
+        except (IndexError, TypeError) as exc:
+            # v1.49.1 [2026-03-22] — Surface parse errors
+            logger.warning("NLMClient.list_notebooks parse error: %s", exc)
         return notebooks
 
     def get_notebook(self, notebook_id: str) -> Dict[str, Any]:
@@ -250,8 +251,8 @@ class NLMClient:
             for s in _extract_strings(data, min_len=20):
                 if len(s) > 50:
                     messages.append({"content": s, "type": "message"})
-        except (IndexError, TypeError):
-            pass
+        except (IndexError, TypeError) as exc:
+            logger.warning("NLMClient.get_chat_history parse error for %s: %s", notebook_id, exc)
         return messages
 
     def get_notes(self, notebook_id: str) -> List[str]:
@@ -544,8 +545,8 @@ class NLMClient:
                     datetime.datetime.now(datetime.timezone.utc)
                     - datetime.datetime.fromisoformat(updated_at)
                 ).days
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("NLMClient.get_status BL age check failed: %s", exc)
         return {
             "has_cookies": bool(cookies),
             "cookie_count": len(cookies),

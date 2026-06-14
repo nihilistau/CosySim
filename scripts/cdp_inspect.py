@@ -38,7 +38,7 @@ import sys
 import urllib.request
 from typing import Any
 
-CDP_PORT = 9222
+CDP_PORT = 9223
 SEP = "─" * 72
 
 

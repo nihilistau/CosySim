@@ -45,8 +45,20 @@ logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
-NLM_PROXY_URL = os.environ.get("NLM_PROXY_URL", "http://localhost:8800")
+def _get_nexus_url() -> str:
+    env = os.environ.get("NEXUS_URL")
+    if env:
+        return env
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
+
+
+def _get_nlm_proxy_url() -> str:
+    env = os.environ.get("NLM_PROXY_URL")
+    if env:
+        return env
+    from engine.port_registry import get_service_url
+    return get_service_url("nlm_proxy")
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 HOME = Path.home()
 
@@ -128,7 +140,7 @@ def _nlm_post(path: str, data: dict, timeout: int = 30) -> Optional[dict]:
     try:
         body = json.dumps(data).encode()
         req = urllib.request.Request(
-            f"{NLM_PROXY_URL}{path}", data=body, method="POST",
+            f"{_get_nlm_proxy_url()}{path}", data=body, method="POST",
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -142,7 +154,7 @@ def _nlm_get(path: str, timeout: int = 10) -> Optional[dict]:
     """GET from NLM proxy."""
     try:
         req = urllib.request.Request(
-            f"{NLM_PROXY_URL}{path}",
+            f"{_get_nlm_proxy_url()}{path}",
             headers={"Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -156,7 +168,7 @@ def _nlm_delete(path: str, timeout: int = 30) -> Optional[dict]:
     """DELETE against the NLM proxy."""
     try:
         req = urllib.request.Request(
-            f"{NLM_PROXY_URL}{path}",
+            f"{_get_nlm_proxy_url()}{path}",
             method="DELETE",
             headers={"Accept": "application/json"},
         )
@@ -172,7 +184,7 @@ def _nexus_post(path: str, data: dict) -> Optional[dict]:
     try:
         body = json.dumps(data).encode()
         req = urllib.request.Request(
-            f"{NEXUS_URL}{path}", data=body, method="POST",
+            f"{_get_nexus_url()}{path}", data=body, method="POST",
             headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -191,7 +203,7 @@ def _nexus_search(query: str, category: str = "", limit: int = 20) -> list[dict]
             **({"category": category} if category else {}),
         })
         req = urllib.request.Request(
-            f"{NEXUS_URL}/api/search?{params}",
+            f"{_get_nexus_url()}/api/search?{params}",
             headers={"Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:

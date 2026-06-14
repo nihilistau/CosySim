@@ -405,39 +405,26 @@ class WorkflowManager:
             b64 = base64.b64encode(img_bytes).decode()
             data_url = f"data:{mime};base64,{b64}"
 
-            import requests  # noqa: PLC0415
-            payload = {
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": data_url},
-                            },
-                            {
-                                "type": "text",
-                                "text": (
-                                    "You are an AI image quality inspector. "
-                                    "Evaluate this generated image professionally.\n"
-                                    + (f"Generation prompt: {prompt_context}\n" if prompt_context else "")
-                                    + "Respond in JSON: {\"score\": 0-10, \"issues\": [], \"strengths\": [], \"suggestion\": \"\"}"
-                                ),
-                            },
-                        ],
-                    }
-                ],
-                "max_tokens": 300,
-                "temperature": 0.1,
-            }
-            resp = requests.post(
-                "http://localhost:1234/api/v1/chat/completions",
-                json=payload,
-                timeout=30,
+            # v1.43.1 [2026-03-21] — Use unified chat()
+            from engine.lmstudio.chat import chat
+            qc_prompt = (
+                "You are an AI image quality inspector. "
+                "Evaluate this generated image professionally.\n"
+                + (f"Generation prompt: {prompt_context}\n" if prompt_context else "")
+                + "Respond in JSON: {\"score\": 0-10, \"issues\": [], \"strengths\": [], \"suggestion\": \"\"}"
             )
-            resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"]
+            raw = chat(
+                [{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                        {"type": "text", "text": qc_prompt},
+                    ],
+                }],
+                model=model,
+                max_tokens=300,
+                temperature=0.1,
+            )
             # Parse JSON from the response
             import json as _json  # noqa: PLC0415
             start = raw.find("{")
@@ -546,7 +533,7 @@ class WorkflowManager:
 def get_workflow_manager() -> WorkflowManager:
     """Return the process-wide WorkflowManager singleton.
 
-    Reads ``art.comfyui_url`` from config on first call.
+    Reads ``comfyui.base_url`` from config on first call.
 
     Returns:
         The shared WorkflowManager instance.
@@ -563,7 +550,8 @@ def get_workflow_manager() -> WorkflowManager:
         except Exception:
             try:
                 from engine.config import get_config  # noqa: PLC0415
-                base_url = get_config().get("art.comfyui_url", "http://localhost:8188")
+                # v1.49.1 [2026-03-22] — Use comfyui.base_url (was stale art.comfyui_url)
+                base_url = get_config().get("comfyui.base_url", "http://localhost:8188")
             except Exception:
                 base_url = "http://localhost:8188"
         _manager_instance = WorkflowManager(base_url=base_url)

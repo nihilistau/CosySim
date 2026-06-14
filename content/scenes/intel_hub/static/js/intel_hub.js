@@ -103,7 +103,7 @@ class BriefingRoomScene {
     this.loadDashboard();
     this._pollLoop();
     this._refreshRatingStats();
-    console.log('[BriefingRoom] Online — v0.77 The First Mind');
+    console.debug('[BriefingRoom] Online — v0.77 The First Mind');
   }
 
   /** Wire ticker click → rating toast */
@@ -138,11 +138,19 @@ class BriefingRoomScene {
       this.socket = io({ transports: ['websocket', 'polling'] });
 
       this.socket.on('connect', () => {
-        console.log('[BriefingRoom] Socket connected:', this.socket.id);
+        console.debug('[BriefingRoom] Socket connected:', this.socket.id);
       });
 
       this.socket.on('disconnect', () => {
-        console.log('[BriefingRoom] Socket disconnected');
+        console.debug('[BriefingRoom] Socket disconnected');
+      });
+
+      // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+      this.socket.io.on('reconnect', (attempt) => {
+        console.debug('[BriefingRoom] Reconnected after ' + attempt + ' attempt(s)');
+      });
+      this.socket.io.on('reconnect_attempt', (attempt) => {
+        if (attempt % 3 === 0) console.debug('[BriefingRoom] Reconnecting... (attempt ' + attempt + ')');
       });
 
       this.socket.on('metrics_update', (data) => {

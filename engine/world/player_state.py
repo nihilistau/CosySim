@@ -778,8 +778,8 @@ class PlayerState:
         try:
             if self._SAVE_PATH.exists():
                 self._SAVE_PATH.unlink()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[PlayerState] Save file cleanup failed (operation=reset): %s", e)
         logger.info("PlayerState reset to defaults")
 
     def _schedule_auto_save(self) -> None:

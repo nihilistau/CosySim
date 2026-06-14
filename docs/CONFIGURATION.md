@@ -1,10 +1,17 @@
 # CosySim Configuration Guide
 
+> CosySim Documentation — v1.52.0 [2026-03-26]
+>
+> Complete reference for all configuration files, YAML sections, environment variables,
+> and per-scene settings. Config version in default.yaml: v1.49.
+
+---
+
 ## Config Files
 
 | File | Purpose |
 |------|---------|
-| `config/default.yaml` | Master configuration — all settings with defaults |
+| `config/default.yaml` | Master configuration — all settings with defaults (source of truth) |
 | `config/development.yaml` | Development overrides (debug on, CPU devices, relaxed limits) |
 | `config/production.yaml` | Production overrides (CUDA, stricter logging, rate limiting) |
 | `config/mcp.json` | MCP server command definitions |
@@ -21,7 +28,7 @@ Configuration is loaded by `engine/config.py` (`ConfigManager`) in this order:
 
 The environment is determined by `COSYSIM_ENV` (or legacy `COSYVOICE_ENV`), defaulting to `"default"`.
 
-Access config values with dot notation: `config.get("lmstudio.base_url")`.
+Access config values with dot notation: `get_config().get("lmstudio.base_url", default)`.
 
 ## default.yaml Sections
 
@@ -30,7 +37,7 @@ Access config values with dot notation: `config.get("lmstudio.base_url")`.
 | Key | Default | Description |
 |-----|---------|-------------|
 | `name` | CosySim AI Playground | Project name |
-| `version` | 1.04b | Current version |
+| `version` | v1.49 | Config version |
 | `environment` | default | Active environment |
 
 ### paths
@@ -136,8 +143,6 @@ Some scenes expose additional YAML-configurable settings.
 
 #### Penthouse Extended Settings
 
-> Updated for v1.04b
-
 The penthouse scene supports extensive YAML configuration beyond the standard
 `host`/`port`/`debug` keys:
 
@@ -178,7 +183,7 @@ scenes:
       - playful_tease
       - intellectual_aloof
       - nurturing_warm
-    stats:                               # Character stat dimensions (0–100)
+    stats:                               # Character stat dimensions (0-100)
       - arousal
       - pleasure
       - happiness
@@ -239,9 +244,9 @@ scenes:
 
 Defines resolution, format, and constraints for generated media:
 
-- **Images**: selfie (512×768 PNG), portrait (512×768 PNG), thumbnail (200×200 JPG)
-- **Video**: message (640×480 H.264 24fps), call (640×480 H.264 15fps)
-- **Audio**: voice_message/voice_mail (22050 Hz mono WAV, 10s–1h)
+- **Images**: selfie (512x768 PNG), portrait (512x768 PNG), thumbnail (200x200 JPG)
+- **Video**: message (640x480 H.264 24fps), call (640x480 H.264 15fps)
+- **Audio**: voice_message/voice_mail (22050 Hz mono WAV, 10s-1h)
 
 ### mcp
 
@@ -265,9 +270,9 @@ Defines resolution, format, and constraints for generated media:
 
 | Service | Enabled | Key Settings |
 |---------|---------|-------------|
-| `autonomous_messenger` | true | frequency: moderate, active_hours: 8–23 |
+| `autonomous_messenger` | true | frequency: moderate, active_hours: 8-23 |
 | `voice_calls` | true | max_duration: 3600s |
-| `video_calls` | true | fps: 15, resolution: 640×480 |
+| `video_calls` | true | fps: 15, resolution: 640x480 |
 
 ### security
 
@@ -357,8 +362,6 @@ Defines resolution, format, and constraints for generated media:
 | `max_consequence_age_turns` | 50 | Consequence expiry (turns) |
 
 ### testing
-
-> Updated for v1.04b — smart test runner and automated scheduler
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -509,11 +512,11 @@ Registers skills per scene with trigger types (`auto`, `optional`, `required`). 
 
 ## Top-Level YAML Keys Reference
 
-> Updated for v1.04b — complete list of `config/default.yaml` top-level sections
+Complete list of `config/default.yaml` top-level sections:
 
 | Key | Description |
 |-----|-------------|
-| `system` | Project name, version (`1.04b`), environment |
+| `system` | Project name, version (`v1.49`), environment |
 | `paths` | Directory paths (data, models, cache, logs) |
 | `database` | SQLite + ChromaDB settings |
 | `llm` | LLM provider, model, temperature |
@@ -538,3 +541,21 @@ Registers skills per scene with trigger types (`auto`, `optional`, `required`). 
 | `framework` | MCP framework state persistence |
 | `testing` | Test DB, smart runner, scheduler, browser checks |
 | `assets` | Asset validation and versioning |
+
+---
+
+## See Also
+
+- [Architecture](ARCHITECTURE.md) — System architecture, BaseScene, MCP pipeline
+- [Operations](OPERATIONS.md) — Launcher, TUI, service management
+- [LMStudio](LMSTUDIO.md) — LMStudio-specific configuration deep dive
+- [Testing](TESTING.md) — Smart test runner, browser checks
+
+---
+
+## Change Log
+
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Updated to v1.50; fixed system.version from v1.04b to v1.49; added config access pattern; removed stale cross-refs |
+| v1.04b | 2025-09-01 | Initial configuration guide |

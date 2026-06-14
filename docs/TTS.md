@@ -1,6 +1,8 @@
-# Qwen3-TTS Voice Generation
+# TTS — Voice Generation
 
-CosySim includes a TTS (text-to-speech) server built for Qwen3-TTS models. It generates voicemails, stories, and character voice lines as WAV files.
+> CosySim Documentation — v1.52.0 [2026-03-26]
+>
+> Qwen3-TTS server, voice design system, presets, and agent integration.
 
 ## Architecture
 
@@ -8,7 +10,7 @@ CosySim includes a TTS (text-to-speech) server built for Qwen3-TTS models. It ge
 ┌─────────────────┐    POST /generate    ┌──────────────┐    WAV files
 │ CosySim Agents  │ ───────────────────▶ │  TTS Server  │ ──────────▶ media/voice/
 │ (skills/MCP)    │ ◀─── job status ──── │  (FastAPI)   │
-└─────────────────┘                      │  + FastMCP   │
+└─────────────────┘                      │  port :8600  │
                                          └──────────────┘
 ```
 
@@ -16,7 +18,7 @@ CosySim includes a TTS (text-to-speech) server built for Qwen3-TTS models. It ge
 
 ```bash
 # Start the TTS server
-python launcher.py --mode tts    # port 8600
+python launcher.py tts    # port 8600
 
 # Generate a voice message
 curl -X POST http://localhost:8600/generate \
@@ -32,21 +34,19 @@ curl http://localhost:8600/status
 
 ## Voice Design System
 
-Each character gets a `VoiceDesign` that describes their vocal identity. Qwen3-TTS uses these descriptions to generate consistent, characterful speech.
+Each character gets a `VoiceDesign` that describes their vocal identity. Qwen3-TTS uses these natural-language descriptions to generate consistent, characterful speech.
 
 ### Voice Design Strings
 
-These natural-language descriptions trigger specific acoustic features:
-
 ```python
 # Pitch, pace, rasp, warmth, vocal fry, reverb, etc.
-"A youthful female voice, mid-range pitch, with a warm playful cadence. 
+"A youthful female voice, mid-range pitch, with a warm playful cadence.
  Slight vocal fry at end of sentences and a breathy, intimate quality."
 
-"A steady, mature male voice with deep baritone resonance. 
+"A steady, mature male voice with deep baritone resonance.
  Confident and warm, with natural weight and smooth delivery."
 
-"A high-fidelity female voice, perfectly clear and articulate. 
+"A high-fidelity female voice, perfectly clear and articulate.
  Rhythmic delivery, measured and professional."
 ```
 
@@ -106,6 +106,7 @@ Auto-selection: short text (<100 chars) → 0.6b, longer/emotional → 1.7b.
 | GET | `/voices` | List presets + character casts |
 | POST | `/cast` | Save voice design for character |
 | GET | `/status` | Engine status + queue depth |
+| GET | `/health` | Health check |
 
 ### Generate Request
 
@@ -160,9 +161,9 @@ The TTS server also exposes MCP tools at `/mcp`:
 
 | Use Case | Duration |
 |----------|----------|
-| Voice message | 10-60 seconds |
-| Voicemail | 30 seconds - 5 minutes |
-| Story narration | 5-60 minutes |
+| Voice message | 10–60 seconds |
+| Voicemail | 30 seconds – 5 minutes |
+| Story narration | 5–60 minutes |
 
 Long generations (>30s estimated) run async — poll via `/jobs/{id}`.
 
@@ -174,3 +175,19 @@ content/simulation/media/voice/
   tts_abc123_20260220_143022.wav
   tts_def456_20260220_143055.wav
 ```
+
+---
+
+## See Also
+
+- [Asset Studio](ASSET_STUDIO.md) — image/video generation
+- [Scenes](SCENES.md) — scene catalog (TTS integration per scene)
+
+---
+
+## Change Log
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v1.50 | 2026-03-22 | Doc overhaul — unified versioning, health check endpoint, cross-references |
+| v1.42 | 2026-03-21 | Initial TTS documentation |

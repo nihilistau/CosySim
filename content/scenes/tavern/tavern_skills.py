@@ -11,7 +11,11 @@ MCPTimer usage, DialogSystem directives.
 
 from __future__ import annotations
 
+import logging
+
 from engine.skills.skill import SkillCategory, skill
+
+logger = logging.getLogger(__name__)
 
 from .tavern_state import DRINKS_MENU, NPC_PROFILES, TavernState
 
@@ -95,8 +99,8 @@ def tavern_order_drink(drink_id: str = "ale") -> str:
                 trigger_after_turns=3,
                 description=f"The warmth from {drink.name} fades.",
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TavernSkills] Silent exception suppressed (operation=best_effort): %s", e)
 
     fx = ", ".join(f"{k}{'+' if v > 0 else ''}{v}" for k, v in changes.items() if v)
     return f"🍺 {drink.name} — {drink.description}\nCost: {drink.price}g | Effects: {fx}"
@@ -321,8 +325,8 @@ def tavern_request_song(mood: str = "merry") -> str:
             on_complete_note="The bard's song ends with a flourish.",
             metadata={"mood": mood},
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[TavernSkills] Silent exception suppressed (operation=best_effort): %s", e)
 
     state.log_event(f"Bard plays a {mood} song.", "music")
     fx = ", ".join(f"{k}{'+' if v > 0 else ''}{v}" for k, v in changes.items() if v)
@@ -464,8 +468,8 @@ def get_quest_board() -> str:
             f"  • [{it.id}] {it.title} — {', '.join(it.tags)}"
             for it in items
         ]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[TavernSkills] Silent exception suppressed (operation=best_effort): %s", e)
 
     lines = ["📋 QUEST BOARD — The Rusty Anchor:"]
     if quests_from_engine:
@@ -508,8 +512,8 @@ def accept_quest(quest_id: str) -> str:
             "tavern.quest_accepted",
             {"quest_id": quest_id, "title": q.title, "reward_gold": q.reward_gold},
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[TavernSkills] Silent exception suppressed (operation=best_effort): %s", e)
 
     return (
         f"📜 Quest accepted: {q.title}\n"
@@ -587,8 +591,8 @@ def buy_drink_and_rumor(drink_name: str = "ale") -> str:
             transaction_type=TransactionType.SPEND,
             description=f"Drink: {drink.name} at The Rusty Anchor",
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[TavernSkills] Silent exception suppressed (operation=best_effort): %s", e)
 
     # Schedule warmth fade consequence
     scene = _get_tavern()
@@ -601,8 +605,8 @@ def buy_drink_and_rumor(drink_name: str = "ale") -> str:
                 trigger_after_turns=3,
                 description=f"The warmth from {drink.name} fades.",
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[TavernSkills] Silent exception suppressed (operation=best_effort): %s", e)
 
     # Hear a rumor while drinking
     rumor = state.hear_rumor()

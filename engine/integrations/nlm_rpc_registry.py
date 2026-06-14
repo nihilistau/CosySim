@@ -2,10 +2,17 @@
 
 Singleton module that loads the YAML registry once and provides fast,
 typed access to rpcids, payload templates, configurable parameters,
-shared config objects, and fallback chains.
+shared config objects, fallback chains, and gRPC method name mappings.
 
 All parameters are runtime-overridable — tier gating is client-side,
 the server accepts whatever values we send.
+
+Version: v1.57.2 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.57.2 [2026-03-26] — gRPC method name lookup from heap-extracted methods
+    v1.53.0 [2026-03-21] — Baseline registry with operations, parameters, payloads
 
 Usage::
 
@@ -29,6 +36,11 @@ Usage::
     # Get operation metadata
     info = reg.get_operation("create_notebook")
     print(info["description"])
+
+    # gRPC method name lookup (heap-extracted)
+    op = reg.get_operation_by_method("CreateProject")   # "create_notebook"
+    rpcid = reg.get_rpcid_by_method("GetProject")       # "rLM1Ne"
+    methods = reg.list_grpc_methods(category="sources")  # all source methods
 """
 from __future__ import annotations
 
@@ -453,6 +465,72 @@ class NLMRpcRegistry:
                 return name
         return None
 
+    # ──── gRPC Method Name Lookup ────────────────────────────────────────────
+
+    # v1.57.2 [2026-03-26] — gRPC method name lookup from heap-extracted methods
+    # CONNECTS: config/nlm_rpcids.yaml grpc_methods section
+    # CALLED BY: ARGUS heap analysis, transport rotation recovery, diagnostics
+
+    def get_operation_by_method(self, method_name: str) -> Optional[str]:
+        """Map a gRPC method name to an operation name.
+
+        Uses the grpc_methods section of nlm_rpcids.yaml to resolve
+        heap-extracted proto service method names (e.g. "CreateProject")
+        to CosySim operation names (e.g. "create_notebook").
+
+        Args:
+            method_name: gRPC method name (e.g. "AddSources", "GetProject").
+
+        Returns:
+            Operation name string, or None if method is not mapped.
+        """
+        grpc = self._data.get("grpc_methods", {})
+        entry = grpc.get(method_name, {})
+        return entry.get("operation") if isinstance(entry, dict) else None
+
+    def get_rpcid_by_method(self, method_name: str) -> Optional[str]:
+        """Map a gRPC method name to its batchexecute rpcid.
+
+        Looks up the rpcid directly from the grpc_methods mapping.
+        Returns None if the method has no known rpcid (many gRPC methods
+        are internal-only and don't have a batchexecute equivalent).
+
+        Args:
+            method_name: gRPC method name (e.g. "LoadSource", "GetProject").
+
+        Returns:
+            rpcid string, or None if no rpcid is mapped.
+        """
+        grpc = self._data.get("grpc_methods", {})
+        entry = grpc.get(method_name, {})
+        rpcid = entry.get("rpcid") if isinstance(entry, dict) else None
+        # YAML null values load as None — treat as no mapping
+        return rpcid if rpcid is not None else None
+
+    def list_grpc_methods(self, category: Optional[str] = None) -> List[Dict]:
+        """List all known gRPC methods, optionally filtered by category.
+
+        Returns the full grpc_methods registry enriched with the method
+        name as a "method" key. Useful for diagnostics and ARGUS reporting.
+
+        Args:
+            category: Optional category filter (e.g. "sources", "projects",
+                      "chat", "generation", "account", "artifacts", "notes",
+                      "export", "media", "feedback").
+
+        Returns:
+            List of dicts, each with keys: method, operation, rpcid, category.
+        """
+        grpc = self._data.get("grpc_methods", {})
+        results: List[Dict] = []
+        for name, info in grpc.items():
+            if not isinstance(info, dict):
+                continue
+            if category and info.get("category") != category:
+                continue
+            results.append({"method": name, **info})
+        return results
+
     def to_summary(self) -> str:
         """Return a human-readable summary of the registry.
 
@@ -463,6 +541,7 @@ class NLMRpcRegistry:
         ops = self._data.get("operations", {})
         params = self._data.get("parameters", {})
         configs = self._data.get("shared_configs", {})
+        grpc = self._data.get("grpc_methods", {})
 
         lines = [
             f"NLM RPC Registry v{meta.get('version', '?')}",
@@ -470,6 +549,7 @@ class NLMRpcRegistry:
             f"  Operations: {len(ops)}",
             f"  Parameters: {len(params)}",
             f"  Shared configs: {len(configs)}",
+            f"  gRPC methods: {len(grpc)}",
             f"  Categories: {', '.join(self.list_categories())}",
             "",
             "Operations with fallbacks:",

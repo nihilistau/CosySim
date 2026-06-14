@@ -1,6 +1,15 @@
 """
 Enhanced Dashboard v2 for Virtual Companion System
 Streamlit-based UI for character management and system control
+
+.. deprecated:: v1.49.2
+    This Streamlit dashboard has been replaced by the Flask-based
+    ``dashboard_scene.py`` (FlaskScene subclass). Use the Flask version
+    for all new development. This file is kept for backward compatibility
+    only and will be removed in a future version.
+
+    Migration: ``python launcher.py dashboard`` now uses dashboard_scene.py.
+    To run this legacy version: ``streamlit run dashboard_v2.py``
 """
 import streamlit as st
 import sys

@@ -66,7 +66,10 @@ class DatasetCurator:
     Supports multiple output formats and quality filtering.
     """
 
-    def __init__(self, nexus_url: str = "http://127.0.0.1:8700") -> None:
+    def __init__(self, nexus_url: str = "") -> None:
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self._url = nexus_url.rstrip("/")
 
     # ── Public API ───────────────────────────────────────────────
@@ -419,8 +422,8 @@ def get_dataset_curator() -> DatasetCurator:
         try:
             from engine.config import get_config
             cfg = get_config()
-            url = cfg.get("nexus.url", "http://127.0.0.1:8700")
+            url = cfg.get("nexus.base_url", "")
         except Exception:
-            url = "http://127.0.0.1:8700"
+            url = ""
         _curator = DatasetCurator(nexus_url=url)
     return _curator

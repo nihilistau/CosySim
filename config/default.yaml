@@ -3,7 +3,7 @@
 
 system:
   name: "CosySim AI Playground"
-  version: "1.37"
+  version: "1.52"
   environment: "default"
 
 # Paths configuration
@@ -263,9 +263,16 @@ lmstudio:
   host: "127.0.0.1"
   port: 1234
   base_url: "http://127.0.0.1:1234"
+  # v1.60.0 [2026-06-13] — affinity TaskQueue (engine/lmstudio/task_queue.py)
+  task_queue_v2:
+    auto_start: true            # singleton get_task_queue() auto-starts its worker pool
+    workers: 2                  # background worker threads
+    max_queue_depth: 100        # max queued tasks before submit rejects
   # API authentication (optional — LMStudio defaults to no auth)
   # Generate a token in LMStudio → Developer → Server Settings → Manage Tokens
-  api_token: "${LMSTUDIO_API_TOKEN:-sk-lm-j8v22Hz0:XmuG1AdltLqaegp2OEAd}"
+  # v1.61.0 [2026-06-13] — no real token in the committed repo; set LMSTUDIO_API_TOKEN
+  # in your gitignored .env (LMStudio defaults to no auth, so empty is fine locally).
+  api_token: "${LMSTUDIO_API_TOKEN:-}"
   # API version: "v1" = legacy OpenAI-compat, "api_v1" = new LMStudio protocol
   api_version: "v1"
   # Default model-load options (tuned for RTX 2060 12 GB)
@@ -365,9 +372,9 @@ lmstudio:
       use_as_draft_for: "primary"
       enabled: false
     embedding:
-      key: ""                   # e.g. "text-embedding-nomic-embed-text-v1.5"
+      key: "text-embedding-nomic-embed-text-v1.5"
       device: "cpu"
-      enabled: false
+      enabled: true
 
   # ── Llmster / Daemon Mode ────────────────────────────────────────
   llmster:
@@ -385,6 +392,14 @@ lmstudio:
     retry_max: 3                # max retries per failed task
     retry_backoff: [1, 2, 4]    # backoff seconds per retry attempt
     fallback_model: ""          # model to try when primary fails (empty = none)
+    # v1.50.1 [2026-03-22] — Config-driven task affinity (model pattern matching)
+    affinity:
+      code: ["*coder*", "*codex*", "*starcoder*", "*deepseek-coder*", "*qwen*coder*"]
+      vision: ["*vision*", "*llava*", "*qwen*vl*", "*pixtral*"]
+      chat: ["*chat*", "*instruct*", "*qwen*", "*llama*"]
+      router: ["*0.6b*", "*270m*", "*router*"]
+      embedding: ["*embed*", "*bge*", "*e5*"]
+      evaluation: ["*judge*", "*eval*", "*qwen*"]
     task_routing:               # route task types to specific models
       code_review: ""
       security_check: ""
@@ -603,6 +618,15 @@ observability:
       stalled_count:
         yellow: 1
         red: 3
+  # v1.60.0 [2026-06-13] — error-aggregator LRU + rate alerting
+  error_aggregator:
+    max_buckets: 2000           # LRU cap on retained fingerprint buckets
+    alert_threshold: 100        # errors within window that trip a rate alert (0 disables)
+    alert_window_sec: 300       # sliding window for the rate alert
+    alert_cooldown_sec: 300     # min spacing between alerts (throttle)
+  oracle:
+    flood_cooldown_sec: 5.0     # per-fingerprint callback cooldown
+    flood_guard_max_keys: 1000  # LRU cap on fingerprints in the flood guard
 
 # Training data pipeline
 training:
@@ -678,6 +702,13 @@ neurochemistry:
   save_interval_ticks: 5        # persist every N ticks
   detailed_prompt_injection: false  # true = full NT levels in prompt; false = summary
   interceptor_priority: 4       # lower = earlier in pipeline
+  # v1.60.0 [2026-06-13] — NLP stimulus auto-detection from dialogue (StimulusDetectInterceptor)
+  stimulus_detect:
+    enabled: true
+    incoming_intensity: 0.6     # effect strength of a line said TO an agent
+    reply_intensity: 0.5        # reflexive effect of the agent's own line on itself
+    max_rules_per_text: 4       # cap stimuli applied per text
+    min_text_len: 2
   baselines:
     dopamine: 0.45
     serotonin: 0.50
@@ -738,6 +769,95 @@ territory:
     - Ghost_Net
     - SynthSec
     - DeepState
+  # v1.60.0 [2026-06-13] — Player standing tilts autonomous faction decisions
+  faction_ai:
+    player_influence: 0.4         # 0-1, how strongly player standing tilts action scores
+    player_target_threshold: 25   # |standing| above which a faction steers toward player's district
+    player_district: ''           # optional fallback for the player's current district id
+
+# v1.59.0 [2026-06-13] — Economy settlement (market.buy/sell ↔ player wallet,
+# inventory, and heat). Closes the inventory↔market↔heat feedback loop.
+# v1.60.0 [2026-06-13] — event_shocks: world events drive supply/demand.
+economy:
+  settle: true                  # market.buy/sell deduct/credit the player wallet + inventory
+  contraband_heat_per_unit: 4   # heat added per illegal unit purchased
+  sell_to_inventory: true       # sell removes the item from inventory (requires possession)
+  event_shocks:
+    enabled: true               # gates Market.subscribe_to_world_events() world-event→price loop
+    scale: 1.0                  # global multiplier on every world-event supply/demand shock
+
+# ════════════════════════════════════════════════════════════════════════
+# v1.60.0 [2026-06-13] — "Living Systems" — feedback-loop tunables. Every key
+# below has a safe in-code default; these expose the knobs for retuning.
+# ════════════════════════════════════════════════════════════════════════
+
+# Faction standing → shop access, pricing, mission gating (engine/world/faction_gates.py)
+faction_gates:
+  allied_threshold: 50          # standing >= this => 'allied' band
+  friendly_threshold: 20        # >= this => 'friendly'
+  hostile_threshold: -20        # <= this => 'unfriendly'
+  enemy_threshold: -50          # <= this => 'hostile'
+  shop_min_standing: -50        # default min standing to enter a faction shop
+  match_discount: 0.10          # matching-faction discount (-10%)
+  rival_surcharge: 0.15         # rival-faction surcharge (+15%)
+  ally_bonus_discount: 0.05     # extra discount for full allies
+  enemy_bonus_surcharge: 0.15   # extra surcharge for sworn enemies
+
+# Mission consequences, skill-scaling, and chain gating (engine/world/mission*.py)
+mission:
+  consequences:
+    enabled: true
+    control_per_difficulty: 3   # faction control gained on success (× difficulty)
+    rep_success: 4              # flat reputation gained on success
+    rep_fail_per_difficulty: 2  # reputation lost on failure (× difficulty)
+    heat_fail_per_difficulty: 4 # heat gained on failure (× difficulty)
+    heat_success_heist: 5       # heat left by a successful (loud) heist
+    heist_control_bonus: 4      # extra faction control for a successful heist
+  scaling:
+    enabled: true
+    pivot: 1.0                  # skill level around which scaling is neutral
+    reward_slope: 0.20          # reward multiplier slope per skill point above pivot
+    difficulty_slope: 0.30      # difficulty multiplier slope per skill point above pivot
+    min_difficulty: 1
+    max_difficulty: 5
+  crew:
+    enforce_availability: true  # reject assigning busy roster members
+  chains:
+    gating_enabled: false       # true => hide gated chain follow-ups until prerequisite done
+
+# Crew operation skill-checks (engine/world/crew.py)
+crew:
+  skill_check:
+    base_chance: 0.20           # baseline success before crew contribution
+    level_weight: 0.06          # per role-weighted crew skill point
+    loyalty_weight: 0.20        # contribution of avg loyalty at 100
+    difficulty_weight: 0.55     # how hard per-op difficulty bites
+    min_chance: 0.05            # clamp floor (never a guaranteed loss)
+    max_chance: 0.95            # clamp ceiling (never a guaranteed win)
+    partial_band: 0.20          # miss-by-this-much => PARTIAL not FAILURE
+    partial_reward_mult: 0.45   # credit/xp scale on partial success
+
+# Equipment bonuses + consumable wear (engine/world/equipment_effects.py)
+world:
+  equipment:
+    condition_scales_bonus: true       # equipped-item bonus scales with condition
+    decrement_condition_on_use: true   # consumables lose condition on use
+    condition_loss_per_use: 0          # condition removed per use (0 = stack-decrement only)
+
+# Scheduler per-task timeout enforcement (engine/nexus/scheduler_daemon.py)
+scheduler:
+  default_timeout_seconds: 300         # daemon-wide per-task hard timeout (<=0 disables)
+  news_fetch_timeout_seconds: 120      # tighter timeout for network-bound news-fetch
+
+# LMStudio federation health backoff (engine/lmstudio/lmlink_manager.py)
+lmlink:
+  health:
+    backoff:
+      base_seconds: 0.5
+      max_seconds: 30.0
+      factor: 2.0
+      max_attempts: 3
+      jitter_ratio: 0.5
 
 comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors
@@ -794,9 +914,9 @@ nexus:
     auto_sync_schedule: "every_15m"
     plan_digest_limit: 10
   embeddings:
-    enabled: true
+    enabled: true                # v1.50.2 — Controls Gemini provider init (EmbeddingService reads this)
     provider: "auto"             # "gemini" (primary), "local" (LMStudio), "auto"
-    model: "gemini-embedding-001"  # Gemini Embedding (v1beta)
+    model: "gemini-embedding-2-preview"  # Gemini Embedding 2 Preview (multimodal, MRL)
     dimensions: 768              # MRL: 768 (fast), 1536 (balanced), 3072 (max quality)
     local_model: "text-embedding-nomic-embed-text-v1.5"  # LMStudio embedding model key (fallback)
     cache_size: 10000            # In-memory embedding cache entries
@@ -809,6 +929,36 @@ nexus:
     default_top_k: 5
     min_score: 0.5               # Minimum similarity for query results
 
+  # v1.50.1 [2026-03-22] — Config-driven query router thresholds
+  query_router:
+    cache_confidence: 0.90       # Q&A cache hit confidence
+    vector_confidence: 0.82      # Vector semantic search confidence
+    # v1.57.0 [2026-03-26] — Tier 2.5: Google File Search grounded citations
+    file_search_confidence: 0.85 # Google File Search (managed RAG with grounded docs)
+    search_high: 0.75            # Strong FTS match
+    search_medium: 0.50          # Decent FTS match
+    search_low: 0.30             # Weak match
+    min_answer_length: 20        # Minimum chars for valid answer
+    local_cache_ttl: 300         # Session cache TTL in seconds
+
+  # v1.55.0 [2026-03-26] — Nexus-first agent cache: check knowledge before GPU
+  agent_cache:
+    enabled: true                # Master toggle for Nexus-first agent inference
+    min_confidence: 0.75         # Minimum confidence to accept a Nexus answer
+    skip_tool_calls: true        # Skip Nexus check when request has tool integrations
+    skip_system_only: true       # Skip when request has no user message (system-only)
+
+  # v1.51.0 [2026-03-24] — Backup count cap to prevent unbounded growth
+  backup_max_per_db: 3             # Keep N most recent backups per database name
+
+  # v1.50.2 [2026-03-24] — Task auto-assignment config
+  tasks:
+    auto_assign:
+      enabled: true              # Enable automatic task→agent assignment
+      interval: "every_5m"       # How often the daemon runs auto-assign
+      stale_timeout_hours: 24    # Reset CLAIMED tasks to PENDING after this
+      min_match_score: 0.3       # Minimum agent-task match score (0.0-1.0)
+
 # GitHub Codespace remote execution
 codespace:
   enabled: true
@@ -817,6 +967,17 @@ codespace:
   default_machine: "standardLinux32gb"
   idle_timeout: "30m"
 
+
+# CDP Auth Recovery — Chrome DevTools Protocol settings
+# v1.50.1 [2026-03-22] — Config-driven CDP auth recovery
+cdp:
+  port: 9223                         # Chrome CDP port (CLAUDE.md: always 9223)
+  navigation_wait_s: 6               # Seconds to wait after page navigate
+  harvest_timeout_s: 18              # API key harvest deadline
+  cookie_max_age_days: 7             # Trigger recovery when cookies older
+  bl_max_age_days: 8                 # Trigger BL refresh when older
+  max_recovery_attempts: 3           # Retries before giving up
+  account_name: "nihilistcod"        # Default account for pool sync
 
 # NPC Scheduler — autonomous NPC world activity
 npc_scheduler:
@@ -869,4 +1030,14 @@ testing:
       - "test_pipeline*"
       - "test_copilot*"
       - "test_nexus*"
+
+# ── v1.51.0 [2026-03-24] — System Maintenance ─────────────────────────────
+maintenance:
+  chrome_cache_cleanup: true         # Clear Chrome profile caches on daily cleanup
+  har_max_age_days: 7                # Delete HAR/heap files older than this
+  log_retention_days: 7              # Structured log retention (DB + JSONL)
+  conversation_idle_seconds: 3600    # Evict conversations idle longer than this (1h)
+  conversation_max_count: 200        # Hard cap on active ConversationManager entries
+  wal_checkpoint_on_startup: true    # Checkpoint all SQLite WAL files at scene startup
+  meta_metrics_retention_days: 30    # Prune meta_metrics data older than this
 

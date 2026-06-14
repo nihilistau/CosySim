@@ -466,7 +466,8 @@ def browse_gallery() -> str:
     """Browse THE OBSCURA permanent collection."""
     try:
         from content.scenes.gallery.gallery_scene import OBSCURA_PIECES
-    except Exception:
+    except Exception as e:
+        logger.debug("[GallerySkills] OBSCURA_PIECES unavailable (operation=browse_gallery): %s", e)
         return "THE OBSCURA collection is currently inaccessible."
     if not OBSCURA_PIECES:
         return "The gallery is dark. No exhibits are currently on display."
@@ -492,7 +493,8 @@ def view_artwork(piece_id: str) -> str:
     """View an artwork and receive curator commentary."""
     try:
         from content.scenes.gallery.gallery_scene import OBSCURA_PIECES
-    except Exception:
+    except Exception as e:
+        logger.debug("[GallerySkills] OBSCURA_PIECES unavailable (operation=view_artwork): %s", e)
         return "Gallery system unavailable."
     piece = next((p for p in OBSCURA_PIECES if p["id"] == piece_id), None)
     if not piece:
@@ -547,8 +549,8 @@ def commission_artwork(description: str, intensity: int = 1) -> str:
                 "url": None,
                 "cached": False,
             })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("[GallerySkills] Commission emit failed (operation=commission_artwork): %s", e)
     return (
         f"🎨 Commission submitted to THE OBSCURA:\n"
         f"   Description: \"{description}\"\n"
@@ -568,7 +570,8 @@ def request_private_viewing(piece_id: str) -> str:
     """Request private viewing. Checks ContentGate then deducts 250 credits."""
     try:
         from content.scenes.gallery.gallery_scene import OBSCURA_PIECES
-    except Exception:
+    except Exception as e:
+        logger.debug("[GallerySkills] OBSCURA_PIECES unavailable (operation=private_viewing): %s", e)
         return "Gallery system unavailable."
     piece = next((p for p in OBSCURA_PIECES if p["id"] == piece_id), None)
     if not piece:
@@ -583,8 +586,8 @@ def request_private_viewing(piece_id: str) -> str:
             from engine.content.content_gate import get_content_gate
             if not get_content_gate().can_show(adult_tags):
                 return "Your content profile does not permit access to this exhibit."
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GallerySkills] Content gate unavailable (operation=private_viewing): %s", e)
 
     # Economy deduction
     try:
@@ -602,7 +605,8 @@ def request_private_viewing(piece_id: str) -> str:
             f"   {piece.get('description', '')}\n"
             f"   250 credits deducted. Balance: {balance - 250}."
         )
-    except Exception:
+    except Exception as e:
+        logger.debug("[GallerySkills] Economy unavailable for private viewing (operation=private_viewing): %s", e)
         return (
             f"🔓 Private viewing access: \"{piece['title']}\"\n"
             f"   {piece.get('description', '')}"

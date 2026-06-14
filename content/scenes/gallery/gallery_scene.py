@@ -1,6 +1,7 @@
 """
-THE OBSCURA — Gallery Scene v0.68 "Dark Renaissance"
-=====================================================
+THE OBSCURA — Gallery Scene
+=============================
+
 Dark art gallery with disturbing and adult exhibits.  Characters inhabit the
 roles of curator, critic, and private collector in a space where art confronts
 the viewer across every comfort boundary.
@@ -14,6 +15,12 @@ the viewer across every comfort boundary.
 • **MCP framework** — rules, state management, consequence chains
 
 Port: 5560 (configurable)
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 from __future__ import annotations
 
@@ -29,15 +36,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, request, render_template
-from flask_socketio import SocketIO, emit
+from flask import jsonify, request, render_template
+from flask_socketio import emit
 
 from engine.paths import ROOT as project_root
 import sys; sys.path.insert(0, str(project_root))
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from content.simulation.database.db import Database
 from content.shared import register_shared_assets
 from engine.mcp.scene_state import get_scene_state_manager
@@ -54,6 +60,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "gallery"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 _SCENE_ROOT = Path(__file__).parent
 
 # ── Art & Gallery Data ─────────────────────────────────────────────────────────
@@ -265,7 +272,8 @@ class GalleryCharacter:
 
 # ── Gallery Scene ──────────────────────────────────────────────────────────────
 
-class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class GalleryScene(FlaskScene):
     """Interactive art gallery — v2.7 framework showcase."""
 
     SCENE_METADATA = {
@@ -282,8 +290,9 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = 5560):
-        super().__init__(scene_name="gallery", host=host, port=port)
+        super().__init__(host=host, port=port)
         self.db = Database()
 
         # Gallery state
@@ -299,25 +308,14 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self._ticker_stop = threading.Event()
         self._ticker_thread: Optional[threading.Thread] = None
 
-        # Flask
-        self.app = Flask(
-            __name__,
-            template_folder=str(_SCENE_ROOT / "templates"),
-            static_folder=str(_SCENE_ROOT / "static"),
-        )
-        register_shared_assets(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.app.secret_key = os.urandom(24)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode="threading")
 
         try:
             from engine.overlay import mount_overlay
             mount_overlay(self.app, self.socketio)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Overlay mount skipped (operation=init): %s", SCENE_ID, e)
 
         self._register_routes()
         self._register_socketio()
@@ -327,14 +325,11 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
         self._tag_registry = TagRegistry.get()
         self._governors: Dict[str, Any] = {}  # char_id → governor
 
-        self.nexus_init("gallery")
-
-        # Bench & TTS helpers (BaseScene-provided)
+        # Bench route (FlaskScene already registers TTS)
         try:
             self.register_bench_route(self.app, self.socketio)
-            self.register_tts_route(self.app)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Bench route registration skipped (operation=init): %s", SCENE_ID, e)
 
         # THE OBSCURA state
         self._curator_mood: str = "contemplative"
@@ -351,8 +346,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             ctx = build_governance_context(char_id, "gallery", "")
             if ctx:
                 return ctx
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Governance context failed (operation=get_governor_context): %s", SCENE_ID, e)
         # Fallback: basic state info
         lines: List[str] = []
         try:
@@ -362,21 +357,23 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                 mood = state.get("mood", "neutral")
                 energy = state.get("energy", 50)
                 lines.append(f"Current mood: {mood} | Energy: {energy:.0f}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] State coordinator unavailable (operation=get_governor_context): %s", SCENE_ID, e)
         return "\n".join(lines)
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
 
-    def start(self) -> None:
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
+
+    def on_before_serve(self) -> None:
+        """Hook: seed characters, register MCP rules, subscribe world events."""
         self._seed_characters()
         try:
-            self._mcp_init()
             register_gallery_rules()
             fw = get_framework()
             fw.on("artwork_created", lambda evt: self._on_art_event(evt))
         except Exception as exc:
-            logger.warning("MCP init skipped: %s", exc)
+            logger.warning("[%s] MCP init skipped (operation=mcp_wire): %s", SCENE_ID, exc)
         # ── World State ──────────────────────────────────────────────
         self._world_state = None
         self._event_bus = None
@@ -387,26 +384,22 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             self._event_bus.subscribe("world.time_change", self._on_time_change)
         # Start background ticker for ambient updates
         self._start_ticker()
-        logger.info("GalleryScene started on %s:%s", self.host, self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False,
-                          use_reloader=False, allow_unsafe_werkzeug=True)
 
-    def stop(self) -> None:
-        self.nexus_flush()
+    def on_shutdown(self) -> None:
+        """Hook: stop ticker, unsubscribe events, save framework state."""
         self._ticker_stop.set()
         if hasattr(self, "_event_bus") and self._event_bus:
             try:
                 self._event_bus.unsubscribe("world.tick", self._on_world_tick)
                 self._event_bus.unsubscribe("world.time_change", self._on_time_change)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] EventBus unsubscribe failed (operation=on_shutdown): %s", SCENE_ID, e)
         if self._ticker_thread and self._ticker_thread.is_alive():
             self._ticker_thread.join(timeout=3)
         try:
             get_framework().save_state()
-        except Exception:
-            pass
-        logger.info("GalleryScene stopped")
+        except Exception as e:
+            logger.debug("[%s] Framework state save failed (operation=on_shutdown): %s", SCENE_ID, e)
 
     # ── World State handlers ──────────────────────────────────────────
     def _on_world_tick(self, event: dict) -> None:
@@ -419,8 +412,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     "day": getattr(time_data, "day", 1),
                     "weather": str(getattr(time_data, "weather", "clear")),
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] World tick emit failed (operation=on_world_tick): %s", SCENE_ID, e)
 
     def _on_time_change(self, event: dict) -> None:
         """Rotate featured exhibit at midnight."""
@@ -482,8 +475,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     "characters": {cid: c.to_dict() for cid, c in self.characters.items()},
                     "log": self.gallery_log[-5:],
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Gallery update emit failed (operation=ticker): %s", SCENE_ID, e)
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
@@ -501,8 +494,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
     def _on_art_event(self, evt) -> None:
         try:
             self.socketio.emit("art_event", evt.payload)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Art event emit failed (operation=on_art_event): %s", SCENE_ID, e)
 
     # ── Character Seeding ──────────────────────────────────────────────────
 
@@ -535,11 +528,11 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     fw = get_framework()
                     fw.get_character(char_id).enter_scene(SCENE_ID)
                     fw.get_character(char_id).update_state({"role": role})
-                except Exception:
-                    pass
-            logger.info("Seeded %d gallery characters", len(self.characters))
+                except Exception as e:
+                    logger.debug("[%s] Framework character setup skipped (operation=seed): %s", SCENE_ID, e)
+            logger.info("[%s] Seeded %d characters (operation=seed)", SCENE_ID, len(self.characters))
         except Exception as exc:
-            logger.warning("Character seeding failed: %s", exc)
+            logger.warning("[%s] Character seeding failed (operation=seed): %s", SCENE_ID, exc)
 
     # ── Core: Streaming Art Evaluation (v2.7 Showcase) ─────────────────────
 
@@ -637,15 +630,15 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                         source="gallery_evaluation",
                         scene=SCENE_ID,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] State coordinator update failed (operation=evaluate): %s", SCENE_ID, e)
                 try:
                     fw = get_framework()
                     fw.get_character(char_id).update_state({
                         "artworks_evaluated": gc.artworks_evaluated,
                     })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] Framework state update failed (operation=evaluate): %s", SCENE_ID, e)
 
             # Store evaluation on artwork
             artwork.evaluations.append({
@@ -657,7 +650,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             })
 
         except Exception as exc:
-            logger.error("Evaluation failed for %s: %s", char_id, exc)
+            logger.error("[%s] Evaluation failed (operation=evaluate, agent=%s): %s", SCENE_ID, char_id, exc)
             result["text"] = f"({name} is speechless before this work.)"
 
         return result
@@ -698,7 +691,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             result = agent.run_structured(prompt, schema=schema, schema_name="art_critique")
             return result if isinstance(result, dict) else {"raw": str(result)}
         except Exception as exc:
-            logger.error("Structured critique failed: %s", exc)
+            logger.error("[%s] Structured critique failed (operation=critique): %s", SCENE_ID, exc)
             return {"technique_score": 5, "emotion_score": 5, "originality_score": 5,
                     "one_word_reaction": "interesting", "would_buy": False}
 
@@ -736,8 +729,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                         )
                         text = agent.run(prompt) or ""
                         alternatives.append({"text": text.strip(), "approach": "contrarian" if i else "thoughtful"})
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[%s] Alternative debate generation failed (operation=debate): %s", SCENE_ID, e)
 
                 # Pick the longer/more substantive one
                 best = max(alternatives, key=lambda a: len(a.get("text", ""))) if alternatives else {"text": ""}
@@ -752,7 +745,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     })
 
             except Exception as exc:
-                logger.error("Debate failed for %s: %s", char_id, exc)
+                logger.error("[%s] Debate failed (operation=debate, agent=%s): %s", SCENE_ID, char_id, exc)
 
         # Emit debate as gallery event
         self.socketio.emit("debate", {
@@ -845,14 +838,14 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     "scene_id": SCENE_ID, "char_id": char_id,
                     "artwork_id": art.id, "title": art.title,
                 }, source=SCENE_ID)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] Framework event emit failed (operation=create_art): %s", SCENE_ID, e)
 
             self._log("artwork_created", f"{gc.name} created '{art.title}'")
             return art
 
         except Exception as exc:
-            logger.error("Create artwork failed: %s", exc)
+            logger.error("[%s] Create artwork failed (operation=create_art): %s", SCENE_ID, exc)
             return None
 
     # ── Gallery Log ────────────────────────────────────────────────────────
@@ -910,8 +903,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             )
             if item and item.content:
                 commentary = item.content[:300]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[%s] Content engine commentary failed (operation=enrich_piece): %s", SCENE_ID, e)
         return {**piece, "commentary": commentary}
 
     def _default_commentary(self, piece: Dict) -> str:
@@ -981,8 +974,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                             "reason": "Content profile does not permit access to this exhibit."
                         })
                         return
-                except Exception:
-                    pass  # Gate unavailable — proceed
+                except Exception as e:
+                    logger.debug("[%s] Content gate unavailable (operation=private_viewing): %s", SCENE_ID, e)
 
             # Economy spend
             try:
@@ -1001,8 +994,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     -250, TransactionType.SPEND, "gallery",
                     f"Private viewing: {piece['title']}"
                 )
-            except Exception:
-                pass  # Economy unavailable — proceed
+            except Exception as e:
+                logger.debug("[%s] Economy transaction failed (operation=private_viewing): %s", SCENE_ID, e)
 
             detail = self._get_piece_detail(piece_id) or dict(piece)
             emit("private_viewing_granted", {
@@ -1018,8 +1011,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     {"piece_id": piece_id, "piece_title": piece["title"]},
                     scene="gallery",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] EventBus publish failed (operation=private_viewing): %s", SCENE_ID, e)
 
         @self.socketio.on("commission_work")
         def on_commission_work(data):
@@ -1057,8 +1050,8 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
                     {"description": description, "intensity": intensity, "url": result.get("url")},
                     scene="gallery",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[%s] EventBus publish failed (operation=commission): %s", SCENE_ID, e)
 
     def _get_state(self) -> Dict:
         return {
@@ -1266,7 +1259,7 @@ class GalleryScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE
             try:
                 return jsonify(self.get_health())
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": "gallery", "reason": "health check raised"}), 500
 
         @app.route("/api/economy")

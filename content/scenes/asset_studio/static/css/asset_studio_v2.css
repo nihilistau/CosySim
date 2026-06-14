@@ -1,0 +1,63 @@
+/*
+ * Asset Studio — Dark Renaissance v2 layer
+ * ========================================
+ * Purple asset library + generation UI. Loads AFTER asset_studio.css.
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial v2 glow-up (violet studio bg, asset-card
+ *                           glow lift, glass generation panel, grid stagger)
+ */
+
+/* ──── Background — violet studio void ──── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 80% 0%, rgba(var(--cs-scene-accent-rgb), 0.10) 0%, transparent 55%),
+    radial-gradient(ellipse at 10% 90%, rgba(var(--cs-scene-accent-rgb), 0.05) 0%, transparent 50%),
+    repeating-linear-gradient(90deg, rgba(var(--cs-scene-accent-rgb), 0.025) 0 1px, transparent 1px 80px),
+    linear-gradient(180deg, #0c0614 0%, #100818 100%);
+}
+
+/* ──── Asset cards — violet glow hover lift ──── */
+.cs-asset-card {
+  transition: transform var(--cs-duration-fast) var(--cs-ease),
+              box-shadow var(--cs-duration-fast) var(--cs-ease),
+              border-color var(--cs-duration-fast) var(--cs-ease);
+}
+.cs-asset-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 26px var(--cs-scene-glow);
+}
+.cs-asset-card--favorited {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.45);
+  box-shadow: inset 0 0 18px rgba(var(--cs-scene-accent-rgb), 0.10);
+}
+.cs-asset-title { font-family: var(--cs-font-display); letter-spacing: 0.02em; }
+
+/* ──── Generate button — breathing accent glow ──── */
+.cs-generate-btn,
+.cs-btn--primary {
+  box-shadow: 0 0 18px var(--cs-scene-glow);
+}
+
+/* ──── Grid stagger-in (reuses shared cs-slide-up keyframe) ──── */
+.cs-asset-grid > * {
+  animation: cs-slide-up 0.4s var(--cs-ease) var(--stagger-delay, 0ms) both;
+}
+.cs-asset-grid > *:nth-child(2) { --stagger-delay: 50ms; }
+.cs-asset-grid > *:nth-child(3) { --stagger-delay: 100ms; }
+.cs-asset-grid > *:nth-child(4) { --stagger-delay: 150ms; }
+.cs-asset-grid > *:nth-child(5) { --stagger-delay: 200ms; }
+.cs-asset-grid > *:nth-child(n+6) { --stagger-delay: 250ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-asset-grid > * { animation: none; }
+}

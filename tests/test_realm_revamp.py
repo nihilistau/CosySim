@@ -240,10 +240,12 @@ class TestRealmAssetFiles:
 # ═════════════════════════════════════════════════════════════════════
 
 class TestRealmSocketIOHandlers:
+    # v1.51.0 [2026-03-22] — Updated for FlaskScene migration
     def test_socketio_handlers_registered(self):
         """All required Socket.IO events must be registered on the scene."""
         scene = _make_realm_scene()
-        handler_names = {h.event for h in getattr(scene.socketio, "handlers", {}).get("/", [])}
+        _handlers = getattr(scene.socketio, "handlers", {})
+        handler_names = {h.event for h in (_handlers.get("/", []) if isinstance(_handlers, dict) else [])}
         # Check via scene source that events are wired
         from content.scenes.realm import realm_scene as rs_module
         source = Path(rs_module.__file__).read_text(encoding="utf-8")
@@ -260,22 +262,15 @@ class TestRealmSocketIOHandlers:
 #  Helpers
 # ═════════════════════════════════════════════════════════════════════
 
+# v1.51.0 [2026-03-22] — Updated for FlaskScene migration
 def _make_realm_scene():
     """Instantiate a RealmScene with all external dependencies mocked."""
     with (
-        patch("content.scenes.realm.realm_scene.register_shared_assets"),
-        patch("content.scenes.realm.realm_scene.CORS"),
-        patch("content.scenes.realm.realm_scene.SocketIO", return_value=MagicMock()),
-        patch("content.scenes.realm.realm_scene.MCPSceneMixin._mcp_init"),
-        patch("engine.scenes.base_scene.BaseScene.mount_overlay"),
-        patch("engine.scenes.base_scene.BaseScene.mount_skills_server"),
-        patch("engine.scenes.base_scene.BaseScene.register_health_route"),
-        patch("engine.scenes.base_scene.BaseScene.register_bench_route"),
-        patch("engine.scenes.base_scene.BaseScene.register_tts_route"),
+        patch("engine.scenes.flask_scene.FlaskScene.mount_overlay"),
+        patch("engine.scenes.flask_scene.FlaskScene.mount_skills_server"),
         patch("content.scenes.realm.realm_scene.get_scene_state_manager", return_value=MagicMock()),
         patch("content.scenes.realm.realm_scene.TagRegistry.get", return_value=MagicMock()),
         patch("content.scenes.realm.realm_scene.register_realm_rules"),
-        patch("content.scenes.realm.realm_scene.NexusSceneMixin.nexus_init"),
     ):
         from content.scenes.realm.realm_scene import RealmScene
         return RealmScene(host="localhost", port=5562)

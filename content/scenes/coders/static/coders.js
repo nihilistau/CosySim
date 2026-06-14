@@ -161,6 +161,14 @@ class TheLabScene {
       this._setFooterStatus('OFFLINE', false);
     });
 
+    // v1.49.2 [2026-03-22] — Socket.IO reconnect feedback
+    this.socket.io.on('reconnect', (attempt) => {
+      console.debug('[Coders] Reconnected after ' + attempt + ' attempt(s)');
+    });
+    this.socket.io.on('reconnect_attempt', (attempt) => {
+      if (attempt % 3 === 0) console.debug('[Coders] Reconnecting... (attempt ' + attempt + ')');
+    });
+
     this.socket.on('state_update', (data) => {
       if (data) this._applyState(data);
     });

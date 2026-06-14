@@ -1,5 +1,10 @@
 """session_distillation.py — Distills Copilot session history into NLM notebooks.
 
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Replace raw urllib.request with governed get_nexus_client()
+
 Pipeline (runs daily via scheduler):
   1. Fetch recent session history entries from Nexus (copilot-history category)
   2. Build a digest document from checkpoints, decisions, and patterns
@@ -32,8 +37,20 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = os.environ.get("NEXUS_URL", "http://localhost:8700")
-NLM_PROXY_URL = os.environ.get("NLM_PROXY_URL", "http://localhost:8800")
+def _get_nexus_url() -> str:
+    env = os.environ.get("NEXUS_URL")
+    if env:
+        return env
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
+
+
+def _get_nlm_proxy_url() -> str:
+    env = os.environ.get("NLM_PROXY_URL")
+    if env:
+        return env
+    from engine.port_registry import get_service_url
+    return get_service_url("nlm_proxy")
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 STATE_FILE = (
     REPO_ROOT / ".github" / "hooks" / "logs" / "session_distillation.json"
@@ -59,41 +76,67 @@ DISTILLATION_QUESTIONS: List[str] = [
 ]
 
 
-# ── HTTP helpers ──────────────────────────────────────────────────────────────
+# ── Nexus helpers (governed client) ───────────────────────────────────────────
+# v1.50.2 [2026-03-24] — Replaced raw urllib.request with governed get_nexus_client()
+# CONNECTS: NexusClient — ensures embedding hooks, governance, and error aggregation
 
 
 def _nexus_get(path: str, timeout: int = 8) -> Optional[Any]:
-    """GET from Nexus API. Returns parsed JSON or None."""
+    """GET from Nexus API via governed client. Returns parsed JSON or None."""
     try:
-        url = f"{NEXUS_URL}/api{path}"
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read())
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        # Route based on path pattern
+        if "/search" in path:
+            # Parse query params from path
+            import urllib.parse
+            parts = urllib.parse.urlparse(path)
+            params = urllib.parse.parse_qs(parts.query)
+            q = params.get("q", [""])[0].replace("+", " ")
+            limit = int(params.get("limit", ["20"])[0])
+            return client.search(q, limit=limit)
+        if "/qa" in path:
+            return client.find_qa("", limit=20)
+        if "/entries" in path:
+            return client.list_entries(limit=20)
+        return None
     except Exception as exc:
-        logger.debug("Nexus GET %s failed: %s", path, exc)
+        logger.debug("[SessionDistillation] Nexus GET %s failed (operation=fetch): %s", path, exc)
         return None
 
 
 def _nexus_post(path: str, data: Dict[str, Any], timeout: int = 8) -> Optional[Dict]:
-    """POST to Nexus API. Returns response dict or None."""
+    """POST to Nexus API via governed client. Returns response dict or None."""
     try:
-        url = f"{NEXUS_URL}/api{path}"
-        body = json.dumps(data).encode()
-        req = urllib.request.Request(
-            url, data=body, method="POST",
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read())
+        from engine.nexus.client import get_nexus_client
+        client = get_nexus_client()
+        if "/qa" in path:
+            result = client.add_qa(
+                question=data.get("question", ""),
+                answer=data.get("answer", ""),
+                category=data.get("category", ""),
+                tags=data.get("tags", []),
+            )
+            return {"id": result, "ok": bool(result)} if result else None
+        if "/entries" in path:
+            result = client.add_entry(
+                title=data.get("title", ""),
+                content=data.get("content", ""),
+                content_type=data.get("content_type", "note"),
+                category=data.get("category", ""),
+                tags=data.get("tags", []),
+            )
+            return {"id": result, "ok": bool(result)} if result else None
+        return None
     except Exception as exc:
-        logger.debug("Nexus POST %s failed: %s", path, exc)
+        logger.debug("[SessionDistillation] Nexus POST %s failed (operation=store): %s", path, exc)
         return None
 
 
 def _nlm_post(path: str, data: Dict[str, Any], timeout: int = 60) -> Optional[Dict]:
     """POST to NLM proxy. Returns response dict or None."""
     try:
-        url = f"{NLM_PROXY_URL}{path}"
+        url = f"{_get_nlm_proxy_url()}{path}"
         body = json.dumps(data).encode()
         req = urllib.request.Request(
             url, data=body, method="POST",
@@ -109,7 +152,7 @@ def _nlm_post(path: str, data: Dict[str, Any], timeout: int = 60) -> Optional[Di
 def _nlm_get(path: str, timeout: int = 10) -> Optional[Any]:
     """GET from NLM proxy. Returns parsed JSON or None."""
     try:
-        url = f"{NLM_PROXY_URL}{path}"
+        url = f"{_get_nlm_proxy_url()}{path}"
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read())
@@ -413,7 +456,7 @@ def run_distillation(
     if not notebook_id:
         logger.error(
             "Cannot proceed: NLM proxy unavailable or notebook creation failed. "
-            "Start the NLM proxy at %s first.", NLM_PROXY_URL
+            "Start the NLM proxy at %s first.", _get_nlm_proxy_url()
         )
         stats["error"] = "NLM proxy unavailable"
         return stats

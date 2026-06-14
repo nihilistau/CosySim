@@ -85,7 +85,10 @@ class Experiment:
 class ExperimentRunner:
     """Manages A/B experiments with Nexus integration."""
 
-    def __init__(self, nexus_url: str = "http://localhost:9400"):
+    def __init__(self, nexus_url: str = ""):
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self.nexus_url = nexus_url
         self._experiments: Dict[str, Experiment] = {}
 

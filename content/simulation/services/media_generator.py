@@ -30,7 +30,8 @@ def _get_event_chain():
     try:
         from content.simulation.database.events import EventChain
         return EventChain()
-    except Exception:
+    except Exception as e:
+        logger.debug("[MediaGenerator] EventChain unavailable (operation=lazy_load): %s", e)
         return None
 
 
@@ -102,8 +103,8 @@ class MediaGenerator:
                     tags=[character_name, mood, setting, "selfie", "generated"],
                 )
                 self.asset_manager.save(asset)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MediaGenerator] Asset registration failed (operation=generate_selfie): %s", e)
 
             # Log to EventChain
             try:
@@ -118,8 +119,8 @@ class MediaGenerator:
                         chain_id=chain_id, scene_id=scene_id,
                         character_id=character_id,
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MediaGenerator] EventChain log failed (operation=generate_selfie): %s", e)
 
             # MCP: publish to ActivityBus
             try:
@@ -131,8 +132,8 @@ class MediaGenerator:
                     scene=scene_id,
                     data={"path": str(path), "mood": mood, "setting": setting, "chain_id": chain_id},
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[MediaGenerator] ActivityBus publish failed (operation=generate_selfie): %s", e)
 
         return path
 

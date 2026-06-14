@@ -13,6 +13,14 @@ This module provides two main capabilities:
 The compound effect: every Q&A pair stored in Nexus is one fewer LLM call in
 the future. Cache hit rate increases over time. Compute decreases.
 
+Version: v1.57.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.57.0 [2026-03-26] — Add structured output path for Q&A parsing via Gemini;
+                             _parse_qa_response() prefers generate_structured(),
+                             _parse_qa_legacy() contains original regex/line parsing
+
 Usage::
 
     from engine.nexus.nlm_qa_distiller import NLMQADistiller
@@ -204,9 +212,15 @@ class NLMQADistiller:
 
     def __init__(
         self,
-        proxy_url: str = "http://localhost:8800",
-        nexus_url: str = "http://localhost:8700",
+        proxy_url: str = "",
+        nexus_url: str = "",
     ) -> None:
+        if not proxy_url:
+            from engine.port_registry import get_service_url
+            proxy_url = get_service_url("nlm_proxy")
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         self._proxy_url = proxy_url.rstrip("/")
         self._nexus_url = nexus_url.rstrip("/")
 
@@ -575,6 +589,96 @@ class NLMQADistiller:
         logger.info("Stored %d/%d Q&A pairs in Nexus for topic '%s'", stored, len(pairs), topic)
         return stored
 
+    # v1.57.0 [2026-03-26] — Prefer structured output for Q&A distillation
+    # CONNECTS: engine.integrations.aistudio_client.generate_structured, engine.nexus.schemas
+    # CALLED BY: distill_topic(), distill_from_entries() when processing raw NLM text
+    def _parse_qa_response(self, text: str) -> List[Dict]:
+        """Parse Q&A pairs from NLM response, preferring Gemini structured output.
+
+        Tries Gemini structured output first for guaranteed valid JSON,
+        then falls back to the legacy Q:/A: line-pair parsing.
+
+        Args:
+            text: Raw NLM response text.
+
+        Returns:
+            List of dicts with at least 'question' and 'answer' keys.
+        """
+        try:
+            from engine.integrations.aistudio_client import generate_structured
+            from engine.nexus.schemas import QA_BATCH_SCHEMA
+
+            pairs = generate_structured(
+                f"Extract Q&A pairs from this text. Return ONLY the pairs:\n\n{text[:5000]}",
+                QA_BATCH_SCHEMA,
+            )
+            if pairs and isinstance(pairs, list):
+                normalized = []
+                for p in pairs:
+                    if isinstance(p, dict) and p.get("question") and p.get("answer"):
+                        normalized.append({
+                            "question": str(p["question"]).strip(),
+                            "answer": str(p["answer"]).strip(),
+                        })
+                if normalized:
+                    logger.info(
+                        "[NLMQADistiller] Extracted %d Q&A via structured output (operation=parse_qa)",
+                        len(normalized),
+                    )
+                    return normalized
+        except Exception as exc:
+            logger.debug(
+                "[NLMQADistiller] Structured extraction failed, using legacy (operation=parse_qa): %s",
+                exc,
+            )
+
+        return self._parse_qa_legacy(text)
+
+    # v1.57.0 [2026-03-26] — Legacy Q&A parsing (regex / line-pair based)
+    def _parse_qa_legacy(self, text: str) -> List[Dict]:
+        """Parse Q&A pairs from text using Q:/A: line-pair format.
+
+        This is the original parsing logic, preserved as a fallback for
+        when Gemini structured output is unavailable.
+
+        Args:
+            text: Raw NLM or LLM response text containing Q:/A: pairs.
+
+        Returns:
+            List of dicts with 'question' and 'answer' keys.
+        """
+        pairs: List[Dict] = []
+        lines = text.splitlines()
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.startswith("Q:") or line.startswith("**Q:"):
+                question = line.lstrip("*").lstrip("Q:").strip().rstrip("*").strip()
+                answer_lines: List[str] = []
+                i += 1
+                while i < len(lines):
+                    aline = lines[i].strip()
+                    if aline.startswith("A:") or aline.startswith("**A:"):
+                        answer_lines.append(
+                            aline.lstrip("*").lstrip("A:").strip().rstrip("*").strip()
+                        )
+                        i += 1
+                        while i < len(lines):
+                            nline = lines[i].strip()
+                            if nline.startswith("Q:") or nline.startswith("**Q:") or not nline:
+                                break
+                            answer_lines.append(nline)
+                            i += 1
+                        break
+                    i += 1
+                answer = " ".join(answer_lines).strip()
+                if question and answer:
+                    pairs.append({"question": question, "answer": answer})
+            else:
+                i += 1
+
+        return pairs
+
     def _store_pairs_direct(self, pairs: List[Dict[str, Any]]) -> int:
         """Fallback: write Q&A pairs directly to SQLite if Nexus is offline."""
         import sqlite3
@@ -699,7 +803,7 @@ if __name__ == "__main__":
     parser.add_argument("--questions", type=int, default=20, help="Number of questions")
     parser.add_argument("--templates", action="store_true", help="List available templates")
     parser.add_argument("--bulk", action="store_true", help="Distill all templates")
-    parser.add_argument("--proxy", default="http://localhost:8800", help="NLM proxy URL")
+    parser.add_argument("--proxy", default="", help="NLM proxy URL")
     args = parser.parse_args()
 
     if args.templates:

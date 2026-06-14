@@ -165,8 +165,8 @@ class WorldAnnouncer:
         try:
             from engine.mcp import get_framework
             get_framework().emit("city_pulse", announcement.to_dict())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[WorldAnnouncer] Socket.IO emit failed (operation=emit_socket): %s", e)
 
     # ── Public API ───────────────────────────────────────────────────────────
 
@@ -279,7 +279,8 @@ def _now_str() -> str:
         ws = get_world_state()
         t = ws.get_time()
         return f"Day {t.game_day} {t.game_hour:02d}:00"
-    except Exception:
+    except Exception as e:
+        logger.debug("[WorldAnnouncer] Game time unavailable (operation=now_str): %s", e)
         return time.strftime("%H:%M:%S")
 
 

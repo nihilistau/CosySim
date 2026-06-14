@@ -3,6 +3,13 @@
 Supports single-score promotion (``auto_promote``) and multi-criteria Pareto-based
 promotion (``promote_multi_criteria``).
 
+Version: v1.55.0 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.55.0 [2026-03-26] — Broadcast model update to VirtualAgentManager on promote (hot-reload)
+    v1.53.0 [2026-03-26] — Pareto multi-criteria promotion, frontier analysis
+
 Usage::
     from training.model_registry import get_model_registry
     registry = get_model_registry()
@@ -157,9 +164,12 @@ class ModelRegistry:
         # Promote new
         self._models[model_id].active = True
         self._models[model_id].promoted_at = datetime.now(timezone.utc).isoformat()
+        promoted = self._models[model_id]
         self._persist()
         logger.info("Promoted model %s as active %s", model_id, model_type)
-        self._notify_lmstudio(self._models[model_id])
+        self._notify_lmstudio(promoted)
+        # v1.55.0 [2026-03-26] — Broadcast model update to running agents
+        self._notify_virtual_agents(model_type, promoted)
 
     def auto_promote(self, model_type: str) -> Optional[RegisteredModel]:
         """Automatically promote the best-scoring model for a type.
@@ -428,6 +438,28 @@ class ModelRegistry:
         return summary
 
     # ── Private ───────────────────────────────────────────────────────────────
+
+    # v1.55.0 [2026-03-26] — Broadcast model update to running agents
+    def _notify_virtual_agents(self, model_type: str, model: RegisteredModel) -> None:
+        """Broadcast a promoted model to VirtualAgentManager for hot-reload.
+
+        Args:
+            model_type: The model type that was promoted.
+            model: The promoted model entry.
+        """
+        try:
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager
+            mgr = get_virtual_agent_manager()
+            if hasattr(mgr, "on_model_promoted"):
+                mgr.on_model_promoted(model_type, model.model_id, model.adapter_path)
+                logger.info(
+                    "[ModelRegistry] Broadcast model update (operation=promote, type=%s, model=%s)",
+                    model_type, model.model_id,
+                )
+        except Exception as exc:
+            logger.warning(
+                "[ModelRegistry] Hot-reload broadcast failed (operation=promote): %s", exc,
+            )
 
     def _notify_lmstudio(self, model: RegisteredModel) -> None:
         """Inform the finetuned router about a newly active model."""

@@ -12,6 +12,13 @@ Features
 * EventBus integration: PHONE_HACKER_MESSAGE, PHONE_JOB_ACCEPTED
 * Investigation board slide-in for clue tracking
 * Real-time Socket.IO message delivery and typing indicators
+
+Version: v1.51.0 [2026-03-22]
+Author:  CosySim Team
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
+    v0.68   [2026-03-21] — Initial SIGNAL scene with 0xGH0ST arc
 """
 from __future__ import annotations
 
@@ -22,17 +29,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, request, render_template
-from flask_socketio import SocketIO, emit
+from flask import jsonify, request, render_template
+from flask_socketio import emit
 
-from engine.scenes.base_scene import BaseScene
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
 
 logger = logging.getLogger(__name__)
 
-_SCENE_ROOT   = Path(__file__).parent
-_TEMPLATE_DIR = _SCENE_ROOT / "templates"
-_STATIC_DIR   = _SCENE_ROOT / "static"
+_SCENE_ROOT = Path(__file__).parent
 
 
 # ── Contact registry ──────────────────────────────────────────────────────────
@@ -173,11 +177,16 @@ _GHOST_AMBIENT_MESSAGES: List[str] = [
 
 # ── Scene class ───────────────────────────────────────────────────────────────
 
-class NeonPhone(BaseScene):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class NeonPhone(FlaskScene):
     """SIGNAL — hacker mystery communication scene for CosySim v0.68.
 
     Six contacts with AI-backed replies. The 0xGH0ST storyline advances
     through message-count milestones and is tracked on the investigation board.
+
+    CONNECTS: FlaskScene, LMStudio, EventBus, InvestigationBoard
+    CALLED BY: launcher.py, TUI
+    EMITS: message_new, typing, ghost_status Socket.IO events
     """
 
     SCENE_METADATA: Dict[str, Any] = {
@@ -197,7 +206,7 @@ class NeonPhone(BaseScene):
             host: Flask bind address.
             port: HTTP port (default 5555).
         """
-        super().__init__(scene_name="phone", host=host, port=port)
+        super().__init__(host=host, port=port)
 
         # In-memory message threads keyed by contact_id
         self._threads: Dict[str, List[Dict[str, Any]]] = {
@@ -206,28 +215,11 @@ class NeonPhone(BaseScene):
         self._ghost_message_count: int = 0
         self._lock = threading.Lock()
 
-        # Flask + SocketIO
-        self.app = Flask(
-            __name__,
-            template_folder=str(_TEMPLATE_DIR),
-            static_folder=str(_STATIC_DIR),
-        )
+        # Scene-specific secret key for session handling
         self.app.secret_key = "signal-dark-renaissance-v068"
-        register_shared_assets(self.app)
 
-        self.socketio = SocketIO(
-            self.app,
-            cors_allowed_origins="*",
-            async_mode="threading",
-        )
-
-        # Standard CosySim route wiring
-        self.register_health_route(self.app)
+        # Scene-specific route registrations
         self.register_bench_route(self.app, self.socketio)
-        try:
-            self.register_tts_route(self.app)
-        except Exception as _exc:
-            logger.debug("TTS route unavailable: %s", _exc)
 
         self._register_routes()
         self._register_socketio()
@@ -235,52 +227,16 @@ class NeonPhone(BaseScene):
         logger.info("NeonPhone initialised — port %d", port)
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
+    # v1.51.0 [2026-03-22] — FlaskScene handles start()/stop(); use hooks
 
-    def start(self) -> None:
-        """Start the SIGNAL scene server."""
+    def on_before_serve(self) -> None:
+        """Seed the ghost investigation board before server starts."""
         self._seed_ghost_investigation()
         self._fire_event("phone_scene_started", {"scene": "signal"})
-        logger.info("SIGNAL scene starting on %s:%d", self.host, self.port)
-        self.socketio.run(
-            self.app,
-            host=self.host,
-            port=self.port,
-            debug=False,
-            use_reloader=False,
-        )
 
-    def stop(self) -> None:
+    def on_shutdown(self) -> None:
         """Gracefully stop the scene."""
         logger.info("SIGNAL scene stopping")
-
-    def get_plugin_info(self) -> Dict[str, Any]:
-        """Return plugin metadata for the scene registry.
-
-        Returns:
-            Dict with name, version, port, description, and current ghost stage.
-        """
-        return {
-            "name": "SIGNAL",
-            "scene_id": "phone",
-            "version": "0.68",
-            "port": self.port,
-            "description": self.SCENE_METADATA["description"],
-            "contacts": list(_CONTACTS.keys()),
-            "ghost_stage": self._current_ghost_stage(),
-            "ghost_message_count": self._ghost_message_count,
-        }
-
-    def inject_navbar_context(self) -> Dict[str, Any]:
-        """Return context variables for the navbar template.
-
-        Returns:
-            Dict with current_scene, scene_name, and scene_accent.
-        """
-        return {
-            "current_scene": "phone",
-            "scene_name": "SIGNAL",
-            "scene_accent": "#10b981",
-        }
 
     # ── Flask routes ───────────────────────────────────────────────────────────
 
@@ -467,25 +423,23 @@ class NeonPhone(BaseScene):
                 self._ghost_message_count += 1
             self._advance_ghost_arc()
 
+        # v1.43.1 [2026-03-21] — Use unified chat()
         try:
-            from engine.lmstudio.lms_client import get_lms_client
-            client = get_lms_client()
+            from engine.lmstudio.chat import chat
 
             with self._lock:
                 history = list(self._threads[contact_id])[-8:]
 
-            messages: List[Dict[str, str]] = [
-                {"role": "system", "content": contact["system_prompt"]}
-            ]
+            messages: List[Dict[str, str]] = []
             for msg in history:
                 role = "user" if msg["from"] == "user" else "assistant"
                 messages.append({"role": role, "content": msg["text"]})
 
-            reply_text: str = client.chat(
+            reply_text = chat(
                 messages,
+                system=contact["system_prompt"],
                 temperature=0.85,
                 max_tokens=120,
-                store=False,
             ) or "..."
             reply_text = reply_text.strip()
 

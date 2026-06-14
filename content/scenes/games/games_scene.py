@@ -5,8 +5,14 @@ Port 5567.  Flask + SocketIO.
 
 Features an AI GameMaster who narrates mysteries, reacts to player choices,
 and hosts Truth-or-Dare with personality. Wraps MysteryGame and TruthOrDareGame
-in a full BaseScene with Socket.IO events, MCP state, score persistence,
+in a full FlaskScene with Socket.IO events, MCP state, score persistence,
 investigation board integration, and a Nexus-backed leaderboard.
+
+Version: v1.51.0 [2026-03-22]
+
+Change Log:
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene (unified base class)
+    v0.68   [2026-03-20] — Dark Renaissance arcade scene
 """
 
 from __future__ import annotations
@@ -19,24 +25,28 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-from flask import Flask, jsonify, render_template, request
-from flask_socketio import SocketIO, emit
+from flask import jsonify, render_template, request
+from flask_socketio import emit
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from content.shared import register_shared_assets
+from engine.scenes.flask_scene import FlaskScene
 
-log = logging.getLogger(__name__)
-
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+# v1.49.2 [2026-03-22] — Removed duplicate 'log' variable (CLAUDE.md standard: use 'logger')
 SCENE_ID = "games"
-DEFAULT_PORT = 5567
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("games", 5567)
+except Exception:
+    DEFAULT_PORT = 5567
 GAMEMASTER_ID = "gamemaster"
 
 # Games available in THE ARCADE
 ARCADE_GAMES = ["mystery", "dice_challenge", "truth_or_dare", "trivia", "word_game"]
 
 
-class GamesScene(BaseScene, NexusSceneMixin):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class GamesScene(FlaskScene):
     """THE ARCADE — violet-themed game hub with AI GameMaster, Socket.IO events,
     investigation board, 3D dice, adult Truth-or-Dare, and Nexus leaderboard."""
 
@@ -50,18 +60,9 @@ class GamesScene(BaseScene, NexusSceneMixin):
         "description": "Insert coin. Lose yourself. The high score is never enough.",
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
-
-        scene_dir = os.path.dirname(os.path.abspath(__file__))
-        self.app = Flask(
-            __name__,
-            template_folder=os.path.join(scene_dir, "templates"),
-            static_folder=os.path.join(scene_dir, "static"),
-        )
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*",
-                                 async_mode="threading")
-        register_shared_assets(self.app)
+        super().__init__(host=host, port=port)
 
         self.mystery_games: Dict[str, Any] = {}
         self.tod_games: Dict[str, Any] = {}
@@ -74,13 +75,10 @@ class GamesScene(BaseScene, NexusSceneMixin):
         self._wire_mcp()
         self._register_gamemaster()
 
-        self.nexus_init("games")
-
-        # Wire bench + TTS routes
+        # Wire bench route (TTS already registered by FlaskScene)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
-        log.info("GamesScene (THE ARCADE) created on port %d", port)
+        logger.info("[%s] Scene created on port %d", SCENE_ID, port)
 
     # ── MCP Integration ──────────────────────────────────────────────
 
@@ -98,9 +96,9 @@ class GamesScene(BaseScene, NexusSceneMixin):
                 "tod_rounds": 0,
                 "active_game": None,
             })
-            log.info("GamesScene (THE ARCADE) MCP wired")
+            logger.info("[%s] MCP wired (operation=mcp_wire)", SCENE_ID)
         except Exception as exc:
-            log.warning("MCP wiring skipped: %s", exc)
+            logger.warning("[%s] MCP wiring skipped (operation=mcp_wire): %s", SCENE_ID, exc)
             self._scene_node = None
 
     def _register_gamemaster(self) -> None:
@@ -138,12 +136,12 @@ class GamesScene(BaseScene, NexusSceneMixin):
                     scene_roles=[SCENE_ID],
                 )
                 apply_default_skills(GAMEMASTER_ID)
-                log.info("GameMaster character registered")
+                logger.info("[%s] GameMaster character registered (operation=seed)", SCENE_ID)
 
             if self._fw:
                 self._fw.get_character(GAMEMASTER_ID).enter_scene(SCENE_ID)
         except Exception as exc:
-            log.warning("GameMaster registration skipped: %s", exc)
+            logger.warning("[%s] GameMaster registration skipped (operation=seed): %s", SCENE_ID, exc)
 
     def _get_gamemaster_reply(self, prompt: str) -> str:
         """Get an AI response from the GameMaster character."""
@@ -179,7 +177,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
             proc = mgr.infer_processed(req)
             return (proc.clean_text or "").strip()
         except Exception as exc:
-            log.debug("GameMaster AI unavailable: %s", exc)
+            logger.debug("GameMaster AI unavailable: %s", exc)
             return ""
 
     def _get_governance_context(self, character_id: str) -> str:
@@ -266,7 +264,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
             try:
                 return jsonify(self.get_health())
             except Exception:
-                logger.exception("Health check failed")
+                logger.exception("[%s] Health check failed (operation=health)", SCENE_ID)
                 return jsonify({"status": "error", "scene": "games", "reason": "health check raised"}), 500
 
         @app.route("/api/status")
@@ -355,15 +353,12 @@ class GamesScene(BaseScene, NexusSceneMixin):
             reaction = self._get_gamemaster_reply(prompt)
             return jsonify({"reaction": reaction or ("Brilliant!" if correct else "Not quite...")})
 
-        self.register_health_route(app)
-        self.register_hud_route(app)
-        self.register_announcer_route(app)
-        self.register_inventory_route(app)
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         try:
             self.mount_overlay(app)
             self.mount_skills_server(app)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[GamesScene] Silent exception suppressed (operation=best_effort): %s", e)
 
     # ── Socket.IO Events ─────────────────────────────────────────────
 
@@ -373,7 +368,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
         @sio.on("connect")
         def on_connect():
-            log.debug("THE ARCADE client connected")
+            logger.debug("THE ARCADE client connected")
             scores = {}
             state = {}
             if self._scene_node:
@@ -390,7 +385,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
         @sio.on("disconnect")
         def on_disconnect():
-            log.debug("THE ARCADE client disconnected")
+            logger.debug("THE ARCADE client disconnected")
 
         # ── New v0.68 handlers ────────────────────────────────────────
 
@@ -690,14 +685,7 @@ class GamesScene(BaseScene, NexusSceneMixin):
 
     # ── BaseScene Interface ──────────────────────────────────────────
 
-    def start(self) -> None:
-        log.info("Starting GamesScene on %s:%d", self.host, self.port)
-        self.socketio.run(self.app, host=self.host, port=self.port,
-                          allow_unsafe_werkzeug=True)
-
-    def stop(self) -> None:
-        self.nexus_flush()
-        log.info("Stopping GamesScene")
+    # v1.51.0 [2026-03-22] — start/stop delegated to FlaskScene
 
     def get_health(self) -> Dict[str, Any]:
         return {

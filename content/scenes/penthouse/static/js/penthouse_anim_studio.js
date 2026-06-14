@@ -659,7 +659,7 @@
       ? PenthouseAnim.AnimManager.getDebug(charId)
       : null;
     if (debug && debug.currentExpression) return Object.assign({}, debug.currentExpression);
-    var defaults = {};
+    let defaults = {};
     EXPRESSION_PROPS.forEach(function (p) { defaults[p] = 0; });
     return defaults;
   }
@@ -669,10 +669,10 @@
   }
 
   function lerpJoints(jointsA, jointsB, t) {
-    var result = {};
+    let result = {};
     BONE_NAMES.forEach(function (bone) {
-      var a = jointsA[bone] || { x: 0, y: 0, z: 0 };
-      var b = jointsB[bone] || { x: 0, y: 0, z: 0 };
+      let a = jointsA[bone] || { x: 0, y: 0, z: 0 };
+      let b = jointsB[bone] || { x: 0, y: 0, z: 0 };
       result[bone] = {
         x: lerp(a.x, b.x, t),
         y: lerp(a.y, b.y, t),
@@ -709,7 +709,7 @@
 
     // Inject CSS
     if (!document.getElementById('as-styles')) {
-      var style = document.createElement('style');
+      let style = document.createElement('style');
       style.id = 'as-styles';
       style.textContent = STUDIO_CSS;
       document.head.appendChild(style);
@@ -756,11 +756,11 @@
   // ── Poses Tab ──────────────────────────────────────────────────────
 
   function buildPosesTab() {
-    var html = '<div class="as-tab-content" id="as-tab-poses">';
+    let html = '<div class="as-tab-content" id="as-tab-poses">';
     html += '<div class="as-section-title">Joint Rotations</div>';
     html += '<div id="as-bone-list">';
     BONE_NAMES.forEach(function (bone) {
-      var label = BONE_LABELS[bone] || bone;
+      let label = BONE_LABELS[bone] || bone;
       html += '<div class="as-bone-group" data-bone="' + bone + '">';
       html += '  <div class="as-bone-header">';
       html += '    <span>' + label + '</span>';
@@ -768,7 +768,7 @@
       html += '  </div>';
       html += '  <div class="as-bone-sliders">';
       ['X', 'Y', 'Z'].forEach(function (axis) {
-        var id = 'as-bone-' + bone + '-' + axis.toLowerCase();
+        let id = 'as-bone-' + bone + '-' + axis.toLowerCase();
         html += '  <div class="as-slider-row">';
         html += '    <label>' + axis + '</label>';
         html += '    <input type="range" id="' + id + '" min="-180" max="180" value="0" step="1">';
@@ -791,7 +791,7 @@
   // ── Expressions Tab ────────────────────────────────────────────────
 
   function buildExpressionsTab() {
-    var html = '<div class="as-tab-content" id="as-tab-expressions" style="display:none">';
+    let html = '<div class="as-tab-content" id="as-tab-expressions" style="display:none">';
     html += '<div class="as-section-title">Presets</div>';
     html += '<div class="as-expr-grid">';
     EXPRESSION_PRESETS.forEach(function (name) {
@@ -800,7 +800,7 @@
     html += '</div>';
     html += '<div class="as-section-title">Custom Expression</div>';
     EXPRESSION_PROPS.forEach(function (prop) {
-      var id = 'as-expr-' + prop;
+      let id = 'as-expr-' + prop;
       html += '<div class="as-slider-row">';
       html += '  <label style="width:50px;text-align:left;font-size:10px">' + prop + '</label>';
       html += '  <input type="range" id="' + id + '" min="-100" max="100" value="0" step="1">';
@@ -818,7 +818,7 @@
   // ── Sequences Tab ──────────────────────────────────────────────────
 
   function buildSequencesTab() {
-    var html = '<div class="as-tab-content" id="as-tab-sequences" style="display:none">';
+    let html = '<div class="as-tab-content" id="as-tab-sequences" style="display:none">';
     html += '<div class="as-section-title">Timeline</div>';
     html += '<div class="as-kf-list" id="as-kf-list">';
     html += '  <div class="as-empty">No keyframes. Add one below.</div>';
@@ -853,7 +853,7 @@
   // ── Library Tab ────────────────────────────────────────────────────
 
   function buildLibraryTab() {
-    var html = '<div class="as-tab-content" id="as-tab-library" style="display:none">';
+    let html = '<div class="as-tab-content" id="as-tab-library" style="display:none">';
     html += '<div class="as-section-title">Saved Poses</div>';
     html += '<div class="as-lib-grid" id="as-lib-poses">';
     html += '  <div class="as-empty">No saved poses yet.</div>';
@@ -870,7 +870,7 @@
   // ── Models Tab ─────────────────────────────────────────────────────
 
   function buildModelsTab() {
-    var h = '<div class="as-tab-content" id="as-tab-models" style="display:none">';
+    let h = '<div class="as-tab-content" id="as-tab-models" style="display:none">';
     h += '<div class="as-section-title">\uD83D\uDCE6 Model Browser</div>';
     h += '<input type="text" class="as-model-search" id="as-model-search" placeholder="Search models by name, type, or tag\u2026">';
     h += '<div class="as-model-filters" id="as-model-filters">';
@@ -896,7 +896,7 @@
     return h;
   }
 
-  var _MODEL_TYPE_ICONS = {
+  const _MODEL_TYPE_ICONS = {
     character: '\uD83D\uDC64', prop: '\uD83C\uDF81',
     clothing: '\uD83D\uDC57', environment: '\uD83C\uDFE0', unknown: '\uD83D\uDCE6'
   };
@@ -910,20 +910,20 @@
       delete _modelCatalog.import_settings;
       renderModelGrid();
     }).catch(function () {
-      var grid = document.getElementById('as-model-grid');
+      let grid = document.getElementById('as-model-grid');
       if (grid) grid.innerHTML = '<div class="as-model-empty">Failed to load catalog.</div>';
     });
   }
 
   function getFilteredModels() {
-    var result = {};
-    var q = _modelSearch.toLowerCase();
+    let result = {};
+    let q = _modelSearch.toLowerCase();
     Object.keys(_modelCatalog).forEach(function (id) {
-      var entry = _modelCatalog[id];
+      let entry = _modelCatalog[id];
       if (!entry || typeof entry !== 'object' || !entry.file) return;
       if (_modelFilter !== 'all' && entry.type !== _modelFilter) return;
       if (q) {
-        var haystack = (id + ' ' + (entry.description || '') + ' ' + (entry.file || '') +
+        let haystack = (id + ' ' + (entry.description || '') + ' ' + (entry.file || '') +
           ' ' + (entry.tags || []).join(' ') + ' ' + (entry.type || '') + ' ' + (entry.gender || '')).toLowerCase();
         if (haystack.indexOf(q) === -1) return;
       }
@@ -933,15 +933,15 @@
   }
 
   function renderModelGrid() {
-    var grid = document.getElementById('as-model-grid');
+    let grid = document.getElementById('as-model-grid');
     if (!grid) return;
-    var filtered = getFilteredModels();
-    var keys = Object.keys(filtered);
+    let filtered = getFilteredModels();
+    let keys = Object.keys(filtered);
 
-    var stats = document.getElementById('as-model-stats');
+    let stats = document.getElementById('as-model-stats');
     if (stats) {
-      var total = Object.keys(_modelCatalog).filter(function (k) {
-        var e = _modelCatalog[k]; return e && typeof e === 'object' && e.file;
+      let total = Object.keys(_modelCatalog).filter(function (k) {
+        let e = _modelCatalog[k]; return e && typeof e === 'object' && e.file;
       }).length;
       stats.textContent = keys.length + ' of ' + total + ' models';
     }
@@ -951,12 +951,12 @@
       return;
     }
 
-    var html = '';
+    let html = '';
     keys.forEach(function (id) {
-      var m = filtered[id];
-      var icon = _MODEL_TYPE_ICONS[m.type] || '\uD83D\uDCE6';
-      var skel = m.has_skeleton ? '\u2699' : '';
-      var displayName = id.replace(/_/g, ' ');
+      let m = filtered[id];
+      let icon = _MODEL_TYPE_ICONS[m.type] || '\uD83D\uDCE6';
+      let skel = m.has_skeleton ? '\u2699' : '';
+      let displayName = id.replace(/_/g, ' ');
       html += '<div class="as-model-card" data-mid="' + id + '">';
       html += '  <div class="as-model-card-icon">' + icon + '</div>';
       html += '  <div class="as-model-card-name" title="' + id + '">' + displayName + '</div>';
@@ -975,14 +975,14 @@
   }
 
   function showModelDetail(modelId) {
-    var m = _modelCatalog[modelId];
+    let m = _modelCatalog[modelId];
     if (!m) return;
-    var icon = _MODEL_TYPE_ICONS[m.type] || '\uD83D\uDCE6';
+    let icon = _MODEL_TYPE_ICONS[m.type] || '\uD83D\uDCE6';
     document.getElementById('as-model-detail-name').textContent = modelId.replace(/_/g, ' ');
     document.getElementById('as-model-detail-icon').textContent = icon;
 
-    var body = document.getElementById('as-model-detail-body');
-    var rows = [
+    let body = document.getElementById('as-model-detail-body');
+    let rows = [
       ['Type', (icon + ' ' + (m.type || 'unknown'))],
       ['Gender', m.gender || '\u2014'],
       ['File', m.file || '\u2014'],
@@ -992,7 +992,7 @@
       ['Poly Estimate', m.poly_estimate || '\u2014'],
       ['Description', m.description || '\u2014'],
     ];
-    var html = '';
+    let html = '';
     rows.forEach(function (r) {
       html += '<div class="as-model-detail-row">';
       html += '  <span class="label">' + r[0] + '</span>';
@@ -1012,7 +1012,7 @@
 
   function closeModelDetail() {
     document.getElementById('as-model-detail').style.display = 'none';
-    var grid = document.getElementById('as-model-grid');
+    let grid = document.getElementById('as-model-grid');
     if (grid) grid.querySelectorAll('.as-model-card').forEach(function (c) { c.classList.remove('selected'); });
   }
 
@@ -1028,7 +1028,7 @@
         _panel.querySelectorAll('.as-tab').forEach(function (t) { t.classList.remove('active'); });
         _panel.querySelectorAll('.as-tab-content').forEach(function (c) { c.style.display = 'none'; });
         tab.classList.add('active');
-        var target = document.getElementById('as-tab-' + tab.dataset.tab);
+        let target = document.getElementById('as-tab-' + tab.dataset.tab);
         if (target) target.style.display = '';
         if (tab.dataset.tab === 'library') refreshLibraryTab();
         if (tab.dataset.tab === 'models') loadModelCatalog();
@@ -1044,9 +1044,9 @@
     // Bone group accordions
     _panel.querySelectorAll('.as-bone-header').forEach(function (header) {
       header.addEventListener('click', function () {
-        var sliders = header.nextElementSibling;
+        let sliders = header.nextElementSibling;
         sliders.classList.toggle('open');
-        var arrow = header.querySelector('span:last-child');
+        let arrow = header.querySelector('span:last-child');
         arrow.textContent = sliders.classList.contains('open') ? '\u25BC' : '\u25B6';
       });
     });
@@ -1054,15 +1054,15 @@
     // Bone sliders
     BONE_NAMES.forEach(function (bone) {
       ['x', 'y', 'z'].forEach(function (axis) {
-        var slider = document.getElementById('as-bone-' + bone + '-' + axis);
-        var valSpan = document.getElementById('as-bone-' + bone + '-' + axis + '-val');
+        let slider = document.getElementById('as-bone-' + bone + '-' + axis);
+        let valSpan = document.getElementById('as-bone-' + bone + '-' + axis + '-val');
         if (!slider) return;
         slider.addEventListener('input', function () {
-          var deg = parseFloat(slider.value);
+          let deg = parseFloat(slider.value);
           valSpan.textContent = deg + '\u00B0';
           if (_selectedCharId) {
-            var rad = deg * DEG2RAD;
-            var rot = getBoneRotation(_selectedCharId, bone);
+            let rad = deg * DEG2RAD;
+            let rot = getBoneRotation(_selectedCharId, bone);
             if (axis === 'x') rot.x = rad;
             else if (axis === 'y') rot.y = rad;
             else rot.z = rad;
@@ -1088,11 +1088,11 @@
 
     // Expression sliders
     EXPRESSION_PROPS.forEach(function (prop) {
-      var slider = document.getElementById('as-expr-' + prop);
-      var valSpan = document.getElementById('as-expr-' + prop + '-val');
+      let slider = document.getElementById('as-expr-' + prop);
+      let valSpan = document.getElementById('as-expr-' + prop + '-val');
       if (!slider) return;
       slider.addEventListener('input', function () {
-        var val = parseFloat(slider.value) / 100;
+        let val = parseFloat(slider.value) / 100;
         valSpan.textContent = val.toFixed(2);
         applyCustomExpression();
       });
@@ -1134,7 +1134,7 @@
     document.getElementById('as-export-lib').addEventListener('click', exportLibrary);
 
     // Model browser events
-    var modelSearchInput = document.getElementById('as-model-search');
+    let modelSearchInput = document.getElementById('as-model-search');
     if (modelSearchInput) {
       modelSearchInput.addEventListener('input', function (e) {
         _modelSearch = e.target.value;
@@ -1151,7 +1151,7 @@
         renderModelGrid();
       });
     });
-    var detailClose = document.getElementById('as-model-detail-close');
+    let detailClose = document.getElementById('as-model-detail-close');
     if (detailClose) {
       detailClose.addEventListener('click', closeModelDetail);
     }
@@ -1160,15 +1160,15 @@
   // ── Draggable ──────────────────────────────────────────────────────
 
   function makeDraggable(el, handle) {
-    var isDragging = false;
-    var startX, startY, origX, origY;
+    let isDragging = false;
+    let startX, startY, origX, origY;
     handle.style.cursor = 'grab';
 
     handle.addEventListener('mousedown', function (e) {
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
-      var rect = el.getBoundingClientRect();
+      let rect = el.getBoundingClientRect();
       origX = rect.left;
       origY = rect.top;
       handle.style.cursor = 'grabbing';
@@ -1192,18 +1192,18 @@
   // ── Character picker ───────────────────────────────────────────────
 
   function populateCharPicker() {
-    var picker = document.getElementById('as-char-picker');
+    let picker = document.getElementById('as-char-picker');
     if (!picker) return;
-    var ids = getCharIds();
+    let ids = getCharIds();
     picker.innerHTML = '';
     if (ids.length === 0) {
       picker.innerHTML = '<option value="">No characters loaded</option>';
       return;
     }
     ids.forEach(function (id) {
-      var entry = getCharEntry(id);
-      var label = entry && entry.name ? entry.name : id;
-      var opt = document.createElement('option');
+      let entry = getCharEntry(id);
+      let label = entry && entry.name ? entry.name : id;
+      let opt = document.createElement('option');
       opt.value = id;
       opt.textContent = label;
       picker.appendChild(opt);
@@ -1219,12 +1219,12 @@
   function syncSlidersFromCharacter() {
     if (!_selectedCharId) return;
     BONE_NAMES.forEach(function (bone) {
-      var rot = getBoneRotation(_selectedCharId, bone);
+      let rot = getBoneRotation(_selectedCharId, bone);
       ['x', 'y', 'z'].forEach(function (axis) {
-        var slider = document.getElementById('as-bone-' + bone + '-' + axis);
-        var valSpan = document.getElementById('as-bone-' + bone + '-' + axis + '-val');
+        let slider = document.getElementById('as-bone-' + bone + '-' + axis);
+        let valSpan = document.getElementById('as-bone-' + bone + '-' + axis + '-val');
         if (!slider) return;
-        var deg = Math.round(rot[axis] * RAD2DEG);
+        let deg = Math.round(rot[axis] * RAD2DEG);
         slider.value = deg;
         valSpan.textContent = deg + '\u00B0';
       });
@@ -1243,15 +1243,15 @@
 
   function mirrorPose() {
     if (!_selectedCharId) return;
-    var joints = getAllBoneRotations(_selectedCharId);
-    var MIRROR_PAIRS = [
+    let joints = getAllBoneRotations(_selectedCharId);
+    let MIRROR_PAIRS = [
       ['arm_l', 'arm_r'], ['forearm_l', 'forearm_r'],
       ['hand_l', 'hand_r'], ['thigh_l', 'thigh_r'],
       ['shin_l', 'shin_r']
     ];
     MIRROR_PAIRS.forEach(function (pair) {
-      var l = joints[pair[0]] || { x: 0, y: 0, z: 0 };
-      var r = joints[pair[1]] || { x: 0, y: 0, z: 0 };
+      let l = joints[pair[0]] || { x: 0, y: 0, z: 0 };
+      let r = joints[pair[1]] || { x: 0, y: 0, z: 0 };
       // Swap and negate Y/Z for mirroring
       setBoneRotation(_selectedCharId, pair[0], r.x, -r.y, -r.z);
       setBoneRotation(_selectedCharId, pair[1], l.x, -l.y, -l.z);
@@ -1261,9 +1261,9 @@
 
   function savePosePrompt() {
     if (!_selectedCharId) return;
-    var name = prompt('Pose name:');
+    let name = prompt('Pose name:');
     if (!name) return;
-    var joints = getAllBoneRotations(_selectedCharId);
+    let joints = getAllBoneRotations(_selectedCharId);
     fetchJSON('/api/anim/poses', {
       method: 'POST',
       body: JSON.stringify({ name: name, joints: joints, character_id: _selectedCharId })
@@ -1287,9 +1287,9 @@
 
   function applyCustomExpression() {
     if (!_selectedCharId) return;
-    var values = {};
+    let values = {};
     EXPRESSION_PROPS.forEach(function (prop) {
-      var slider = document.getElementById('as-expr-' + prop);
+      let slider = document.getElementById('as-expr-' + prop);
       values[prop] = slider ? parseFloat(slider.value) / 100 : 0;
     });
     if (window.PenthouseAnim && PenthouseAnim.AnimManager.setExpression) {
@@ -1299,8 +1299,8 @@
 
   function resetExpression() {
     EXPRESSION_PROPS.forEach(function (prop) {
-      var slider = document.getElementById('as-expr-' + prop);
-      var valSpan = document.getElementById('as-expr-' + prop + '-val');
+      let slider = document.getElementById('as-expr-' + prop);
+      let valSpan = document.getElementById('as-expr-' + prop + '-val');
       if (slider) { slider.value = 0; }
       if (valSpan) { valSpan.textContent = '0.00'; }
     });
@@ -1309,11 +1309,11 @@
   }
 
   function saveExpressionPrompt() {
-    var name = prompt('Expression name:');
+    let name = prompt('Expression name:');
     if (!name) return;
-    var values = {};
+    let values = {};
     EXPRESSION_PROPS.forEach(function (prop) {
-      var slider = document.getElementById('as-expr-' + prop);
+      let slider = document.getElementById('as-expr-' + prop);
       values[prop] = slider ? parseFloat(slider.value) / 100 : 0;
     });
     fetchJSON('/api/anim/expressions', {
@@ -1328,13 +1328,13 @@
 
   function addKeyframe() {
     if (!_selectedCharId) return;
-    var pose = getAllBoneRotations(_selectedCharId);
-    var exprVals = {};
+    let pose = getAllBoneRotations(_selectedCharId);
+    let exprVals = {};
     EXPRESSION_PROPS.forEach(function (prop) {
-      var slider = document.getElementById('as-expr-' + prop);
+      let slider = document.getElementById('as-expr-' + prop);
       exprVals[prop] = slider ? parseFloat(slider.value) / 100 : 0;
     });
-    var time = _seqKeyframes.length > 0
+    let time = _seqKeyframes.length > 0
       ? _seqKeyframes[_seqKeyframes.length - 1].time + 1.0
       : 0;
     _seqKeyframes.push({
@@ -1353,13 +1353,13 @@
   }
 
   function renderKeyframeList() {
-    var container = document.getElementById('as-kf-list');
+    let container = document.getElementById('as-kf-list');
     if (!container) return;
     if (_seqKeyframes.length === 0) {
       container.innerHTML = '<div class="as-empty">No keyframes. Add one below.</div>';
       return;
     }
-    var html = '';
+    let html = '';
     _seqKeyframes.forEach(function (kf, i) {
       html += '<div class="as-kf-item" data-idx="' + i + '">';
       html += '  <span class="as-kf-idx">' + (i + 1) + '</span>';
@@ -1374,19 +1374,19 @@
     // Wire keyframe events
     container.querySelectorAll('.as-kf-name').forEach(function (input) {
       input.addEventListener('change', function () {
-        var idx = parseInt(input.dataset.idx);
+        let idx = parseInt(input.dataset.idx);
         if (_seqKeyframes[idx]) _seqKeyframes[idx].name = input.value;
       });
     });
     container.querySelectorAll('.as-kf-time').forEach(function (input) {
       input.addEventListener('change', function () {
-        var idx = parseInt(input.dataset.idx);
+        let idx = parseInt(input.dataset.idx);
         if (_seqKeyframes[idx]) _seqKeyframes[idx].time = parseFloat(input.value) || 0;
       });
     });
     container.querySelectorAll('.as-kf-del').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var idx = parseInt(btn.dataset.idx);
+        let idx = parseInt(btn.dataset.idx);
         _seqKeyframes.splice(idx, 1);
         renderKeyframeList();
       });
@@ -1412,7 +1412,7 @@
     _seqRafId = requestAnimationFrame(sequenceTick);
   }
 
-  var _seqPauseElapsed = 0;
+  let _seqPauseElapsed = 0;
 
   function pauseSequence() {
     if (!_seqPlaying) return;
@@ -1431,8 +1431,8 @@
 
   function sequenceTick(now) {
     if (!_seqPlaying || _seqPaused) return;
-    var elapsed = ((now - _seqStartTime) / 1000) * _seqSpeed;
-    var totalDuration = _seqKeyframes[_seqKeyframes.length - 1].time;
+    let elapsed = ((now - _seqStartTime) / 1000) * _seqSpeed;
+    let totalDuration = _seqKeyframes[_seqKeyframes.length - 1].time;
     if (totalDuration <= 0) { stopSequence(); return; }
 
     if (elapsed >= totalDuration) {
@@ -1441,7 +1441,7 @@
         elapsed = 0;
       } else {
         // Apply final keyframe
-        var lastKf = _seqKeyframes[_seqKeyframes.length - 1];
+        let lastKf = _seqKeyframes[_seqKeyframes.length - 1];
         applyAllBoneRotations(_selectedCharId, lastKf.pose);
         stopSequence();
         return;
@@ -1449,9 +1449,9 @@
     }
 
     // Find surrounding keyframes
-    var kfA = _seqKeyframes[0];
-    var kfB = _seqKeyframes[1];
-    for (var i = 0; i < _seqKeyframes.length - 1; i++) {
+    let kfA = _seqKeyframes[0];
+    let kfB = _seqKeyframes[1];
+    for (let i = 0; i < _seqKeyframes.length - 1; i++) {
       if (elapsed >= _seqKeyframes[i].time && elapsed <= _seqKeyframes[i + 1].time) {
         kfA = _seqKeyframes[i];
         kfB = _seqKeyframes[i + 1];
@@ -1459,17 +1459,17 @@
       }
     }
 
-    var segDuration = kfB.time - kfA.time;
-    var t = segDuration > 0 ? (elapsed - kfA.time) / segDuration : 0;
+    let segDuration = kfB.time - kfA.time;
+    let t = segDuration > 0 ? (elapsed - kfA.time) / segDuration : 0;
     t = Math.max(0, Math.min(1, t));
 
     // Interpolate pose
-    var interpJoints = lerpJoints(kfA.pose, kfB.pose, t);
+    let interpJoints = lerpJoints(kfA.pose, kfB.pose, t);
     applyAllBoneRotations(_selectedCharId, interpJoints);
 
     // Interpolate expression
     if (kfA.expression && kfB.expression) {
-      var interpExpr = {};
+      let interpExpr = {};
       EXPRESSION_PROPS.forEach(function (prop) {
         interpExpr[prop] = lerp(kfA.expression[prop] || 0, kfB.expression[prop] || 0, t);
       });
@@ -1483,7 +1483,7 @@
 
   function saveSequencePrompt() {
     if (_seqKeyframes.length === 0) return;
-    var name = prompt('Sequence name:');
+    let name = prompt('Sequence name:');
     if (!name) return;
     fetchJSON('/api/anim/sequences', {
       method: 'POST',
@@ -1500,7 +1500,7 @@
 
   function exportSequenceJSON() {
     if (_seqKeyframes.length === 0) return;
-    var data = {
+    let data = {
       name: 'Untitled Sequence',
       keyframes: _seqKeyframes,
       loop: _seqLoop,
@@ -1513,9 +1513,9 @@
   // ── Library tab ────────────────────────────────────────────────────
 
   function refreshLibraryTab() {
-    var container = document.getElementById('as-lib-poses');
+    let container = document.getElementById('as-lib-poses');
     if (!container) return;
-    var keys = Object.keys(_poseLibrary).filter(function (k) {
+    let keys = Object.keys(_poseLibrary).filter(function (k) {
       return !_poseLibrary[k].type || _poseLibrary[k].type !== 'expression';
     });
     if (keys.length === 0) {
@@ -1524,17 +1524,17 @@
     }
 
     // Group poses by category
-    var groups = {};
+    let groups = {};
     keys.forEach(function (id) {
-      var pose = _poseLibrary[id];
-      var cat = pose.category || (pose.builtin ? 'built-in' : 'custom');
+      let pose = _poseLibrary[id];
+      let cat = pose.category || (pose.builtin ? 'built-in' : 'custom');
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push({ id: id, pose: pose });
     });
 
     // Render order: furniture first, then basic, gesture, social, then custom
-    var catOrder = ['furniture', 'basic', 'gesture', 'social', 'custom'];
-    var catLabels = {
+    let catOrder = ['furniture', 'basic', 'gesture', 'social', 'custom'];
+    let catLabels = {
       furniture: '🪑 Furniture Interactions',
       basic: '🧍 Basic Poses',
       gesture: '👋 Gestures',
@@ -1546,15 +1546,15 @@
       if (catOrder.indexOf(cat) === -1) catOrder.push(cat);
     });
 
-    var html = '';
+    let html = '';
     catOrder.forEach(function (cat) {
-      var items = groups[cat];
+      let items = groups[cat];
       if (!items || items.length === 0) return;
       html += '<div class="as-lib-section">';
       html += '  <div class="as-lib-section-title">' + (catLabels[cat] || cat) + '</div>';
       items.forEach(function (item) {
-        var pose = item.pose;
-        var isBuiltin = pose.builtin;
+        let pose = item.pose;
+        let isBuiltin = pose.builtin;
         html += '<div class="as-lib-card' + (isBuiltin ? ' as-lib-builtin' : '') + '" data-pose-id="' + item.id + '">';
         html += '  <div class="as-lib-name">' + (pose.name || 'Unnamed');
         if (isBuiltin) html += ' <span class="as-badge">built-in</span>';
@@ -1593,7 +1593,7 @@
 
   function loadPoseFromLibrary(poseId) {
     if (!_selectedCharId) return;
-    var pose = _poseLibrary[poseId];
+    let pose = _poseLibrary[poseId];
     if (!pose || !pose.joints) return;
     applyAllBoneRotations(_selectedCharId, pose.joints);
       // Set animation state to 'pose' so state machine doesn't overwrite bones
@@ -1617,18 +1617,18 @@
   }
 
   function importLibrary(e) {
-    var file = e.target.files && e.target.files[0];
+    let file = e.target.files && e.target.files[0];
     if (!file) return;
-    var reader = new FileReader();
+    let reader = new FileReader();
     reader.onload = function () {
       try {
-        var data = JSON.parse(reader.result);
-        var poses = data.poses || data;
-        var count = 0;
-        var keys = Object.keys(poses);
-        var total = keys.length;
+        let data = JSON.parse(reader.result);
+        let poses = data.poses || data;
+        let count = 0;
+        let keys = Object.keys(poses);
+        let total = keys.length;
         keys.forEach(function (key) {
-          var pose = poses[key];
+          let pose = poses[key];
           if (pose.name && pose.joints) {
             fetchJSON('/api/anim/poses', {
               method: 'POST',
@@ -1655,9 +1655,9 @@
   // ── Utility ────────────────────────────────────────────────────────
 
   function downloadJSON(data, filename) {
-    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
+    let blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);

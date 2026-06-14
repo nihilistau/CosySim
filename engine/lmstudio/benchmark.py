@@ -1,8 +1,17 @@
 """
-InferenceBenchmark — Automated benchmarking framework for LMStudio models.
+InferenceBenchmark — Automated benchmarking framework for LMStudio models
+=========================================================================
 
 Measures tokens/sec, time-to-first-token, latency, and VRAM usage across
 configurable test matrices. Stores results in Nexus.
+
+Version: v1.44.0 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.44.0 [2026-03-21] — Refactored to use LMSClient for inference and
+                            NexusClient for storage (no more direct HTTP)
+    v1.43.0 [2026-03-21] — Initial benchmark framework
 
 Usage::
 
@@ -21,10 +30,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-import requests
-
 from engine.config import get_config
-from engine.utils import get_lmstudio_headers
 
 logger = logging.getLogger(__name__)
 
@@ -170,20 +176,14 @@ class BenchmarkSummary:
 class InferenceBenchmark:
     """Automated benchmarking framework for LMStudio inference."""
 
+    # v1.44.0 [2026-03-21] — Removed manual URL construction; uses LMSClient + NexusClient
     def __init__(self, config: Optional[Any] = None) -> None:
         self._config = config or get_config()
-        self._host = self._config.get("lmstudio.host", "localhost")
-        self._port = self._config.get("lmstudio.port", 1234)
-        self._base_url = f"http://{self._host}:{self._port}"
-        try:
-            from engine.port_registry import get_service_url
-            self._nexus_url = get_service_url("nexus", "/api")
-        except Exception:
-            self._nexus_url = self._config.get("nexus.url", "http://localhost:8700/api")
         self._summaries: List[BenchmarkSummary] = []
 
     # ── Single run ──────────────────────────────────────────────────
 
+    # v1.44.0 [2026-03-21] — Uses LMSClient instead of raw HTTP
     def _run_single(
         self,
         model: str,
@@ -192,7 +192,12 @@ class InferenceBenchmark:
         max_tokens: int = 256,
         prompt_type: str = "medium",
     ) -> BenchmarkResult:
-        """Execute a single inference call and measure metrics."""
+        """Execute a single inference call and measure metrics.
+
+        Uses ``LMSClient.chat()`` which returns an ``LMSResponse`` with
+        native metrics: ``server_tps``, ``time_to_first_token_s``,
+        ``output_tokens``, and ``latency_ms`` — no manual SSE parsing needed.
+        """
         result = BenchmarkResult(
             model=model,
             prompt_type=prompt_type,
@@ -202,49 +207,36 @@ class InferenceBenchmark:
             n_parallel=0,
         )
 
-        payload = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "stream": True,
-        }
-
         try:
-            t0 = time.monotonic()
-            ttft_recorded = False
+            from engine.lmstudio.lms_client import get_lms_client
 
-            resp = requests.post(
-                f"{self._base_url}/api/v1/chat/completions",
-                json=payload,
-                headers=get_lmstudio_headers(),
-                stream=True,
-                timeout=120,
+            client = get_lms_client()
+            messages = [{"role": "user", "content": prompt}]
+
+            resp = client.chat(
+                messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                store=False,
             )
-            resp.raise_for_status()
 
-            completion_tokens = 0
-            for line in resp.iter_lines(decode_unicode=True):
-                if not line or not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str.strip() == "[DONE]":
-                    break
+            # LMSResponse carries all the metrics we need
+            result.total_latency_ms = resp.latency_ms or 0.0
+            result.time_to_first_token_ms = (
+                (resp.time_to_first_token_s or 0.0) * 1000
+            )
+            result.generation_time_ms = (
+                result.total_latency_ms - result.time_to_first_token_ms
+            )
+            result.prompt_tokens = resp.input_tokens or 0
+            result.completion_tokens = resp.output_tokens or 0
+            result.tokens_per_second = resp.server_tps or 0.0
 
-                if not ttft_recorded:
-                    result.time_to_first_token_ms = (
-                        time.monotonic() - t0
-                    ) * 1000
-                    ttft_recorded = True
-                completion_tokens += 1
-
-            elapsed = (time.monotonic() - t0) * 1000
-            result.total_latency_ms = elapsed
-            result.generation_time_ms = elapsed - result.time_to_first_token_ms
-            result.completion_tokens = completion_tokens
-            if result.generation_time_ms > 0:
+            # Fallback TPS calculation if server didn't report
+            if result.tokens_per_second == 0.0 and result.generation_time_ms > 0:
                 result.tokens_per_second = (
-                    completion_tokens / (result.generation_time_ms / 1000)
+                    result.completion_tokens / (result.generation_time_ms / 1000)
                 )
 
         except Exception as e:
@@ -360,28 +352,26 @@ class InferenceBenchmark:
 
     # ── Nexus storage ───────────────────────────────────────────────
 
+    # v1.44.0 [2026-03-21] — Uses NexusClient instead of raw HTTP
     def store_results(self, summary: BenchmarkSummary) -> Optional[str]:
-        """Store benchmark results in Nexus."""
+        """Store benchmark results in Nexus via NexusClient."""
         try:
+            from engine.nexus.client import get_nexus_client
+
+            client = get_nexus_client()
             content = summary.to_markdown()
             timestamp = time.strftime("%Y-%m-%d %H:%M")
-            resp = requests.post(
-                f"{self._nexus_url}/entries",
-                json={
-                    "title": f"Benchmark: {summary.model} — {timestamp}",
-                    "content": content,
-                    "content_type": "audit",
-                    "category": "performance",
-                    "tags": ["benchmark", "auto-generated", summary.model],
-                },
-                headers=get_lmstudio_headers(),
-                timeout=10,
+            entry_id = client.add_entry(
+                title=f"Benchmark: {summary.model} — {timestamp}",
+                content=content,
+                content_type="audit",
+                category="performance",
+                tags=["benchmark", "auto-generated", summary.model],
             )
-            if resp.ok:
-                entry_id = resp.json().get("id", "?")
+            if entry_id:
                 logger.info("Stored benchmark in Nexus: %s", entry_id)
                 return entry_id
-            logger.warning("Nexus store failed: %s", resp.text[:200])
+            logger.warning("Nexus store returned no entry ID")
         except Exception as e:
             logger.warning("Cannot store to Nexus: %s", e)
         return None

@@ -53,7 +53,7 @@ EXPECTED_SCENE_ACCENTS = {
     "gallery": "#a855f7",
     "arena": "#dc2626",
     "realm": "#6366f1",
-    "neoncity": "#f43f5e",
+    "neoncity": "#06b6d4",
     "coders": "#06b6d4",
     "heist": "#f59e0b",
     "command_center": "#14b8a6",

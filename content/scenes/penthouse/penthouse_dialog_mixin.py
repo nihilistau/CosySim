@@ -1,4 +1,15 @@
-"""penthouse scene dialogue, director controls, and agent-loop mixin."""
+"""
+Penthouse Dialog Mixin
+======================
+Director directives, conversation starters, events, and agent-loop wiring.
+
+Version: v1.53.1 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.53.1 [2026-03-26] — Added _register_char_with_loop() for hot-registration
+    v1.50.0 [2026-03-24] — Initial extraction from penthouse_scene.py
+"""
 from __future__ import annotations
 
 import logging
@@ -90,6 +101,60 @@ class PenthouseDialogMixin:
         self.agent_loop.start(interval=interval)
         self.scene_state["agent_loop_running"] = True
         self._broadcast_state()
+
+    # v1.53.0 [2026-03-26] — Hot-register a single character with a running agent loop
+    def _register_char_with_loop(self, char) -> None:
+        """Register a character with the running agent loop + inject context."""
+        from engine.agents.character_agent import CharacterAgent
+        from content.scenes.penthouse.penthouse_scene import (
+            CharacterProfile, build_roleplay_system_prompt,
+        )
+
+        agent_cfg = self.agent_model_config.get(char.id, {})
+        try:
+            from engine.mcp.character_registry import seed_registry_from_character
+            seed_registry_from_character(char)
+        except Exception:
+            pass
+
+        profile_model = None
+        try:
+            from engine.mcp.framework import get_framework
+            fw = get_framework()
+            agent_profile = fw.get_agent_profile("big")
+            if agent_profile and not agent_cfg.get("model"):
+                profile_model = agent_profile.get("model_hint")
+        except Exception:
+            pass
+
+        agent = CharacterAgent(
+            char,
+            db=self.db,
+            skill_packs=["memory", "character"],
+            model=agent_cfg.get("model") or profile_model,
+            scene="penthouse",
+        )
+        try:
+            from engine.mcp.comms_framework import get_governor
+            agent = get_governor(agent, scene="penthouse")
+        except Exception:
+            pass
+
+        self.agent_loop.register_character(char, agent=agent)
+
+        # Inject roleplay context for the new character
+        profile = self.profiles.get(char.id, CharacterProfile())
+        self._refresh_character_state()
+        rp_prompt = build_roleplay_system_prompt(
+            char, profile, self.scene_state, self.profiles,
+            self.story_beats, self.active_scenario,
+        )
+        gov_ctx = self._get_governance_context(char.id)
+        self._inject_to_loop(
+            "(system)",
+            f"[ROLEPLAY CONTEXT for {char.name}]\n{gov_ctx}{rp_prompt}",
+            "system",
+        )
 
     # ── Framework event-bus handlers ────────────────────────────────────
 

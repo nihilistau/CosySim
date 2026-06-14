@@ -1,5 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   THE GRID — CosySim v0.75  |  accent: #00ff88
+   THE GRID — CosySim  |  accent: var(--cs-scene-accent) (#22d3ee, was #00ff88)
+
+   Version: v1.58.0 [2026-06-11]
+   Change Log:
+     v1.58.0 [2026-06-11] — Dark Renaissance glow-up (appended section):
+                             palette re-pointed at --cs-* v2 tokens, kit
+                             4-layer drift background, Orbitron display
+                             voice, status pill badges, listing left-rail
+                             cards, amber prices, terminal-voice ghost
+                             feed, ck-toast styles (grid_kit.css unlinked);
+                             enrichment: kit signature zone tiles — the
+                             underline tab strip becomes the 4-up
+                             underground-market tile grid (kit .zones)
+     v0.75               — Original Creation Kit stylesheet
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -47,7 +60,8 @@ body {
 /* ──────────────────────────────────────────────────────────────────────────
    HERO
    ────────────────────────────────────────────────────────────────────────── */
-.grid-wrapper { max-width: 1200px; margin: 0 auto; padding: 0 16px 60px; }
+/* v1.49.2 [2026-03-22] — Added padding-top for fixed navbar clearance (52px) */
+.grid-wrapper { max-width: 1200px; margin: 0 auto; padding: 56px 16px 60px; }
 
 .grid-hero {
   position: relative;
@@ -294,3 +308,245 @@ body {
 .ghost-terminal__output { min-height: 80px; max-height: 160px; overflow-y: auto; margin-bottom: 10px; }
 .ghost-line { font-size: 11px; color: #00e5ff; padding: 2px 0; opacity: 0.9; }
 .ghost-line::before { content: "> "; opacity: 0.5; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.58.0 [2026-06-11] — DARK RENAISSANCE GLOW-UP (ui_kits_v2/grid)
+   ════════════════════════════════════════════════════════════════════════
+   Kit ideas applied: 4-layer background (black → 40px grid → radial accent
+   glow; scanlines come from shared .neon-scanlines), Orbitron display
+   voice on wordmark/zone titles/listing names, rounded status pill, tab
+   underline glow, listing cards with 3px left accent rail + hover lift,
+   amber prices, terminal-voice ghost feed, intel left-rail entries.
+   Palette re-pointed at the v2 scene tokens injected by neon_base
+   (--cs-scene-accent = #22d3ee from grid.html; green #00ff88 fallback).
+   CONNECTS: design_tokens_v2.css, cosysim-animations.css (keyframes reused)
+   CALLED BY: grid.html (sole scene stylesheet), grid_ext.js (markup gen)
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* ── 1 · Token alignment — palette derives from v2 scene tokens ──────── */
+:root {
+  --grid-accent-rgb:  var(--cs-scene-accent-rgb, 0 255 136);
+  --grid-accent:      var(--cs-scene-accent, #00ff88);
+  --grid-accent-dim:  rgb(var(--grid-accent-rgb) / 0.65);
+  --grid-bg:          #02030a;                              /* v2 recipe black */
+  --grid-panel:       rgb(var(--grid-accent-rgb) / 0.04);
+  --grid-border:      rgb(var(--grid-accent-rgb) / 0.18);
+  --grid-text:        #b8e9f0;
+  --grid-text-dim:    #567a82;
+  --grid-glass:       rgba(2, 12, 16, 0.85);
+  --grid-glow:        0 0 18px rgb(var(--grid-accent-rgb) / 0.35);
+  --grid-glow-sm:     0 0 8px rgb(var(--grid-accent-rgb) / 0.25);
+}
+
+/* ── 2 · Kit 4-layer background on the shared grid element ───────────── */
+.neon-grid-bg {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--grid-accent-rgb) / 0.10) 0%, transparent 70%),
+    repeating-linear-gradient(0deg, transparent 0 39px, rgb(var(--grid-accent-rgb) / 0.04) 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, rgb(var(--grid-accent-rgb) / 0.04) 40px),
+    var(--grid-bg);
+}
+body { background: var(--grid-bg); }
+
+/* ── 3 · Hero — Orbitron wordmark + denser kit glow ──────────────────── */
+.grid-hero { padding: 38px 24px 16px; }
+.grid-hero__logo {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.12em;
+}
+.grid-hero__name {
+  text-shadow: 0 0 30px rgb(var(--grid-accent-rgb) / 0.6), 0 0 60px rgb(var(--grid-accent-rgb) / 0.3);
+}
+.grid-hero__brackets { color: rgb(var(--grid-accent-rgb) / 0.45); }
+.grid-hero__bg {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgb(var(--grid-accent-rgb) / 0.18) 0%, transparent 70%),
+    repeating-linear-gradient(0deg, transparent 0 39px, rgb(var(--grid-accent-rgb) / 0.04) 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, rgb(var(--grid-accent-rgb) / 0.04) 40px);
+}
+.grid-hero__tagline { margin-top: 8px; letter-spacing: 0.2em; }
+
+/* ── 4 · Status pill (kit .grid-status) — styles the ck-hud-badge row ──
+   grid_kit.css is not linked by grid.html, so these badges previously
+   rendered unstyled. IDs/classes preserved (grid_kit.js reads spans). */
+/* v1.58.0 [2026-06-11] — align-self centers within the .neon-main flex
+   column (left/transform shifted the blockified flex item off-center) */
+.ck-hud-badges {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  width: fit-content;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 14px auto 4px;
+  padding: 8px 18px;
+  background: rgb(var(--grid-accent-rgb) / 0.04);
+  border: 1px solid rgb(var(--grid-accent-rgb) / 0.18);
+  border-radius: 20px;
+  font-size: 11px;
+  position: relative;
+}
+.ck-hud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--grid-text-dim);
+  letter-spacing: 0.06em;
+}
+.ck-hud-badge span { color: var(--grid-accent); font-weight: 600; }
+#badge-credits span { color: #f59e0b; }                 /* amber credits (kit .nv-credits) */
+#badge-heat span { color: #f87171; }                    /* heat reads hot (kit .heat) */
+
+/* ── 5 · Tabs — kit active treatment (underline + glow + tint) ───────── */
+.grid-tab--active {
+  background: rgb(var(--grid-accent-rgb) / 0.04);
+  text-shadow: 0 0 6px rgb(var(--grid-accent-rgb) / 0.35);
+}
+
+/* ── 6 · Zone titles — Orbitron display voice ────────────────────────── */
+.zone-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  text-shadow: 0 0 16px rgb(var(--grid-accent-rgb) / 0.4);
+}
+.zone-sub { letter-spacing: 0.14em; text-transform: uppercase; }
+
+/* ── 7 · Listings — kit .listing card (left rail, lift, amber price) ─── */
+.market-item {
+  background: var(--grid-glass);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.market-item::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 3px;
+  background: var(--grid-accent);
+  opacity: 0.4;
+}
+.market-item:hover {
+  border-color: var(--grid-accent);
+  box-shadow: var(--grid-glow);
+  transform: translateY(-1px);
+}
+.market-item__name {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--grid-accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.market-item__price { font-size: 14px; }
+.price-val { color: #fbbf24; text-shadow: 0 0 6px rgba(251, 191, 36, 0.3); }
+.price-symbol { color: #fbbf24; }
+.market-item__stock { letter-spacing: 0.06em; }
+
+/* ── 8 · Faction cards — Orbitron names + glass depth ────────────────── */
+.faction-card { background: var(--grid-glass); }
+.faction-card__name {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── 9 · Broker — intel left rail + terminal-voice ghost feed ────────── */
+.intel-entry { border-left: 2px solid var(--grid-accent); border-radius: 0 4px 4px 0; }
+.intel-feed-panel__title, .station-sidebar__title, .inventory-title,
+.sell-info-panel__title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.1em;
+}
+.ghost-terminal__output, .ghost-line {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+.ghost-terminal__id { font-family: var(--cs-font-display, 'Orbitron', sans-serif); }
+
+/* ── 10 · Buttons — accent-derived hover (was hardcoded green) ───────── */
+.btn:hover { background: rgb(var(--grid-accent-rgb) / 0.12); }
+.inventory-item {
+  background: rgb(var(--grid-accent-rgb) / 0.1);
+  border-color: rgb(var(--grid-accent-rgb) / 0.25);
+}
+
+/* ── 11 · Toasts — grid_kit.css never linked; kit treatment here ─────── */
+.ck-toast-container {
+  position: fixed;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.ck-toast--bottom-center { bottom: 34px; left: 50%; transform: translateX(-50%); align-items: center; }
+.ck-toast {
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgb(var(--grid-accent-rgb) / 0.3);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--grid-text);
+  pointer-events: all;
+  animation: cs-slide-up 0.3s ease-out;   /* reuse shared keyframe */
+}
+
+/* ── 12 · Content clearance under fixed navbar ───────────────────────── */
+.grid-zone, .grid-tabs, .ck-hud-badges { position: relative; z-index: 1; }
+
+/* ── 13 · Zone tiles — kit signature (.zones / .zone) ────────────────────
+   v1.58.0 [2026-06-11] — Enrichment: the kit's defining moment is its 4-up
+   underground-market zone tile grid (icon over Orbitron name, glow on
+   hover, tinted active state). The production tab strip keeps its classes
+   (.grid-tab / data-zone — grid_ext.js toggles .grid-tab--active) and is
+   re-dressed into those tiles. Overrides the underline-tab rules above.
+   CALLED BY: grid_ext.js wireZoneTabs() — class contract unchanged */
+.grid-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  border-bottom: none;
+  margin: 18px 0 24px;
+  overflow: visible;
+}
+.grid-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 8px;
+  background: var(--grid-glass);
+  border: 1px solid rgb(var(--grid-accent-rgb) / 0.15);
+  border-radius: 6px;
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+.grid-tab__icon {
+  margin-right: 0;
+  display: block;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--grid-accent);
+  opacity: 0.85;
+}
+.grid-tab:hover {
+  background: var(--grid-glass);
+  border-color: var(--grid-accent);
+  box-shadow: var(--grid-glow);
+  color: var(--grid-text);
+}
+.grid-tab--active {
+  color: var(--grid-accent);
+  background: rgb(var(--grid-accent-rgb) / 0.06);
+  border-color: var(--grid-accent);
+  box-shadow: var(--grid-glow), inset 0 0 24px rgb(var(--grid-accent-rgb) / 0.05);
+  text-shadow: 0 0 8px rgb(var(--grid-accent-rgb) / 0.35);
+}
+@media (max-width: 720px) {
+  .grid-tabs { grid-template-columns: repeat(2, 1fr); }
+}

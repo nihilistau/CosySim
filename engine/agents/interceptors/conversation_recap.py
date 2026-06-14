@@ -29,11 +29,12 @@ class ConversationRecapInterceptor(InterceptorBase):
     are rebuilt each turn.
 
     The recap is lightweight (last 4 exchanges max) and fades old entries
-    automatically.  Runs at priority 6 (after NaturalMoodDrift at 5,
+    automatically.  Runs at priority 7 (after NexusPrompt at 6,
     before CharacterRegistry at 8) so downstream interceptors see it.
     """
     name     = "conversation_recap"
-    priority = 6
+    # v1.49.1 [2026-03-22] — Bumped from 6→7 to resolve conflict with NexusPromptInterceptor
+    priority = 7
 
     MAX_TURNS = 4      # recent exchanges to keep
     MAX_MSG_LEN = 120  # truncate long messages in recap

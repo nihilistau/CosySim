@@ -1,6 +1,6 @@
 """NLM Q&A Seeder — batch-ask curated questions to NotebookLM and store answers in Nexus.
 
-Attaches to the running Chrome instance (port 9222) via ARGUS BaseCrawler,
+Attaches to the running Chrome instance (port 9223) via ARGUS BaseCrawler,
 finds the open NLM tab, submits each question from a curated list, waits for
 the stable answer, and stores every Q&A pair in Nexus Q&A cache.
 
@@ -189,7 +189,7 @@ async def run_seeder(
     async with crawler:
         ctx = crawler.context
         if ctx is None:
-            logger.error("No browser context — is Chrome running on port 9222?")
+            logger.error("No browser context — is Chrome running on port 9223?")
             return stats
 
         print(f"\n{'═'*70}")

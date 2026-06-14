@@ -155,7 +155,7 @@ Video styles: anime, autoselect, classic, custom, heritage, kawaii, papercraft, 
 
 The heap revealed the complete authentication picture:
 
-**API Key (embedded in app):** `AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM`  
+**API Key (embedded in app):** `AIza_REDACTED`  
 **OAuth Client ID:** `371316423795-luo3ln0198apr966qa7dkrmrsj30vrja.apps.googleusercontent.com`
 
 But NLM doesn't use the API key for batchexecute calls. It uses **Cookie-based session auth**:

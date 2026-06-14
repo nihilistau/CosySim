@@ -50,16 +50,16 @@ class _RingHandler(logging.Handler):
             # Forward ERROR / CRITICAL to ActivityBus so the admin panel captures them
             if record.levelno >= logging.ERROR:
                 try:
-                    from engine.services.activity_bus import get_activity_bus
-                    get_activity_bus().publish(
-                        activity_type="log_error",
-                        description=f"[{record.levelname}] {record.name}: {record.getMessage()[:200]}",
+                    # v1.49.4 [2026-03-22] — Fixed: ActivityBus has push(Activity), not publish()
+                    from engine.services.activity_bus import get_activity_bus, Activity
+                    get_activity_bus().push(Activity(
+                        kind="log_error",
+                        label=f"[{record.levelname}] {record.name}: {record.getMessage()[:200]}",
                         agent_id=record.name,
                         scene="system",
-                        data={"level": record.levelname, "logger": record.name},
-                    )
+                    ))
                 except Exception:
-                    logger.debug("Suppressed exception", exc_info=True)
+                    pass  # Never crash the log handler
         except Exception:                 # never crash the emitting thread
             self.handleError(record)
 

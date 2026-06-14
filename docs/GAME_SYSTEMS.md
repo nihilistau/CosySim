@@ -1,7 +1,10 @@
 # CosySim Game Systems Reference
 
-> Consolidated in v1.42 — merges NeonCity 2 game systems, living world, and world system docs.
-> Covers: WorldSim · WorldState · PlayerState · EventCascade · Economy · Factions · NPCs · Events · Inventory
+> CosySim Documentation — v1.52.0 [2026-03-26]
+>
+> Covers: WorldSim · WorldState · PlayerState · EventCascade · Economy · Factions · NPCs · Events · Inventory.
+> Living world simulation with 32 launch targets, 6 factions, and threaded daemons that keep
+> the city alive even when the player is idle.
 
 All systems use `threading.RLock` for thread safety and the singleton pattern for global access.
 
@@ -154,7 +157,7 @@ DEFAULT_SCENE_SUBSCRIPTIONS = {
     "penthouse": ["world.tick"],
     "grid":      ["world.tick", "world.economy_tick", "world.faction_shift",
                   "world.npc_action", "world.ghost_message"],
-    # … 10 more scenes
+    # ... additional scenes
 }
 ```
 
@@ -180,7 +183,7 @@ all_events = get_all_world_events()
 ### Weather System
 
 Markov chain with 5 states:
-Clear → Overcast → Rain → Acid Rain → Storm → Clear
+Clear -> Overcast -> Rain -> Acid Rain -> Storm -> Clear
 
 Weather affects NPC behavior, market prices, and visibility.
 
@@ -201,7 +204,7 @@ Weather affects NPC behavior, market prices, and visibility.
 
 ```
 1. WorldSim timer fires (e.g., economy_tick every 90 s)
-2. WorldSim calls neon_city_events helper → picks template
+2. WorldSim calls neon_city_events helper -> picks template
 3. WorldSim mutates PlayerState (credits, heat, reputation)
 4. PlayerState emits Socket.IO `hud_update` to ALL connected browsers
 5. WorldSim publishes EventBus event (e.g., "world.economy_tick")
@@ -209,8 +212,8 @@ Weather affects NPC behavior, market prices, and visibility.
      a. In-process subscribers (scene._on_economy_tick handlers) called synchronously
      b. Socket.IO `economy_tick` emitted to subscribed scene rooms
      c. Event appended to scene MCP poll queues
-7. Scene UI receives `economy_tick` → renders notification in feed
-8. HUD strip receives `hud_update` → updates credits/rep/heat glyphs in real time
+7. Scene UI receives `economy_tick` -> renders notification in feed
+8. HUD strip receives `hud_update` -> updates credits/rep/heat glyphs in real time
 ```
 
 ### World Skills (pack `"world"`)
@@ -296,10 +299,10 @@ Seven named economy events fire in rotation:
 
 | Event | Credits delta | Reputation delta | Description |
 |-------|--------------|-----------------|-------------|
-| `supply_disruption` | −50 to −150 | 0 | Supply chain blocked — prices spike |
+| `supply_disruption` | -50 to -150 | 0 | Supply chain blocked — prices spike |
 | `faction_windfall` | +100 to +300 | +2 | Faction pays out contracts |
-| `market_crash` | −200 to −400 | −5 | Exchange volatility wipes portfolios |
-| `black_market_surge` | +150 to +250 | −3 | Underground trade boom |
+| `market_crash` | -200 to -400 | -5 | Exchange volatility wipes portfolios |
+| `black_market_surge` | +150 to +250 | -3 | Underground trade boom |
 | `corporate_bounty` | +200 | +5 | OmniCorp posts open bounty contract |
 | `ghost_dividend` | +50 to +100 | +8 | Ghost_Net data payload pays out |
 | `heat_relief` | 0 | +3 | SynthSec stands down — pressure eases |
@@ -331,7 +334,7 @@ Economy tick interval: **90 seconds** (configurable via `world.economy_tick_inte
 
 | Scene | Economy event handler | Effect |
 |-------|-----------------------|--------|
-| Casino | `_on_economy_tick` | Adjusts table odds ±5–15 % |
+| Casino | `_on_economy_tick` | Adjusts table odds +/-5-15 % |
 | NeonCity | `_on_economy_tick` | Updates district price index |
 | THE GRID | `_on_economy_tick` | Refreshes vendor prices |
 | Phone | `_on_economy_tick` | Triggers NEXUS FEED news item |
@@ -339,7 +342,7 @@ Economy tick interval: **90 seconds** (configurable via `world.economy_tick_inte
 
 ### PlayerState (`engine/world/player_state.py`)
 
-Singleton tracking credits, heat, reputation, faction standings, energy, XP, and location.
+Singleton tracking credits, heat, reputation, faction standings, health, hunger, energy, XP, and location.
 
 ```python
 from engine.world.player_state import get_player_state
@@ -393,7 +396,7 @@ recruit, or withdraw.
 ### Standing Scale
 
 ```
- −100 ──────────── 0 ──────────── +100
+ -100 ──────────── 0 ──────────── +100
   Hostile          Neutral         Allied
 ```
 
@@ -401,16 +404,16 @@ Five zones:
 
 | Range | Label |
 |-------|-------|
-| 80 – 100 | **Champion** — deep bonuses |
-| 50 – 79 | **Allied** — faction content unlocked |
-| −19 – 49 | **Neutral** |
-| −20 – −49 | **Hostile** — reduced access |
-| −50 – −100 | **Enemy** — locked out, potential ambush |
+| 80 - 100 | **Champion** — deep bonuses |
+| 50 - 79 | **Allied** — faction content unlocked |
+| -19 - 49 | **Neutral** |
+| -20 - -49 | **Hostile** — reduced access |
+| -50 - -100 | **Enemy** — locked out, potential ambush |
 
 ### World-Level Faction Shifts
 
 `_fire_faction_shift()` fires every 300 seconds. It selects one of the six factions and
-applies a small world-level standing delta (±3 to ±10) to ALL players. This simulates
+applies a small world-level standing delta (+/-3 to +/-10) to ALL players. This simulates
 the faction's global power rising or falling independent of the player's actions.
 
 Scenes that subscribe to `world.faction_shift` can trigger narrative events: faction wars
@@ -492,8 +495,8 @@ await scheduler.tick()  # force a single tick (useful for testing)
 ```
 
 **Graceful degradation:**
-- WorldSim unavailable → uses `npc_scheduler.fallback_npcs` config list.
-- LMStudio unavailable → picks randomly from the built-in `ACTIVITY_POOL`.
+- WorldSim unavailable -> uses `npc_scheduler.fallback_npcs` config list.
+- LMStudio unavailable -> picks randomly from the built-in `ACTIVITY_POOL`.
 - No exception ever propagates out of `tick()`.
 
 **Config keys:**
@@ -549,9 +552,9 @@ NPCs can be interrupted from routines and will resume afterward.
 ### Character Neurochemistry (`engine/characters/neurochemistry.py`)
 
 **Skills:** `engine/skills/builtin/neurochemistry_skills.py` (3 skills)
-**Config:** `config/default.yaml` → `neurochemistry:`
+**Config:** `config/default.yaml` -> `neurochemistry:`
 
-Every NPC has 6 neurotransmitters (0.0–1.0) that drive their emotional state:
+Every NPC has 6 neurotransmitters (0.0-1.0) that drive their emotional state:
 
 | Neurotransmitter | Role |
 |-----------------|------|
@@ -568,7 +571,7 @@ Every NPC has 6 neurotransmitters (0.0–1.0) that drive their emotional state:
 - **Trusting**: high oxytocin + low cortisol
 - **Excited**: high adrenaline + high dopamine
 
-**30+ stimuli** mapped to neurotransmitter deltas (e.g., `compliment` → dopamine +0.15,
+**30+ stimuli** mapped to neurotransmitter deltas (e.g., `compliment` -> dopamine +0.15,
 serotonin +0.1, oxytocin +0.05).
 
 ```python
@@ -577,7 +580,7 @@ from engine.characters.neurochemistry import get_neurochemistry_engine
 engine = get_neurochemistry_engine()
 engine.apply_stimulus("npc_lola", "compliment")
 state = engine.get_state("npc_lola")
-# → {dopamine: 0.65, serotonin: 0.6, ..., emotions: ["happy", "trusting"]}
+# -> {dopamine: 0.65, serotonin: 0.6, ..., emotions: ["happy", "trusting"]}
 ```
 
 **MCP Skills:** `check_mood`, `stimulate`, `read_neurochem`
@@ -646,7 +649,7 @@ ann.unmute_station("economy")
 | `world` | `world.*` | Blue |
 | `hacker` | `hacker.*` | Green |
 | `economy` | `economy.*`, `casino.*` | Gold |
-| `all` | Master mute — silences all stations | — |
+| `all` | Master mute — silences all stations | -- |
 
 **Ring buffer:** 50-event capacity, thread-safe, each entry has
 `{id, title, body, category, scene, actor, intensity, timestamp}`.
@@ -756,7 +759,7 @@ Each edge carries: `travel_cost` (minutes), `energy_cost`, `heat_add`.
 ### MissionManager (`engine/world/mission.py`)
 
 Singleton mission system. Ships 15 builtin missions; custom missions can be created at runtime.
-Full lifecycle: `pending → active → completed / failed`.
+Full lifecycle: `pending -> active -> completed / failed`.
 
 ```python
 from engine.world.mission import get_mission_manager, reset_mission_manager
@@ -784,9 +787,9 @@ mgr.create_mission(
 | `sabotage` | "Burn It Down", "The Signal Jammer", "Cascade Fault" |
 | `courier` | "Dead Drop", "Hot Package", "The Last Mile" |
 
-**Rewards** apply to PlayerState: `credits` → `earn_credits()`, `xp` → `add_xp()`,
-`reputation` → `adjust_reputation()`, `faction` → `adjust_faction()`.
-Abandon penalty: −3 reputation. Fail penalty: −difficulty × 3 reputation.
+**Rewards** apply to PlayerState: `credits` -> `earn_credits()`, `xp` -> `add_xp()`,
+`reputation` -> `adjust_reputation()`, `faction` -> `adjust_faction()`.
+Abandon penalty: -3 reputation. Fail penalty: -difficulty x 3 reputation.
 
 **REST endpoints** (registered by `base_scene.register_mission_route()`):
 
@@ -838,7 +841,7 @@ Abandon penalty: −3 reputation. Fail penalty: −difficulty × 3 reputation.
 **Skill checks:** Roll vs difficulty + skill level + modifiers:
 ```python
 result = progression.skill_check("player_1", "hacking", difficulty=3)
-# → {success: True, roll: 14, threshold: 12, margin: 2}
+# -> {success: True, roll: 14, threshold: 12, margin: 2}
 ```
 
 **MCP Skills:** `check_skill`, `attempt_action`, `view_xp`
@@ -979,11 +982,21 @@ world:
 
 ## See Also
 
-- [NEON_HUD.md](./NEON_HUD.md) — PlayerState API, HUD strip, Socket.IO events
-- [THE_GRID.md](./THE_GRID.md) — Scene with deepest living-world integration
-- [ECONOMY_GUIDE.md](./ECONOMY_GUIDE.md) — EconomyManager, cross-scene credits
-- [SKILLS.md](./SKILLS.md) — `@skill` decorator, pack registration
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — BaseScene, MCP pipeline, interceptor chain
-- [MCP_FRAMEWORK.md](./MCP_FRAMEWORK.md) — full MCP system deep dive
-- [CHARACTERS.md](./CHARACTERS.md) — NPCState, CharacterMemory, relationship system
-- [CONFIGURATION.md](./CONFIGURATION.md) — `world.*`, `npc.*`, `npc_scheduler.*` config keys
+- [Scenes](SCENES.md) — Per-scene configuration and launch targets
+- [Economy Guide](ECONOMY_GUIDE.md) — EconomyManager, cross-scene credits, market system
+- [Architecture](ARCHITECTURE.md) — BaseScene, MCP pipeline, interceptor chain
+- [Neon HUD](NEON_HUD.md) — PlayerState API, HUD strip, Socket.IO events
+- [Character System](CHARACTER_SYSTEM.md) — NPCState, CharacterMemory, relationship system
+- [Configuration](CONFIGURATION.md) — `world.*`, `npc.*`, `npc_scheduler.*` config keys
+- [Skills](SKILLS.md) — `@skill` decorator, pack registration
+- [MCP Framework](MCP_FRAMEWORK.md) — Full MCP system deep dive
+
+---
+
+## Change Log
+
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Updated to v1.50; fixed PlayerState fields (added health, hunger); confirmed 6 factions with power %; 60s WorldSim tick; removed stale cross-refs |
+| v1.42 | 2025-12-15 | Consolidated from NeonCity 2 game systems, living world, and world system docs |
+| v1.04b | 2025-09-01 | Initial game systems documentation |

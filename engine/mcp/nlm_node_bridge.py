@@ -625,7 +625,7 @@ class NLMNodeBridge:
         notebook_id: str,
         store_in_nexus: bool = False,
         nexus_category: str = "",
-        nexus_url: str = "http://localhost:8700",
+        nexus_url: str = "",
     ) -> Dict[str, Any]:
         """Generate flashcards via Studio tile and parse into {front, back}[] pairs.
 
@@ -640,6 +640,9 @@ class NLMNodeBridge:
         Returns:
             Dict with flashcards list, count, parse_method, nexus_ids.
         """
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         if not self.ensure_started():
             return {"error": "Node server not running"}
         args: Dict[str, Any] = {"notebook_id": notebook_id}
@@ -655,7 +658,7 @@ class NLMNodeBridge:
         notebook_id: str,
         store_in_nexus: bool = False,
         nexus_category: str = "",
-        nexus_url: str = "http://localhost:8700",
+        nexus_url: str = "",
     ) -> Dict[str, Any]:
         """Generate quiz via Studio tile and parse into {question, answer, options[]}[] items.
 
@@ -670,6 +673,9 @@ class NLMNodeBridge:
         Returns:
             Dict with questions list, count, parse_method, nexus_ids.
         """
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         if not self.ensure_started():
             return {"error": "Node server not running"}
         args: Dict[str, Any] = {"notebook_id": notebook_id}
@@ -740,7 +746,7 @@ class NLMNodeBridge:
         self,
         notebook_id: str,
         nexus_category: str = "distillation",
-        nexus_url: str = "http://localhost:8700",
+        nexus_url: str = "",
     ) -> Dict[str, Any]:
         """One-shot: generate flashcards + quiz, parse, store all Q&A pairs in Nexus.
 
@@ -754,6 +760,9 @@ class NLMNodeBridge:
         Returns:
             Dict with flashcard_count, quiz_count, nexus_count, nexus_ids.
         """
+        if not nexus_url:
+            from engine.port_registry import get_service_url
+            nexus_url = get_service_url("nexus")
         if not self.ensure_started():
             return {"error": "Node server not running"}
         return self.call_tool("distill_to_nexus", {

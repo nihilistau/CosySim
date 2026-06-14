@@ -1,0 +1,2238 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Creation Kit — Visual Scene Editor v1.51.0
+  =========================================
+  Drag-and-drop scene construction from the CosySim component library.
+  Left: Component palette. Center: Layout canvas + live preview.
+  Right: Property inspector. Supports nested layouts.
+
+  Version: v1.51.0 [2026-03-25]
+  Change Log:
+    v1.51.0 [2026-03-25] — Character Wizard overlay (6-stage character creation)
+    v1.49.5 [2026-03-22] — Visual drop indicator, breadcrumb navigation,
+                            component duplication (Ctrl+D), canvas minimap
+    v1.48.0 [2026-03-21] — v2: nested slot drop zones, 28 components,
+                            live auto-preview, canvas drag reorder,
+                            container slot visualization
+    v1.47.0 [2026-03-21] — Initial visual editor: palette, canvas, inspector,
+                            theme editor, save/load, HTML export, live preview
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creation Kit — CosySim</title>
+<link rel="stylesheet" href="/shared/css/design_tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- v1.51.0 [2026-03-25] — Character Wizard overlay styles -->
+<link rel="stylesheet" href="/creation_kit/static/character_wizard.css">
+<style>
+/* ══════════════════════════════════════════════════════════════
+   CREATION KIT — v1.47.0 [2026-03-21]
+   Visual scene editor.
+   Aesthetic: Warm amber on dark slate. Blueprint grid.
+   Typography: DM Sans (UI) + JetBrains Mono (code/data).
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  --ck-bg: #0c0e14;
+  --ck-panel: #12151e;
+  --ck-panel-2: #181c28;
+  --ck-border: #242940;
+  --ck-accent: #f59e0b;
+  --ck-accent-rgb: 245 158 11;
+  --ck-accent-dim: #b45309;
+  --ck-blue: #3b82f6;
+  --ck-green: #22c55e;
+  --ck-red: #ef4444;
+  --ck-cyan: #06b6d4;
+  --ck-purple: #8b5cf6;
+  --ck-text: #c8ccd8;
+  --ck-text-dim: #5a6078;
+  --ck-sans: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+  --ck-mono: 'JetBrains Mono', 'Cascadia Code', monospace;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--ck-bg);
+  color: var(--ck-text);
+  font-family: var(--ck-sans);
+  font-size: 13px;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── App layout ─────────────────────────────────────────── */
+.ck-app {
+  display: grid;
+  grid-template-columns: 220px 1fr 280px;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+}
+
+/* ── Top bar ────────────────────────────────────────────── */
+.ck-topbar {
+  grid-column: 1 / -1;
+  background: var(--ck-panel);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--ck-border);
+}
+.ck-topbar h1 {
+  font-family: var(--ck-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ck-accent);
+  letter-spacing: 2px;
+}
+.ck-topbar-sep {
+  width: 1px; height: 20px;
+  background: var(--ck-border);
+}
+
+/* Scene name input */
+.ck-scene-name {
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  color: var(--ck-text);
+  font-family: var(--ck-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  width: 180px;
+}
+.ck-scene-name:focus { outline: none; border-color: var(--ck-accent); }
+
+/* Accent color picker */
+.ck-accent-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ck-accent-swatch {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  border: 2px solid var(--ck-border);
+  cursor: pointer;
+}
+.ck-accent-input {
+  width: 26px; height: 26px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+.ck-accent-hex {
+  font-family: var(--ck-mono);
+  font-size: 0.7rem;
+  color: var(--ck-text-dim);
+}
+
+/* Topbar buttons */
+.ck-btn {
+  padding: 5px 12px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  color: var(--ck-text);
+  font-family: var(--ck-sans);
+  font-size: 0.72rem;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.ck-btn:hover { border-color: var(--ck-accent); color: var(--ck-accent); }
+.ck-btn.primary {
+  background: var(--ck-accent);
+  color: #000;
+  border-color: var(--ck-accent);
+  font-weight: 600;
+}
+.ck-btn.primary:hover { background: #d97706; }
+.ck-btn.danger { border-color: var(--ck-red); color: var(--ck-red); }
+.ck-btn-group { display: flex; gap: 6px; margin-left: auto; }
+
+/* ── Left panel — Component palette ─────────────────────── */
+.ck-palette {
+  background: var(--ck-panel);
+  border-right: 1px solid var(--ck-border);
+  overflow-y: auto;
+  padding: 10px;
+}
+.ck-palette-title {
+  font-family: var(--ck-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--ck-accent);
+  text-transform: uppercase;
+  margin: 12px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(245,158,11,0.12);
+}
+.ck-palette-title:first-child { margin-top: 0; }
+
+.ck-comp-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 5px;
+  margin: 4px 0;
+  cursor: grab;
+  transition: all 0.15s;
+  user-select: none;
+}
+.ck-comp-card:hover {
+  border-color: var(--ck-accent);
+  background: rgba(245,158,11,0.04);
+  transform: translateX(2px);
+}
+.ck-comp-card:active { cursor: grabbing; opacity: 0.7; }
+.ck-comp-icon {
+  font-size: 1rem;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.ck-comp-info { flex: 1; min-width: 0; }
+.ck-comp-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ck-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ck-comp-desc {
+  font-size: 0.6rem;
+  color: var(--ck-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Search */
+.ck-search {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 4px;
+  color: var(--ck-text);
+  font-family: var(--ck-sans);
+  font-size: 0.72rem;
+  margin-bottom: 8px;
+}
+.ck-search:focus { outline: none; border-color: var(--ck-accent); }
+.ck-search::placeholder { color: var(--ck-text-dim); }
+
+/* ── Center — Canvas ────────────────────────────────────── */
+.ck-canvas-area {
+  position: relative;
+  overflow: auto;
+  /* Blueprint grid background */
+  background:
+    linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px),
+    linear-gradient(rgba(59,130,246,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59,130,246,0.02) 1px, transparent 1px),
+    var(--ck-bg);
+  background-size: 80px 80px, 80px 80px, 20px 20px, 20px 20px;
+}
+
+/* Drop zone indicator */
+.ck-canvas-area.drag-over::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(245,158,11,0.03);
+  border: 2px dashed rgba(245,158,11,0.2);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.ck-canvas {
+  min-height: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Empty state */
+.ck-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 400px;
+  color: var(--ck-text-dim);
+  text-align: center;
+  gap: 12px;
+}
+.ck-empty-icon { font-size: 3rem; opacity: 0.3; }
+.ck-empty-text { font-size: 0.85rem; }
+.ck-empty-hint { font-size: 0.7rem; opacity: 0.5; }
+
+/* Placed component on canvas */
+.ck-placed {
+  position: relative;
+  padding: 10px;
+  border: 1px dashed var(--ck-border);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.01);
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 48px;
+}
+.ck-placed:hover { border-color: rgba(245,158,11,0.3); }
+.ck-placed.selected {
+  border-color: var(--ck-accent);
+  border-style: solid;
+  background: rgba(245,158,11,0.03);
+  box-shadow: 0 0 0 1px rgba(245,158,11,0.15);
+}
+.ck-placed-label {
+  position: absolute;
+  top: -8px; left: 8px;
+  font-family: var(--ck-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: var(--ck-accent);
+  background: var(--ck-bg);
+  padding: 0 4px;
+  letter-spacing: 0.5px;
+}
+.ck-placed-preview {
+  font-size: 0.72rem;
+  color: var(--ck-text-dim);
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ck-placed-preview .preview-icon { font-size: 1.2rem; opacity: 0.5; }
+
+/* Drag handle + delete */
+.ck-placed-actions {
+  position: absolute;
+  top: -8px; right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.ck-placed:hover .ck-placed-actions { opacity: 1; }
+.ck-placed-action {
+  width: 18px; height: 18px;
+  background: var(--ck-panel);
+  border: 1px solid var(--ck-border);
+  border-radius: 3px;
+  color: var(--ck-text-dim);
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ck-placed-action:hover { border-color: var(--ck-accent); color: var(--ck-accent); }
+.ck-placed-action.delete:hover { border-color: var(--ck-red); color: var(--ck-red); }
+
+/* Drop placeholder line */
+.ck-drop-line {
+  height: 3px;
+  background: var(--ck-accent);
+  border-radius: 2px;
+  margin: 2px 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.ck-drop-line.active { opacity: 1; }
+
+/* ── Right panel — Property inspector ───────────────────── */
+.ck-inspector {
+  background: var(--ck-panel);
+  border-left: 1px solid var(--ck-border);
+  overflow-y: auto;
+  padding: 12px;
+}
+.ck-insp-title {
+  font-family: var(--ck-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--ck-accent);
+  text-transform: uppercase;
+  margin: 12px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(245,158,11,0.12);
+}
+.ck-insp-title:first-child { margin-top: 0; }
+
+.ck-insp-empty {
+  text-align: center;
+  color: var(--ck-text-dim);
+  font-size: 0.75rem;
+  padding: 40px 10px;
+}
+
+/* Property field */
+.ck-prop-field {
+  margin: 6px 0;
+}
+.ck-prop-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--ck-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+}
+.ck-prop-input {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 3px;
+  color: var(--ck-text);
+  font-family: var(--ck-mono);
+  font-size: 0.72rem;
+}
+.ck-prop-input:focus { outline: none; border-color: var(--ck-accent); }
+.ck-prop-select {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 3px;
+  color: var(--ck-text);
+  font-family: var(--ck-mono);
+  font-size: 0.72rem;
+}
+.ck-prop-textarea {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 3px;
+  color: var(--ck-text);
+  font-family: var(--ck-mono);
+  font-size: 0.68rem;
+  resize: vertical;
+  min-height: 48px;
+}
+.ck-prop-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ck-prop-toggle input[type="checkbox"] {
+  accent-color: var(--ck-accent);
+}
+
+/* Component type badge */
+.ck-type-badge {
+  display: inline-block;
+  font-family: var(--ck-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: 3px;
+  color: var(--ck-accent);
+  margin-bottom: 8px;
+}
+
+/* ── Asset browser drawer ──────────────────────────────── */
+/* v1.50.0 [2026-03-22] — slide-over panel inside inspector */
+.ck-asset-browser {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: var(--ck-panel);
+  z-index: 10;
+  overflow-y: auto;
+  padding: 12px;
+  animation: ck-ab-slide 0.2s ease-out;
+}
+@keyframes ck-ab-slide {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.ck-asset-browser.open { display: block; }
+.ck-ab-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ck-ab-header h3 {
+  flex: 1;
+  font-family: var(--ck-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--ck-accent);
+  text-transform: uppercase;
+  margin: 0;
+}
+.ck-ab-close {
+  background: none;
+  border: none;
+  color: var(--ck-text-dim);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.ck-ab-close:hover { color: var(--ck-text); }
+.ck-ab-search {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 3px;
+  color: var(--ck-text);
+  font-family: var(--ck-mono);
+  font-size: 0.72rem;
+  margin-bottom: 6px;
+}
+.ck-ab-search:focus { outline: none; border-color: var(--ck-accent); }
+.ck-ab-filters {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.ck-ab-filter-btn {
+  padding: 2px 8px;
+  font-size: 0.6rem;
+  font-family: var(--ck-mono);
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 3px;
+  color: var(--ck-text-dim);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ck-ab-filter-btn:hover { color: var(--ck-text); border-color: var(--ck-accent); }
+.ck-ab-filter-btn.active {
+  background: rgba(245,158,11,0.1);
+  border-color: var(--ck-accent);
+  color: var(--ck-accent);
+}
+.ck-ab-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.ck-ab-card {
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  text-align: center;
+}
+.ck-ab-card:hover { border-color: var(--ck-accent); }
+.ck-ab-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #0a0a0f;
+}
+.ck-ab-card-name {
+  font-size: 0.55rem;
+  color: var(--ck-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.ck-ab-card .ck-ab-fav { color: #f59e0b; font-size: 0.6rem; }
+.ck-ab-card .ck-ab-source {
+  font-size: 0.5rem;
+  color: var(--ck-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ck-ab-empty {
+  text-align: center;
+  color: var(--ck-text-dim);
+  font-size: 0.72rem;
+  padding: 30px 10px;
+}
+.ck-ab-placeholder {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ck-bg);
+  border-radius: 3px;
+  font-size: 1.4rem;
+  color: var(--ck-text-dim);
+}
+
+/* ── Bottom bar ─────────────────────────────────────────── */
+.ck-bottombar {
+  grid-column: 1 / -1;
+  background: var(--ck-panel);
+  border-top: 1px solid var(--ck-border);
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.68rem;
+  color: var(--ck-text-dim);
+}
+.ck-status-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ck-status-val { color: var(--ck-accent); font-family: var(--ck-mono); }
+
+/* ── Layout list modal ──────────────────────────────────── */
+.ck-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.ck-modal-overlay.show { opacity: 1; pointer-events: all; }
+.ck-modal {
+  background: var(--ck-panel);
+  border: 1px solid var(--ck-border);
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 400px;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.ck-modal h2 {
+  font-size: 1rem;
+  color: var(--ck-accent);
+  margin-bottom: 12px;
+}
+.ck-layout-card {
+  padding: 10px;
+  background: var(--ck-bg);
+  border: 1px solid var(--ck-border);
+  border-radius: 5px;
+  margin: 6px 0;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ck-layout-card:hover { border-color: var(--ck-accent); }
+.ck-layout-name { font-weight: 600; font-size: 0.8rem; }
+.ck-layout-meta { font-size: 0.65rem; color: var(--ck-text-dim); margin-top: 2px; }
+
+/* ── Preview modal ──────────────────────────────────────── */
+.ck-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 200;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.ck-preview-overlay.show { opacity: 1; pointer-events: all; }
+.ck-preview-frame {
+  width: 100%;
+  max-width: 1200px;
+  background: #000;
+  border: 1px solid var(--ck-border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.ck-preview-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--ck-panel);
+  border-bottom: 1px solid var(--ck-border);
+  gap: 8px;
+}
+.ck-preview-header h3 {
+  font-size: 0.8rem;
+  color: var(--ck-accent);
+  flex: 1;
+}
+.ck-preview-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+}
+
+/* ── Nested slot drop zones ─────────────────────────────── */
+/* v1.48.0 — Container components show slot drop zones */
+.ck-slot-zone {
+  min-height: 36px;
+  border: 1px dashed rgba(245,158,11,0.15);
+  border-radius: 4px;
+  margin: 4px 0;
+  padding: 4px;
+  position: relative;
+  transition: all 0.15s;
+}
+.ck-slot-zone:empty::after {
+  content: 'Drop here';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  color: var(--ck-text-dim);
+  opacity: 0.5;
+}
+.ck-slot-zone.drag-over {
+  border-color: var(--ck-accent);
+  background: rgba(245,158,11,0.04);
+}
+.ck-slot-label {
+  font-family: var(--ck-mono);
+  font-size: 0.5rem;
+  color: var(--ck-text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* Nested placed component (inside slot) */
+.ck-placed.nested {
+  border-color: rgba(245,158,11,0.12);
+  margin: 3px 0;
+}
+.ck-placed.nested .ck-placed-label {
+  font-size: 0.5rem;
+}
+
+/* Container columns preview */
+.ck-placed-columns {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* ── Canvas drag reorder ───────────────────────────────── */
+/* v1.48.0 — Drag handle for reordering */
+.ck-drag-handle {
+  cursor: grab;
+  opacity: 0.4;
+  font-size: 0.7rem;
+  transition: opacity 0.15s;
+}
+.ck-drag-handle:hover { opacity: 1; }
+.ck-placed.dragging {
+  opacity: 0.4;
+  border-style: dotted;
+}
+.ck-drop-indicator {
+  height: 2px;
+  background: var(--ck-accent);
+  border-radius: 1px;
+  margin: 1px 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.ck-drop-indicator.visible { opacity: 1; }
+
+/* ── Live preview split ────────────────────────────────── */
+/* v1.48.0 — Toggle between canvas and split view */
+.ck-canvas-area.split-view {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+}
+.ck-live-preview {
+  border-top: 2px solid var(--ck-accent);
+  background: #000;
+  overflow: hidden;
+  display: none;
+}
+.ck-canvas-area.split-view .ck-live-preview { display: block; }
+.ck-live-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  transform-origin: top left;
+  transform: scale(0.75);
+  width: 133.33%;
+  height: 133.33%;
+}
+.ck-preview-badge {
+  position: absolute;
+  bottom: 4px; right: 4px;
+  font-family: var(--ck-mono);
+  font-size: 0.55rem;
+  color: var(--ck-accent);
+  background: rgba(0,0,0,0.8);
+  padding: 2px 6px;
+  border-radius: 3px;
+  z-index: 5;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--ck-border); border-radius: 2px; }
+
+/* ── Toast notification — v1.49.3 ──────────────────────── */
+.ck-toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--ck-panel-2); color: var(--ck-text); border: 1px solid var(--ck-border);
+  padding: 8px 20px; border-radius: 6px; font-size: 12px;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  z-index: 9999;
+}
+.ck-toast--visible { opacity: 1; }
+.ck-toast--info { border-color: var(--ck-blue); }
+.ck-toast--error { border-color: var(--ck-red); color: var(--ck-red); }
+
+/* ── Disabled button ───────────────────────────────────── */
+.ck-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── Visual drop indicator v1.49.5 [2026-03-22] ───────── */
+/* Glowing insertion line shown during palette drag over canvas */
+.ck-drop-indicator-line {
+  height: 3px;
+  background: var(--ck-accent);
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgb(var(--ck-accent-rgb) / 0.6), 0 0 20px rgb(var(--ck-accent-rgb) / 0.3);
+  margin: 2px 20px;
+  pointer-events: none;
+  transition: opacity 0.1s;
+  opacity: 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+}
+.ck-drop-indicator-line.visible { opacity: 1; }
+
+/* ── Breadcrumb navigation v1.49.5 [2026-03-22] ───────── */
+/* Trail for nested component editing: Root > parent > slot > child */
+.ck-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgba(245,158,11,0.04);
+  border: 1px solid rgba(245,158,11,0.1);
+  border-radius: 4px;
+}
+.ck-breadcrumb__item {
+  font-family: var(--ck-mono);
+  font-size: 0.6rem;
+  color: var(--ck-text-dim);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 2px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.ck-breadcrumb__item:hover {
+  color: var(--ck-accent);
+  background: rgba(245,158,11,0.08);
+}
+.ck-breadcrumb__item.current {
+  color: var(--ck-accent);
+  font-weight: 600;
+  cursor: default;
+}
+.ck-breadcrumb__sep {
+  font-size: 0.55rem;
+  color: var(--ck-text-dim);
+  opacity: 0.4;
+  user-select: none;
+}
+
+/* ── Canvas minimap v1.49.5 [2026-03-22] ──────────────── */
+/* Small fixed overview panel showing all placed components */
+.ck-minimap {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 120px;
+  max-height: 200px;
+  background: rgba(18, 21, 30, 0.92);
+  border: 1px solid var(--ck-border);
+  border-radius: 6px;
+  padding: 6px;
+  z-index: 15;
+  overflow-y: auto;
+  backdrop-filter: blur(6px);
+}
+.ck-minimap__title {
+  font-family: var(--ck-mono);
+  font-size: 0.45rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--ck-text-dim);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.ck-minimap__block {
+  height: 6px;
+  border-radius: 2px;
+  margin: 2px 0;
+  cursor: pointer;
+  transition: all 0.12s;
+  opacity: 0.6;
+}
+.ck-minimap__block:hover { opacity: 1; transform: scaleX(1.05); }
+.ck-minimap__block.selected {
+  opacity: 1;
+  box-shadow: 0 0 6px rgb(var(--ck-accent-rgb) / 0.5);
+  height: 8px;
+}
+.ck-minimap__empty {
+  font-size: 0.5rem;
+  color: var(--ck-text-dim);
+  text-align: center;
+  padding: 4px;
+  opacity: 0.5;
+}
+</style>
+</head>
+<body>
+<div class="ck-app">
+
+  <!-- ── Top bar ────────────────────────────────────────── -->
+  <div class="ck-topbar">
+    <h1>&#9670; CREATION KIT</h1>
+    <div class="ck-topbar-sep"></div>
+
+    <input type="text" class="ck-scene-name" id="ck-scene-name"
+           placeholder="Scene Name" value="my_scene">
+
+    <div class="ck-accent-picker">
+      <input type="color" class="ck-accent-input" id="ck-accent-color"
+             value="#06b6d4" onchange="CK.setAccent(this.value)">
+      <span class="ck-accent-hex" id="ck-accent-hex">#06b6d4</span>
+    </div>
+
+    <div class="ck-btn-group">
+      <button class="ck-btn" onclick="CK.newLayout()">&#10010; New</button>
+      <button class="ck-btn" onclick="CK.openLoadModal()">&#128193; Open</button>
+      <button class="ck-btn" onclick="CK.save()">&#128190; Save</button>
+      <!-- v1.49.3 [2026-03-22] — Undo/redo buttons -->
+      <button class="ck-btn" id="ck-undo-btn" onclick="CK.undo()" disabled title="Undo (Ctrl+Z)">&#8617; Undo</button>
+      <button class="ck-btn" id="ck-redo-btn" onclick="CK.redo()" disabled title="Redo (Ctrl+Y)">&#8618; Redo</button>
+      <button class="ck-btn" onclick="CK.toggleLivePreview()" id="btn-live-preview">&#9654; Live Preview</button>
+      <button class="ck-btn" onclick="CK.preview()">&#9635; Full Preview</button>
+      <!-- v1.51.0 [2026-03-25] — Character Wizard button -->
+      <button class="ck-btn" onclick="CharacterWizard.open()">&#9823; Character</button>
+      <button class="ck-btn primary" onclick="CK.exportScene()">&#10548; Export Scene</button>
+    </div>
+  </div>
+  <!-- v1.49.3 [2026-03-22] — Toast notification -->
+  <div id="ck-toast" class="ck-toast"></div>
+
+  <!-- ── Left — Component palette ───────────────────────── -->
+  <div class="ck-palette" id="ck-palette">
+    <input type="text" class="ck-search" id="ck-search"
+           placeholder="Search components..." oninput="CK.filterPalette(this.value)">
+    <div id="ck-palette-list">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+
+  <!-- ── Center — Canvas ────────────────────────────────── -->
+  <!-- v1.49.5 [2026-03-22] — Added drop indicator line + minimap to canvas area -->
+  <div class="ck-canvas-area" id="ck-canvas-area"
+       ondragover="CK._onDragOver(event)"
+       ondragleave="CK._onDragLeave(event)"
+       ondrop="CK._onDrop(event)">
+    <div class="ck-drop-indicator-line" id="ck-drop-indicator-line"></div>
+    <div class="ck-canvas" id="ck-canvas">
+      <div class="ck-empty-state" id="ck-empty">
+        <div class="ck-empty-icon">&#9638;</div>
+        <div class="ck-empty-text">Drag components here to start building</div>
+        <div class="ck-empty-hint">Components from the palette snap into a vertical layout. Containers have slot drop zones.</div>
+      </div>
+    </div>
+    <!-- v1.49.5 [2026-03-22] — Canvas minimap overview -->
+    <div class="ck-minimap" id="ck-minimap"></div>
+    <!-- v1.48.0 — Live preview split pane -->
+    <div class="ck-live-preview" id="ck-live-preview">
+      <iframe class="ck-live-iframe" id="ck-live-iframe" sandbox="allow-same-origin"></iframe>
+      <span class="ck-preview-badge">LIVE PREVIEW</span>
+    </div>
+  </div>
+
+  <!-- ── Right — Property inspector ─────────────────────── -->
+  <div class="ck-inspector" id="ck-inspector" style="position:relative">
+
+    <!-- v1.50.0 [2026-03-22] — Asset browser drawer -->
+    <div class="ck-asset-browser" id="ck-asset-browser">
+      <div class="ck-ab-header">
+        <h3>&#128194; Assets</h3>
+        <button class="ck-ab-close" onclick="CK.closeAssetBrowser()" title="Close">&#10005;</button>
+      </div>
+      <input type="text" class="ck-ab-search" id="ck-ab-search"
+             placeholder="Search assets..." oninput="CK._filterAssets()">
+      <div class="ck-ab-filters" id="ck-ab-filters">
+        <button class="ck-ab-filter-btn active" data-type="" onclick="CK._setAssetFilter(this)">All</button>
+        <button class="ck-ab-filter-btn" data-type="image" onclick="CK._setAssetFilter(this)">Image</button>
+        <button class="ck-ab-filter-btn" data-type="audio" onclick="CK._setAssetFilter(this)">Audio</button>
+        <button class="ck-ab-filter-btn" data-type="model" onclick="CK._setAssetFilter(this)">3D</button>
+        <button class="ck-ab-filter-btn" data-type="video" onclick="CK._setAssetFilter(this)">Video</button>
+      </div>
+      <div class="ck-ab-grid" id="ck-ab-grid"></div>
+    </div>
+
+    <div class="ck-insp-title">Properties</div>
+    <div class="ck-insp-empty" id="ck-insp-empty">
+      Select a component on the canvas to edit its properties
+    </div>
+    <div id="ck-insp-content" style="display:none">
+      <div class="ck-type-badge" id="ck-insp-type"></div>
+      <div id="ck-insp-fields"></div>
+      <!-- v1.49.5 [2026-03-22] — Duplicate + remove buttons -->
+      <div style="margin-top:12px;display:flex;gap:6px">
+        <button class="ck-btn" onclick="CK.duplicateSelected()" style="flex:1" title="Duplicate (Ctrl+D)">&#10697; Duplicate</button>
+        <button class="ck-btn danger" onclick="CK.deleteSelected()" style="flex:1">&#128465; Remove</button>
+      </div>
+    </div>
+
+    <div class="ck-insp-title" style="margin-top:16px">Scene Info</div>
+    <div class="ck-prop-field">
+      <label class="ck-prop-label">Description</label>
+      <textarea class="ck-prop-textarea" id="ck-scene-desc"
+                placeholder="What does this scene do?"></textarea>
+    </div>
+    <div class="ck-prop-field">
+      <label class="ck-prop-label">Scene Key (Python ID)</label>
+      <input type="text" class="ck-prop-input" id="ck-scene-key"
+             placeholder="my_scene" oninput="CK._syncSceneKey()">
+    </div>
+  </div>
+
+  <!-- ── Bottom bar ─────────────────────────────────────── -->
+  <div class="ck-bottombar">
+    <div class="ck-status-chip">Components: <span class="ck-status-val" id="ck-stat-count">0</span></div>
+    <div class="ck-status-chip">Layout: <span class="ck-status-val" id="ck-stat-layout">unsaved</span></div>
+    <div class="ck-status-chip" style="margin-left:auto">
+      Creation Kit v1.47 — <span class="ck-status-val" id="ck-stat-palette">0</span> components available
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Load modal ─────────────────────────────────────────── -->
+<div class="ck-modal-overlay" id="ck-load-modal">
+  <div class="ck-modal">
+    <h2>&#128193; Open Layout</h2>
+    <div id="ck-layout-list"></div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="ck-btn" onclick="CK.closeLoadModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Preview modal ──────────────────────────────────────── -->
+<div class="ck-preview-overlay" id="ck-preview-modal">
+  <div class="ck-preview-frame">
+    <div class="ck-preview-header">
+      <h3>&#9654; Live Preview</h3>
+      <button class="ck-btn" onclick="CK.closePreview()">&#10005; Close</button>
+    </div>
+    <iframe class="ck-preview-iframe" id="ck-preview-iframe" sandbox="allow-same-origin"></iframe>
+  </div>
+</div>
+
+<!-- v1.51.0 [2026-03-25] — Character Wizard overlay (populated by JS) -->
+<div id="cw-overlay" class="cw-overlay" style="display:none"></div>
+
+<!-- v1.51.0 [2026-03-25] — Character Wizard JS controller -->
+<script src="/creation_kit/static/character_wizard.js"></script>
+
+<script>
+/**
+ * Creation Kit Editor Controller — v1.49.5 [2026-03-22]
+ *
+ * Visual scene editor with nested layout support, drag reorder,
+ * live preview, 28-component palette, visual drop indicators,
+ * breadcrumb navigation, component duplication, and canvas minimap.
+ *
+ * CONNECTS: /api/components, /api/layouts, /api/export/* REST endpoints
+ * CALLED BY: DOM drag/click handlers
+ * EMITS: DOM updates, REST calls for persistence, live preview refresh
+ *
+ * Change Log:
+ *   v1.49.5 [2026-03-22] — Visual drop indicator, breadcrumb nav,
+ *                           duplication (Ctrl+D), canvas minimap
+ *   v1.48.0 [2026-03-21] — Nested slots, drag reorder, live preview
+ */
+'use strict';
+
+const CK = {
+  // State
+  components: {},        // type -> definition (from API)
+  categories: [],        // category list
+  layout: [],            // ordered list of placed component instances
+  selectedId: null,      // id of selected component (supports nesting)
+  layoutId: null,        // current layout ID (null if unsaved)
+  accentColor: '#06b6d4',
+  _dragType: null,       // component type being dragged from palette
+  _dragIdx: null,        // index being dragged for reorder
+  _livePreview: false,   // live preview toggle
+  _previewTimer: null,   // debounce timer for live preview
+  _dropInsertIdx: -1,    // v1.49.5 — calculated insertion index during palette drag
+
+  // v1.49.3 [2026-03-22] — Undo/redo history
+  _undoStack: [],        // previous layout snapshots
+  _redoStack: [],        // snapshots undone (cleared on new action)
+  _MAX_UNDO: 50,        // max undo depth
+
+  // ── Undo/Redo ──────────────────────────────────────────────────
+
+  _pushUndo() {
+    this._undoStack.push(JSON.stringify(this.layout));
+    if (this._undoStack.length > this._MAX_UNDO) this._undoStack.shift();
+    this._redoStack = []; // new action clears redo
+    this._updateUndoButtons();
+  },
+
+  undo() {
+    if (!this._undoStack.length) return;
+    this._redoStack.push(JSON.stringify(this.layout));
+    this.layout = JSON.parse(this._undoStack.pop());
+    this.selectedId = null;
+    this._renderCanvas();
+    this._renderInspector();
+    this._updateUndoButtons();
+    this._showToast('Undone', 'info');
+  },
+
+  redo() {
+    if (!this._redoStack.length) return;
+    this._undoStack.push(JSON.stringify(this.layout));
+    this.layout = JSON.parse(this._redoStack.pop());
+    this.selectedId = null;
+    this._renderCanvas();
+    this._renderInspector();
+    this._updateUndoButtons();
+    this._showToast('Redone', 'info');
+  },
+
+  _updateUndoButtons() {
+    const undoBtn = document.getElementById('ck-undo-btn');
+    const redoBtn = document.getElementById('ck-redo-btn');
+    if (undoBtn) undoBtn.disabled = !this._undoStack.length;
+    if (redoBtn) redoBtn.disabled = !this._redoStack.length;
+  },
+
+  _showToast(msg, type = 'info') {
+    const el = document.getElementById('ck-toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'ck-toast ck-toast--' + type + ' ck-toast--visible';
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => el.classList.remove('ck-toast--visible'), 2000);
+  },
+
+  // ── Keyboard Shortcuts ──────────────────────────────────────────
+  // v1.49.3 [2026-03-22] — Ctrl+Z, Ctrl+Y, Delete, arrow keys
+
+  _setupKeyboard() {
+    document.addEventListener('keydown', (e) => {
+      // Skip if user is typing in an input/textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        this.undo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        this.redo();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (this.selectedId) {
+          e.preventDefault();
+          this._pushUndo();
+          this.layout = this.layout.filter(c => c.id !== this.selectedId);
+          this.selectedId = null;
+          this._renderCanvas();
+          this._renderInspector();
+          this._showToast('Component deleted', 'info');
+        }
+      } else if (e.key === 'ArrowUp' && this.selectedId) {
+        e.preventDefault();
+        this._moveSelected(-1);
+      } else if (e.key === 'ArrowDown' && this.selectedId) {
+        e.preventDefault();
+        this._moveSelected(1);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        // v1.49.5 [2026-03-22] — Ctrl+D / Cmd+D to duplicate selected
+        e.preventDefault();
+        this.duplicateSelected();
+      } else if (e.key === 'Escape') {
+        this.selectedId = null;
+        this._renderCanvas();
+        this._renderInspector();
+      }
+    });
+  },
+
+  _moveSelected(dir) {
+    const idx = this.layout.findIndex(c => c.id === this.selectedId);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= this.layout.length) return;
+    this._pushUndo();
+    const temp = this.layout[idx];
+    this.layout[idx] = this.layout[newIdx];
+    this.layout[newIdx] = temp;
+    this._renderCanvas();
+  },
+
+  // ── Init ─────────────────────────────────────────────────────────
+
+  async init() {
+    await this._loadCatalogue();
+    this._renderPalette();
+    this._renderCanvas(); // v1.49.5 — also renders minimap
+    this._setupKeyboard();
+    this._updateUndoButtons();
+  },
+
+  async _loadCatalogue() {
+    try {
+      const res = await fetch('/api/components');
+      const data = await res.json();
+      this.categories = data.categories || [];
+      const grouped = data.components || {};
+      for (const cat of Object.keys(grouped)) {
+        for (const comp of grouped[cat]) {
+          this.components[comp.type] = comp;
+        }
+      }
+      document.getElementById('ck-stat-palette').textContent = data.total || 0;
+    } catch (e) {
+      console.error('Failed to load component catalogue:', e);
+    }
+  },
+
+  // ── Palette ──────────────────────────────────────────────────────
+
+  _renderPalette(filter = '') {
+    const list = document.getElementById('ck-palette-list');
+    const lc = filter.toLowerCase();
+    let html = '';
+    for (const cat of this.categories) {
+      const comps = Object.values(this.components).filter(c =>
+        c.category === cat.id &&
+        (!lc || c.label.toLowerCase().includes(lc) || c.description?.toLowerCase().includes(lc))
+      );
+      if (!comps.length) continue;
+      html += `<div class="ck-palette-title">${cat.icon} ${cat.label}</div>`;
+      for (const c of comps) {
+        html += `<div class="ck-comp-card" draggable="true"
+                      ondragstart="CK._onPaletteDragStart(event, '${c.type}')"
+                      ondblclick="CK.addComponent('${c.type}')">
+          <span class="ck-comp-icon">${c.icon}</span>
+          <div class="ck-comp-info">
+            <div class="ck-comp-name">${c.label}</div>
+            <div class="ck-comp-desc">${c.description || ''}</div>
+          </div>
+        </div>`;
+      }
+    }
+    list.innerHTML = html;
+  },
+
+  filterPalette(val) { this._renderPalette(val); },
+
+  // ── Drag and drop ────────────────────────────────────────────────
+
+  _onPaletteDragStart(e, compType) {
+    this._dragType = compType;
+    this._dragIdx = null;
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', compType);
+  },
+
+  _onCanvasDragStart(e, idx) {
+    this._dragIdx = idx;
+    this._dragType = null;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `reorder:${idx}`);
+    e.currentTarget.classList.add('dragging');
+  },
+
+  // v1.49.5 [2026-03-22] — Visual drop indicator: glowing insertion line
+  // CONNECTS: _onDrop (uses _dropInsertIdx), ck-drop-indicator-line DOM element
+  _onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = this._dragIdx !== null ? 'move' : 'copy';
+    document.getElementById('ck-canvas-area').classList.add('drag-over');
+
+    // Calculate insertion position from mouse Y and show glowing line
+    const indicator = document.getElementById('ck-drop-indicator-line');
+    const placedEls = document.querySelectorAll('#ck-canvas > .ck-placed');
+    const canvasArea = document.getElementById('ck-canvas-area');
+    const canvasRect = canvasArea.getBoundingClientRect();
+
+    if (!placedEls.length) {
+      // No components yet — hide indicator, will append
+      this._dropInsertIdx = 0;
+      indicator.classList.remove('visible');
+      return;
+    }
+
+    let insertIdx = placedEls.length; // default: append at end
+    let indicatorY = 0;
+
+    for (let i = 0; i < placedEls.length; i++) {
+      const rect = placedEls[i].getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        insertIdx = i;
+        // Position line at the top edge of this component
+        indicatorY = rect.top - canvasRect.top + canvasArea.scrollTop - 2;
+        break;
+      }
+    }
+
+    // If appending after last, position line at the bottom of the last component
+    if (insertIdx === placedEls.length) {
+      const lastRect = placedEls[placedEls.length - 1].getBoundingClientRect();
+      indicatorY = lastRect.bottom - canvasRect.top + canvasArea.scrollTop + 2;
+    }
+
+    this._dropInsertIdx = insertIdx;
+    indicator.style.top = indicatorY + 'px';
+    indicator.classList.add('visible');
+  },
+
+  _onDragLeave(e) {
+    document.getElementById('ck-canvas-area').classList.remove('drag-over');
+    // v1.49.5 — Hide drop indicator when leaving canvas
+    document.getElementById('ck-drop-indicator-line').classList.remove('visible');
+    this._dropInsertIdx = -1;
+  },
+
+  // v1.49.5 [2026-03-22] — Drop handler uses _dropInsertIdx for positioned insertion
+  _onDrop(e) {
+    e.preventDefault();
+    document.getElementById('ck-canvas-area').classList.remove('drag-over');
+    // Hide the visual drop indicator line
+    document.getElementById('ck-drop-indicator-line').classList.remove('visible');
+    const data = e.dataTransfer.getData('text/plain');
+
+    if (data.startsWith('reorder:')) {
+      // Canvas reorder — compute drop position
+      const fromIdx = parseInt(data.split(':')[1]);
+      const placedEls = document.querySelectorAll('#ck-canvas > .ck-placed');
+      let toIdx = this.layout.length;
+      for (let i = 0; i < placedEls.length; i++) {
+        const rect = placedEls[i].getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+          toIdx = i;
+          break;
+        }
+      }
+      if (fromIdx !== toIdx && fromIdx !== toIdx - 1) {
+        this._pushUndo();
+        const item = this.layout.splice(fromIdx, 1)[0];
+        const insertAt = toIdx > fromIdx ? toIdx - 1 : toIdx;
+        this.layout.splice(insertAt, 0, item);
+      }
+    } else if (this._dragType) {
+      // v1.49.5 — Insert at calculated position instead of always appending
+      this._addComponentAtIndex(this._dragType, this._dropInsertIdx);
+    } else if (data) {
+      this._addComponentAtIndex(data, this._dropInsertIdx);
+    }
+
+    this._dragType = null;
+    this._dragIdx = null;
+    this._dropInsertIdx = -1;
+    this._renderCanvas();
+    this._schedulePreview();
+  },
+
+  // v1.48.0 — Drop into container slot
+  _onSlotDrop(e, parentId, slotName) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+
+    const compType = e.dataTransfer.getData('text/plain') || this._dragType;
+    if (!compType || compType.startsWith('reorder:')) return;
+
+    const parent = this._findById(this.layout, parentId);
+    if (!parent) return;
+
+    const def = this.components[compType];
+    if (!def) return;
+
+    const instance = {
+      id: `${compType}_${Date.now().toString(36)}`,
+      type: compType,
+      props: JSON.parse(JSON.stringify(def.default_props || {})),
+      children: {},
+    };
+
+    if (!parent.children) parent.children = {};
+    if (!parent.children[slotName]) parent.children[slotName] = [];
+    parent.children[slotName].push(instance);
+
+    this.selectedId = instance.id;
+    this._dragType = null;
+    this._renderCanvas();
+    this._renderInspector();
+    this._schedulePreview();
+  },
+
+  _onSlotDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.add('drag-over');
+  },
+
+  _onSlotDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+  },
+
+  // ── Component operations ─────────────────────────────────────────
+
+  _findById(list, id) {
+    for (const item of list) {
+      if (item.id === id) return item;
+      if (item.children) {
+        for (const slot of Object.values(item.children)) {
+          const found = this._findById(slot, id);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
+  },
+
+  _removeById(list, id) {
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === id) { list.splice(i, 1); return true; }
+      if (list[i].children) {
+        for (const slot of Object.values(list[i].children)) {
+          if (this._removeById(slot, id)) return true;
+        }
+      }
+    }
+    return false;
+  },
+
+  _countAll(list) {
+    let n = list.length;
+    for (const item of list) {
+      if (item.children) {
+        for (const slot of Object.values(item.children)) n += this._countAll(slot);
+      }
+    }
+    return n;
+  },
+
+  addComponent(compType, parentId = null, slotName = null) {
+    const def = this.components[compType];
+    if (!def) return;
+    const instance = {
+      id: `${compType}_${Date.now().toString(36)}`,
+      type: compType,
+      props: JSON.parse(JSON.stringify(def.default_props || {})),
+      children: {},
+    };
+
+    if (parentId && slotName) {
+      const parent = this._findById(this.layout, parentId);
+      if (parent) {
+        if (!parent.children) parent.children = {};
+        if (!parent.children[slotName]) parent.children[slotName] = [];
+        this._pushUndo();
+        parent.children[slotName].push(instance);
+      }
+    } else {
+      this._pushUndo();
+      this.layout.push(instance);
+    }
+
+    this.selectedId = instance.id;
+    this._renderCanvas();
+    this._renderInspector();
+    this._schedulePreview();
+  },
+
+  // v1.49.5 [2026-03-22] — Insert a new component at a specific index
+  // CONNECTS: _onDrop (palette drops with visual indicator position)
+  // CALLED BY: _onDrop when _dropInsertIdx is set from _onDragOver
+  _addComponentAtIndex(compType, idx) {
+    const def = this.components[compType];
+    if (!def) return;
+    const instance = {
+      id: `${compType}_${Date.now().toString(36)}`,
+      type: compType,
+      props: JSON.parse(JSON.stringify(def.default_props || {})),
+      children: {},
+    };
+
+    this._pushUndo();
+    if (idx >= 0 && idx < this.layout.length) {
+      this.layout.splice(idx, 0, instance);
+    } else {
+      this.layout.push(instance);
+    }
+
+    this.selectedId = instance.id;
+    this._renderInspector();
+  },
+
+  selectComponent(id) {
+    this.selectedId = id;
+    this._renderCanvas();
+    this._renderInspector();
+  },
+
+  deleteSelected() {
+    if (!this.selectedId) return;
+    this._removeById(this.layout, this.selectedId);
+    this.selectedId = null;
+    this._renderCanvas();
+    this._renderInspector();
+    this._schedulePreview();
+  },
+
+  // v1.49.5 [2026-03-22] — Duplicate selected component with new ID
+  // Deep clones the component (including nested children) and inserts after original.
+  // CONNECTS: layout[], _renderCanvas, _renderInspector, _renderMinimap
+  // CALLED BY: Ctrl+D keyboard shortcut, duplicate button in inspector
+  duplicateSelected() {
+    if (!this.selectedId) return;
+
+    // Find the component and its parent context
+    const found = this._findWithParent(this.layout, this.selectedId);
+    if (!found) return;
+
+    const { item, parentList, index } = found;
+    const clone = this._deepClone(item);
+
+    this._pushUndo();
+    // Insert clone right after the original
+    parentList.splice(index + 1, 0, clone);
+    this.selectedId = clone.id;
+
+    this._renderCanvas();
+    this._renderInspector();
+    this._schedulePreview();
+    this._showToast('Component duplicated', 'info');
+  },
+
+  // v1.49.5 — Find item and its parent list + index for duplication
+  _findWithParent(list, id) {
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === id) return { item: list[i], parentList: list, index: i };
+      if (list[i].children) {
+        for (const slot of Object.values(list[i].children)) {
+          const found = this._findWithParent(slot, id);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
+  },
+
+  // v1.49.5 — Deep clone a component instance, generating new unique IDs
+  _deepClone(inst) {
+    const clone = JSON.parse(JSON.stringify(inst));
+    // Recursively assign new IDs to the clone and all nested children
+    const reassignIds = (node) => {
+      node.id = `${node.type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      if (node.children) {
+        for (const slot of Object.values(node.children)) {
+          for (const child of slot) reassignIds(child);
+        }
+      }
+    };
+    reassignIds(clone);
+    return clone;
+  },
+
+  moveComponent(idx, direction) {
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= this.layout.length) return;
+    this._pushUndo();
+    const temp = this.layout[idx];
+    this.layout[idx] = this.layout[newIdx];
+    this.layout[newIdx] = temp;
+    this._renderCanvas();
+    this._schedulePreview();
+  },
+
+  // ── Canvas rendering ─────────────────────────────────────────────
+
+  _renderCanvas() {
+    const canvas = document.getElementById('ck-canvas');
+    const empty = document.getElementById('ck-empty');
+
+    if (this.layout.length === 0) {
+      canvas.innerHTML = '';
+      canvas.appendChild(empty);
+      empty.style.display = 'flex';
+    } else {
+      empty.style.display = 'none';
+      canvas.innerHTML = this.layout.map((inst, i) => this._renderPlacedComponent(inst, i, false)).join('');
+    }
+
+    document.getElementById('ck-stat-count').textContent = this._countAll(this.layout);
+    this._renderMinimap(); // v1.49.5 — keep minimap in sync
+  },
+
+  _renderPlacedComponent(inst, idx, nested) {
+    const def = this.components[inst.type] || {};
+    const selected = inst.id === this.selectedId;
+    const title = inst.props?.title || inst.props?.text || inst.props?.label || def.label || inst.type;
+    const hasSlots = (def.slots || []).length > 0;
+
+    // Slot drop zones for containers
+    let slotsHtml = '';
+    if (hasSlots) {
+      const slots = def.slots || [];
+      slotsHtml = '<div class="ck-placed-columns" style="grid-template-columns:repeat(' +
+        Math.min(slots.length, 3) + ',1fr)">';
+      for (const slot of slots) {
+        const children = inst.children?.[slot] || [];
+        const childrenHtml = children.map((c, ci) => this._renderPlacedComponent(c, ci, true)).join('');
+        slotsHtml += `<div>
+          <div class="ck-slot-label">${slot.toUpperCase()}</div>
+          <div class="ck-slot-zone"
+               ondragover="CK._onSlotDragOver(event)"
+               ondragleave="CK._onSlotDragLeave(event)"
+               ondrop="CK._onSlotDrop(event, '${inst.id}', '${slot}')">
+            ${childrenHtml}
+          </div>
+        </div>`;
+      }
+      slotsHtml += '</div>';
+    }
+
+    const dragAttr = nested ? '' :
+      `draggable="true" ondragstart="CK._onCanvasDragStart(event, ${idx})" ondragend="this.classList.remove('dragging')"`;
+
+    return `<div class="ck-placed ${selected ? 'selected' : ''} ${nested ? 'nested' : ''}"
+                 onclick="event.stopPropagation();CK.selectComponent('${inst.id}')"
+                 ${dragAttr}>
+      <span class="ck-placed-label">${def.label || inst.type}</span>
+      <div class="ck-placed-preview">
+        ${!nested ? '<span class="ck-drag-handle" title="Drag to reorder">&#9776;</span>' : ''}
+        <span class="preview-icon">${def.icon || '&#9634;'}</span>
+        <span>${this._escHtml(String(title))}</span>
+        ${hasSlots ? '<span style="font-size:0.55rem;color:var(--ck-text-dim)">[container]</span>' : ''}
+      </div>
+      ${this._renderInlinePreview(inst, def)}
+      ${slotsHtml}
+      <div class="ck-placed-actions">
+        ${!nested ? `
+          <button class="ck-placed-action" onclick="event.stopPropagation();CK.moveComponent(${idx},-1)" title="Move up">&#9650;</button>
+          <button class="ck-placed-action" onclick="event.stopPropagation();CK.moveComponent(${idx},1)" title="Move down">&#9660;</button>
+        ` : ''}
+        <button class="ck-placed-action" onclick="event.stopPropagation();CK.selectedId='${inst.id}';CK.duplicateSelected()" title="Duplicate (Ctrl+D)">&#10697;</button>
+        <button class="ck-placed-action delete" onclick="event.stopPropagation();CK.selectedId='${inst.id}';CK.deleteSelected()" title="Delete">&#10005;</button>
+      </div>
+    </div>`;
+  },
+
+  // ── Inline preview — mini component rendering in canvas cards ────
+  // v1.49.3 [2026-03-22] — Shows what the component will look like
+
+  _renderInlinePreview(inst, def) {
+    const p = inst.props || {};
+    const t = inst.type;
+    // Only render inline preview for visual component types
+    if (t === 'text_block' && p.text) {
+      return `<div class="ck-inline-prev" style="font-size:0.65rem;color:var(--ck-text-dim);padding:4px 8px;max-height:40px;overflow:hidden">${this._escHtml(String(p.text).slice(0, 100))}</div>`;
+    }
+    if (t === 'heading') {
+      const sz = {'h1':'1.1rem','h2':'0.9rem','h3':'0.75rem'}[p.level||'h2'] || '0.9rem';
+      return `<div class="ck-inline-prev" style="font-size:${sz};font-weight:600;padding:4px 8px;color:var(--ck-accent)">${this._escHtml(p.text || 'Heading')}</div>`;
+    }
+    if (t === 'button' || t === 'button_group') {
+      const label = p.label || (p.buttons || []).map(b => b.label).join(' | ') || 'Button';
+      return `<div class="ck-inline-prev" style="padding:4px 8px"><span style="background:var(--ck-accent);color:#000;padding:2px 10px;border-radius:4px;font-size:0.6rem;font-weight:600">${this._escHtml(label)}</span></div>`;
+    }
+    if (t === 'status_indicator') {
+      const colors = {ok:'var(--ck-green)',warning:'var(--ck-accent)',error:'var(--ck-red)',offline:'var(--ck-text-dim)'};
+      const c = colors[p.status] || 'var(--ck-text-dim)';
+      return `<div class="ck-inline-prev" style="padding:4px 8px;font-size:0.65rem"><span style="color:${c}">\u25CF</span> ${this._escHtml(p.label||'')} <strong>${this._escHtml(String(p.value||''))}</strong></div>`;
+    }
+    if (t === 'health_bar' || t === 'faction_bars') {
+      const pct = p.value || p.pct || 75;
+      return `<div class="ck-inline-prev" style="padding:4px 8px"><div style="background:var(--ck-panel);border-radius:3px;height:8px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--ck-green);border-radius:3px"></div></div></div>`;
+    }
+    if (t === 'text_input') {
+      return `<div class="ck-inline-prev" style="padding:4px 8px"><div style="background:var(--ck-panel);border:1px solid var(--ck-border);border-radius:4px;padding:3px 8px;font-size:0.6rem;color:var(--ck-text-dim)">${this._escHtml(p.placeholder || 'Type...')}</div></div>`;
+    }
+    if (t === 'glass_panel') {
+      return `<div class="ck-inline-prev" style="padding:4px 8px;font-size:0.6rem;color:var(--ck-text-dim);border-left:2px solid var(--ck-accent);margin:0 8px">${this._escHtml(p.title || 'Panel')}</div>`;
+    }
+    return ''; // No inline preview for this type
+  },
+
+  // ── Property inspector ───────────────────────────────────────────
+
+  _renderInspector() {
+    const emptyEl = document.getElementById('ck-insp-empty');
+    const contentEl = document.getElementById('ck-insp-content');
+    const fieldsEl = document.getElementById('ck-insp-fields');
+
+    const inst = this.selectedId ? this._findById(this.layout, this.selectedId) : null;
+    if (!inst) {
+      emptyEl.style.display = 'block';
+      contentEl.style.display = 'none';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    contentEl.style.display = 'block';
+
+    const def = this.components[inst.type] || {};
+    document.getElementById('ck-insp-type').textContent = (def.label || inst.type).toUpperCase();
+
+    // v1.49.5 [2026-03-22] — Breadcrumb navigation for nested components
+    // Shows path: Root > parent_component > slot_name > this_component
+    let breadcrumbEl = document.getElementById('ck-breadcrumb');
+    if (!breadcrumbEl) {
+      breadcrumbEl = document.createElement('div');
+      breadcrumbEl.id = 'ck-breadcrumb';
+      // Insert breadcrumb before the type badge
+      const typeBadge = document.getElementById('ck-insp-type');
+      typeBadge.parentNode.insertBefore(breadcrumbEl, typeBadge);
+    }
+    const crumbs = this._getBreadcrumb(this.selectedId);
+    if (crumbs.length > 1) {
+      // Nested — show full breadcrumb trail
+      breadcrumbEl.className = 'ck-breadcrumb';
+      breadcrumbEl.style.display = 'flex';
+      breadcrumbEl.innerHTML = crumbs.map((crumb, ci) => {
+        const isLast = ci === crumbs.length - 1;
+        const sep = isLast ? '' : '<span class="ck-breadcrumb__sep">&#9656;</span>';
+        const cls = isLast ? 'ck-breadcrumb__item current' : 'ck-breadcrumb__item';
+        // Root (id=null) deselects; parent components navigate to them
+        const clickAction = crumb.id === null
+          ? 'CK.selectedId=null;CK._renderCanvas();CK._renderInspector()'
+          : `CK.selectComponent('${crumb.id}')`;
+        const click = isLast ? '' : ` onclick="${clickAction}"`;
+        return `<span class="${cls}"${click}>${this._escHtml(crumb.label)}</span>${sep}`;
+      }).join('');
+    } else {
+      // Top-level component — hide breadcrumb
+      breadcrumbEl.style.display = 'none';
+      breadcrumbEl.innerHTML = '';
+    }
+
+    const schema = def.prop_schema || [];
+    fieldsEl.innerHTML = schema.map(prop => {
+      const val = inst.props?.[prop.key] ?? '';
+      const escaped = this._escAttr(String(val));
+      const instId = inst.id;
+
+      if (prop.type === 'select') {
+        const options = (prop.options || []).map(o =>
+          `<option value="${o}" ${o === val ? 'selected' : ''}>${o}</option>`
+        ).join('');
+        return `<div class="ck-prop-field">
+          <label class="ck-prop-label">${prop.label}</label>
+          <select class="ck-prop-select" onchange="CK._setPropById('${instId}','${prop.key}',this.value)">${options}</select>
+        </div>`;
+      }
+      if (prop.type === 'boolean') {
+        return `<div class="ck-prop-field">
+          <div class="ck-prop-toggle">
+            <input type="checkbox" ${val ? 'checked' : ''}
+                   onchange="CK._setPropById('${instId}','${prop.key}',this.checked)">
+            <label class="ck-prop-label" style="margin:0">${prop.label}</label>
+          </div>
+        </div>`;
+      }
+      if (prop.type === 'textarea') {
+        return `<div class="ck-prop-field">
+          <label class="ck-prop-label">${prop.label}</label>
+          <textarea class="ck-prop-textarea"
+                    oninput="CK._setPropById('${instId}','${prop.key}',this.value)">${this._escHtml(String(val))}</textarea>
+        </div>`;
+      }
+      if (prop.type === 'color') {
+        return `<div class="ck-prop-field">
+          <label class="ck-prop-label">${prop.label}</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="color" value="${escaped}"
+                   onchange="CK._setPropById('${instId}','${prop.key}',this.value)"
+                   style="width:28px;height:28px;border:none;cursor:pointer">
+            <input type="text" class="ck-prop-input" value="${escaped}"
+                   oninput="CK._setPropById('${instId}','${prop.key}',this.value)" style="flex:1">
+          </div>
+        </div>`;
+      }
+      if (prop.type === 'number') {
+        return `<div class="ck-prop-field">
+          <label class="ck-prop-label">${prop.label}</label>
+          <input type="number" class="ck-prop-input" value="${escaped}"
+                 ${prop.min !== undefined ? `min="${prop.min}"` : ''}
+                 ${prop.max !== undefined ? `max="${prop.max}"` : ''}
+                 oninput="CK._setPropById('${instId}','${prop.key}',Number(this.value))">
+        </div>`;
+      }
+      // v1.50.0 — Asset hint: add Browse button for asset-accepting props
+      if (prop.asset_hint) {
+        return `<div class="ck-prop-field">
+          <label class="ck-prop-label">${prop.label}</label>
+          <div style="display:flex;gap:4px">
+            <input type="text" class="ck-prop-input" value="${escaped}" style="flex:1"
+                   oninput="CK._setPropById('${instId}','${prop.key}',this.value)">
+            <button class="ck-btn" style="font-size:0.6rem;white-space:nowrap"
+                    onclick="CK.openAssetBrowser('${prop.asset_hint}', (url) => {
+                      CK._setPropById('${instId}','${prop.key}', url);
+                      CK._renderInspector();
+                    })">Browse</button>
+          </div>
+        </div>`;
+      }
+      return `<div class="ck-prop-field">
+        <label class="ck-prop-label">${prop.label}</label>
+        <input type="text" class="ck-prop-input" value="${escaped}"
+               oninput="CK._setPropById('${instId}','${prop.key}',this.value)">
+      </div>`;
+    }).join('');
+  },
+
+  _setPropById(id, key, value) {
+    const inst = this._findById(this.layout, id);
+    if (!inst) return;
+    // v1.49.3 [2026-03-22] — Validate prop against schema before setting
+    const def = this.components[inst.type] || {};
+    const schema = (def.prop_schema || []).find(p => p.key === key);
+    if (schema) {
+      const err = this._validateProp(schema, value);
+      const errEl = document.getElementById('ck-prop-err-' + key);
+      if (errEl) errEl.textContent = err || '';
+      if (err) {
+        this._showToast('Validation: ' + err, 'error');
+      }
+    }
+    this._pushUndo();
+    inst.props[key] = value;
+    this._renderCanvas();
+    this._schedulePreview();
+  },
+
+  // v1.49.3 [2026-03-22] — Property validation against component schema
+  _validateProp(schema, value) {
+    if (schema.required && (value === '' || value === null || value === undefined)) {
+      return schema.label + ' is required';
+    }
+    if (schema.type === 'number') {
+      const num = Number(value);
+      if (isNaN(num)) return schema.label + ' must be a number';
+      if (schema.min !== undefined && num < schema.min) return schema.label + ' min: ' + schema.min;
+      if (schema.max !== undefined && num > schema.max) return schema.label + ' max: ' + schema.max;
+    }
+    if (schema.type === 'color' && value && !/^#[0-9a-fA-F]{3,8}$/.test(value)) {
+      return schema.label + ' must be a valid hex color';
+    }
+    return null; // valid
+  },
+
+  // ── Live preview ─────────────────────────────────────────────────
+  // v1.48.0 — Debounced auto-preview on every change
+
+  toggleLivePreview() {
+    this._livePreview = !this._livePreview;
+    const area = document.getElementById('ck-canvas-area');
+    const btn = document.getElementById('btn-live-preview');
+    if (this._livePreview) {
+      area.classList.add('split-view');
+      btn.textContent = '\u25A0 Hide Preview';
+      btn.style.borderColor = 'var(--ck-accent)';
+      btn.style.color = 'var(--ck-accent)';
+      this._refreshLivePreview();
+    } else {
+      area.classList.remove('split-view');
+      btn.textContent = '\u25B6 Live Preview';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }
+  },
+
+  _schedulePreview() {
+    if (!this._livePreview) return;
+    clearTimeout(this._previewTimer);
+    this._previewTimer = setTimeout(() => this._refreshLivePreview(), 400);
+  },
+
+  async _refreshLivePreview() {
+    if (!this._livePreview) return;
+    const data = this._getLayoutData();
+    try {
+      const res = await fetch('/api/export/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (result.ok) {
+        document.getElementById('ck-live-iframe').srcdoc = result.html;
+      }
+    } catch (e) { /* silent */ }
+  },
+
+  // ── Accent color ─────────────────────────────────────────────────
+
+  setAccent(color) {
+    this.accentColor = color;
+    document.getElementById('ck-accent-hex').textContent = color;
+    this._schedulePreview();
+  },
+
+  _syncSceneKey() {
+    const key = document.getElementById('ck-scene-key').value;
+    document.getElementById('ck-scene-name').value = key;
+  },
+
+  // ── Save / Load ──────────────────────────────────────────────────
+
+  _getLayoutData() {
+    return {
+      id: this.layoutId,
+      name: document.getElementById('ck-scene-name').value || 'my_scene',
+      description: document.getElementById('ck-scene-desc').value || '',
+      scene_key: document.getElementById('ck-scene-key').value ||
+                 document.getElementById('ck-scene-name').value || 'my_scene',
+      accent_color: this.accentColor,
+      components: this.layout,
+    };
+  },
+
+  async save() {
+    const data = this._getLayoutData();
+    try {
+      const res = await fetch('/api/layouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (result.ok) {
+        this.layoutId = result.id;
+        document.getElementById('ck-stat-layout').textContent = result.id;
+      }
+    } catch (e) { console.error('Save failed:', e); }
+  },
+
+  async openLoadModal() {
+    try {
+      const res = await fetch('/api/layouts');
+      const data = await res.json();
+      const list = document.getElementById('ck-layout-list');
+      const layouts = data.layouts || [];
+      if (!layouts.length) {
+        list.innerHTML = '<div style="color:var(--ck-text-dim);text-align:center;padding:20px">No saved layouts yet.</div>';
+      } else {
+        list.innerHTML = layouts.map(l => `
+          <div class="ck-layout-card" onclick="CK.loadLayout('${l.id}')">
+            <div class="ck-layout-name">${l.name}</div>
+            <div class="ck-layout-meta">${l.component_count} components — ${l.scene_key || '?'} — accent: ${l.accent_color}</div>
+          </div>
+        `).join('');
+      }
+      document.getElementById('ck-load-modal').classList.add('show');
+    } catch (e) { console.error('Load failed:', e); }
+  },
+
+  closeLoadModal() { document.getElementById('ck-load-modal').classList.remove('show'); },
+
+  async loadLayout(layoutId) {
+    try {
+      const res = await fetch(`/api/layouts/${layoutId}`);
+      const data = await res.json();
+      if (data.error) return;
+      this.layout = data.components || [];
+      this.layoutId = layoutId;
+      this.accentColor = data.accent_color || '#06b6d4';
+      document.getElementById('ck-scene-name').value = data.name || '';
+      document.getElementById('ck-scene-desc').value = data.description || '';
+      document.getElementById('ck-scene-key').value = data.scene_key || '';
+      document.getElementById('ck-accent-color').value = this.accentColor;
+      document.getElementById('ck-accent-hex').textContent = this.accentColor;
+      document.getElementById('ck-stat-layout').textContent = layoutId;
+      this.selectedId = null;
+      this._renderCanvas();
+      this._renderInspector();
+      this.closeLoadModal();
+      this._schedulePreview();
+    } catch (e) { console.error('Load layout failed:', e); }
+  },
+
+  newLayout() {
+    this._pushUndo();
+    this.layout = [];
+    this.layoutId = null;
+    this.selectedId = null;
+    document.getElementById('ck-scene-name').value = 'my_scene';
+    document.getElementById('ck-scene-desc').value = '';
+    document.getElementById('ck-scene-key').value = '';
+    document.getElementById('ck-stat-layout').textContent = 'unsaved';
+    this._renderCanvas();
+    this._renderInspector();
+    this._schedulePreview();
+  },
+
+  // ── Full preview (modal) ─────────────────────────────────────────
+
+  async preview() {
+    const data = this._getLayoutData();
+    try {
+      const res = await fetch('/api/export/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (!result.ok) return;
+      document.getElementById('ck-preview-iframe').srcdoc = result.html;
+      document.getElementById('ck-preview-modal').classList.add('show');
+    } catch (e) { console.error('Preview failed:', e); }
+  },
+
+  closePreview() { document.getElementById('ck-preview-modal').classList.remove('show'); },
+
+  // ── Export ───────────────────────────────────────────────────────
+
+  async exportScene() {
+    const data = this._getLayoutData();
+    if (!data.scene_key || !data.scene_key.match(/^[a-z][a-z0-9_]*$/)) {
+      alert('Scene key must be a valid Python identifier (lowercase, underscores).');
+      return;
+    }
+    try {
+      const res = await fetch('/api/export/scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (result.ok) {
+        alert(`Scene exported!\n\nPath: ${result.path}\n\nRegister it in control_plane_registry.py to launch.`);
+      } else {
+        alert(`Export failed: ${result.error}`);
+      }
+    } catch (e) { alert('Export failed: ' + e.message); }
+  },
+
+  // ── Asset browser ─────────────────────────────────────────────
+  // v1.50.0 [2026-03-22] — browse and pick assets for component props
+  // CONNECTS: /api/assets/combined, inspector prop fields
+  // CALLED BY: Browse button on asset_hint props
+
+  _assetCallback: null,
+  _assetFilter: '',
+  _assetCache: [],
+
+  openAssetBrowser(assetType, callback) {
+    this._assetCallback = callback;
+    this._assetFilter = assetType || '';
+    const panel = document.getElementById('ck-asset-browser');
+    panel.classList.add('open');
+    document.getElementById('ck-ab-search').value = '';
+    // Set active filter button
+    document.querySelectorAll('.ck-ab-filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.type === (assetType || ''));
+    });
+    this._loadAssets();
+  },
+
+  closeAssetBrowser() {
+    document.getElementById('ck-asset-browser').classList.remove('open');
+    this._assetCallback = null;
+  },
+
+  _setAssetFilter(btn) {
+    document.querySelectorAll('.ck-ab-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    this._assetFilter = btn.dataset.type || '';
+    this._loadAssets();
+  },
+
+  async _loadAssets() {
+    const query = document.getElementById('ck-ab-search')?.value || '';
+    const type = this._assetFilter;
+    let url = '/api/assets/combined?limit=60';
+    if (type) url += `&type=${encodeURIComponent(type)}`;
+    if (query) url += `&q=${encodeURIComponent(query)}`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      this._assetCache = data.assets || [];
+      this._renderAssetGrid(this._assetCache);
+    } catch (e) {
+      this._renderAssetGrid([]);
+    }
+  },
+
+  _filterAssets() {
+    clearTimeout(this._abDebounce);
+    this._abDebounce = setTimeout(() => this._loadAssets(), 250);
+  },
+
+  _renderAssetGrid(assets) {
+    const grid = document.getElementById('ck-ab-grid');
+    if (!assets.length) {
+      grid.innerHTML = '<div class="ck-ab-empty" style="grid-column:1/-1">No assets found</div>';
+      return;
+    }
+    grid.innerHTML = assets.map(a => {
+      const isImage = (a.type === 'image' || a.type === 'portrait');
+      const thumb = isImage
+        ? `<img src="/api/assets/file/${encodeURIComponent(a.url)}" alt="${this._escAttr(a.name)}" loading="lazy">`
+        : `<div class="ck-ab-placeholder">${this._typeIcon(a.type)}</div>`;
+      const fav = a.favorite ? '<span class="ck-ab-fav">&#9733;</span> ' : '';
+      return `<div class="ck-ab-card" onclick="CK._pickAsset('${this._escAttr(a.url)}')">
+        ${thumb}
+        <div class="ck-ab-card-name">${fav}${this._escHtml(a.name)}</div>
+        <div class="ck-ab-source">${a.source}</div>
+      </div>`;
+    }).join('');
+  },
+
+  _typeIcon(type) {
+    const icons = {image:'&#128444;', audio:'&#9835;', video:'&#127910;', model:'&#127922;', portrait:'&#128100;'};
+    return icons[type] || '&#128196;';
+  },
+
+  _pickAsset(url) {
+    if (this._assetCallback) this._assetCallback(url);
+    this.closeAssetBrowser();
+  },
+
+  // ── Breadcrumb navigation v1.49.5 [2026-03-22] ─────────────────
+  // Walks the layout tree to build path from root to the target component.
+  // CONNECTS: layout[] tree, _renderInspector (renders breadcrumb trail)
+  // CALLED BY: _renderInspector when selected component is nested
+
+  _getBreadcrumb(id) {
+    const path = [];
+
+    const walk = (list, trail) => {
+      for (const item of list) {
+        const def = this.components[item.type] || {};
+        const label = def.label || item.type;
+        const currentTrail = [...trail, { id: item.id, label }];
+
+        if (item.id === id) {
+          path.push(...currentTrail);
+          return true;
+        }
+        if (item.children) {
+          for (const [slotName, slotChildren] of Object.entries(item.children)) {
+            // Add the slot name as an intermediate breadcrumb (non-clickable separator)
+            const slotTrail = [...currentTrail, { id: item.id, label: slotName }];
+            if (walk(slotChildren, slotTrail)) return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    walk(this.layout, [{ id: null, label: 'Root' }]);
+    return path;
+  },
+
+  // ── Canvas minimap v1.49.5 [2026-03-22] ──────────────────────
+  // Small overview panel at bottom-right of canvas showing colored blocks
+  // for each top-level component. Click to scroll and select.
+  // CONNECTS: layout[], selectComponent, ck-canvas DOM scrolling
+  // CALLED BY: _renderCanvas, selectComponent, deleteSelected, addComponent
+  // EMITS: scroll + selection changes on click
+
+  _renderMinimap() {
+    const el = document.getElementById('ck-minimap');
+    if (!el) return;
+
+    if (!this.layout.length) {
+      el.innerHTML = '<div class="ck-minimap__title">Minimap</div><div class="ck-minimap__empty">Empty</div>';
+      return;
+    }
+
+    // Color palette for component categories
+    const catColors = {
+      'layout': 'var(--ck-blue)',
+      'content': 'var(--ck-green)',
+      'interactive': 'var(--ck-accent)',
+      'media': 'var(--ck-purple)',
+      'data': 'var(--ck-cyan)',
+      'navigation': '#ec4899',
+      'feedback': 'var(--ck-red)',
+    };
+    const defaultColor = 'var(--ck-text-dim)';
+
+    let html = '<div class="ck-minimap__title">Minimap</div>';
+    for (let i = 0; i < this.layout.length; i++) {
+      const inst = this.layout[i];
+      const def = this.components[inst.type] || {};
+      const color = catColors[def.category] || defaultColor;
+      const selected = inst.id === this.selectedId;
+      html += `<div class="ck-minimap__block ${selected ? 'selected' : ''}"
+                    style="background:${color}"
+                    onclick="CK._minimapClick('${inst.id}', ${i})"
+                    title="${this._escAttr(def.label || inst.type)}"></div>`;
+    }
+    el.innerHTML = html;
+  },
+
+  // v1.49.5 — Click a minimap block to scroll to and select that component
+  _minimapClick(id, idx) {
+    this.selectComponent(id);
+    // Scroll the canvas to bring the component into view
+    const placedEls = document.querySelectorAll('#ck-canvas > .ck-placed');
+    if (placedEls[idx]) {
+      placedEls[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  },
+
+  // ── Helpers ──────────────────────────────────────────────────────
+
+  _escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); },
+  _escAttr(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); },
+};
+
+document.addEventListener('DOMContentLoaded', () => CK.init());
+</script>
+</body>
+</html>

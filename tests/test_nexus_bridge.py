@@ -127,24 +127,26 @@ class TestMCPToolRegistration:
     """Verify tools are registered in the MCP server."""
 
     def test_nexus_tools_registered(self):
+        # v1.51.1 [2026-03-25] — Updated for FastMCP v3 (list_tools returns FunctionTool objects)
         import asyncio
         from engine.mcp.devtools_server import mcp
 
         async def check():
-            tools = await mcp.get_tools()
-            return list(tools.keys())
+            tools = await mcp.list_tools()
+            return [t.name for t in tools]
 
         tool_names = asyncio.run(check())
         nexus_tools = [n for n in tool_names if "nexus" in n.lower()]
         assert len(nexus_tools) >= 14, f"Expected 14+ Nexus tools, got {len(nexus_tools)}"
 
     def test_discovery_tools_registered(self):
+        # v1.51.1 [2026-03-25] — Updated for FastMCP v3
         import asyncio
         from engine.mcp.devtools_server import mcp
 
         async def check():
-            tools = await mcp.get_tools()
-            return list(tools.keys())
+            tools = await mcp.list_tools()
+            return [t.name for t in tools]
 
         tool_names = asyncio.run(check())
         assert "list_all_skills" in tool_names
@@ -153,12 +155,13 @@ class TestMCPToolRegistration:
 
     def test_total_tool_count(self):
         """Devtools server should have 30+ tools (Nexus + system + copilot + agent)."""
+        # v1.51.1 [2026-03-25] — Updated for FastMCP v3
         import asyncio
         from engine.mcp.devtools_server import mcp
 
         async def check():
-            tools = await mcp.get_tools()
-            return list(tools.keys())
+            tools = await mcp.list_tools()
+            return [t.name for t in tools]
 
         tool_names = asyncio.run(check())
         assert len(tool_names) >= 30, f"Expected 30+ tools, got {len(tool_names)}"

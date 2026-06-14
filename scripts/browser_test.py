@@ -7,12 +7,17 @@ and tests every interactive HUD element. Reads telemetry logs after
 each interaction. Outputs a structured diagnostic report.
 
 Usage:
-    python scripts/browser_test.py                    # Full test
+    python scripts/browser_test.py                    # Full NeonCity test
     python scripts/browser_test.py --scene penthouse  # Test specific scene
+    python scripts/browser_test.py --all              # Quick smoke test all scenes
     python scripts/browser_test.py --report           # Just read last telemetry
 
-Version: v1.43.0 [2026-03-21]
+Version: v1.53.0 [2026-03-26]
 Author:  CosySim Team
+
+Change Log:
+    v1.53.0 [2026-03-26] — Added --all multi-scene smoke tests (14 scenes)
+    v1.43.0 [2026-03-21] — Initial NeonCity deep test suite
 """
 from __future__ import annotations
 
@@ -44,8 +49,12 @@ def run_tests() -> dict:
         status = "PASS" if passed else "FAIL"
         results["tests"].append({"name": name, "status": status, "detail": detail})
         results["summary"]["passed" if passed else "failed"] += 1
-        icon = "✓" if passed else "✗"
-        print(f"  {icon} {name}: {detail}" if detail else f"  {icon} {name}")
+        # v1.49.3 [2026-03-22] — Use ASCII-safe icons to avoid cp1252 crash on Windows
+        icon = "[PASS]" if passed else "[FAIL]"
+        try:
+            print(f"  {icon} {name}: {detail}" if detail else f"  {icon} {name}")
+        except UnicodeEncodeError:
+            print(f"  {icon} {name}")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -265,13 +274,49 @@ def run_tests() -> dict:
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
 
+        # ── v1.52.0 — Footer ─────────────────────────────────────
+        print("\n=== FOOTER ===")
+        footer = page.query_selector(".cs-footer")
+        test("Footer exists", footer is not None)
+        if footer:
+            version_el = page.query_selector(".cs-footer-version")
+            test("Footer version shown", version_el is not None and "CosySim" in (version_el.inner_text() or ""))
+            keys_el = page.query_selector(".cs-footer-keys")
+            test("Footer keyboard hints", keys_el is not None)
+            links = page.query_selector_all(".cs-footer-link")
+            test("Footer quick links (2+)", len(links) >= 2, f"{len(links)} links")
+
+        # ── v1.52.0 — Navbar ─────────────────────────────────────
+        print("\n=== NAVBAR ===")
+        navbar = page.query_selector("#cs-navbar") or page.query_selector(".cs-navbar")
+        test("Navbar exists", navbar is not None)
+        if navbar:
+            nav_items = page.query_selector_all("[class*=navbar] a") or page.query_selector_all(".cs-navbar__nav-item")
+            test("Navbar scene links (8+)", len(nav_items) >= 8, f"{len(nav_items)} items")
+
+        # ── v1.52.0 — Danmaku (F7) ───────────────────────────────
+        print("\n=== DANMAKU (F7) ===")
+        page.keyboard.press("F7")
+        page.wait_for_timeout(600)
+        overlay = page.query_selector("#cosy-danmaku-overlay") or page.query_selector("[class*=danmaku-overlay]")
+        test("F7 creates danmaku overlay", overlay is not None)
+        page.keyboard.press("F7")
+        page.wait_for_timeout(300)
+
+        # ── v1.52.0 — HUD Narrative + Spectator Widgets ──────────
+        print("\n=== HUD WIDGETS ===")
+        narrative_el = page.query_selector("#hud-narrative")
+        test("Narrative widget in DOM", narrative_el is not None)
+        spectator_el = page.query_selector("#hud-spectator")
+        test("Spectator widget in DOM", spectator_el is not None)
+
         # ── JS Errors ──────────────────────────────────────────────
         print(f"\n=== JS ERRORS: {len(js_errors)} ===")
         # Filter out expected connection refused errors
         real_errors = [e for e in js_errors if "ERR_CONNECTION_REFUSED" not in e and "signal" not in e.lower()]
         for e in real_errors[:10]:
             safe = e.encode("ascii", "replace").decode()[:120]
-            print(f"  ✗ {safe}")
+            print(f"  [ERR] {safe}")
             results["errors"].append(safe)
         results["summary"]["errors"] = len(real_errors)
 
@@ -319,21 +364,110 @@ def read_telemetry(limit: int = 30) -> None:
         msg = e.get("msg", "?")
         ctx = e.get("ctx", {})
         ts = ctx.get("timestamp", "")[-12:]
-        icon = "✗" if lvl == "ERROR" else "·"
+        icon = "[ERR]" if lvl == "ERROR" else " . "
         print(f"  {icon} [{lvl:7s}] {ts} {msg[:90]}")
+
+
+# v1.53.0 [2026-03-26] — Multi-scene smoke test for --all flag
+# ──── Scene Registry ─────────────────────────────────────────────────
+ALL_SCENES = {
+    "neoncity":     ("http://localhost:5563", "NEON CITY"),
+    "penthouse":    ("http://localhost:5556", "THE PENTHOUSE"),
+    "phone":        ("http://localhost:5555", "SIGNAL"),
+    "lounge":       ("http://localhost:5557", "THE VELVET PIT"),
+    "tavern":       ("http://localhost:5558", "THE RUSTY ANCHOR"),
+    "casino":       ("http://localhost:5559", "CLUB NOIR"),
+    "gallery":      ("http://localhost:5560", "THE OBSCURA"),
+    "arena":        ("http://localhost:5561", "THE COLOSSEUM"),
+    "cyberspace":   ("http://localhost:5573", "CYBERSPACE"),
+    "auction":      ("http://localhost:5574", "THE AUCTION HOUSE"),
+    "neonos":       ("http://localhost:5593", "NEON OS"),
+    "creation_kit": ("http://localhost:5592", "CREATION KIT"),
+    "grid":         ("http://localhost:5569", "THE GRID"),
+    "lab_break":    ("http://localhost:5571", "LAB BREAK"),
+}
+
+
+def run_smoke_all() -> dict:
+    """Quick smoke test: page load + basic DOM check for every scene."""
+    from playwright.sync_api import sync_playwright
+
+    results = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "mode": "smoke-all",
+        "scenes": [],
+        "summary": {"up": 0, "down": 0, "errors": 0},
+    }
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+
+        for key, (url, display_name) in ALL_SCENES.items():
+            scene_result = {"key": key, "name": display_name, "url": url}
+            try:
+                page = browser.new_page(viewport={"width": 1920, "height": 1080})
+                js_errors = []
+                page.on("console", lambda msg: js_errors.append(msg.text) if msg.type == "error" else None)
+
+                # v1.58.0 [2026-06-11] — domcontentloaded + 20s: full-stack runs
+                # (30+ Flask procs) made the old 8s "load" wait flaky because
+                # each page fans out cross-scene health probes on load.
+                page.goto(url, timeout=20000, wait_until="domcontentloaded")
+                page.wait_for_timeout(2500)
+
+                html_len = len(page.content())
+                has_content = html_len > 2000
+                scene_result["status"] = "UP" if has_content else "EMPTY"
+                scene_result["html_bytes"] = html_len
+                scene_result["js_errors"] = len(js_errors)
+
+                # Check for shared footer (present on most scenes)
+                footer = page.query_selector(".cs-footer")
+                scene_result["has_footer"] = footer is not None
+
+                results["summary"]["up"] += 1
+                icon = "[UP]"
+                print(f"  {icon}  {display_name:24s} {url:36s} {html_len:>7,}B  errors:{len(js_errors)}")
+                page.close()
+
+            except Exception as exc:
+                scene_result["status"] = "DOWN"
+                scene_result["error"] = str(exc)[:120]
+                results["summary"]["down"] += 1
+                print(f"  [DOWN] {display_name:24s} {url:36s} {str(exc)[:60]}")
+
+            results["scenes"].append(scene_result)
+
+        browser.close()
+
+    # Save report
+    report_path = Path("data/browser_smoke_report.json")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(results, indent=2))
+
+    up = results["summary"]["up"]
+    down = results["summary"]["down"]
+    print(f"\n  === SMOKE: {up} UP / {down} DOWN / {up + down} total ===\n")
+    return results
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="CosySim Browser Test Suite")
-    parser.add_argument("--scene", default="http://localhost:5563", help="Scene URL")
+    parser.add_argument("--scene", default="http://localhost:5563",
+                        help="Scene name (e.g. penthouse) or full URL")
     parser.add_argument("--report", action="store_true", help="Just read last telemetry")
+    parser.add_argument("--all", action="store_true", help="Quick smoke test all scenes")
     args = parser.parse_args()
 
     if args.report:
         read_telemetry()
+    elif args.all:
+        run_smoke_all()
     else:
-        SCENE_URL = args.scene
+        # v1.58.0 [2026-06-11] — Accept scene names (the documented usage
+        # `--scene penthouse` previously produced an invalid URL)
+        SCENE_URL = ALL_SCENES.get(args.scene, (args.scene,))[0]
         results = run_tests()
         read_telemetry(15)

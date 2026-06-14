@@ -12,6 +12,13 @@ Architecture:
   Player — Chooses actions via UI; choices feed into Director pipeline.
 
 All state flows through ``RealmGameState`` → synced to ``MCPFramework``.
+
+Version: v1.49.5 [2026-03-22]
+
+Change Log:
+    v1.49.5 [2026-03-22] — Character classes (4) + branching quest library (12 quests, 3 tiers)
+    v1.51.0 [2026-03-22] — Migrated to FlaskScene
+    v1.49.3 [2026-03-22] — Structured logging context
 """
 from __future__ import annotations
 
@@ -25,21 +32,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
+from flask import jsonify, render_template, request
 from flask_socketio import SocketIO
 
-from engine.scenes.base_scene import BaseScene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 
 from .realm_state import (
+    CHARACTER_CLASSES,
     DIRECTOR_PERSONALITIES,
     EQUIPMENT_SLOTS,
     ITEM_CATALOG,
     MURDER_ROOMS,
     MURDER_WEAPONS,
     MurderMysteryState,
+    QUEST_LIBRARY,
     REALM_LOCATIONS,
     RealmGameState,
     SKILL_TREE,
@@ -52,7 +59,13 @@ from content.scenes.realm.realm_rules import register_realm_rules
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "realm"
-DEFAULT_PORT = 5562
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("realm", 5562)
+except Exception:
+    DEFAULT_PORT = 5562
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -132,7 +145,8 @@ Keep responses SHORT. You're a speech bubble, not a novel. Use humor, sarcasm, p
 #  REALM SCENE
 # ═══════════════════════════════════════════════════════════════
 
-class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class RealmScene(FlaskScene):
     """The Realm — AI-Directed LitRPG / Visual Novel."""
 
     SCENE_METADATA = {
@@ -152,37 +166,16 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
         ],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_PORT):
-        super().__init__(scene_name=SCENE_ID, host=host, port=port)
-        self._mcp_init()
+        super().__init__(host=host, port=port)
 
-        # Flask + SocketIO
-        _scene_dir = Path(__file__).parent
-        self.app = Flask(
-            __name__,
-            template_folder=str(_scene_dir / "templates"),
-            static_folder=str(_scene_dir / "static"),
-        )
-        import jinja2 as _jinja2
-        _shared_tpl = _scene_dir.parent.parent / "shared" / "templates"
-        self.app.jinja_loader = _jinja2.ChoiceLoader([
-            _jinja2.FileSystemLoader(str(_scene_dir / "templates")),
-            _jinja2.FileSystemLoader(str(_shared_tpl)),
-        ])
-        register_shared_assets(self.app)
         self.app.config["SECRET_KEY"] = "realm_shattered_throne_v068"
-        CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
 
-        # Mount overlay + skills + health + bench + TTS
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
         self.mount_overlay(self.app, self.socketio)
         self.mount_skills_server(self.app)
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
         self.register_bench_route(self.app, self.socketio)
-        self.register_tts_route(self.app)
 
         # Game state (one active session at a time)
         self.state: Optional[RealmGameState] = None
@@ -202,7 +195,14 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
         # MCP rules
         register_realm_rules()
 
-        self.nexus_init("realm")
+    # v1.51.1 [2026-03-25] — Auto-load Dragonfire Chain story pack
+    def on_before_serve(self) -> None:
+        """Hook: load narrative story pack before serving."""
+        try:
+            from engine.mcp.narrative_packs import load_pack
+            load_pack("realm_dragonfire_chain", scene_id="realm", character_id="director")
+        except Exception:
+            pass
 
     # ── Agent helpers──
 
@@ -250,7 +250,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
             return self._parse_director_response(raw)
 
         except Exception as e:
-            logger.warning("Director inference failed: %s", e)
+            logger.warning("[%s] Director inference failed (operation=chat): %s", SCENE_ID, e)
             return {
                 "narration": "The Director pauses, gathering thoughts... (LLM unavailable)",
                 "choices": [{"id": "a", "text": "Wait patiently"}, {"id": "b", "text": "Try again"}],
@@ -290,7 +290,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
             proc = mgr.infer_processed(req)
             return (proc.clean_text or proc.raw_text or "").strip()
         except Exception as e:
-            logger.warning("Assistant inference failed: %s", e)
+            logger.warning("[%s] Assistant inference failed (operation=chat): %s", SCENE_ID, e)
             return "*The Assistant stares blankly at the screen.*"
 
     def _parse_director_response(self, raw: str) -> Dict[str, Any]:
@@ -422,6 +422,8 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
             return render_template(
                 "realm.html",
                 personalities=DIRECTOR_PERSONALITIES,
+                character_classes=CHARACTER_CLASSES,
+                quest_library_count=len(QUEST_LIBRARY),
                 skills=list(SKILL_TREE.keys()),
                 weapons=MURDER_WEAPONS,
                 rooms=MURDER_ROOMS,
@@ -454,6 +456,12 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
                 self._director_conv_id = None
                 self._assistant_conv_id = None
 
+                # v1.49.5 [2026-03-22] — Apply character class if provided
+                class_id = data.get("class_id")
+                class_result = None
+                if class_id and class_id in CHARACTER_CLASSES:
+                    class_result = self.state.apply_class_bonus(class_id)
+
                 # Register timers in MCP framework
                 try:
                     fw = get_framework()
@@ -462,8 +470,16 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
                     pass
 
                 # Get opening narration from Director
+                class_intro = ""
+                if class_result and "error" not in class_result:
+                    cls_info = CHARACTER_CLASSES[class_id]
+                    class_intro = (
+                        f" The player is a {cls_info['name']} — {cls_info['description']}. "
+                        f"Reference their class abilities: {', '.join(a['name'] for a in cls_info['abilities'])}."
+                    )
                 opening_prompt = (
-                    "Begin a new LitRPG adventure. The player has just arrived in a mysterious realm. "
+                    "Begin a new LitRPG adventure. The player has just arrived in a mysterious realm."
+                    f"{class_intro} "
                     "Set the scene dramatically and present their first choices. "
                     "Keep it to 2-3 paragraphs."
                 )
@@ -481,13 +497,14 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
                 return jsonify({
                     "success": True,
                     "session_id": self.state.session_id,
+                    "class": class_result,
                     "narration": result.get("narration", ""),
                     "choices": result.get("choices", []),
                     "assistant": assistant_msg,
                     "state": self.state.to_dict(),
                 })
             except Exception as exc:
-                logger.error("new_game failed: %s", exc, exc_info=True)
+                logger.error("[%s] new_game failed (operation=game_start): %s", SCENE_ID, exc, exc_info=True)
                 return jsonify({"error": str(exc)}), 500
 
         # ── PLAYER CHOICE ──
@@ -630,7 +647,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
                 self.socketio.emit("murder_started", {**result, "narration": opening.get("narration", "")})
                 return jsonify({**result, "narration": opening.get("narration", "")})
             except Exception as exc:
-                logger.error("start_murder failed: %s", exc, exc_info=True)
+                logger.error("[%s] start_murder failed (operation=murder_mystery): %s", SCENE_ID, exc, exc_info=True)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/murder/investigate", methods=["POST"])
@@ -886,6 +903,165 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
             self.socketio.emit("quest_accepted", quest)
             return jsonify({**result, "narration": narration.get("narration", "")})
 
+        # ── Character Class Routes ──────────────────────────────────
+        # v1.49.5 [2026-03-22] — Character class selection and abilities
+        # CONNECTS: CHARACTER_CLASSES, RealmGameState.apply_class_bonus
+        # CALLED BY: Frontend class selection UI
+        # EMITS: class_selected SocketIO event
+
+        @self.app.route("/api/classes")
+        def class_list():
+            """Return all available character classes with stats and abilities."""
+            return jsonify({"classes": CHARACTER_CLASSES})
+
+        @self.app.route("/api/game/select_class", methods=["POST"])
+        def select_class():
+            """Select a character class for the current game.
+
+            Accepts JSON: {"class_id": "fighter"}.
+            Applies stat bonuses and grants class abilities.
+            """
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            if self.state.player_class:
+                return jsonify({"error": f"Class already selected: {self.state.player_class}"}), 400
+            data = request.get_json(silent=True) or {}
+            class_id = data.get("class_id")
+            if not class_id:
+                return jsonify({"error": "class_id required"}), 400
+            result = self.state.apply_class_bonus(class_id)
+            if "error" in result:
+                return jsonify(result), 400
+            # Director acknowledges the class choice
+            cls_info = CHARACTER_CLASSES[class_id]
+            narration = self._director_infer(
+                f"The player has chosen the {cls_info['name']} class — {cls_info['description']}. "
+                f"Abilities unlocked: {', '.join(a['name'] for a in cls_info['abilities'])}. "
+                "Acknowledge their choice dramatically and hint at how it will shape their journey."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("class_selected", result)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        @self.app.route("/api/game/use_ability", methods=["POST"])
+        def use_ability():
+            """Use a class ability during gameplay.
+
+            Accepts JSON: {"ability_name": "Shield Wall"}.
+            """
+            if not self.state or self.state.ended:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            ability_name = data.get("ability_name")
+            if not ability_name:
+                return jsonify({"error": "ability_name required"}), 400
+            result = self.state.use_class_ability(ability_name)
+            if "error" in result:
+                return jsonify(result), 400
+            # Director narrates the ability usage
+            narration = self._director_infer(
+                f"The player uses their class ability: '{ability_name}' — {result['effect']}. "
+                "Describe the dramatic effect in the current scene."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("ability_used", result)
+            return jsonify({**result, "narration": narration.get("narration", "")})
+
+        # ── Branching Quest Library Routes ─────────────────────────
+        # v1.49.5 [2026-03-22] — 12-quest library with branching narrative paths
+        # CONNECTS: QUEST_LIBRARY, RealmGameState.get_quest_library
+        # CALLED BY: Frontend quest journal UI
+        # EMITS: quest_branch_chosen SocketIO event
+
+        @self.app.route("/api/quests/library")
+        def quest_library():
+            """Return the full branching quest library, filtered by tier if requested."""
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            tier = request.args.get("tier", type=int)
+            return jsonify({
+                "quests": self.state.get_quest_library(tier=tier),
+                "player_level": self.state.player_stats.get("level", 1),
+            })
+
+        @self.app.route("/api/quests/library/accept", methods=["POST"])
+        def quest_library_accept():
+            """Accept a quest from the branching quest library.
+
+            Accepts JSON: {"quest": "missing_merchant"}.
+            """
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            quest_key = data.get("quest")
+            if not quest_key:
+                return jsonify({"error": "quest key required"}), 400
+            result = self.state.accept_library_quest(quest_key)
+            if "error" in result:
+                return jsonify(result), 400
+            quest = result["quest"]
+            # Director narrates the quest hook
+            quest_data = QUEST_LIBRARY.get(quest_key, {})
+            narration = self._director_infer(
+                f"The player discovers a new quest: '{quest_data.get('name', quest_key)}'. "
+                f"{quest_data.get('intro', '')} "
+                "Set the scene for this quest and present the branching choices: "
+                + ", ".join(
+                    f"'{bk}': {bv['description']}"
+                    for bk, bv in quest_data.get("branches", {}).items()
+                )
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("quest_accepted", quest)
+            return jsonify({
+                **result,
+                "narration": narration.get("narration", ""),
+                "branches": {
+                    bk: {"description": bv["description"]}
+                    for bk, bv in quest_data.get("branches", {}).items()
+                },
+            })
+
+        @self.app.route("/api/quests/branch", methods=["POST"])
+        def quest_branch():
+            """Choose a branching path for an active library quest.
+
+            Accepts JSON: {"quest": "missing_merchant", "branch": "search_forest"}.
+            Resolves the quest and grants rewards.
+            """
+            if not self.state:
+                return jsonify({"error": "No active game"}), 400
+            data = request.get_json(silent=True) or {}
+            quest_key = data.get("quest")
+            branch_key = data.get("branch")
+            if not quest_key or not branch_key:
+                return jsonify({"error": "quest and branch keys required"}), 400
+            result = self.state.choose_quest_branch(quest_key, branch_key)
+            if "error" in result:
+                return jsonify(result), 400
+            # Director narrates the branch outcome
+            narration = self._director_infer(
+                f"The player chose path '{result['description']}' for quest '{result['quest_name']}'. "
+                f"Outcome: {result['outcome']} "
+                f"They earned {result['rewards']['xp']} XP and {result['rewards']['gold']} gold. "
+                + (f"They found: {result['bonus_item']['name']}. " if result.get("bonus_item") else "")
+                + "Narrate this dramatically and present what happens next."
+            )
+            self._apply_director_result(narration)
+            self.socketio.emit("quest_branch_chosen", {
+                "quest": quest_key,
+                "branch": branch_key,
+                "rewards": result["rewards"],
+                "outcome": result["outcome"],
+            })
+            if result.get("leveled_up"):
+                self.socketio.emit("level_up", {"level": self.state.player_stats.get("level", 1)})
+            return jsonify({
+                **result,
+                "narration": narration.get("narration", ""),
+                "state": self.state.to_dict(),
+            })
+
         # ── Equipment Routes ──
 
         @self.app.route("/api/equipment")
@@ -979,7 +1155,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
                     "recent_transactions": [t.to_dict() for t in em.get_history(player_id, limit=10)],
                 })
             except Exception as exc:
-                logger.error("Economy API error: %s", exc)
+                logger.error("[%s] Economy API error (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
         @self.app.route("/api/consequences")
@@ -994,7 +1170,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
                     "pending": [c.to_dict() for c in store.get_pending(SCENE_ID, player_id)],
                 })
             except Exception as exc:
-                logger.error("Consequences API error: %s", exc)
+                logger.error("[%s] Consequences API error (operation=consequences): %s", SCENE_ID, exc)
                 return jsonify({"error": str(exc)}), 500
 
     # ── SocketIO ──
@@ -1209,15 +1385,7 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
 
     # ── SocketIO ──
 
-    def start(self) -> None:
-        logger.info(
-            "THE SHATTERED THRONE v0.68 'Dark Renaissance' — starting on port %d", self.port
-        )
-        self.socketio.run(self.app, host=self.host, port=self.port, debug=False, allow_unsafe_werkzeug=True)
-
-    def stop(self) -> None:
-        self.nexus_flush()
-        self._mcp_deregister_scene()
+    # v1.51.0 [2026-03-22] — start/stop delegated to FlaskScene
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
@@ -1256,5 +1424,12 @@ class RealmScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id="realm"
                 {"path": "/api/shop/catalog",     "methods": ["GET"],  "description": "Shop catalog"},
                 {"path": "/api/shop/buy",         "methods": ["POST"], "description": "Buy item"},
                 {"path": "/api/shop/sell",        "methods": ["POST"], "description": "Sell item"},
+                # v1.49.5 [2026-03-22] — Character classes + branching quest library
+                {"path": "/api/classes",                "methods": ["GET"],  "description": "List character classes"},
+                {"path": "/api/game/select_class",      "methods": ["POST"], "description": "Select character class"},
+                {"path": "/api/game/use_ability",       "methods": ["POST"], "description": "Use class ability"},
+                {"path": "/api/quests/library",         "methods": ["GET"],  "description": "Branching quest library"},
+                {"path": "/api/quests/library/accept",  "methods": ["POST"], "description": "Accept library quest"},
+                {"path": "/api/quests/branch",          "methods": ["POST"], "description": "Choose quest branch"},
             ],
         }

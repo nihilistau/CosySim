@@ -1,19 +1,351 @@
-# CosySim Operations Guide
+# Operations
 
-> Logging, monitoring, scheduling, admin panels, news pipeline, and local agent operations.
+> CosySim Documentation -- v1.52.0 [2026-03-26]
+>
+> Launching, ports, monitoring, logging, scheduling, and admin panels.
 
 ---
 
-## 1. Logging & Monitoring
+## 1. Quick Start
+
+CosySim runs as a constellation of Flask/Socket.IO scenes, Streamlit dashboards, FastAPI services, and Node.js apps. The launcher (`launcher.py`) and TUI (`tui.py`) are the two entry points.
+
+### Launcher CLI
+
+```bash
+python launcher.py [target]           # Single target by name
+python launcher.py --core             # auto_start services + scenes
+python launcher.py --services         # auto_start services only
+python launcher.py --scenes           # auto_start scenes only
+python launcher.py --all              # every known target
+python launcher.py --game             # game pillar only
+python launcher.py --creation         # creation pillar only
+python launcher.py --list             # show all targets + port status
+python launcher.py --status           # system health check
+python launcher.py --test             # run test suite
+python launcher.py --init-db          # initialize simulation database
+python launcher.py --housekeep        # housekeeping tasks
+```
+
+### Common Recipes
+
+```bash
+# Minimal -- one scene
+python launcher.py penthouse              # http://localhost:5556
+
+# Recommended -- core auto-start targets
+python launcher.py --core
+
+# Everything
+python launcher.py --all
+
+# Interactive terminal dashboard
+python tui.py
+```
+
+### Auto-Start Overrides
+
+Edit `config/launcher.yaml` to toggle which targets launch with `--core`:
+
+```yaml
+services:
+  nexus_kms:
+    auto_start: true
+  hub:
+    auto_start: true
+scenes:
+  penthouse:
+    auto_start: false
+  lounge:
+    auto_start: true
+```
+
+---
+
+## 2. Three-Pillar Architecture
+
+CosySim organizes its 32 launcher-managed targets into three pillars, defined in `engine/control_plane_registry.py`. Each target has a type, a port, an auto-start flag, and a pillar assignment.
+
+```
++--------------------- External (manual) ----------------------+
+|  LMStudio (:1234)             ComfyUI (:8188)                |
+|  LLM inference                Image generation               |
++------------------------------+-------------------------------+
+                               | REST / SSE
++------------------------------v-------------------------------+
+|               CosySim Engine  (v1.50)                        |
+|                                                              |
+|  +- GAME PILLAR (15) ------------------------------------+   |
+|  |  phone :5555      penthouse :5556    lounge :5557     |   |
+|  |  tavern :5558     casino :5559       gallery :5560    |   |
+|  |  arena :5561      realm :5562        neoncity :5563   |   |
+|  |  coders :5564     heist :5565        games :5567      |   |
+|  |  grid :5569       lab_break :5571    oracle :5572     |   |
+|  +-------------------------------------------------------+   |
+|                                                              |
+|  +- SERVICE PILLAR (11) ---------------------------------+   |
+|  |  Nexus KMS :8700 (auto, priority 0)                   |   |
+|  |  Hub :8500          Nexus Panel :5570                 |   |
+|  |  Dashboard :8501    Admin :8502                       |   |
+|  |  TTS :8600          Bridge :8601                      |   |
+|  |  NLM Proxy :8800    System Control :5575              |   |
+|  |  Command Center :5566    Intel Hub :5580              |   |
+|  +-------------------------------------------------------+   |
+|                                                              |
+|  +- CREATION PILLAR (6) ---------------------------------+   |
+|  |  Canvas :5590       Canvas API :5595                  |   |
+|  |  Assets :8503       Creator :8504                     |   |
+|  |  Asset Studio :5568    Creation Kit :5592             |   |
+|  +-------------------------------------------------------+   |
++--------------------------------------------------------------+
+```
+
+### Service Types
+
+| Type | Framework | Port Range | Launch Method |
+|------|-----------|------------|---------------|
+| `flask` | Flask + Socket.IO | 5555--5580 | Daemon thread |
+| `streamlit` | Streamlit | 8500--8504 | Subprocess |
+| `fastapi` | Uvicorn | 8600--8601, 5595 | Daemon thread |
+| `node` | Node.js | 5590 | Subprocess |
+| `external` | Subprocess | 8700 | Subprocess (cwd) |
+
+### Pillar Summary
+
+| Pillar | Count | Description |
+|--------|-------|-------------|
+| **Game** | 15 | Interactive scenes -- each a Flask+Socket.IO app with Neon HUD |
+| **Service** | 11 | Infrastructure -- KMS, dashboards, proxy, bridge, control panels |
+| **Creation** | 6 | Authoring tools -- canvas, asset generators, scene creator, creation kit |
+
+---
+
+## 3. Port Registry
+
+All ports are defined in `engine/port_registry.py`. Config overrides from `config/default.yaml` are applied at runtime by the `PortRegistry` singleton. Always use `get_port()` or `get_port_registry().get()` for lookups -- never hardcode port numbers.
+
+### Game Pillar (15 targets)
+
+| Port | ID | Label |
+|------|----|-------|
+| 5555 | phone | SIGNAL |
+| 5556 | penthouse | THE PENTHOUSE |
+| 5557 | lounge | THE VELVET PIT |
+| 5558 | tavern | THE RUSTY ANCHOR |
+| 5559 | casino | CLUB NOIR |
+| 5560 | gallery | THE OBSCURA |
+| 5561 | arena | THE COLOSSEUM |
+| 5562 | realm | THE SHATTERED THRONE |
+| 5563 | neoncity | NEON CITY |
+| 5564 | coders | THE LAB |
+| 5565 | heist | THE SCORE |
+| 5567 | games | THE ARCADE |
+| 5569 | grid | THE GRID |
+| 5571 | lab_break | LAB BREAK |
+| 5572 | oracle | THE ORACLE |
+
+### Service Pillar (11 targets)
+
+| Port | ID | Label |
+|------|----|-------|
+| 8700 | nexus_kms | Nexus KMS |
+| 8500 | hub | CosySim Hub |
+| 5570 | nexus_panel | Nexus Control Panel |
+| 8501 | dashboard | System Dashboard |
+| 8502 | admin | Admin Panel |
+| 8600 | tts | TTS Server |
+| 8601 | bridge | MCP Bridge |
+| 8800 | nlm_proxy | NLM Live Proxy |
+| 5575 | system_control | System Control Panel |
+| 5566 | command_center | Command Center |
+| 5580 | intel_hub | THE BRIEFING ROOM |
+
+### Creation Pillar (6 targets)
+
+| Port | ID | Label |
+|------|----|-------|
+| 5590 | canvas | Nexus Canvas |
+| 5595 | canvas_api | Canvas API |
+| 8503 | assets | Asset Generator |
+| 8504 | creator | Scene Creator |
+| 5568 | asset_studio | ASSET STUDIO |
+| 5592 | creation_kit | CREATION KIT |
+
+### External (Not Launcher-Managed)
+
+| Port | Service | Required |
+|------|---------|----------|
+| 1234 | LMStudio | Yes -- local LLM inference |
+| 8188 | ComfyUI | No -- image generation only |
+
+### Sidecar Services
+
+| Port | Service |
+|------|---------|
+| 5005 | Orpheus TTS |
+| 5050 | CosyVoice TTS |
+| 5051 | Whisper STT |
+| 5591 | Canvas Sidecar |
+
+### Legacy Aliases
+
+Old service names map to canonical keys so either name resolves to the same port:
+
+| Alias | Canonical |
+|-------|-----------|
+| `qwen3_tts` | `tts` |
+| `web_bridge` | `bridge` |
+| `nexus_canvas` | `canvas` |
+| `notebooklm_proxy` | `nlm_proxy` |
+| `nexus` | `nexus_kms` |
+
+### Programmatic Access
+
+```python
+from engine.port_registry import get_port, get_service_url, get_port_registry
+
+port = get_port("penthouse")                      # 5556
+url = get_service_url("nexus_kms", path="/api/health")  # http://localhost:8700/api/health
+
+registry = get_port_registry()
+conflicts = registry.find_conflicts()              # [(svc_a, svc_b, port), ...]
+all_ports = registry.all_ports()                   # {"phone": 5555, ...}
+print(registry.summary())                          # Formatted table
+```
+
+---
+
+## 4. Auto-Start & Service Dependencies
+
+### Start Order
+
+Nexus KMS is a **managed auto-start service** with priority 0 -- it launches automatically before all other targets. The full start sequence:
+
+```
+Step 0: Nexus KMS (:8700)    <-- auto-managed, starts first
+Step 1: External (manual)
+  +-- LMStudio    :1234      <-- required (LLM inference)
+  +-- ComfyUI     :8188      <-- optional (image generation)
+Step 2: CosySim Services     <-- auto_start=True targets
+Step 3: CosySim Scenes       <-- auto_start=True targets
+Step 4: WorldSim + Scheduler <-- auto-activated after scenes
+```
+
+### Default Auto-Start Targets
+
+From `control_plane_registry.py`, these targets have `auto_start: True` by default:
+
+**Services:** nexus_kms, hub, nexus_panel, bridge, nlm_proxy, system_control, canvas, canvas_api
+
+**Scenes:** phone, penthouse, neoncity, intel_hub
+
+All others start on demand via `python launcher.py <target>` or `--all`.
+
+### PM2 Process Management
+
+For persistent deployment, use PM2 with `ecosystem.config.js`:
+
+```bash
+pm2 start ecosystem.config.js                          # Start all processes
+pm2 start ecosystem.config.js --only cosysim-nexus-kms  # Nexus only
+pm2 start ecosystem.config.js --only cosysim-launcher   # CosySim core
+pm2 stop all                                            # Stop everything
+pm2 save                                                # Persist process list
+pm2 resurrect                                           # Restore after reboot
+```
+
+PM2 process names follow the `cosysim-{target}` convention. Nexus KMS starts first via `scripts/pm2/start_nexus_kms.py`.
+
+### Environment Requirements
+
+- **Python 3.10+** (3.13 recommended)
+- **Node.js 18+** (for Nexus Canvas)
+- `pip install -r requirements.txt && npm install`
+
+### External Services
+
+| Service | Required | Install |
+|---------|----------|---------|
+| LMStudio | Yes | [lmstudio.ai](https://lmstudio.ai) -- load at least one model |
+| ComfyUI | No | Only for image generation |
+
+### Configuration Hierarchy
+
+Layered YAML config system (see [CONFIGURATION.md](./CONFIGURATION.md)):
+
+```
+config/default.yaml       <-- base values (source of truth)
+config/development.yaml   <-- dev overrides
+config/production.yaml    <-- prod overrides
+config/launcher.yaml      <-- auto_start overrides
+config/game.yaml          <-- game pillar config
+config/services.yaml      <-- service pillar config
+config/creation.yaml      <-- creation pillar config
+```
+
+---
+
+## 5. Health Checks
+
+Every launcher-managed service exposes a health endpoint. The launcher, TUI, Hub, and System Control panel all use these for status monitoring.
+
+### Health Endpoints
+
+| Service Type | Default Health Path | Notes |
+|--------------|-------------------|-------|
+| Flask scenes | `GET :port/api/health` | Returns scene status JSON |
+| Hub (Streamlit) | `GET :8500/health` | Streamlit health |
+| Nexus KMS | `GET :8700/api/health` | Entry/rule counts |
+| LMStudio | `GET :1234/api/v1/models` | Model list (v1 API) |
+| TTS Server | `GET :8600/health` | TTS status |
+| MCP Bridge | `GET :8601/health` | Bridge status |
+| NLM Proxy | `GET :8800/health` | Proxy status |
+| ComfyUI | `GET :8188/system_stats` | System stats |
+
+### Health Path Overrides
+
+Most targets use `/api/health`. These use custom paths (defined in `port_registry.py`):
+
+| Target | Override Path |
+|--------|--------------|
+| `hub` | `/health` |
+| `lmstudio` | `/api/v1/models` |
+| `comfyui` | `/system_stats` |
+| `tts` | `/health` |
+| `nlm_proxy` | `/health` |
+
+### Quick Health Check
+
+```bash
+python launcher.py --status    # Full system health across all targets
+python launcher.py --list      # Port status table grouped by pillar
+```
+
+### Scene Registry Endpoint
+
+Every Flask scene auto-serves `GET /api/scene-registry` (wired by `BaseSceneRoutesMixin`), returning all targets grouped by pillar with live status. The Hub uses this for its scene catalogue.
+
+### Programmatic Health Checks
+
+```python
+from engine.port_registry import build_health_endpoints
+
+endpoints = build_health_endpoints()
+# [{"id": "nexus_kms", "name": "Nexus KMS", "url": "http://localhost:8700/api/health", "port": 8700}, ...]
+```
+
+---
+
+## 6. Logging
 
 ### Architecture
 
 ```
 engine/logging/
-├── __init__.py          Public API — re-exports everything below
-├── cosy_logger.py       CosyLogger: ring-buffer handler + install_logger()
-├── benchmark.py         @timed decorator, LLM KPI tracking, timeseries
-└── monitor.py           SystemMonitor: CPU/RAM/GPU metrics, service health
++-- __init__.py          Public API -- re-exports everything below
++-- cosy_logger.py       CosyLogger: ring-buffer handler + install_logger()
++-- benchmark.py         @timed decorator, LLM KPI tracking, timeseries
++-- monitor.py           SystemMonitor: CPU/RAM/GPU metrics, service health
 ```
 
 | Subsystem | Module | Purpose |
@@ -56,7 +388,7 @@ logging:
 
 The log directory is also set in `paths.logs_dir` (default: `./logs`).
 
-### Per-Module Logging Convention
+### Per-Module Convention
 
 Every module uses one logger, never `print()`:
 
@@ -82,13 +414,6 @@ try:
     result = client.chat(messages)
 except Exception as e:
     logger.error("LLM call failed: %s", e, exc_info=True)
-```
-
-For non-critical failures, log at `DEBUG` to keep noise low:
-
-```python
-except Exception:
-    logger.debug("Suppressed exception", exc_info=True)
 ```
 
 ### CosyLogger Ring Buffer
@@ -119,41 +444,17 @@ clear_logs()                                  # Clear buffer
 Each entry is a dict with fields: `id` (monotonic), `ts` (HH:MM:SS.mmm), `level`, `logger`, `message`.
 
 ```
-┌─────────────┐    emit()    ┌──────────────────┐
-│ Any module   │────────────>│ _RingHandler      │
-│ logger.info()│             │ deque(maxlen=2000)│
-└─────────────┘             └────────┬─────────┘
-                                     │ if ERROR+
++-------------+    emit()    +------------------+
+| Any module   |------------>| _RingHandler      |
+| logger.info()|             | deque(maxlen=2000)|
++-------------+             +--------+---------+
+                                     | if ERROR+
                                      v
-                              ┌──────────────┐
-                              │ ActivityBus   │
-                              │ "log_error"   │
-                              └──────────────┘
+                              +--------------+
+                              | ActivityBus   |
+                              | "log_error"   |
+                              +--------------+
 ```
-
-### SystemMonitor
-
-The `SystemMonitor` singleton collects hardware metrics (cached 5 seconds) and pings external services.
-
-```python
-from engine.logging import get_system_monitor
-monitor = get_system_monitor()
-
-snap = monitor.snapshot()        # CPU%, RAM, GPU VRAM, GPU temp
-health = monitor.check_services() # Per-service up/down + latency
-model = monitor.get_loaded_model() # Currently loaded LMStudio model
-```
-
-Monitored services:
-
-| Service | Health Endpoint | Default URL |
-|---------|-----------------|-------------|
-| LMStudio | `/v1/models` | `http://localhost:1234` |
-| ComfyUI | `/system_stats` | `http://localhost:8188` |
-| TTS | `/status` | `http://localhost:8600` |
-| MCP (CosySim) | `/health` | `http://localhost:8700` |
-
-URLs are read from config (`lmstudio.base_url`, `comfyui.base_url`, etc.) with fallback to the defaults above.
 
 ### Log Files and Rotation
 
@@ -165,6 +466,30 @@ URLs are read from config (`lmstudio.base_url`, `comfyui.base_url`, etc.) with f
 | Backup count | 5 (`logging.backup_count`) |
 
 When `cosysim.log` reaches 10 MB it rotates, keeping up to 5 backups (`cosysim.log.1` through `.5`). The `logs/` directory is created automatically.
+
+### SystemMonitor
+
+The `SystemMonitor` singleton collects hardware metrics (cached 5 seconds) and pings external services.
+
+```python
+from engine.logging import get_system_monitor
+monitor = get_system_monitor()
+
+snap = monitor.snapshot()          # CPU%, RAM, GPU VRAM, GPU temp
+health = monitor.check_services()  # Per-service up/down + latency
+model = monitor.get_loaded_model() # Currently loaded LMStudio model
+```
+
+Monitored services:
+
+| Service | Health Endpoint | Default URL |
+|---------|-----------------|-------------|
+| LMStudio | `/v1/models` | `http://localhost:1234` |
+| ComfyUI | `/system_stats` | `http://localhost:8188` |
+| TTS | `/status` | `http://localhost:8600` |
+| Nexus KMS | `/health` | `http://localhost:8700` |
+
+URLs are read from config (`lmstudio.base_url`, `comfyui.base_url`, etc.) with fallback to the defaults above.
 
 ### Benchmarking and KPIs
 
@@ -187,7 +512,7 @@ The shim at `content/simulation/services/cosylogger.py` re-exports the public AP
 
 ---
 
-## 2. Scheduler Daemon
+## 7. Scheduler
 
 > **Module:** `engine/nexus/scheduler_daemon.py` | **Tasks:** 61 recurring | **Tests:** `tests/test_scheduler_daemon.py`
 
@@ -196,17 +521,17 @@ The scheduler daemon manages recurring background tasks: Nexus maintenance, news
 ### Architecture
 
 ```
-                    ┌──────────────────────────────┐
-                    │     TaskSchedulerDaemon       │
-                    │   get_scheduler_daemon()      │
-                    └──────────┬───────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              │                │                │
-    ┌─────────┴────┐  ┌───────┴──────┐  ┌──────┴──────┐
-    │  60s Tick    │  │  State File  │  │ Nexus Log   │
-    │  run_due()   │  │  (JSON)      │  │ (history)   │
-    └──────────────┘  └──────────────┘  └─────────────┘
+                    +------------------------------+
+                    |     TaskSchedulerDaemon       |
+                    |   get_scheduler_daemon()      |
+                    +--------------+---------------+
+                                   |
+              +--------------------+--------------------+
+              |                    |                    |
+    +---------+----+      +--------+------+     +------+------+
+    |  60s Tick    |      |  State File   |     | Nexus Log   |
+    |  run_due()   |      |  (JSON)       |     | (history)   |
+    +--------------+      +---------------+     +-------------+
 ```
 
 ### Task Registration
@@ -334,7 +659,7 @@ def my_callback() -> Dict[str, Any]:
 | `har-watchfolder` | every_4h | Process new HAR captures |
 | `cdp-health` | every_4h | Check CDP endpoint availability |
 
-**Other (17 tasks)** — operator inbox, session logging, Copilot validation, inventory snapshots, etc.
+**Other (17 tasks)** -- operator inbox, session logging, Copilot validation, inventory snapshots, etc.
 
 ### CLI Usage
 
@@ -382,34 +707,38 @@ State survives restarts -- tasks resume from where they left off.
 
 ---
 
-## 3. Admin Panel (Streamlit)
+## 8. Admin Panels
 
-**Launch:** `python launcher.py --mode admin` (port 8502)
+CosySim has three operator interfaces for runtime control and diagnostics.
+
+### Admin Panel (Streamlit) -- port 8502
+
+**Launch:** `python launcher.py admin`
 
 A Streamlit-based diagnostic and control center (`admin_panel.py`, ~120 lines) that delegates to 12 page modules in `content/scenes/admin/pages/`.
 
-### Page Modules
+#### Page Modules
 
 ```
 admin_panel.py          -> Sidebar navigation, session state init
 pages/
-├── dashboard.py        -> System overview + health
-├── logs.py             -> Log viewer + benchmarks
-├── chains.py           -> EventChain browser
-├── config_editor.py    -> Interactive config editing
-├── rag_editor.py       -> RAG message editor
-├── god_mode.py         -> Full override access
-├── character_manager.py-> Character CRUD
-├── scene_manager.py    -> Scene registry
-├── media.py            -> Media gallery
-├── lmstudio.py         -> LMStudio management
-├── backup.py           -> Backup & restore
-└── assets.py           -> Asset browser
++-- dashboard.py        -> System overview + health
++-- logs.py             -> Log viewer + benchmarks
++-- chains.py           -> EventChain browser
++-- config_editor.py    -> Interactive config editing
++-- rag_editor.py       -> RAG message editor
++-- god_mode.py         -> Full override access
++-- character_manager.py-> Character CRUD
++-- scene_manager.py    -> Scene registry
++-- media.py            -> Media gallery
++-- lmstudio.py         -> LMStudio management
++-- backup.py           -> Backup & restore
++-- assets.py           -> Asset browser
 ```
 
 Each page exports a `render()` function.
 
-### Key Pages
+#### Key Pages
 
 **Dashboard** -- Service health indicators (LMStudio, ComfyUI, Database, EventChain), system metrics (CPU%, RAM, GPU VRAM), loaded model info, benchmark summary table.
 
@@ -421,7 +750,7 @@ Each page exports a `render()` function.
 
 **GOD Mode** -- Password-protected (`cosysim`) full override access. Raw SQL, event injection, force state override, DB browser, danger zone (clear all events/tables). Red banner when active; all actions logged as `god_mode_action` events.
 
-### Session State
+#### Session State
 
 Shared via `st.session_state`:
 
@@ -431,34 +760,30 @@ Shared via `st.session_state`:
 | `config` | ConfigManager | Configuration access |
 | `god_mode` | bool | GOD mode toggle |
 
-### Adding a New Page
+#### Adding a New Page
 
 1. Create `pages/my_page.py` with a `render()` function.
 2. Add to `_PAGES` dict in `admin_panel.py`.
 3. Import at top of `admin_panel.py`.
 
----
+### System Dashboard (Streamlit) -- port 8501
 
-## 4. System Control Panel (Flask)
+**Launch:** `python launcher.py dashboard`
 
-> Port **5575** | `content/scenes/system_control/`
+High-level system overview with live metrics. Uses the same `engine.logging` subsystem as the admin panel but with a simplified read-only dashboard view. Shows CPU, RAM, GPU utilization, service health grid, and active scene summary.
 
-The operator's runtime dashboard for CosySim. Auto-starts with `--core`.
+### System Control Panel (Flask) -- port 5575
 
-```bash
-python launcher.py system_control
-# or auto-starts with:
-python launcher.py --core
-```
+**Launch:** `python launcher.py system_control` (auto-starts with `--core`)
 
 Open: [http://localhost:5575](http://localhost:5575)
 
-### Tabs
+The operator's runtime dashboard for CosySim. Nine tabs provide full operational control:
 
 | Tab | Features |
 |-----|----------|
-| **Overview** | CPU, RAM, GPU utilisation (live 30s refresh), uptime, quick links |
-| **Services** | Health status for all 19 services (parallel checks, 3s timeout) |
+| **Overview** | CPU, RAM, GPU utilization (live 30s refresh), uptime, quick links |
+| **Services** | Health status for all services (parallel checks, 3s timeout) |
 | **Config Editor** | Load/edit/validate/save YAML + JSON config files (`.bak` backups) |
 | **Launcher** | Toggle `auto_start` per service/scene, persists to `config/launcher.yaml` |
 | **NLM Proxy** | Status, BL age, cookie freshness, HAR import, CDP cookie capture, notebook list |
@@ -469,13 +794,13 @@ Open: [http://localhost:5575](http://localhost:5575)
 
 Editable config files: `config/default.yaml`, `config/production.yaml`, `config/launcher.yaml`, `config/voices.yaml`, `config/skill_manifests.yaml`, `config/mcp.json`, `config/news_sources.yaml`.
 
-### API Endpoints
+#### API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Scene health check |
 | GET | `/api/metrics` | CPU/RAM/GPU stats |
-| GET | `/api/services` | Health of all 19 services |
+| GET | `/api/services` | Health of all services |
 | GET | `/api/configs` | List editable config files |
 | GET | `/api/config/<name>` | Read a config file |
 | POST | `/api/config/<name>` | Write a config file (validated) |
@@ -492,279 +817,90 @@ Editable config files: `config/default.yaml`, `config/production.yaml`, `config/
 | GET | `/api/logs/<name>` | Tail a log file (`?lines=100`) |
 | GET | `/api/git` | Git branch, commits, and status |
 
-### Architecture Notes
+#### Architecture Notes
 
 - All NLM operations proxy to `:8800` (never called directly).
 - Config writes are atomic: validated then written; `.bak` backups created before each write.
 - Service health checks run in a 10-thread pool.
 - Metrics use `psutil` (CPU/RAM) and `pynvml` (GPU); both degrade gracefully if not installed.
 
-### Configuration
-
-```yaml
-# config/default.yaml
-scenes:
-  system_control:
-    host: "localhost"
-    port: 5575
-    debug: false
-
-# config/launcher.yaml
-services:
-  system_control:
-    auto_start: true
-```
-
 ---
 
-## 5. News & Intelligence Pipeline
+## 9. Troubleshooting
 
-> Automated news ingestion, NLM distillation, and curated intelligence feeds.
+### Port Already in Use
 
-### Pipeline Overview
-
-```
-RSS Sources -> Fetch -> Dedup -> NLM Distillation -> Nexus Storage -> Scene Delivery
-```
-
-1. **Ingestion** -- Fetch top stories from RSS/web sources 3x daily.
-2. **Deduplication** -- URL fingerprint + title similarity (>85%) within a 48-hour window.
-3. **NLM Distillation** -- Upload to NotebookLM notebooks, ask 10 curated questions per category.
-4. **Nexus Storage** -- Answers stored as searchable Q&A and knowledge entries.
-5. **Scene Delivery** -- Intel Hub ticker + Phone scene feed display curated news.
-6. **Agent Access** -- Any agent can query `nexus_ask("latest AI news")`.
-
-### Source Layout
-
-```
-engine/nexus/news/
-├── news_pipeline.py      -- Orchestrator: fetch -> parse -> dedup -> distill -> store
-├── rss_fetcher.py        -- RSS feed fetcher + HTML scraper
-├── dedup_filter.py       -- Title/URL fingerprint deduplication
-├── source_registry.py    -- Curated source list per category
-└── news_models.py        -- NewsItem, NewsDigest, NewsCategory dataclasses
-engine/skills/builtin/
-└── news_skills.py        -- LLM skills: fetch_news, get_news_digest, search_news
+```powershell
+Get-NetTCPConnection -LocalPort 5556 | Select-Object OwningProcess
+Stop-Process -Id <PID> -Force
 ```
 
-### News Categories
-
-| Category | Sources | NLM Notebook |
-|----------|---------|-------------|
-| `ai_research` | arxiv, HuggingFace blog, OpenAI blog, Anthropic, Google DeepMind | `news-ai-research` |
-| `tech` | Hacker News, Ars Technica, The Verge, WIRED | `news-tech` |
-| `world` | Reuters, AP News, BBC World | `news-world` |
-| `science` | Nature News, New Scientist, Phys.org | `news-science` |
-| `crypto` | CoinDesk, The Block, Decrypt | `news-crypto` |
-
-New categories can be added by extending `source_registry.py`.
-
-### Pipeline Stages
-
-**Stage 1: Fetch** (`news-fetch` task, 07:00 / 13:00 / 20:00)
-
-```python
-from engine.nexus.news.rss_fetcher import RSSFetcher
-fetcher = RSSFetcher()
-items = fetcher.fetch_category("ai_research", limit=20)
-# -> List[NewsItem]: title, url, summary, published_at, source_name
-```
-
-Respects per-source rate limits (1 req/5s). Falls back to HTML scrape if RSS unavailable. Stores raw items in Nexus with `content_type=raw_news`.
-
-**Stage 2: Deduplication**
-
-```python
-from engine.nexus.news.dedup_filter import DedupFilter
-dedup = DedupFilter()
-fresh = dedup.filter(items)
-# Removes: same URL, title similarity > 85%, within 48h window
-```
-
-URL fingerprint stored in Nexus `news_seen` index. Title similarity via character-level n-gram (no heavy NLP deps).
-
-**Stage 3: NLM Distillation** (`news-distill` task, 21:00)
-
-Each category has a dedicated NLM notebook. Per cycle: collect today's fresh items (up to 15), format and upload as text source, ask 10 curated questions, store each Q&A in Nexus with category + date tags. Session chaining ensures later questions benefit from earlier answers.
-
-Example curated questions for `ai_research`:
-- "What are the most significant AI research findings reported today?"
-- "Which papers or announcements could change how we build AI systems?"
-- "What are the key technical claims and are there limitations?"
-- "What open-source models or tools were announced?"
-- "Summarise today's AI news in 5 bullet points."
-
-**Stage 4: Cleanup** (`news-cleanup` task, weekly Sunday 04:00)
-
-- Removes `raw_news` entries older than 30 days.
-- Archives Q&A older than 90 days to `news_archive` category.
-- Rebuilds Nexus search index.
-
-### Scheduler Tasks
-
-| Task | Schedule | Duration est. |
-|------|----------|---------------|
-| `news-fetch` | 07:00, 13:00, 20:00 daily | ~2 min |
-| `news-distill` | 21:30 daily | ~8 min (NLM calls) |
-| `news-cleanup` | Sunday 04:00 | ~1 min |
-
-### Scene Delivery
-
-**Intel Hub** (`/intel`) -- Scrolling news ticker from Nexus. `GET /api/news/ticker` returns last 20 Q&A summaries. Socket.IO event `world_news.update` emitted after each distill cycle. Filterable by category.
-
-**Phone Scene** (`/phone`) -- FEED tab with curated news. `GET /api/news/feed?category=all&limit=10`. Rendered as chat-style messages from "NEXUS FEED" sender. Clicking a headline shows full Q&A distillation.
-
-### Agent Skills (`news` pack)
-
-| Skill | Args | Description |
-|-------|------|-------------|
-| `fetch_news` | `category, limit` | Latest news headlines + summaries from Nexus |
-| `get_news_digest` | `category, date` | Full distilled digest for a category on a date |
-| `search_news` | `query, category, days_back` | Semantic search through news Q&A |
-
-```python
-result = search_news("open source LLM", category="ai_research", days_back=7)
-```
-
-### NotebookLM Integration
-
-Each category uses a dedicated notebook. Notebooks accumulate sources (up to 50) then rotate. Notebook IDs are stored in Nexus under the `news_notebooks` key:
-
-```json
-{
-  "ai_research": "nb-news-ai",
-  "tech": "nb-news-tech",
-  "world": "nb-news-world",
-  "science": "nb-news-science",
-  "crypto": "nb-news-crypto"
-}
-```
-
-### Nexus Knowledge Structure
-
-| Field | Value |
-|-------|-------|
-| `content_type` | `news` (distilled) or `raw_news` (pre-distill) |
-| `category` | `news` |
-| `tags` | `["{date}", "{category}", "news", "distilled"]` |
-| `title` | Question asked |
-| `content` | NLM answer |
-| `source` | `news_pipeline:{category}` |
-
-### Configuration
-
-```yaml
-news_system:
-  enabled: true
-  categories: [ai_research, tech, world, science]
-  fetch_limit_per_source: 20
-  dedup_window_hours: 48
-  distill_questions_per_category: 10
-  max_sources_per_notebook: 15
-  nexus_retention_days: 30
-  archive_after_days: 90
-  ticker_item_count: 20
-```
-
-### Testing
+The scheduler task `port-conflict-check` (every 4 hours) also detects conflicts automatically. You can run it manually:
 
 ```bash
-python -m pytest tests/test_news_pipeline.py tests/test_news_skills.py -v
-python scripts/smart_test.py --domain news
+python -m engine.nexus.scheduler_daemon run port-conflict-check
 ```
+
+### LMStudio Not Responding
+
+1. Verify running: `curl http://localhost:1234/api/v1/models`
+2. Ensure a model is loaded in the LMStudio UI
+3. Check `config/default.yaml` -> `lmstudio.base_url` and `lmstudio.api_token`
+4. LMStudio uses v1 API -- ensure `lmstudio.api_version: "v1"` in config
+5. The `lmstudio-health` scheduler task checks every hour automatically
+
+### Nexus KMS Won't Start
+
+Nexus KMS is auto-managed (priority 0). If it fails:
+
+1. Check manually: `cd C:\Files\Nexus && python -m nexus api`
+2. Verify port 8700 is free: `Get-NetTCPConnection -LocalPort 8700`
+3. Check logs: `python launcher.py --status`
+
+### Unicode Console Errors (Windows)
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+```
+
+### Database Not Found
+
+```bash
+python launcher.py --init-db
+```
+
+### Scene Not Appearing in Hub
+
+1. Verify the scene is registered in `engine/control_plane_registry.py` (`SCENE_DEFS`)
+2. Verify its port is in `engine/port_registry.py` (`_DEFAULT_PORTS`)
+3. Verify it has an entry in `config/default.yaml` under `scenes.<name>`
+4. Check that it implements `get_plugin_info()` and `register_health_route()`
 
 ---
 
-## 6. Local Agent Operations
+## 10. Cross-References
 
-> Safety rails and operational guide for local LMStudio-hosted agents executing scheduler tasks.
-
-### Permissions
-
-**Allowed:**
-- Read any file in the CosySim codebase
-- Edit/create files specified in the task ticket
-- Run the test suite
-- Search and add entries to Nexus
-- Create git commits (conventional commit format)
-
-**Prohibited:**
-- Delete files
-- Modify `engine/mcp/` core framework files (unless explicitly authorized)
-- Modify `config/default.yaml` without backup
-- Make real HTTP calls to external services in tests
-- Push to remote repositories
-- Install new packages without authorization
-- Modify other agents' active tasks
-- Skip running tests before committing
-
-### Task Ticket Format
-
-```json
-{
-    "id": "task-uuid",
-    "title": "Short task description",
-    "description": "Detailed requirements and acceptance criteria",
-    "priority": 1,
-    "complexity": "low|medium|high",
-    "status": "claimed",
-    "assigned_agent": "agent-name",
-    "allowed_operations": ["read", "edit", "create", "test"],
-    "target_files": ["engine/skills/builtin/my_skills.py"],
-    "acceptance_criteria": ["Tests pass", "No regressions", "Nexus entry created"]
-}
-```
-
-### Execution Workflow
-
-1. **Claim** -- Acknowledge the assigned task.
-2. **Research** -- Search Nexus for context. Read relevant test files.
-3. **Baseline tests** -- Run full test suite, record pass count.
-4. **Implement** -- Minimal, surgical changes. Follow Python conventions.
-5. **Test** -- Run full suite again. Verify same or more tests pass, 0 failures.
-6. **Store results** -- Add a Nexus entry documenting decisions and changes.
-7. **Commit** -- `git commit -m "feat: description" -m "Task: task-uuid" -m "Co-authored-by: ..."`.
-8. **Report** -- Mark task complete with files changed, tests added, Nexus entries created.
-
-### Pre-Commit Safety Checks
-
-| Check | How |
-|-------|-----|
-| Tests pass | `python -m pytest tests/ -q --tb=line` |
-| No syntax errors | `python -m py_compile changed_file.py` |
-| Imports are absolute | grep for `from .` in changed files |
-| No print statements | grep for `print(` in changed files |
-| Type hints present | Review function signatures |
-| No hardcoded values | grep for port numbers, file paths |
-
-### Complexity Guidelines
-
-| Level | Examples |
-|-------|----------|
-| **Low** | Add a test case, fix a typo, update a config value, add a Nexus entry |
-| **Medium** | Add a new skill, fix a bug with known root cause, refactor a module, update docs |
-| **High** | Add a new scene, modify the interceptor pipeline, change inference routing, multi-file refactoring |
-
-If a task feels higher complexity than labeled, STOP and report.
-
-### Error Recovery
-
-1. **Test failures after change**: `git checkout -- .` to revert.
-2. **Can't understand the task**: Mark as "blocked" with explanation.
-3. **Unexpected behavior**: Revert and report -- do not chase cascading issues.
-4. **Nexus unreachable**: Continue but note Nexus storage is pending.
-
-### Communication Channels
-
-Local agents communicate through: task status updates (scheduler), Nexus entries (knowledge/decisions), git commits (code changes), task comments (questions/blockers). Agents do not send emails, interact with external services, modify the scheduler, or communicate directly with other agents.
+| Doc | Relevance |
+|-----|-----------|
+| [Architecture](./ARCHITECTURE.md) | System design, layers, data flow, interceptor pipeline |
+| [Configuration](./CONFIGURATION.md) | All config files, `logging` and `news_system` sections |
+| [KPI & Benchmarking](./KPI.md) | `@timed` decorator, LLM KPIs, admin dashboard metrics |
+| [Nexus](./NEXUS.md) | Knowledge storage, query router, training flywheel |
+| [LMStudio](./LMSTUDIO.md) | InferenceOrchestrator, ServerController, LMLink |
+| [Testing](./TESTING.md) | Smart test system, fixtures, conventions |
+| [Scenes](./SCENES.md) | Scene mechanics, APIs, routes |
+| [Contributing](./CONTRIBUTING.md) | Development conventions, scene creation, code standards |
+| [Agent Onboarding](./AGENT_ONBOARDING.md) | Copilot/local agent onboarding and session logging |
 
 ---
 
-## See Also
+## 11. Change Log
 
-- [Configuration](./CONFIGURATION.md) -- `logging`, `news_system` sections in `default.yaml`
-- [KPI & Benchmarking](./KPI.md) -- `@timed`, LLM KPIs, admin dashboard
-- [Architecture](./ARCHITECTURE.md) -- System design and data flow
-- [Deployment](./DEPLOYMENT.md) -- Service startup order and ports
-- [Nexus Integration](./NEXUS_INTEGRATION.md) -- Knowledge storage and query router
-- [Agent Onboarding](./AGENT_ONBOARDING.md) -- Copilot/local agent onboarding and session logging
+| Version | Date | Description |
+|---------|------|-------------|
+| v1.50 | 2026-03-22 | Merged DEPLOYMENT.md into OPERATIONS.md; added oracle, creation_kit to port tables; updated pillar counts to 15/11/6 = 32 |
+| v1.49 | 2026-03-21 | Added news pipeline, local agent operations, system control panel docs |
+| v1.42 | 2026-03-21 | Three-pillar architecture, managed Nexus KMS auto-start |
+| v1.41 | 2026-03-20 | ARGUS deep polish, extended rpcids |
+| v1.40 | 2026-03-19 | Health check aggregator, service discovery registry |

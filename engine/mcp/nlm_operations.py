@@ -1,4 +1,11 @@
-"""NLM RPC operations — all batchexecute and gRPC-Web operation functions."""
+"""NLM RPC operations — all batchexecute and gRPC-Web operation functions.
+
+Version: v1.57.2 [2026-03-26]
+
+Change Log:
+    v1.57.2 [2026-03-26] — Convert all RPC_* import-time constants to
+                            get_rpcid() call-time lookups for live rotation
+"""
 from __future__ import annotations
 
 import json
@@ -21,14 +28,20 @@ _DATA_DIR = _PROJECT_ROOT / "data"
 logger = logging.getLogger(__name__)
 
 # ── Sibling imports ───────────────────────────────────────────────────────
+# v1.57.2 [2026-03-26] — Switched from import-time RPC_* constants to
+# call-time get_rpcid() lookups.  This means rpcid rotations picked up by
+# RpcidUpdater take effect immediately without process restart.
+#
+# OLD imports (kept as comments for reference / backward compat):
+#   RPC_CREATE_NOTE, RPC_RENAME_NOTEBOOK, RPC_ADD_SOURCE,
+#   RPC_SOURCE_STATUS, RPC_REGISTER_FILES, RPC_SAVE_NOTE,
+#   RPC_GET_SOURCE_SUMMARY, RPC_GET_AUDIO_OPTIONS, RPC_SYNC_NOTES,
+#   RPC_DELETE_SOURCE, RPC_START_DEEP_RESEARCH, RPC_ADD_RESEARCH_SOURCE,
+#   RPC_READ_SOURCE,
 from engine.mcp.nlm_rpc_constants import (
     _rate_limiter, _get_rate_limit,
     _DEFAULT_BL, _GRPC_CHAT_URL, _SOURCE_CONFIG,
-    RPC_CREATE_NOTE, RPC_RENAME_NOTEBOOK, RPC_ADD_SOURCE,
-    RPC_SOURCE_STATUS, RPC_REGISTER_FILES, RPC_SAVE_NOTE,
-    RPC_GET_SOURCE_SUMMARY, RPC_GET_AUDIO_OPTIONS, RPC_SYNC_NOTES,
-    RPC_DELETE_SOURCE, RPC_START_DEEP_RESEARCH, RPC_ADD_RESEARCH_SOURCE,
-    RPC_READ_SOURCE,
+    get_rpcid,
 )
 from engine.mcp.nlm_auth import (
     _cookies_header, _load_meta, _NLM_HOST,
@@ -79,7 +92,7 @@ def ask_question(
         Dict with keys: answer_id, answer (markdown with [citations]), sources.
     """
     args = json.dumps([notebook_id, question])
-    _, data = _batchexecute(RPC_CREATE_NOTE, args, cookies, notebook_id)
+    _, data = _batchexecute(get_rpcid("create_note"), args, cookies, notebook_id)
     return _parse_ask_response(data)
 
 
@@ -103,7 +116,7 @@ def rename_notebook(
         Dict with: renamed (bool), notebook_id, name.
     """
     args = json.dumps([notebook_id, [[None, None, None, [None, new_name]]]])
-    _, data = _batchexecute(RPC_RENAME_NOTEBOOK, args, cookies, notebook_id)
+    _, data = _batchexecute(get_rpcid("rename_notebook"), args, cookies, notebook_id)
     return _parse_rename_response(data, notebook_id, new_name)
 
 
@@ -167,7 +180,7 @@ def add_source_url(
     else:
         source_obj = [None, None, url, None, None, None, None, None, None, None, 1]
     args = json.dumps([[source_obj], notebook_id, [2], _SOURCE_CONFIG])
-    _, data = _batchexecute(RPC_ADD_SOURCE, args, cookies, notebook_id)
+    _, data = _batchexecute(get_rpcid("add_source"), args, cookies, notebook_id)
     return _parse_add_source_response(data, url)
 
 
@@ -226,7 +239,7 @@ def add_text_source(
         [1, None, None, None, None, None, None, None, None, None, [1]],
     ], separators=(",", ":"))
 
-    _rpc_id, data = _batchexecute(RPC_ADD_SOURCE, args, cookies, notebook_id)
+    _rpc_id, data = _batchexecute(get_rpcid("add_source"), args, cookies, notebook_id)
     if data is None:
         return {"error": "null_response", "detail": "No data returned from add_text_source"}
     if isinstance(data, dict) and data.get("error"):
@@ -260,7 +273,7 @@ def poll_source_status(
     """
     poll_flag = 0 if first_poll else 1
     args = json.dumps([notebook_id, None, [2], None, poll_flag], separators=(",", ":"))
-    _rpc_id, data = _batchexecute(RPC_SOURCE_STATUS, args, cookies, notebook_id)
+    _rpc_id, data = _batchexecute(get_rpcid("source_status"), args, cookies, notebook_id)
     if data is None:
         return {"error": "null_response"}
     if isinstance(data, dict) and data.get("error"):
@@ -337,7 +350,7 @@ def register_file_sources(
         [1, None, None, None, None, None, None, None, None, None, [1]],
     ], separators=(",", ":"))
 
-    _rpc_id, data = _batchexecute(RPC_REGISTER_FILES, args, cookies, notebook_id)
+    _rpc_id, data = _batchexecute(get_rpcid("register_files"), args, cookies, notebook_id)
     if data is None:
         return [{"error": "null_response", "filename": fn} for fn in filenames]
     if isinstance(data, dict) and data.get("error"):
@@ -455,7 +468,7 @@ def create_note(
         [notebook_id, content_html, [1], None, title, None, [2]],
         separators=(",", ":"),
     )
-    _rpc_id, data = _batchexecute(RPC_CREATE_NOTE, args, cookies, notebook_id)
+    _rpc_id, data = _batchexecute(get_rpcid("create_note"), args, cookies, notebook_id)
     if data is None:
         return {"error": "null_response", "detail": "No data from create_note"}
     if isinstance(data, dict) and data.get("error"):
@@ -500,7 +513,7 @@ def save_note(
         [notebook_id, note_id, [[[content_html, title, [], 0]]], [2]],
         separators=(",", ":"),
     )
-    _rpc_id, data = _batchexecute(RPC_SAVE_NOTE, args, cookies, notebook_id)
+    _rpc_id, data = _batchexecute(get_rpcid("save_note"), args, cookies, notebook_id)
     if data is None:
         return {"error": "null_response"}
     if isinstance(data, dict) and data.get("error"):
@@ -533,7 +546,7 @@ def get_source_summary(
         Dict with source_id, summary (markdown), and status.
     """
     args = json.dumps([[[[source_id]]]], separators=(",", ":"))
-    _rpc_id, data = _batchexecute(RPC_GET_SOURCE_SUMMARY, args, cookies)
+    _rpc_id, data = _batchexecute(get_rpcid("get_source_summary"), args, cookies)
     if data is None:
         return {"error": "null_response"}
     if isinstance(data, dict) and data.get("error"):
@@ -564,10 +577,10 @@ def get_audio_options(
         Dict with options list [{id, label, description}].
     """
     args = json.dumps(
-        [[2, None, None, [1, None, None, None, None, None, None, None, None, None, [1]], [[2, 1]]], None, 1],
+        [[2, None, None, [1, None, None, None, None, None, None, None, None, None, [1]], [[2, 1, 3]]], None, 1],
         separators=(",", ":"),
     )
-    _rpc_id, data = _batchexecute(RPC_GET_AUDIO_OPTIONS, args, cookies, notebook_id)
+    _rpc_id, data = _batchexecute(get_rpcid("get_audio_options"), args, cookies, notebook_id)
     if data is None:
         return {"error": "null_response"}
     if isinstance(data, dict) and data.get("error"):
@@ -609,7 +622,7 @@ def sync_notes(
         [notebook_id, None, prev_timestamp, [2]],
         separators=(",", ":"),
     )
-    _rpc_id, data = _batchexecute(RPC_SYNC_NOTES, args, cookies, notebook_id)
+    _rpc_id, data = _batchexecute(get_rpcid("sync_notes"), args, cookies, notebook_id)
     if data is None:
         return {"notes": [], "next_timestamp": None}
     if isinstance(data, dict) and data.get("error"):
@@ -655,7 +668,7 @@ def ask_questions_batch(
     for i in range(0, len(questions), max_batch):
         batch = questions[i:i + max_batch]
         calls = [
-            (RPC_CREATE_NOTE, json.dumps([notebook_id, q]))
+            (get_rpcid("create_note"), json.dumps([notebook_id, q]))
             for q in batch
         ]
         raw_results = _batchexecute_multi(calls, cookies, notebook_id)
@@ -719,7 +732,7 @@ def delete_source(
         Dict with: deleted (bool), source_id.
     """
     args = json.dumps([[[source_id]], [2]])
-    _, data = _batchexecute(RPC_DELETE_SOURCE, args, cookies)
+    _, data = _batchexecute(get_rpcid("delete_source"), args, cookies)
     ok = data is not None and not (isinstance(data, dict) and "error" in data)
     return {"deleted": ok, "source_id": source_id}
 
@@ -745,7 +758,7 @@ def start_deep_research(
         Dict with: session_id (UUID), topic, notebook_id.
     """
     args = json.dumps([None, [1], [topic, 1], 5, notebook_id])
-    _, data = _batchexecute(RPC_START_DEEP_RESEARCH, args, cookies, notebook_id)
+    _, data = _batchexecute(get_rpcid("start_deep_research"), args, cookies, notebook_id)
     session_id = None
     if data is not None:
         try:
@@ -785,7 +798,7 @@ def add_research_source(
     """
     sources_array = [[None, [title, content]]]
     args = json.dumps([None, [1], session_id, notebook_id, sources_array])
-    _, data = _batchexecute(RPC_ADD_RESEARCH_SOURCE, args, cookies, notebook_id)
+    _, data = _batchexecute(get_rpcid("add_research_source"), args, cookies, notebook_id)
     source_id = None
     if data is not None:
         try:
@@ -1019,7 +1032,7 @@ def read_source(
         Dict with: source_id, content (markdown text), word_count.
     """
     args = json.dumps([[[[source_id]]]])
-    _, data = _batchexecute(RPC_READ_SOURCE, args, cookies)
+    _, data = _batchexecute(get_rpcid("read_source"), args, cookies)
     return _parse_read_source_response(data, source_id)
 
 

@@ -48,7 +48,8 @@ class RAGMemory:
                 name=self.collection_name,
                 embedding_function=self.embedding_function
             )
-        except:
+        except Exception as e:
+            logger.debug("[RAGMemory] Collection not found, creating new (operation=init): %s", e)
             self.collection = self.client.create_collection(
                 name=self.collection_name,
                 embedding_function=self.embedding_function,
@@ -61,7 +62,8 @@ class RAGMemory:
             try:
                 from content.simulation.database.events import EventChain
                 self._event_chain = EventChain()
-            except Exception:
+            except Exception as e:
+                logger.debug("[RAGMemory] EventChain unavailable (operation=lazy_load): %s", e)
                 self._event_chain = False  # sentinel: unavailable
         return self._event_chain if self._event_chain else None
 
@@ -283,8 +285,8 @@ class RAGMemory:
                 scene=scene_id,
                 data={"query": query[:200], "result_count": len(memories), "memory_type": memory_type, "chain_id": chain_id},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[RAGMemory] ActivityBus publish failed (operation=rag_query): %s", e)
 
         return memories
     

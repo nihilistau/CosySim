@@ -4,6 +4,19 @@ Nexus HTTP Client — CosySim's interface to the Nexus Knowledge System.
 v0.50a: Extended with session tracking, rules engine, prompt management,
 batch operations, and retry logic.
 
+Version: v1.57.1 [2026-03-26]
+Author:  CosySim Team
+
+Change Log:
+    v1.57.1 [2026-03-26] — Non-blocking embedding hooks: auto_embed_entry/auto_embed_qa
+                            now run in daemon threads so embedding failures never block
+                            Nexus writes or health checks
+    v1.56.0 [2026-03-26] — Agent registry access check before heuristic fallback
+    v1.55.0 [2026-03-26] — Re-raise PermissionError in all governance-guarded methods (RBAC enforcement)
+    v1.53.0 [2026-03-26] — Added filesystem/oracle/scheduler/training to trusted actors
+    v1.49.5 [2026-03-22] — Per-request timeout override, structured logging
+    v0.50a  [2026-03-15] — Session tracking, rules engine, prompt management, batch ops
+
 Usage:
     from engine.nexus.client import get_nexus_client
     client = get_nexus_client()
@@ -41,6 +54,7 @@ def _resolve_governance_actor(agent_id: str = "", created_by: str = "") -> str:
         return agent_id
 
     created_by_normalized = (created_by or "").strip().lower()
+    # v1.53.0 [2026-03-26] — Added filesystem, oracle, scheduler, training actors
     trusted_prefixes = (
         "copilot",
         "nexus",
@@ -51,6 +65,10 @@ def _resolve_governance_actor(agent_id: str = "", created_by: str = "") -> str:
         "benchmark",
         "api",
         "system",
+        "filesystem",
+        "oracle",
+        "scheduler",
+        "training",
     )
     trusted_suffixes = (
         "_workflow",
@@ -141,20 +159,78 @@ class NexusClient:
                 tags=_parse_tags(d.get("tags", [])),
             )
 
+    # v1.56.0 [2026-03-26] — Check agent access via Nexus registry before heuristic
+    # CONNECTS: Nexus agent_registry API, GovernanceManager
+    # CALLED BY: _check_governance
+    def _check_access_registry(self, agent_id: str, operation: str) -> Optional[bool]:
+        """Check agent access via Nexus agent_registry. Falls back to heuristic.
+
+        Queries the agent_registry for the agent's allowed_operations.
+        Returns True/False if a definitive answer is found, or None to
+        signal that the caller should fall back to the heuristic path.
+
+        Args:
+            agent_id: Agent identifier to look up.
+            operation: Operation to check (read/write/delete/admin).
+
+        Returns:
+            True if allowed, False if denied, None if registry unavailable.
+        """
+        try:
+            if self.is_available(timeout=2):
+                resp = self._get(f"/api/agents/{agent_id}")
+                if resp.get("ok") and resp.get("data", {}).get("agent_id"):
+                    data = resp["data"]
+                    raw_ops = data.get("allowed_operations", "")
+                    if raw_ops:
+                        allowed_ops = json.loads(raw_ops) if isinstance(raw_ops, str) else raw_ops
+                        if isinstance(allowed_ops, list) and allowed_ops:
+                            return operation in allowed_ops
+                    # Agent exists but no stored ops — resolve from type
+                    agent_type = data.get("agent_type", "")
+                    if agent_type:
+                        from engine.nexus.governance_rules import AGENT_TYPES
+                        type_def = AGENT_TYPES.get(agent_type)
+                        if type_def:
+                            return operation in type_def.get("ops", [])
+        except Exception:
+            pass
+        return None  # None = use heuristic fallback
+
     def _check_governance(
         self,
         operation: str,
         agent_id: str = "",
         created_by: str = "",
     ) -> str:
-        """Resolve actor identity and enforce mutation permissions."""
+        """Resolve actor identity and enforce mutation permissions.
+
+        v1.56.0: Checks the Nexus agent_registry first for a definitive
+        allow/deny.  Falls back to the GovernanceManager heuristic when
+        the registry is unavailable or the agent is not registered.
+        """
         from engine.nexus.governance_rules import get_governance_manager
 
         actor = _resolve_governance_actor(agent_id=agent_id, created_by=created_by)
+
+        # v1.56.0 — Try registry-backed access check first
+        registry_result = self._check_access_registry(actor, operation)
+        if registry_result is not None:
+            if not registry_result:
+                logger.warning(
+                    "[NexusClient] Registry denied (operation=%s, actor=%s)",
+                    operation,
+                    actor,
+                )
+                raise PermissionError(f"Agent '{actor}' is not permitted to perform '{operation}'")
+            return actor
+
+        # Heuristic fallback via GovernanceManager
         mgr = get_governance_manager()
         if not mgr.check_permissions(actor, operation):
+            # v1.49.3 [2026-03-22] — Structured logging context
             logger.warning(
-                "Governance denied Nexus %s for actor '%s'",
+                "[NexusClient] Governance denied (operation=%s, actor=%s)",
                 operation,
                 actor,
             )
@@ -185,7 +261,7 @@ class NexusClient:
         )
         if normalized.get("errors"):
             logger.warning(
-                "Nexus entry governance rejected '%s': %s",
+                "[NexusClient] Entry governance rejected (operation=normalize_entry, title=%s): %s",
                 title[:80],
                 "; ".join(normalized["errors"]),
             )
@@ -219,7 +295,7 @@ class NexusClient:
         )
         if normalized.get("errors"):
             logger.warning(
-                "Nexus namespace normalization rejected category '%s': %s",
+                "[NexusClient] Namespace normalization rejected (operation=normalize_tags, category=%s): %s",
                 category,
                 "; ".join(normalized["errors"]),
             )
@@ -280,14 +356,24 @@ class NexusClient:
                 created_by=created_by,
                 namespace=namespace,
             )
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
-            logger.warning("NexusEntryCreate validation failed: %s", exc)
+            logger.warning("[NexusClient] Entry validation failed (operation=add_entry): %s", exc)
             return None
         result = self._post("/api/entries", payload)
         entry_id = result.get("data", {}).get("id") if result.get("ok") else None
         if entry_id:
-            from engine.nexus.embedding_hooks import auto_embed_entry
-            auto_embed_entry(entry_id, content, content_type, category, tags)
+            # v1.57.1 [2026-03-26] — Non-blocking embed: run in daemon thread so
+            # embedding failures never block the Nexus write path or health checks
+            def _bg_embed() -> None:
+                try:
+                    from engine.nexus.embedding_hooks import auto_embed_entry
+                    auto_embed_entry(entry_id, content, content_type, category, tags)
+                except Exception as exc:
+                    logger.debug("[NexusClient] Background embed failed for %s: %s", entry_id, exc)
+            t = threading.Thread(target=_bg_embed, name=f"embed-{entry_id[:8]}", daemon=True)
+            t.start()
         return entry_id
     
     def get_entry(self, entry_id: str) -> Optional[NexusEntry]:
@@ -325,8 +411,10 @@ class NexusClient:
                 if "category" in fields:
                     fields["category"] = normalized["category"]
                 fields["tags"] = normalized["tags"]
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
-            logger.warning("Nexus update_entry governance failed: %s", exc)
+            logger.warning("[NexusClient] Update entry governance failed (operation=update_entry): %s", exc)
             return False
         result = self._put(f"/api/entries/{entry_id}", fields)
         return result.get("ok", False)
@@ -336,8 +424,10 @@ class NexusClient:
             current = self.get_entry(entry_id)
             created_by = current.get("created_by", "") if current else ""
             self._check_governance("delete", agent_id=agent_id, created_by=created_by)
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
-            logger.warning("Nexus delete_entry governance failed: %s", exc)
+            logger.warning("[NexusClient] Delete entry governance failed (operation=delete_entry): %s", exc)
             return False
         result = self._delete(f"/api/entries/{entry_id}")
         return result.get("ok", False)
@@ -383,8 +473,10 @@ class NexusClient:
         """Create a new session record in Nexus. Returns session ID."""
         try:
             self._check_governance("write", agent_id=agent_id, created_by=agent_id)
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
-            logger.warning("Nexus log_session governance failed: %s", exc)
+            logger.warning("[NexusClient] Log session governance failed (operation=log_session): %s", exc)
             return None
         payload = {
             "project": project, "repo": repo,
@@ -399,8 +491,10 @@ class NexusClient:
         """Update session (summary, commits, files_changed, status, etc.)."""
         try:
             self._check_governance("write", agent_id=agent_id, created_by=agent_id)
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
-            logger.warning("Nexus update_session governance failed: %s", exc)
+            logger.warning("[NexusClient] Update session governance failed (operation=update_session): %s", exc)
             return False
         result = self._put(f"/api/sessions/{session_id}", fields)
         return result.get("ok", False)
@@ -436,8 +530,10 @@ class NexusClient:
         """Create a new rule. Returns rule ID."""
         try:
             self._check_governance("admin", agent_id=agent_id, created_by=agent_id)
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
-            logger.warning("Nexus add_rule governance failed: %s", exc)
+            logger.warning("[NexusClient] Add rule governance failed (operation=add_rule): %s", exc)
             return None
         result = self._post("/api/rules", {
             "scope": scope, "rule_type": rule_type, "name": name,
@@ -485,8 +581,10 @@ class NexusClient:
                         namespace=entry.get("namespace", ""),
                     )
                 )
+            except PermissionError:
+                raise  # v1.55.0 — Don't swallow RBAC violations
             except Exception as exc:
-                logger.warning("Skipping batch Nexus entry due to governance failure: %s", exc)
+                logger.warning("[NexusClient] Skipping batch entry due to governance failure (operation=batch_add): %s", exc)
         if not normalized_entries:
             return []
         result = self._post("/api/batch", {"entries": normalized_entries})
@@ -546,11 +644,18 @@ class NexusClient:
     def stats(self) -> Dict:
         return self._get("/api/stats")
     
-    def is_available(self) -> bool:
+    def is_available(self, timeout: float = 5.0) -> bool:
+        """Check if Nexus KMS is reachable and healthy.
+
+        Args:
+            timeout: Health check timeout in seconds (default 5s, not 30s).
+        """
         try:
-            result = self.health()
+            # v1.49.5 [2026-03-22] — Short timeout for health checks + logging on failure
+            result = self._get("/api/health", timeout=timeout)
             return result.get("ok", False)
-        except Exception:
+        except Exception as exc:
+            logger.warning("[NexusClient] Health check failed (operation=health_check): %s", exc)
             return False
 
     # ─── Q&A System (v0.50b) ─────────────────────────────────
@@ -582,8 +687,10 @@ class NexusClient:
                 tags=tags,
                 namespace=namespace,
             )
+        except PermissionError:
+            raise  # v1.55.0 — Don't swallow RBAC violations
         except Exception as exc:
-            logger.warning("Nexus add_qa governance failed: %s", exc)
+            logger.warning("[NexusClient] Add Q&A governance failed (operation=add_qa): %s", exc)
             return None
         result = self._post("/api/qa", {
             "question": question, "answer": answer,
@@ -592,8 +699,16 @@ class NexusClient:
         })
         qa_id = result.get("data", {}).get("id") if result.get("ok") else None
         if qa_id:
-            from engine.nexus.embedding_hooks import auto_embed_qa
-            auto_embed_qa(qa_id, question, answer, category)
+            # v1.57.1 [2026-03-26] — Non-blocking embed: run in daemon thread so
+            # embedding failures never block the Nexus write path or health checks
+            def _bg_embed_qa() -> None:
+                try:
+                    from engine.nexus.embedding_hooks import auto_embed_qa
+                    auto_embed_qa(qa_id, question, answer, category)
+                except Exception as exc:
+                    logger.debug("[NexusClient] Background Q&A embed failed for %s: %s", qa_id, exc)
+            t = threading.Thread(target=_bg_embed_qa, name=f"embed-qa-{qa_id[:8]}", daemon=True)
+            t.start()
         return qa_id
 
     # ─── Research Sessions (v0.50b) ──────────────────────────
@@ -732,9 +847,9 @@ class NexusClient:
             entries = [e for e in entries if method in (e.get("content") or "")]
         return entries
     
-    def _get(self, path: str) -> dict:
-        return self._request("GET", path)
-    
+    def _get(self, path: str, timeout: Optional[float] = None) -> dict:
+        return self._request("GET", path, timeout=timeout)
+
     def _post(self, path: str, payload: dict) -> dict:
         return self._request("POST", path, payload)
     
@@ -744,7 +859,7 @@ class NexusClient:
     def _delete(self, path: str) -> dict:
         return self._request("DELETE", path)
     
-    def _request(self, method: str, path: str, payload: dict = None) -> dict:
+    def _request(self, method: str, path: str, payload: dict = None, timeout: Optional[float] = None) -> dict:
         url = f"{self._base_url}{path}"
         last_err = None
         for attempt in range(1, self._max_retries + 1):
@@ -755,15 +870,19 @@ class NexusClient:
                         headers={"Content-Type": "application/json"})
                 else:
                     req = urllib.request.Request(url, method=method)
-                with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                # v1.49.5 [2026-03-22] — Support per-request timeout override
+                with urllib.request.urlopen(req, timeout=timeout or self._timeout) as resp:
                     return json.loads(resp.read().decode())
             except Exception as exc:
                 last_err = exc
                 if attempt < self._max_retries:
                     time.sleep(0.5 * attempt)  # exponential backoff
                     continue
-                logger.debug("Nexus %s %s failed after %d attempts: %s",
-                            method, path, attempt, exc)
+                # v1.49.5 [2026-03-22] — Structured logging with operation context
+                logger.warning(
+                    "[NexusClient] %s %s failed after %d attempt(s) (operation=request): %s",
+                    method, path, attempt, exc,
+                )
         return {"ok": False, "error": str(last_err)}
 
 

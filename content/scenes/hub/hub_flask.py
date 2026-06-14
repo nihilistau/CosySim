@@ -9,10 +9,12 @@ Usage:
     python launcher.py hub
     python launcher.py --core   # auto-starts hub among core scenes
 
-Version: v1.42.1 [2026-03-21]
+Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.58.0 [2026-06-11] — "/" serves the NEONCITY Dark Renaissance landing
+                            page (landing.html); catalogue moved to /terminal
     v1.42.1 [2026-03-21] — Extensive documentation, section dividers, version stamps
     v1.42.0 [2026-03-21] — Pillar wiring, hub modernization
     v0.68   [prior]      — Dark Renaissance initial implementation
@@ -35,6 +37,7 @@ from engine.utils import port_is_open
 logger = logging.getLogger(__name__)
 
 SCENE_ID = "hub"
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 DEFAULT_PORT = get_port(SCENE_ID)
 
 _SCENE_DIR = Path(__file__).parent
@@ -186,6 +189,28 @@ _SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
         "accent": "#22c55e",
         "desc": "Live service truth, config editing, proxy control, and health visibility",
     },
+    # v1.51.1 [2026-03-25] — New scenes added to hub catalogue
+    "oracle": {
+        "subtitle": "Neural Consciousness",
+        "icon": "👁️",
+        "group": "neon_world",
+        "accent": "#a855f7",
+        "desc": "AI consciousness terminal — predictions, meditation, and machine intelligence",
+    },
+    "neonos": {
+        "subtitle": "Virtual Desktop",
+        "icon": "🖥️",
+        "group": "system",
+        "accent": "#06b6d4",
+        "desc": "All scenes as desktop apps — draggable windows, taskbar, app launcher",
+    },
+    "creation_kit": {
+        "subtitle": "Scene Editor",
+        "icon": "🔧",
+        "group": "system",
+        "accent": "#f59e0b",
+        "desc": "Visual scene builder + character wizard — drag-and-drop components",
+    },
 }
 
 
@@ -270,7 +295,7 @@ class HubScene(BaseScene):
             logger.debug("Metrics dashboard not available: %s", exc)
 
         self._setup_routes()
-        logger.info("HubScene (THE TERMINAL) created on port %d", port)
+        logger.info("[%s] Scene created on port %d (operation=lifecycle)", SCENE_ID, port)
 
     # -----------------------------------------------------------------
     # Overrides — Scene Registry Route                      [v1.42.1]
@@ -317,8 +342,29 @@ class HubScene(BaseScene):
         """Register all Flask routes."""
         app = self.app
 
+        # v1.58.0 [2026-06-11] — "/" now serves the NEONCITY Dark Renaissance
+        # landing page; the scene catalogue (THE TERMINAL) moved to /terminal.
+        # CTA targets are injected server-side via port_registry (no hardcoded
+        # ports per CLAUDE.md).
         @app.route("/")
         def index() -> str:
+            try:
+                from importlib.metadata import version as _pkg_version
+                _version = f"v{_pkg_version('cosysim')}"
+            except Exception:
+                _version = "v1.58"
+            return render_template(
+                "landing.html",
+                terminal_url="/terminal",
+                neoncity_url=f"http://localhost:{get_port('neoncity')}",
+                neonos_url=f"http://localhost:{get_port('neonos')}",
+                intel_url=f"http://localhost:{get_port('intel_hub')}",
+                version=_version,
+            )
+
+        @app.route("/terminal")
+        def terminal() -> str:
+            """THE TERMINAL — full scene catalogue (was the old hub root)."""
             return render_template(
                 "hub.html",
                 **self.inject_navbar_context(),
@@ -349,7 +395,7 @@ class HubScene(BaseScene):
                     "npc_availability": summary.get("npc_availability", {}),
                 })
             except Exception as exc:
-                logger.warning("world_state unavailable: %s", exc)
+                logger.warning("[%s] world_state unavailable (operation=api): %s", SCENE_ID, exc)
                 return jsonify({"ok": False, "error": str(exc), "time": {}, "events": []})
 
         @app.route("/api/economy")
@@ -372,7 +418,7 @@ class HubScene(BaseScene):
                 ]
                 return jsonify({"ok": True, "balance": balance, "transactions": txns})
             except Exception as exc:
-                logger.warning("economy unavailable: %s", exc)
+                logger.warning("[%s] Economy unavailable (operation=economy): %s", SCENE_ID, exc)
                 return jsonify({"ok": False, "balance": 0, "transactions": []})
 
         @app.route("/api/system")
@@ -390,7 +436,7 @@ class HubScene(BaseScene):
 
     def start(self) -> None:
         """Start THE TERMINAL Flask server."""
-        logger.info("THE TERMINAL opening on %s:%d", self.host, self.port)
+        logger.info("[%s] Opening on %s:%d (operation=lifecycle)", SCENE_ID, self.host, self.port)
         try:
             from engine.events.event_bus import get_event_bus
             get_event_bus().emit("scene_started", {"scene_id": SCENE_ID, "port": self.port})
@@ -400,7 +446,7 @@ class HubScene(BaseScene):
 
     def stop(self) -> None:
         """Stop THE TERMINAL."""
-        logger.info("THE TERMINAL shutting down")
+        logger.info("[%s] Shutting down (operation=lifecycle)", SCENE_ID)
 
     def get_plugin_info(self) -> Dict[str, Any]:
         """Return plugin metadata for admin discovery."""

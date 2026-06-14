@@ -2,6 +2,12 @@
 
 Derived from HAR + V8 heap analysis (March 2026). 136 methods extracted.
 See docs/AISTUDIO_API_REFERENCE.md for full protocol spec.
+
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Add generate_structured() for Gemini JSON schema output
+                            via google.genai SDK; module-level convenience function
 """
 
 from __future__ import annotations
@@ -9,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
@@ -22,13 +29,32 @@ STREAMING_BASE = "https://webchannel-alkalimakersuite-pa.clients6.google.com"
 _REST_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 # Confirmed API keys (rotate via GenerateCloudApiKey)
-API_KEYS = [
-    "AIzaSyCSt0nZexCAx3F3vQRqBowSHFtsOEcCXf4",
-    "AIzaSyBJYe7k9rD5mlZOkSa7ADy2N9v5YuhijII",
-    "AIzaSyAUm0Y-FiebN1_g4-AJoTII8NVxP5qZZVI",
-    "AIzaSyBZVupqzpydHPgrWGNu0UT0837Fe2BwqB4",
-    "AIzaSyBQ8vuVaujV35Gl88_HrPfQ6Xw5ejTaOI0",
-]
+# v1.61.0 [2026-06-13] — move hardcoded AI Studio API keys to env
+# Keys are read from env vars GOOGLE_AISTUDIO_KEY_1..5 (comma-separated
+# GOOGLE_AISTUDIO_KEYS also accepted). Empty entries are filtered out so the
+# module imports cleanly even when no keys are configured locally.
+def _load_aistudio_keys() -> List[str]:
+    """Load AI Studio API keys from environment, filtering empties."""
+    bulk = os.getenv("GOOGLE_AISTUDIO_KEYS", "")
+    if bulk:
+        return [k.strip() for k in bulk.split(",") if k.strip()]
+    return [
+        k
+        for k in (
+            os.getenv("GOOGLE_AISTUDIO_KEY_1", ""),
+            os.getenv("GOOGLE_AISTUDIO_KEY_2", ""),
+            os.getenv("GOOGLE_AISTUDIO_KEY_3", ""),
+            os.getenv("GOOGLE_AISTUDIO_KEY_4", ""),
+            os.getenv("GOOGLE_AISTUDIO_KEY_5", ""),
+        )
+        if k
+    ]
+
+
+API_KEYS = _load_aistudio_keys()
+
+# Default key used as a fallback argument; empty string when none configured.
+_DEFAULT_API_KEY = API_KEYS[0] if API_KEYS else ""
 
 
 def _build_sapisidhash(sapisid: str, origin: str = "https://aistudio.google.com") -> str:
@@ -57,7 +83,8 @@ class AIStudioClient:
         api_key: AI Studio API key (defaults to first in list).
     """
 
-    def __init__(self, cookies: dict[str, str], api_key: str = API_KEYS[0]) -> None:
+    # v1.61.0 [2026-06-13] — default key from env-loaded list (was API_KEYS[0])
+    def __init__(self, cookies: dict[str, str], api_key: str = _DEFAULT_API_KEY) -> None:
         self._cookies = cookies
         self._api_key = api_key
         self._session = requests.Session()
@@ -2402,13 +2429,64 @@ class AIStudioClient:
         img_b64 = result.get("imageData", "")
         return _b64.b64decode(img_b64) if img_b64 else b""
 
+    # ──── Structured Output ────
+
+    # v1.57.0 [2026-03-26] — Gemini structured output via google.genai SDK
+    # CONNECTS: google.genai Client, Gemini 2.5 Flash (or any model supporting JSON schema)
+    # CALLED BY: engine.nexus.knowledge_forge, engine.nexus.schemas consumers
+    # EMITS: Parsed Python object matching the provided JSON schema
+    def generate_structured(
+        self,
+        prompt: str,
+        schema: dict,
+        model: str = "gemini-2.5-flash",
+        system_instruction: str = "",
+    ) -> Any:
+        """Generate content with JSON schema enforcement.
+
+        Uses the google.genai SDK for native structured output. The model is
+        forced to produce JSON matching the provided schema, eliminating the
+        need for regex-based extraction of fenced JSON from markdown responses.
+
+        Args:
+            prompt: User prompt text.
+            schema: JSON schema dict (Gemini format with STRING/NUMBER/OBJECT/ARRAY types).
+            model: Model to use for generation.
+            system_instruction: Optional system instruction text.
+
+        Returns:
+            Parsed Python object (dict, list, etc.) matching the schema.
+
+        Raises:
+            Exception: On API failure or JSON parse error.
+        """
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=self._api_key)
+
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=schema,
+        )
+        if system_instruction:
+            config.system_instruction = system_instruction
+
+        result = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=config,
+        )
+
+        return json.loads(result.text)
+
 
 # ──── Singleton ────
 
 _client: Optional[AIStudioClient] = None
 
 
-def get_aistudio_client(cookies: Optional[dict] = None, api_key: str = API_KEYS[0]) -> AIStudioClient:
+def get_aistudio_client(cookies: Optional[dict] = None, api_key: str = _DEFAULT_API_KEY) -> AIStudioClient:
     """Get or create the singleton AI Studio client.
 
     Args:
@@ -2430,3 +2508,23 @@ def get_aistudio_client(cookies: Optional[dict] = None, api_key: str = API_KEYS[
                 cookies = {}
         _client = AIStudioClient(cookies, api_key=api_key)
     return _client
+
+
+# v1.57.0 [2026-03-26] — Module-level convenience for Gemini structured output
+def generate_structured(prompt: str, schema: dict, **kwargs: Any) -> Any:
+    """Module-level convenience for structured output via Gemini.
+
+    Creates/reuses the singleton AIStudioClient and calls generate_structured().
+    Accepts all keyword arguments that AIStudioClient.generate_structured() does
+    (model, system_instruction).
+
+    Args:
+        prompt: User prompt text.
+        schema: JSON schema dict (Gemini format).
+        **kwargs: Passed through to AIStudioClient.generate_structured().
+
+    Returns:
+        Parsed Python object matching the schema.
+    """
+    client = get_aistudio_client()
+    return client.generate_structured(prompt, schema, **kwargs)

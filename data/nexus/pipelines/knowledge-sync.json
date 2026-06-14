@@ -1,0 +1,68 @@
+{
+    "name": "knowledge-sync",
+    "description": "Full knowledge sync: upload docs + code to File Search, query, distill to Nexus",
+    "stages": [
+        {
+            "stage": "file_search_upload",
+            "params": {
+                "store": "cosysim-architecture",
+                "files": [
+                    "CLAUDE.md",
+                    "context.md",
+                    "README.md",
+                    "CHANGELOG.md",
+                    "docs/ARCHITECTURE.md",
+                    "docs/NEXUS.md",
+                    "docs/NEXUS_SYSTEM.md",
+                    "docs/MCP_FRAMEWORK.md",
+                    "docs/SKILLS.md",
+                    "docs/CONFIGURATION.md"
+                ]
+            }
+        },
+        {
+            "stage": "file_search_upload",
+            "params": {
+                "store": "cosysim-codebase",
+                "files": [
+                    "engine/nexus/client.py",
+                    "engine/nexus/query_router.py",
+                    "engine/agents/agent_loop.py",
+                    "engine/agents/virtual_agent_manager.py",
+                    "engine/lmstudio/router.py",
+                    "engine/skills/skill.py"
+                ]
+            }
+        },
+        {
+            "stage": "file_search_query",
+            "params": {
+                "store": "cosysim-architecture",
+                "questions": [
+                    "What are the 8 agent types and their access tiers?",
+                    "How does the 7-tier query pipeline work?",
+                    "What is the self-improvement training loop?",
+                    "How does Nexus-first agent inference save GPU calls?",
+                    "What are the key singletons in CosySim?"
+                ]
+            }
+        },
+        {
+            "stage": "file_search_query",
+            "params": {
+                "store": "cosysim-codebase",
+                "questions": [
+                    "How does _try_qa_cache check relevance in query_router.py?",
+                    "What does the AgentGovernor reply pipeline do step by step?",
+                    "How does the training feedback loop collect agent decisions?",
+                    "What error handling patterns does NexusClient use?",
+                    "How does the embedding circuit breaker work?"
+                ]
+            }
+        },
+        {
+            "stage": "file_search_distill",
+            "params": {}
+        }
+    ]
+}

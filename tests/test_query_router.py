@@ -1,4 +1,11 @@
-"""Tests for the NexusQueryRouter."""
+"""Tests for the NexusQueryRouter.
+
+Version: v1.57.0 [2026-03-26]
+
+Change Log:
+    v1.57.0 [2026-03-26] — Mock File Search client (Tier 2.5) to prevent real API calls
+    v1.50.2 [2026-03-24] — Mock vector store instead of disabling it entirely
+"""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -6,6 +13,39 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from engine.nexus.query_router import NexusQueryRouter, QueryResult, RouterStats
+
+
+# v1.50.2 [2026-03-24] — Mock vector store instead of disabling it entirely.
+# Vector search (Tier 2) uses real ChromaDB, bypassing mocked Nexus client.
+# We mock get_vector_store and is_vector_store_enabled so Tier 2 returns
+# no results by default, but individual tests can override the mock.
+@pytest.fixture(autouse=True)
+def _mock_vector_store(monkeypatch):
+    """Mock vector store with no results by default (override per-test)."""
+    mock_store = MagicMock()
+    mock_store.search_multi.return_value = []
+    monkeypatch.setattr(
+        "engine.nexus.vector_store.is_vector_store_enabled", lambda: True
+    )
+    monkeypatch.setattr(
+        "engine.nexus.vector_store.get_vector_store", lambda **kw: mock_store
+    )
+    return mock_store
+
+
+# v1.57.0 [2026-03-26] — Mock File Search client (Tier 2.5) to prevent real
+# Google API calls during testing. Returns no stores by default so the tier
+# is skipped, letting queries fall through to the mocked Nexus tiers below.
+@pytest.fixture(autouse=True)
+def _mock_file_search(monkeypatch):
+    """Mock File Search client with no stores by default (override per-test)."""
+    mock_client = MagicMock()
+    mock_client.list_stores.return_value = []
+    monkeypatch.setattr(
+        "engine.integrations.file_search_client.get_file_search_client",
+        lambda: mock_client,
+    )
+    return mock_client
 
 
 # ── QueryResult tests ────────────────────────────────────────────────────
@@ -87,7 +127,65 @@ class TestQACache:
         assert self.router.stats.no_answer == 1
 
 
-# ── Tier 2: FTS Search ──────────────────────────────────────────────────
+# ── Tier 2: Vector Semantic Search ──────────────────────────────────────
+# v1.50.2 [2026-03-24] — Test vector search path (was globally disabled before)
+
+class TestVectorSearch:
+    def setup_method(self):
+        self.router = NexusQueryRouter()
+        self.mock_client = MagicMock()
+        self.router._client = self.mock_client
+        self.mock_client.is_available.return_value = True
+        self.mock_client.find_qa.return_value = []  # No cache hit
+
+    def test_vector_hit_returns_result(self, _mock_vector_store):
+        from engine.nexus.vector_store import VectorSearchResult
+        _mock_vector_store.search_multi.return_value = [
+            VectorSearchResult(
+                entry_id="v1",
+                text="The interceptor pipeline is a chain of processors that "
+                     "govern agent behavior in CosySim. Each interceptor has a "
+                     "priority that determines execution order.",
+                score=0.88,
+                collection="knowledge",
+            ),
+        ]
+        result = self.router.query("How does the interceptor pipeline work?", use_llm=False)
+        assert result.source == "vector"
+        assert result.confidence > 0.5
+        assert "interceptor" in result.answer.lower()
+        assert self.router.stats.vector_hits == 1
+
+    def test_vector_miss_falls_through(self, _mock_vector_store):
+        _mock_vector_store.search_multi.return_value = []
+        self.mock_client.search.return_value = []
+        self.mock_client.ask.return_value = {}
+        result = self.router.query("Completely unknown topic", use_llm=False)
+        assert result.source != "vector"
+
+    def test_vector_low_score_falls_through(self, _mock_vector_store):
+        from engine.nexus.vector_store import VectorSearchResult
+        _mock_vector_store.search_multi.return_value = [
+            VectorSearchResult(entry_id="v2", text="Barely relevant text", score=0.3, collection="knowledge"),
+        ]
+        self.mock_client.search.return_value = []
+        self.mock_client.ask.return_value = {}
+        result = self.router.query("Something specific", use_llm=False)
+        assert result.source != "vector"
+
+    def test_vector_disabled_skips_tier(self, _mock_vector_store, monkeypatch):
+        from engine.nexus.vector_store import VectorSearchResult
+        _mock_vector_store.search_multi.return_value = [
+            VectorSearchResult(entry_id="v3", text="This should not be returned " * 5, score=0.95, collection="qa"),
+        ]
+        monkeypatch.setattr("engine.nexus.vector_store.is_vector_store_enabled", lambda: False)
+        self.mock_client.search.return_value = []
+        self.mock_client.ask.return_value = {}
+        result = self.router.query("Vector disabled", use_llm=False)
+        assert result.source != "vector"
+
+
+# ── Tier 3: FTS Search ──────────────────────────────────────────────────
 
 class TestFTSSearch:
     def setup_method(self):

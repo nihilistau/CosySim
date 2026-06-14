@@ -51,15 +51,15 @@ def create_bridge_app(
         lmstudio_url: LMStudio base URL (default from config).
         mount_mcp: Whether to mount the CosySim MCP server at ``/mcp``.
     """
+    # v1.43.1 [2026-03-21] — Resolve URL from LMSClient singleton
     if lmstudio_url is None:
         try:
-            from engine.config import get_config
-            config = get_config()
-            host = config.get("lmstudio.host", "127.0.0.1")
-            port = int(config.get("lmstudio.port", 1234))
-            lmstudio_url = f"http://{host}:{port}"
-        except Exception:
-            lmstudio_url = "http://127.0.0.1:1234"
+            from engine.lmstudio.lms_client import get_lms_client
+            lmstudio_url = get_lms_client().base_url
+        except Exception as e:
+            logger.debug("[WebBridge] LMSClient unavailable, using default URL (operation=init): %s", e)
+            from engine.port_registry import get_service_url
+            lmstudio_url = get_service_url("lmstudio")
 
     app = FastAPI(title="CosySim Bridge", version="1.0.0")
 
@@ -84,7 +84,8 @@ def create_bridge_app(
                 from engine.utils import get_lmstudio_headers
                 r = await client.get(f"{lmstudio_url}/api/v1/models", headers=get_lmstudio_headers(), timeout=3.0)
                 lms_ok = r.status_code == 200
-        except Exception:
+        except Exception as e:
+            logger.debug("[WebBridge] LMStudio health check failed (operation=health): %s", e)
             lms_ok = False  # LMStudio unreachable — expected when offline
         return {
             "status": "ok",
@@ -133,13 +134,18 @@ def create_bridge_app(
         body = await request.json()
         body["stream"] = False
 
+        # v1.43.1 [2026-03-21] — Use native v1 API + client auth
         async with httpx.AsyncClient() as client:
             try:
-                from engine.utils import get_lmstudio_headers
+                from engine.lmstudio.lms_client import get_lms_client
+                lms = get_lms_client()
+                headers = {"Content-Type": "application/json"}
+                if lms._api_token:
+                    headers["Authorization"] = f"Bearer {lms._api_token}"
                 r = await client.post(
-                    f"{lmstudio_url}/api/v1/chat/completions",
+                    f"{lms.base_url}/api/v1/chat/completions",
                     json=body,
-                    headers=get_lmstudio_headers(),
+                    headers=headers,
                     timeout=120.0,
                 )
                 return JSONResponse(r.json(), status_code=r.status_code)
@@ -160,15 +166,20 @@ def create_bridge_app(
         body = await request.json()
         body["stream"] = True
 
+        # v1.43.1 [2026-03-21] — Use client auth for streaming proxy
         async def event_generator():
             try:
                 async with httpx.AsyncClient() as client:
-                    from engine.utils import get_lmstudio_headers
+                    from engine.lmstudio.lms_client import get_lms_client
+                    lms = get_lms_client()
+                    headers = {"Content-Type": "application/json"}
+                    if lms._api_token:
+                        headers["Authorization"] = f"Bearer {lms._api_token}"
                     async with client.stream(
                         "POST",
-                        f"{lmstudio_url}/api/v1/chat/completions",
+                        f"{lms.base_url}/api/v1/chat/completions",
                         json=body,
-                        headers=get_lmstudio_headers(),
+                        headers=headers,
                         timeout=None,
                     ) as response:
                         async for line in response.aiter_lines():

@@ -61,13 +61,16 @@
   <meta name="scene-accent" content="{{ scene_accent }}">
   <title>{{ page_title }}</title>
 
-  {# ── Fonts ──────────────────────────────────────────────────────── #}
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@400;500;700;900&display=swap">
+  {# ── Fonts — locally vendored woff2 (v1.58.0 [2026-06-11]) ───────
+       Replaces the Google Fonts <link>: offline-safe, no FOUT on cold
+       start, and adds Share Tech Mono + Press Start 2P (referenced by
+       tokens but previously never loaded). #}
+  <link rel="stylesheet" href="/shared/css/fonts.css">
 
   {# ── Design System CSS (always loaded, order matters) ───────────── #}
   <link rel="stylesheet" href="/shared/css/design_tokens.css">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 token overrides (cascade-last) #}
+  <link rel="stylesheet" href="/shared/css/design_tokens_v2.css">
   <link rel="stylesheet" href="/shared/css/cosysim-components.css">
   <link rel="stylesheet" href="/shared/css/cosysim-animations.css">
   <link rel="stylesheet" href="/shared/css/cosysim-scene-fx.css">
@@ -75,6 +78,9 @@
   <link rel="stylesheet" href="/shared/css/cosysim-shop.css">
   <link rel="stylesheet" href="/shared/css/neon_base.css">
   <link rel="stylesheet" href="/shared/css/cosysim-news-ticker.css">
+  {% if not hide_danmaku %}
+  <link rel="stylesheet" href="/shared/css/cosysim-danmaku.css">
+  {% endif %}
 
   {# ── Scene accent injection ─────────────────────────────────────── #}
   <style>
@@ -97,6 +103,17 @@
 
   {# ── Inline style overrides from child template ─────────────────── #}
   {% block head_style %}{% endblock %}
+
+  {# ── Service URL config (consumed by JS via window.COSYSIM.services) ── #}
+  <script>
+    window.COSYSIM = window.COSYSIM || {};
+    window.COSYSIM.services = {
+      phone:   '{{ phone_url | default("http://localhost:5555") }}',
+      tts:     '{{ tts_url | default("http://localhost:8600") }}',
+      comfyui: '{{ comfyui_url | default("http://localhost:8188") }}',
+      nexus:   '{{ nexus_url | default("http://localhost:8700") }}'
+    };
+  </script>
 
   {# ── Head scripts (rare — prefer body_scripts) ─────────────────── #}
   {% block head_scripts %}{% endblock %}
@@ -142,8 +159,27 @@
 
   </div>{# /.neon-layout #}
 
-  {# ── Footer area (optional) ─────────────────────────────────────── #}
-  {% block scene_footer %}{% endblock %}
+  {# ── Footer area ────────────────────────────────────────────────── #}
+  {# v1.51.1 [2026-03-25] — Default footer with version, shortcuts, quick links #}
+  {% block scene_footer %}
+  <footer class="cs-footer" id="cs-footer">
+    <span class="cs-footer-version">CosySim v1.57</span>
+    <span class="cs-footer-sep">|</span>
+    <span class="cs-footer-scene">{{ scene_display_name | default('') }}</span>
+    <span class="cs-footer-sep">|</span>
+    <span class="cs-footer-keys">
+      <kbd>F7</kbd> Danmaku
+      <kbd>H</kbd> HUD
+      <kbd>I</kbd> Inventory
+    </span>
+    <span class="cs-footer-links">
+      {# v1.58.0 — hub root is the landing page; footer goes to the catalogue #}
+      <a href="http://localhost:8500/terminal" class="cs-footer-link">Hub</a>
+      <a href="http://localhost:5572" class="cs-footer-link">Oracle</a>
+      <a href="http://localhost:5593" class="cs-footer-link">NeonOS</a>
+    </span>
+  </footer>
+  {% endblock %}
 
   {# ── Overlays (modals, drawers, etc.) ───────────────────────────── #}
   {% block scene_overlays %}{% endblock %}
@@ -158,7 +194,7 @@
   <script src="/shared/js/cosysim-telemetry.js" defer></script>
   <script src="/shared/js/cosysim-neon-hud.js" defer></script>
   {# cosysim-shop.js removed v1.43.0 — shop now handled by NeonHUD._toggleShop() #}
-  <script src="/shared/js/cosysim-announcer.js" defer></script>
+  {# cosysim-announcer.js removed v1.51.2 — radio widget caused click-blocking #}
 
   {# ── Particle system (if canvas present) ────────────────────────── #}
   {% if not hide_particles %}
@@ -170,6 +206,11 @@
 
   {# ── World news ticker (bottom-of-screen crawl) ─────────────────── #}
   <script src="/shared/js/cosysim-news-ticker.js" defer></script>
+
+  {# ── Danmaku spectator overlay (F7 toggle) ─────────────────────── #}
+  {% if not hide_danmaku %}
+  <script src="/shared/js/cosysim-danmaku.js" defer></script>
+  {% endif %}
 
   {# ── Scene-specific scripts from child template ─────────────────── #}
   {% block body_scripts %}{% endblock %}

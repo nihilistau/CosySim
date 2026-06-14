@@ -1,0 +1,393 @@
+/*
+ * cosysim-desktop.css — NeonOS Desktop Shell Styles
+ * ==================================================
+ *
+ * Styles for the NeonOS virtual desktop: app launcher grid, draggable
+ * windows with glass-morphism, taskbar with clock, and cyberpunk neon
+ * aesthetic matching the existing Oracle/NeonCity theme.
+ *
+ * Version: v1.51.0 [2026-03-25]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.51.0 [2026-03-25] — Initial implementation: desktop, launcher,
+ *                           windows, taskbar, glass-morphism, animations
+ */
+
+/* ── Desktop Container ────────────────────────────────────────────────── */
+
+.neon-desktop {
+  position: fixed;
+  inset: 60px 0 0 0;  /* below navbar */
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(0, 229, 255, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(139, 92, 246, 0.03) 0%, transparent 50%),
+    #060810;
+  font-family: 'Inter', 'JetBrains Mono', sans-serif;
+  z-index: 1;
+}
+
+/* ── App Launcher ─────────────────────────────────────────────────────── */
+
+/* v1.51.0 [2026-03-25] — Scrollable app launcher grid */
+.neon-app-launcher {
+  position: absolute;
+  inset: 0 0 48px 0;  /* above taskbar */
+  overflow-y: auto;
+  padding: 32px 48px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 229, 255, 0.3) transparent;
+}
+
+.neon-app-launcher::-webkit-scrollbar {
+  width: 6px;
+}
+
+.neon-app-launcher::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.neon-app-launcher::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.3);
+  border-radius: 3px;
+}
+
+.neon-app-launcher__section {
+  margin-bottom: 32px;
+}
+
+.neon-app-launcher__heading {
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(0, 229, 255, 0.6);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin: 0 0 16px 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.1);
+}
+
+.neon-app-launcher__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+/* ── App Tile ─────────────────────────────────────────────────────────── */
+
+/* v1.51.0 [2026-03-25] — Clickable app icon with accent glow */
+.neon-app-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  background: rgba(10, 14, 22, 0.5);
+  border: 1px solid rgba(0, 229, 255, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #c0c8d8;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.neon-app-tile:hover {
+  background: rgba(0, 229, 255, 0.06);
+  border-color: rgba(0, 229, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 229, 255, 0.1);
+}
+
+.neon-app-tile:active {
+  transform: translateY(0);
+}
+
+.neon-app-tile__icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid;
+  font-family: 'Orbitron', monospace;
+  font-size: 1.4rem;
+  font-weight: 700;
+  background: rgba(10, 14, 22, 0.8);
+  transition: all 0.2s ease;
+}
+
+.neon-app-tile:hover .neon-app-tile__icon {
+  transform: scale(1.08);
+}
+
+.neon-app-tile__label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-align: center;
+  letter-spacing: 0.5px;
+  color: #a0a8b8;
+  line-height: 1.3;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neon-app-tile__status {
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.neon-app-tile__status--up {
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.neon-app-tile__status--down {
+  color: #64748b;
+  background: rgba(100, 116, 139, 0.1);
+}
+
+/* Dim offline apps slightly */
+.neon-app-tile[data-status="down"] {
+  opacity: 0.5;
+}
+
+.neon-app-tile[data-status="down"]:hover {
+  opacity: 0.7;
+}
+
+/* ── Neon Window ──────────────────────────────────────────────────────── */
+
+/* v1.51.0 [2026-03-25] — Draggable window with glass-morphism effect */
+.neon-window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  min-height: 200px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(8, 10, 18, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow:
+    0 0 1px rgba(0, 229, 255, 0.3),
+    0 4px 24px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(0, 229, 255, 0.05);
+  transition: box-shadow 0.15s ease;
+}
+
+.neon-window:hover {
+  box-shadow:
+    0 0 1px rgba(0, 229, 255, 0.5),
+    0 8px 40px rgba(0, 0, 0, 0.7),
+    0 0 60px rgba(0, 229, 255, 0.08);
+}
+
+.neon-window--maximized {
+  border-radius: 0;
+}
+
+/* ── Window Titlebar ──────────────────────────────────────────────────── */
+
+.neon-window__titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  user-select: none;
+  cursor: move;
+  flex-shrink: 0;
+}
+
+.neon-window__status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.neon-window__status--up {
+  background: #22d3ee;
+  box-shadow: 0 0 6px rgba(34, 211, 238, 0.5);
+}
+
+.neon-window__status--down {
+  background: #64748b;
+}
+
+.neon-window__title {
+  flex: 1;
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neon-window__buttons {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.neon-window__btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #8890a0;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+  font-family: inherit;
+}
+
+.neon-window__btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c0c8d8;
+}
+
+.neon-window__btn--close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+/* ── Window Content ───────────────────────────────────────────────────── */
+
+.neon-window__content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.neon-window__iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #0a0e16;
+}
+
+/* ── Resize Handle ────────────────────────────────────────────────────── */
+
+.neon-window__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  z-index: 2;
+}
+
+.neon-window__resize::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(0, 229, 255, 0.3);
+  border-bottom: 2px solid rgba(0, 229, 255, 0.3);
+}
+
+/* ── Drag Overlay (prevents iframe from stealing mouse events) ────── */
+
+.neon-window__drag-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  cursor: move;
+}
+
+/* ── Taskbar ──────────────────────────────────────────────────────────── */
+
+/* v1.51.0 [2026-03-25] — Bottom taskbar with open window buttons + clock */
+.neon-taskbar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: rgba(8, 10, 18, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(0, 229, 255, 0.1);
+  z-index: 9999;
+}
+
+.neon-taskbar__apps {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  flex: 1;
+  padding-right: 16px;
+  scrollbar-width: none;
+}
+
+.neon-taskbar__apps::-webkit-scrollbar {
+  display: none;
+}
+
+.neon-taskbar__app-btn {
+  padding: 4px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #8890a0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.neon-taskbar__app-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #c0c8d8;
+}
+
+.neon-taskbar__app-btn--active {
+  background: rgba(0, 229, 255, 0.08);
+  color: #00e5ff;
+  border-color: rgba(0, 229, 255, 0.2);
+}
+
+.neon-taskbar__app-btn--minimized {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.neon-taskbar__clock {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: rgba(0, 229, 255, 0.7);
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}

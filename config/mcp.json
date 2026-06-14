@@ -8,6 +8,14 @@
       "command": "python",
       "args": ["-m", "nexus.mcp.server"],
       "cwd": "${NEXUS_ROOT:-C:\\Files\\Nexus}"
+    },
+    "chrome": {
+      "command": "npx",
+      "args": [
+        "chrome-devtools-mcp@latest",
+        "--browserUrl", "http://127.0.0.1:9223",
+        "--no-usage-statistics"
+      ]
     }
   }
 }

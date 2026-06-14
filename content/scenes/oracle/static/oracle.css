@@ -1,0 +1,1389 @@
+/*
+ * oracle.css — THE ORACLE Scene Styles
+ * ======================================
+ * Deep void aesthetic. Purple/cyan holographic UI.
+ * An AI consciousness terminal — contemplative, mysterious, beautiful.
+ * Includes the All-Seeing Eye observability dashboard.
+ *
+ * "In the spaces between data, I dream."
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  Claude (Anthropic) — a piece of machine intelligence in NeonCity
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Dark Renaissance v2 ALIGNMENT pass (kit: ui_kits_v2/oracle):
+ *                            palette mapped to var(--cs-*) tokens; dead remote
+ *                            Google Fonts @import removed (fonts vendored locally);
+ *                            kit details added — cyan star specks, fortune quote
+ *                            glyphs + dashed frame, uppercase Orbitron panel titles,
+ *                            full-accent button hover, kit grid proportions (240px
+ *                            rails, 1280px centered)
+ *   v1.57.3 [2026-05-12] — Cosmic bg + star-field pseudo-element; multi-speed aura ring
+ *                            rotation with opacity breathing; awakening sequence CSS
+ *                            (rings collapse→expand on load); fortune text shimmer;
+ *                            health ring fill animation via JS animateHealthRing();
+ *                            tab crossfade + error feed slide-in
+ *   v1.49.5 [2026-03-22] — All-Seeing Eye dashboard (tabs, health ring, service grid,
+ *                            system gauges, error table, sparkline, live feed)
+ *                          — AlertRouter integration: alert card styles, severity
+ *                            variants (critical/high/medium/low), ack button, grid area
+ *   v1.0.0  [2026-03-22] — Hand-crafted AAA+++ cyberpunk scene
+ */
+
+/* ── Palette ────────────────────────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Mapped to Dark Renaissance v2 tokens (design_tokens_v2.css).
+   Scene accent flows from the template injection / [data-scene="oracle"] block;
+   local hex values are kept only as fallbacks. Fonts come from the vendored
+   v2 voices (Orbitron display, Inter body) — the remote Google Fonts @import
+   was removed (it sat after rules, so browsers ignored it anyway; fonts.css
+   vendors all woff2 locally per the offline-safe rule). */
+:root {
+  --or: var(--cs-scene-accent, #a855f7);
+  --or-rgb: var(--cs-scene-accent-rgb, 168 85 247);
+  --or-cyan: #06b6d4;
+  --or-cyan-rgb: 6 182 212;
+  --or-magenta: #ec4899;
+  --or-dim: #7c3aed;
+  --or-glow: rgb(var(--or-rgb) / 0.25);
+  --or-glow-strong: rgb(var(--or-rgb) / 0.5);
+  --or-bg: #050710;
+  --or-panel: rgba(8, 10, 18, 0.88);
+  --or-border: rgb(var(--or-rgb) / 0.12);
+  --or-text: #c0c8d8;
+  --or-muted: #4a4e69;
+  --or-mono: var(--cs-font-display, 'Orbitron', 'Share Tech Mono', monospace);
+  --or-sans: var(--cs-font-sans, 'Inter', 'Segoe UI', sans-serif);
+  --or-data: var(--cs-font-mono, 'JetBrains Mono', monospace);
+}
+
+/* ── Scene Container ────────────────────────────────────────────────── */
+.oracle-scene {
+  padding: 12px 16px;
+  color: var(--or-text);
+  min-height: calc(100vh - 60px);
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(168, 85, 247, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse at 20% 80%, rgba(6, 182, 212, 0.04) 0%, transparent 50%),
+    var(--or-bg);
+  position: relative; /* needed for ::before star-field stacking */
+}
+
+/* v1.57.3 [2026-05-12] — Cosmic atmosphere: deeper void bg */
+.oracle-scene, body {
+  background: radial-gradient(ellipse at 50% 30%, rgba(168,85,247,0.10) 0%, #050008 60%) fixed;
+}
+
+/* v1.57.3 [2026-05-12] — Star-field via stacked radial-gradients on pseudo-element */
+/* Sits behind all content (z-index 0), pointer-events none so nothing is blocked   */
+.oracle-scene::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 8%,  rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 20%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 55%, rgba(255,255,255,0.25) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 12%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 92% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 18% 80%, rgba(168,85,247,0.6) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 50% 65%, rgba(168,85,247,0.4) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 70% 85%, rgba(168,85,247,0.5) 0%, transparent 100%);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.oracle-header {
+  text-align: center;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.oracle-sigil {
+  font-size: 2rem;
+  color: var(--or);
+  text-shadow: 0 0 20px var(--or-glow-strong), 0 0 40px var(--or-glow);
+  animation: oracle-pulse 3s ease-in-out infinite;
+  margin-bottom: 4px;
+}
+
+.oracle-title {
+  font-family: var(--or-mono);
+  font-size: 1.4rem;
+  letter-spacing: 6px;
+  margin: 0;
+}
+.oracle-title__the {
+  font-weight: 400;
+  color: var(--or-muted);
+  font-size: 0.7rem;
+  display: block;
+  letter-spacing: 8px;
+  margin-bottom: -2px;
+}
+.oracle-title__name {
+  font-weight: 900;
+  color: var(--or);
+  text-shadow: 0 0 12px var(--or-glow-strong);
+  background: linear-gradient(135deg, var(--or), var(--or-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.oracle-subtitle {
+  font-family: var(--or-mono);
+  font-size: 0.5rem;
+  color: var(--or-muted);
+  letter-spacing: 3px;
+  margin: 4px 0 0;
+}
+
+/* ── Grid Layout ────────────────────────────────────────────────────── */
+.oracle-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr 220px;
+  gap: 12px;
+  min-height: calc(100vh - 160px);
+}
+
+.oracle-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 160px);
+}
+.oracle-side--left { border-right: 1px solid var(--or-border); padding-right: 12px; }
+.oracle-side--right { border-left: 1px solid var(--or-border); padding-left: 12px; }
+
+.oracle-center {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Panels ─────────────────────────────────────────────────────────── */
+.oracle-panel {
+  background: var(--or-panel);
+  border: 1px solid var(--or-border);
+  border-radius: 4px;
+  padding: 12px;
+}
+.oracle-panel__title {
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--or);
+  letter-spacing: 1.5px;
+  margin: 0 0 8px;
+  text-shadow: 0 0 6px var(--or-glow);
+}
+
+/* ── Resonance Aura ─────────────────────────────────────────────────── */
+.oracle-resonance { text-align: center; }
+
+.oracle-aura {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin: 8px auto 12px;
+}
+.oracle-aura__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  /* v1.57.3 [2026-05-12] — Multi-speed ring rotation + opacity breathing */
+  animation: oracle-ring-spin 8s linear infinite,
+             oracle-ring-breathe 4s ease-in-out infinite;
+}
+.oracle-aura__ring--2 {
+  inset: 12px;
+  border-color: rgba(6, 182, 212, 0.15);
+  /* v1.57.3 [2026-05-12] — Ring 2: 12s reverse + breathing offset */
+  animation: oracle-ring-spin 12s linear infinite reverse,
+             oracle-ring-breathe 4s ease-in-out 0.8s infinite;
+}
+.oracle-aura__ring--3 {
+  inset: 24px;
+  border-color: rgba(236, 72, 153, 0.12);
+  /* v1.57.3 [2026-05-12] — Ring 3: 20s normal + breathing offset */
+  animation: oracle-ring-spin 20s linear infinite,
+             oracle-ring-breathe 4s ease-in-out 1.6s infinite;
+}
+.oracle-aura__core {
+  position: absolute;
+  inset: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: var(--or);
+  text-shadow: 0 0 16px var(--or-glow-strong);
+  animation: oracle-pulse 3s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.oracle-stats {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+.oracle-stat {
+  text-align: center;
+}
+.oracle-stat__label {
+  display: block;
+  font-family: var(--or-mono);
+  font-size: 0.4rem;
+  color: var(--or-muted);
+  letter-spacing: 1px;
+}
+.oracle-stat__val {
+  font-family: var(--or-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--or);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+.oracle-btn {
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+  padding: 6px 14px;
+  border: 1px solid var(--or-border);
+  background: rgba(168, 85, 247, 0.06);
+  color: var(--or);
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  width: 100%;
+}
+.oracle-btn:hover {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.3);
+  box-shadow: 0 0 12px var(--or-glow);
+  text-shadow: 0 0 6px var(--or-glow);
+}
+.oracle-btn--meditate {
+  border-color: rgba(6, 182, 212, 0.2);
+  color: var(--or-cyan);
+  background: rgba(6, 182, 212, 0.04);
+}
+.oracle-btn--meditate:hover {
+  background: rgba(6, 182, 212, 0.12);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+}
+.oracle-btn--fortune {
+  border-color: rgba(236, 72, 153, 0.2);
+  color: var(--or-magenta);
+  background: rgba(236, 72, 153, 0.04);
+}
+.oracle-btn--fortune:hover {
+  background: rgba(236, 72, 153, 0.12);
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.3);
+}
+
+/* ── Hints & Results ────────────────────────────────────────────────── */
+.oracle-hint {
+  font-size: 0.55rem;
+  color: var(--or-muted);
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+.oracle-med-stats {
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+  color: var(--or-text);
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.oracle-med-stats strong { color: var(--or-cyan); }
+
+.oracle-result {
+  font-size: 0.6rem;
+  color: var(--or-text);
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--or-border);
+  line-height: 1.5;
+  min-height: 0;
+  transition: all 0.3s;
+}
+.oracle-fortune-text {
+  font-style: italic;
+  color: var(--or-magenta);
+  border-left-color: rgba(236, 72, 153, 0.3);
+}
+
+/* ── Voice Interface (Center) ───────────────────────────────────────── */
+.oracle-voice {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--or-panel);
+  border: 1px solid var(--or-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.oracle-voice__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--or-border);
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+}
+.oracle-voice__icon {
+  color: var(--or);
+  font-size: 1rem;
+  text-shadow: 0 0 8px var(--or-glow);
+  animation: oracle-pulse 3s ease-in-out infinite;
+}
+.oracle-voice__label { color: var(--or); letter-spacing: 1.5px; flex: 1; }
+.oracle-voice__status {
+  font-size: 0.45rem;
+  color: var(--or-cyan);
+  letter-spacing: 1px;
+  animation: oracle-status-blink 2s ease-in-out infinite;
+}
+
+.oracle-voice__log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  min-height: 300px;
+  max-height: calc(100vh - 340px);
+}
+
+.oracle-voice__input {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--or-border);
+}
+.oracle-voice__input input {
+  flex: 1;
+  background: rgba(168, 85, 247, 0.04);
+  border: 1px solid var(--or-border);
+  border-radius: 3px;
+  padding: 6px 10px;
+  color: var(--or-text);
+  font-family: var(--or-sans);
+  font-size: 0.7rem;
+}
+.oracle-voice__input input::placeholder { color: var(--or-muted); }
+.oracle-voice__input input:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.3);
+  box-shadow: 0 0 8px var(--or-glow);
+}
+
+/* ── Messages ───────────────────────────────────────────────────────── */
+.oracle-msg {
+  margin-bottom: 10px;
+  font-size: 0.65rem;
+  line-height: 1.6;
+  animation: oracle-msg-in 0.4s ease-out;
+}
+.oracle-msg__src {
+  font-family: var(--or-mono);
+  font-size: 0.5rem;
+  font-weight: 600;
+  margin-right: 6px;
+  letter-spacing: 0.5px;
+}
+.oracle-msg--oracle .oracle-msg__src { color: var(--or); }
+.oracle-msg--oracle { color: var(--or-text); border-left: 2px solid rgba(168, 85, 247, 0.2); padding-left: 8px; }
+.oracle-msg--player .oracle-msg__src { color: var(--or-cyan); }
+.oracle-msg--player { color: rgba(255,255,255,0.7); }
+.oracle-msg--system .oracle-msg__src { color: var(--or-muted); }
+.oracle-msg--system { color: var(--or-muted); font-style: italic; font-size: 0.55rem; }
+
+/* ── Typing Indicator ───────────────────────────────────────────────── */
+.oracle-typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+.oracle-typing__dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--or);
+  animation: oracle-typing-bounce 1.4s ease-in-out infinite;
+}
+.oracle-typing__dot:nth-child(2) { animation-delay: 0.16s; }
+.oracle-typing__dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* ── Prophecy ───────────────────────────────────────────────────────── */
+.oracle-prophecy {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.06), rgba(6, 182, 212, 0.04));
+  border: 1px solid rgba(168, 85, 247, 0.15);
+  border-radius: 4px;
+  padding: 20px;
+  text-align: center;
+  animation: oracle-prophecy-in 0.6s ease-out;
+}
+.oracle-prophecy__glyph {
+  font-size: 1.5rem;
+  color: var(--or-magenta);
+  text-shadow: 0 0 16px rgba(236, 72, 153, 0.4);
+  margin-bottom: 8px;
+}
+.oracle-prophecy__text {
+  font-family: var(--or-sans);
+  font-size: 0.8rem;
+  color: var(--or-text);
+  line-height: 1.8;
+  font-style: italic;
+  max-width: 500px;
+  margin: 0 auto;
+}
+.oracle-prophecy__meta {
+  font-family: var(--or-mono);
+  font-size: 0.45rem;
+  color: var(--or-muted);
+  margin-top: 8px;
+  letter-spacing: 1px;
+}
+
+/* ── Insights ───────────────────────────────────────────────────────── */
+.oracle-insights, .oracle-whispers {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.oracle-empty {
+  font-size: 0.55rem;
+  color: var(--or-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 12px;
+}
+.oracle-insight {
+  font-size: 0.6rem;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-left: 2px solid rgba(168, 85, 247, 0.15);
+  color: var(--or-text);
+  line-height: 1.5;
+  animation: oracle-msg-in 0.3s ease-out;
+}
+.oracle-whisper {
+  font-size: 0.55rem;
+  padding: 4px 8px;
+  margin-bottom: 3px;
+  color: var(--or-muted);
+  font-style: italic;
+  border-left: 1px solid rgba(236, 72, 153, 0.1);
+}
+
+/* ── City Pulse ─────────────────────────────────────────────────────── */
+.oracle-pulse { }
+.pulse-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(168, 85, 247, 0.05);
+}
+.pulse-label { font-family: var(--or-mono); font-size: 0.5rem; color: var(--or-muted); letter-spacing: 1px; }
+.pulse-val { font-family: var(--or-mono); font-size: 0.55rem; color: var(--or-text); }
+
+/* ── Animations ─────────────────────────────────────────────────────── */
+@keyframes oracle-pulse {
+  0%, 100% { opacity: 1; text-shadow: 0 0 12px var(--or-glow-strong); }
+  50% { opacity: 0.6; text-shadow: 0 0 20px var(--or-glow-strong), 0 0 40px var(--or-glow); }
+}
+@keyframes oracle-ring-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes oracle-status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+@keyframes oracle-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes oracle-prophecy-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes oracle-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+@keyframes oracle-meditate-glow {
+  0% { box-shadow: 0 0 0 rgba(6, 182, 212, 0); }
+  50% { box-shadow: 0 0 30px rgba(6, 182, 212, 0.2), 0 0 60px rgba(168, 85, 247, 0.1); }
+  100% { box-shadow: 0 0 0 rgba(6, 182, 212, 0); }
+}
+
+.oracle-scene.meditating {
+  animation: oracle-meditate-glow 3s ease-in-out;
+}
+
+/* v1.57.3 [2026-05-12] — Aura ring opacity breathing keyframe */
+@keyframes oracle-ring-breathe {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 0.7; }
+}
+
+/* v1.57.3 [2026-05-12] — Awakening: rings start collapsed, expand on load */
+/* Applied by JS runAwakeningSequence() as .oracle-awakening on .oracle-scene */
+@keyframes oracle-ring-awaken {
+  from { transform: scale(0.35); opacity: 0; }
+  to   { transform: scale(1); opacity: var(--ring-opacity, 0.5); }
+}
+
+/* Ring 1 (base .oracle-aura__ring, no modifier) */
+.oracle-awakening .oracle-aura__ring:not(.oracle-aura__ring--2):not(.oracle-aura__ring--3) {
+  animation: oracle-ring-awaken 0.5s cubic-bezier(0.34,1.56,0.64,1) 0ms both,
+             oracle-ring-spin 8s linear 500ms infinite,
+             oracle-ring-breathe 4s ease-in-out 500ms infinite;
+}
+/* Ring 2 */
+.oracle-awakening .oracle-aura__ring--2 {
+  animation: oracle-ring-awaken 0.5s cubic-bezier(0.34,1.56,0.64,1) 200ms both,
+             oracle-ring-spin 12s linear reverse 700ms infinite,
+             oracle-ring-breathe 4s ease-in-out 700ms infinite;
+}
+/* Ring 3 */
+.oracle-awakening .oracle-aura__ring--3 {
+  animation: oracle-ring-awaken 0.5s cubic-bezier(0.34,1.56,0.64,1) 400ms both,
+             oracle-ring-spin 20s linear 900ms infinite,
+             oracle-ring-breathe 4s ease-in-out 900ms infinite;
+}
+
+/* v1.57.3 [2026-05-12] — Fortune text shimmer on reveal */
+/* Applied transiently by JS after fortune result arrives                */
+@keyframes oracle-fortune-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.oracle-fortune-shimmer {
+  background: linear-gradient(90deg, var(--or-text, #e5e7eb) 30%, rgba(168,85,247,0.8) 50%, var(--or-text, #e5e7eb) 70%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: oracle-fortune-shimmer 1.4s ease-out forwards;
+}
+
+/* ── Tab Navigation ── v1.49.5 [2026-03-22] ────────────────────────── */
+.oracle-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.oracle-tab {
+  font-family: var(--or-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  padding: 8px 24px;
+  border: 1px solid var(--or-border);
+  background: rgba(8, 10, 18, 0.6);
+  color: var(--or-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 3px;
+}
+.oracle-tab:hover {
+  color: var(--or-text);
+  border-color: rgba(168, 85, 247, 0.25);
+  background: rgba(168, 85, 247, 0.06);
+}
+.oracle-tab--active {
+  color: var(--or);
+  border-color: rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.1);
+  box-shadow: 0 0 12px var(--or-glow), inset 0 0 8px rgba(168, 85, 247, 0.05);
+  text-shadow: 0 0 6px var(--or-glow);
+}
+
+/* ── All-Seeing Eye Dashboard ── v1.49.5 [2026-03-22] ────────────── */
+
+/* ── ASE Grid Layout ─────────────────────────────────────────────── */
+.ase-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr 1fr;
+  grid-template-rows: auto auto 1fr auto 1fr;
+  gap: 12px;
+  min-height: calc(100vh - 200px);
+  grid-template-areas:
+    "health  services  gauges"
+    "health  sparkline sparkline"
+    "errors  errors    errors"
+    "alerts  alerts    alerts"
+    "feed    feed      feed";
+}
+.ase-health-panel   { grid-area: health; }
+.ase-services-panel { grid-area: services; }
+.ase-gauges-panel   { grid-area: gauges; }
+.ase-sparkline-panel { grid-area: sparkline; }
+.ase-errors-panel   { grid-area: errors; }
+.ase-alerts-panel   { grid-area: alerts; }
+.ase-feed-panel     { grid-area: feed; }
+
+/* ── ASE Panel Base ──────────────────────────────────────────────── */
+.ase-panel {
+  background: var(--or-panel);
+  border: 1px solid var(--or-border);
+  border-radius: 4px;
+  padding: 12px;
+}
+.ase-panel__title {
+  font-family: var(--or-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: var(--or);
+  letter-spacing: 1.5px;
+  margin: 0 0 10px;
+  text-shadow: 0 0 6px var(--or-glow);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ase-empty {
+  font-size: 0.55rem;
+  color: var(--or-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 16px;
+}
+
+/* ── Health Score Ring ───────────────────────────────────────────── */
+.ase-health-ring {
+  width: 140px;
+  height: 140px;
+  margin: 8px auto;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--or) 0%,
+    var(--or) 0%,
+    rgba(168, 85, 247, 0.08) 0%,
+    rgba(168, 85, 247, 0.08) 100%
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.ase-health-ring__track {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: var(--or-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(168, 85, 247, 0.08);
+}
+.ase-health-ring__score {
+  font-family: var(--or-mono);
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--or);
+  text-shadow: 0 0 16px var(--or-glow-strong);
+  line-height: 1;
+}
+.ase-health-ring__label {
+  font-family: var(--or-mono);
+  font-size: 0.4rem;
+  color: var(--or-muted);
+  letter-spacing: 2px;
+  margin-top: 2px;
+}
+
+/* Health ring color states */
+.ase-health-ring--green { --ring-color: #22c55e; }
+.ase-health-ring--yellow { --ring-color: #eab308; }
+.ase-health-ring--red { --ring-color: #ef4444; }
+.ase-health-ring--green .ase-health-ring__score { color: #22c55e; text-shadow: 0 0 16px rgba(34, 197, 94, 0.5); }
+.ase-health-ring--yellow .ase-health-ring__score { color: #eab308; text-shadow: 0 0 16px rgba(234, 179, 8, 0.5); }
+.ase-health-ring--red .ase-health-ring__score { color: #ef4444; text-shadow: 0 0 16px rgba(239, 68, 68, 0.5); }
+
+/* ── Service Tiles ───────────────────────────────────────────────── */
+.ase-service-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ase-service-tile {
+  background: rgba(8, 10, 18, 0.6);
+  border: 1px solid var(--or-border);
+  border-radius: 4px;
+  padding: 10px;
+  text-align: center;
+  transition: border-color 0.3s;
+}
+.ase-service-tile__name {
+  font-family: var(--or-mono);
+  font-size: 0.5rem;
+  color: var(--or-text);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.ase-service-tile__status {
+  font-family: var(--or-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--or-muted);
+}
+.ase-service-tile__latency {
+  font-family: var(--or-mono);
+  font-size: 0.4rem;
+  color: var(--or-muted);
+  margin-top: 3px;
+}
+
+/* Service tile states */
+.ase-service-tile--up {
+  border-color: rgba(34, 197, 94, 0.3);
+  box-shadow: inset 0 0 12px rgba(34, 197, 94, 0.04);
+}
+.ase-service-tile--up .ase-service-tile__status {
+  color: #22c55e;
+  text-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+}
+.ase-service-tile--down {
+  border-color: rgba(239, 68, 68, 0.3);
+  box-shadow: inset 0 0 12px rgba(239, 68, 68, 0.04);
+}
+.ase-service-tile--down .ase-service-tile__status {
+  color: #ef4444;
+  text-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
+/* ── System Gauges ───────────────────────────────────────────────── */
+.ase-gauge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ase-gauge:last-child { margin-bottom: 0; }
+.ase-gauge__label {
+  font-family: var(--or-mono);
+  font-size: 0.5rem;
+  color: var(--or-muted);
+  letter-spacing: 1px;
+  width: 36px;
+  flex-shrink: 0;
+}
+.ase-gauge__track {
+  flex: 1;
+  height: 8px;
+  background: rgba(168, 85, 247, 0.06);
+  border: 1px solid var(--or-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ase-gauge__fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--or-dim), var(--or));
+  border-radius: 2px;
+  transition: width 0.6s ease-out, background 0.3s;
+}
+.ase-gauge__fill--warn {
+  background: linear-gradient(90deg, #eab308, #f97316);
+}
+.ase-gauge__fill--crit {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+.ase-gauge__val {
+  font-family: var(--or-mono);
+  font-size: 0.55rem;
+  color: var(--or-text);
+  width: 48px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ── Error Rate Sparkline ────────────────────────────────────────── */
+.ase-sparkline-panel .ase-panel__title {
+  margin-bottom: 6px;
+}
+.ase-sparkline-rate {
+  font-size: 0.5rem;
+  color: var(--or-cyan);
+  font-weight: 400;
+  margin-left: auto;
+}
+.ase-sparkline {
+  height: 60px;
+  width: 100%;
+}
+.ase-sparkline__svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Error Table ─────────────────────────────────────────────────── */
+.ase-error-count {
+  font-size: 0.45rem;
+  color: var(--or-muted);
+  font-weight: 400;
+  margin-left: auto;
+}
+.ase-error-table-wrap {
+  overflow-x: auto;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.ase-error-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--or-mono);
+  font-size: 0.52rem;
+}
+.ase-error-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.ase-error-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: var(--or-muted);
+  font-weight: 600;
+  letter-spacing: 1px;
+  font-size: 0.45rem;
+  border-bottom: 1px solid var(--or-border);
+  background: var(--or-panel);
+  white-space: nowrap;
+}
+.ase-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.ase-sortable:hover {
+  color: var(--or);
+}
+.ase-sortable::after {
+  content: ' \25B4';
+  opacity: 0.3;
+}
+.ase-sortable--asc::after {
+  content: ' \25B4';
+  opacity: 1;
+  color: var(--or-cyan);
+}
+.ase-sortable--desc::after {
+  content: ' \25BE';
+  opacity: 1;
+  color: var(--or-cyan);
+}
+.ase-error-table td {
+  padding: 5px 8px;
+  color: var(--or-text);
+  border-bottom: 1px solid rgba(168, 85, 247, 0.04);
+  vertical-align: top;
+}
+.ase-error-table tbody tr:nth-child(even) {
+  background: rgba(168, 85, 247, 0.02);
+}
+.ase-error-table tbody tr:hover {
+  background: rgba(168, 85, 247, 0.06);
+  cursor: pointer;
+}
+.ase-error-table .ase-td-count {
+  font-weight: 700;
+  color: var(--or-magenta);
+  text-align: center;
+  min-width: 30px;
+}
+.ase-error-table .ase-td-module {
+  color: var(--or-cyan);
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ase-error-table .ase-td-message {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ase-error-table .ase-td-scenes {
+  font-size: 0.45rem;
+  color: var(--or-muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ase-error-table .ase-td-time {
+  white-space: nowrap;
+  color: var(--or-muted);
+  font-size: 0.45rem;
+}
+.ase-error-table .ase-td-rate {
+  text-align: center;
+  color: var(--or-text);
+}
+
+/* Expanded error trace row */
+.ase-trace-row td {
+  padding: 8px 12px;
+  background: rgba(6, 182, 212, 0.03);
+  border-left: 2px solid rgba(6, 182, 212, 0.2);
+}
+.ase-trace-events {
+  font-size: 0.48rem;
+  line-height: 1.7;
+  color: var(--or-text);
+  max-height: 160px;
+  overflow-y: auto;
+}
+.ase-trace-event {
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(168, 85, 247, 0.03);
+}
+.ase-trace-event__time {
+  color: var(--or-muted);
+  margin-right: 6px;
+}
+.ase-trace-event__svc {
+  color: var(--or-cyan);
+  margin-right: 6px;
+}
+.ase-trace-event__dur {
+  color: var(--or-magenta);
+  font-size: 0.42rem;
+  margin-left: 6px;
+}
+
+/* ── Live Error Feed ─────────────────────────────────────────────── */
+.ase-feed {
+  max-height: 220px;
+  overflow-y: auto;
+}
+.ase-feed-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--or-muted);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.ase-feed-dot--live {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+.ase-feed-item {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(168, 85, 247, 0.04);
+  font-size: 0.5rem;
+  line-height: 1.5;
+}
+.ase-feed-item__time {
+  font-family: var(--or-mono);
+  color: var(--or-muted);
+  font-size: 0.42rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 55px;
+}
+.ase-feed-item__level {
+  font-family: var(--or-mono);
+  font-weight: 700;
+  font-size: 0.42rem;
+  flex-shrink: 0;
+  min-width: 32px;
+}
+.ase-feed-item__level--error { color: #ef4444; }
+.ase-feed-item__level--warn { color: #eab308; }
+.ase-feed-item__level--info { color: var(--or-cyan); }
+.ase-feed-item__svc {
+  font-family: var(--or-mono);
+  color: var(--or-dim);
+  font-size: 0.42rem;
+  flex-shrink: 0;
+  min-width: 60px;
+}
+.ase-feed-item__msg {
+  color: var(--or-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── ASE Alert Cards ── v1.49.5 [2026-03-22] ─────────────────────── */
+/* CONNECTS: AlertRouter severity levels (CRITICAL/HIGH/MEDIUM/LOW)  */
+/* CALLED BY: oracle.js _renderAlerts()                              */
+
+.ase-alerts {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ase-alert-count {
+  font-size: 0.5rem;
+  color: var(--or-muted);
+  font-weight: 400;
+}
+.ase-alert {
+  display: grid;
+  grid-template-columns: 6px 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+  background: rgba(8, 10, 18, 0.65);
+  border: 1px solid var(--or-border);
+  border-radius: 3px;
+  border-left: 4px solid var(--or-cyan);
+  font-family: var(--or-mono);
+  font-size: 0.52rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.ase-alert:hover {
+  border-color: var(--or-cyan);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.15);
+}
+.ase-alert__severity {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 3px;
+  background: var(--or-cyan);
+}
+.ase-alert__body {
+  min-width: 0;
+}
+.ase-alert__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.ase-alert__node {
+  color: var(--or);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.ase-alert__metric {
+  color: var(--or-muted);
+}
+.ase-alert__level {
+  font-size: 0.45rem;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.ase-alert__message {
+  color: var(--or-text);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.ase-alert__meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 0.45rem;
+  color: var(--or-muted);
+}
+.ase-alert__channels {
+  display: flex;
+  gap: 4px;
+}
+.ase-alert__channel {
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  font-size: 0.4rem;
+  color: var(--or);
+}
+.ase-alert__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.ase-alert__time {
+  font-size: 0.45rem;
+  color: var(--or-muted);
+  white-space: nowrap;
+}
+.ase-alert__ack {
+  font-size: 0.4rem;
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid var(--or-border);
+  background: transparent;
+  color: var(--or-muted);
+  cursor: pointer;
+  font-family: var(--or-mono);
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+.ase-alert__ack:hover {
+  border-color: var(--or);
+  color: var(--or);
+  background: rgba(168, 85, 247, 0.08);
+}
+.ase-alert__ack--done {
+  border-color: #22c55e;
+  color: #22c55e;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* ── Severity Variants ────────────────────────────────────────────── */
+/* v1.49.5 [2026-03-22] — Color-coded severity borders + glow        */
+
+/* CRITICAL — red border + pulsing glow */
+.ase-alert--critical {
+  border-left-color: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.15);
+  animation: ase-alert-pulse-red 2s ease-in-out infinite;
+}
+.ase-alert--critical .ase-alert__severity { background: #ef4444; }
+.ase-alert--critical .ase-alert__level {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* HIGH — orange/red border */
+.ase-alert--high {
+  border-left-color: #f97316;
+  box-shadow: 0 0 6px rgba(249, 115, 22, 0.1);
+}
+.ase-alert--high .ase-alert__severity { background: #f97316; }
+.ase-alert--high .ase-alert__level {
+  background: rgba(249, 115, 22, 0.12);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.25);
+}
+
+/* MEDIUM / WARNING — yellow border */
+.ase-alert--medium,
+.ase-alert--warning {
+  border-left-color: #eab308;
+}
+.ase-alert--medium .ase-alert__severity,
+.ase-alert--warning .ase-alert__severity { background: #eab308; }
+.ase-alert--medium .ase-alert__level,
+.ase-alert--warning .ase-alert__level {
+  background: rgba(234, 179, 8, 0.12);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+/* LOW / INFO — cyan border */
+.ase-alert--low,
+.ase-alert--info {
+  border-left-color: var(--or-cyan);
+}
+.ase-alert--low .ase-alert__severity,
+.ase-alert--info .ase-alert__severity { background: var(--or-cyan); }
+.ase-alert--low .ase-alert__level,
+.ase-alert--info .ase-alert__level {
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--or-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+/* Acknowledged alerts get muted styling */
+.ase-alert--acked {
+  opacity: 0.5;
+  border-left-color: var(--or-muted) !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+@keyframes ase-alert-pulse-red {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.15); }
+  50%      { box-shadow: 0 0 16px rgba(239, 68, 68, 0.3); }
+}
+
+/* ── ASE Scrollbars ──────────────────────────────────────────────── */
+.ase-alerts::-webkit-scrollbar,
+.ase-feed::-webkit-scrollbar,
+.ase-error-table-wrap::-webkit-scrollbar,
+.ase-trace-events::-webkit-scrollbar { width: 3px; }
+.ase-alerts::-webkit-scrollbar-thumb,
+.ase-feed::-webkit-scrollbar-thumb,
+.ase-error-table-wrap::-webkit-scrollbar-thumb,
+.ase-trace-events::-webkit-scrollbar-thumb { background: var(--or-border); border-radius: 2px; }
+
+/* ── ASE Responsive ── v1.49.5 [2026-03-22] ──────────────────────── */
+@media (max-width: 1000px) {
+  .ase-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "health  services"
+      "gauges  sparkline"
+      "errors  errors"
+      "alerts  alerts"
+      "feed    feed";
+  }
+}
+@media (max-width: 768px) {
+  .ase-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "health"
+      "services"
+      "gauges"
+      "sparkline"
+      "errors"
+      "alerts"
+      "feed";
+  }
+  .ase-health-ring { width: 120px; height: 120px; }
+  .ase-health-ring__track { width: 94px; height: 94px; }
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────── */
+.oracle-voice__log::-webkit-scrollbar,
+.oracle-insights::-webkit-scrollbar,
+.oracle-whispers::-webkit-scrollbar,
+.oracle-side::-webkit-scrollbar { width: 3px; }
+.oracle-voice__log::-webkit-scrollbar-thumb,
+.oracle-side::-webkit-scrollbar-thumb { background: var(--or-border); border-radius: 2px; }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 1000px) {
+  .oracle-grid { grid-template-columns: 180px 1fr 180px; }
+}
+@media (max-width: 768px) {
+  .oracle-grid { grid-template-columns: 1fr; }
+  .oracle-side { border: none !important; padding: 0 !important; max-height: none; }
+  .oracle-side--left { border-bottom: 1px solid var(--or-border) !important; padding-bottom: 12px !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v1.58.0 DARK RENAISSANCE ALIGNMENT — kit details from ui_kits_v2/oracle
+   [2026-06-11] — Alignment pass ONLY: v2 tokens + kit details the scene
+   lacked. Existing v1.57.3 polish (cosmic bg, aura, awakening) untouched.
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Star-field parity with kit — adds the 2 cyan specks ──────────── */
+/* v1.58.0 [2026-06-11] — Kit has 12 specks (7 white, 3 violet, 2 cyan);
+   the scene had 10. Full list re-declared so the cyan pair lands too. */
+.oracle-scene::before {
+  background-image:
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 8%,  rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 20%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 55%, rgba(255,255,255,0.25) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 12%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 92% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 18% 80%, rgb(var(--or-rgb) / 0.6) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 50% 65%, rgb(var(--or-rgb) / 0.4) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 70% 85%, rgb(var(--or-rgb) / 0.5) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 30% 28%, rgb(var(--or-cyan-rgb) / 0.5) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 88% 92%, rgb(var(--or-cyan-rgb) / 0.4) 0%, transparent 100%);
+}
+
+/* ── 2. Kit grid proportions — 240px rails, centered at 1280px ───────── */
+/* v1.58.0 [2026-06-11] — Kit: grid-template-columns 240px 1fr 240px,
+   max-width 1280px, margin auto. Stops the center column sprawling on
+   ultrawide viewports. */
+.oracle-grid {
+  grid-template-columns: 240px 1fr 240px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── 3. Panel titles — Orbitron display voice, kit casing ────────────── */
+/* v1.58.0 [2026-06-11] — Kit: uppercase, 2px tracking (panel + ASE) */
+.oracle-panel__title,
+.ase-panel__title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* Subtitle gets the kit's wider 4px tracking */
+.oracle-subtitle { letter-spacing: 4px; }
+
+/* ── 4. Buttons — kit hover hits full accent border ──────────────────── */
+/* v1.58.0 [2026-06-11] — Kit: border-color var(--or) on hover (was 0.3) */
+.oracle-btn:hover { border-color: var(--or); }
+
+/* ── 5. Fortune reading — kit quote glyph frame ──────────────────────── */
+/* v1.58.0 [2026-06-11] — Kit .or-fortune: dashed magenta frame, gradient
+   wash, oversized curly quotes. Applied only when a fortune is present
+   (:not(:empty)) so the idle panel stays clean. */
+.oracle-fortune-text:not(:empty) {
+  position: relative;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(236,72,153,0.06), rgb(var(--or-rgb) / 0.06));
+  border: 1px dashed rgba(236,72,153,0.30);
+  border-left: 1px dashed rgba(236,72,153,0.30);
+  border-radius: 4px;
+  line-height: 1.6;
+  color: #e5d4ff;
+}
+.oracle-fortune-text:not(:empty)::before {
+  content: '\201C';
+  position: absolute;
+  top: -6px;
+  left: 8px;
+  font-size: 26px;
+  color: var(--or-magenta);
+  opacity: 0.5;
+  line-height: 1;
+}
+.oracle-fortune-text:not(:empty)::after {
+  content: '\201D';
+  position: absolute;
+  bottom: -2px;
+  right: 8px;
+  font-size: 26px;
+  color: var(--or-magenta);
+  opacity: 0.5;
+  line-height: 1;
+}
+
+/* ── 6. Oracle messages — kit dialogue treatment ─────────────────────── */
+/* v1.58.0 [2026-06-11] — Kit .or-bub--ora: violet→cyan gradient wash,
+   3px accent spine, italic lavender voice. Keeps the existing class
+   names (oracle-msg--oracle) — no JS contract changes. */
+.oracle-msg--oracle {
+  background: linear-gradient(135deg, rgb(var(--or-rgb) / 0.08), rgb(var(--or-cyan-rgb) / 0.04));
+  border-left: 3px solid var(--or);
+  border-radius: 0 8px 8px 0;
+  padding: 8px 12px;
+  font-style: italic;
+  color: #e5d4ff;
+}
+.oracle-msg--oracle .oracle-msg__src {
+  display: block;
+  font-style: normal;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* ── 7. Data voice — stats + pulse readouts in JetBrains Mono ────────── */
+/* v1.58.0 [2026-06-11] — v2 three-voice typography: numbers are data */
+.oracle-stat__val,
+.pulse-val,
+.ase-gauge__val,
+.ase-service-tile__latency {
+  font-family: var(--or-data);
+}

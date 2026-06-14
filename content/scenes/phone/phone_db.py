@@ -106,6 +106,19 @@ class PhoneDB:
                     created_at   TEXT NOT NULL,
                     updated_at   TEXT NOT NULL
                 );
+
+                -- v1.52.0 [2026-03-22] — Investigation arc tracking
+                CREATE TABLE IF NOT EXISTS phone_investigations (
+                    id           TEXT PRIMARY KEY,
+                    character_id TEXT NOT NULL,
+                    thread_id    TEXT,
+                    stage        INTEGER NOT NULL DEFAULT 0,
+                    message_count INTEGER NOT NULL DEFAULT 0,
+                    clues        TEXT NOT NULL DEFAULT '[]',
+                    active       INTEGER NOT NULL DEFAULT 1,
+                    created_at   TEXT NOT NULL,
+                    updated_at   TEXT NOT NULL
+                );
             """)
 
         # ── Migrations: add columns to existing DBs ─────────────────────
@@ -567,3 +580,72 @@ class PhoneDB:
             "disliked_sources": {r["source_id"]: r["cnt"] for r in disliked_sources},
             "liked_categories": {r["category"]: r["cnt"] for r in liked_cats},
         }
+
+    # ─── investigation arc ────────────────────────────────────────────
+    # v1.52.0 [2026-03-22] — 0xGH0ST investigation tracking
+
+    def get_investigation(self, character_id: str) -> Optional[Dict[str, Any]]:
+        """Get the active investigation for a character."""
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT * FROM phone_investigations WHERE character_id=? AND active=1 ORDER BY created_at DESC LIMIT 1",
+                (character_id,),
+            ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        try:
+            d["clues"] = json.loads(d["clues"])
+        except Exception:
+            d["clues"] = []
+        return d
+
+    def create_investigation(self, character_id: str, thread_id: str = "") -> str:
+        """Create a new investigation arc for a character."""
+        inv_id = str(uuid.uuid4())[:8]
+        now = datetime.now(timezone.utc).isoformat()
+        with self.conn() as c:
+            c.execute(
+                """INSERT INTO phone_investigations
+                   (id, character_id, thread_id, stage, message_count, clues, active, created_at, updated_at)
+                   VALUES (?, ?, ?, 0, 0, '[]', 1, ?, ?)""",
+                (inv_id, character_id, thread_id, now, now),
+            )
+        return inv_id
+
+    def advance_investigation(self, character_id: str, clue: str = "") -> Dict[str, Any]:
+        """Increment message count and advance stage if threshold is met.
+
+        Stage thresholds: 0→stage0 (0 msgs), 1→stage1 (3 msgs),
+        2→stage2 (7 msgs), 3→stage3 (12 msgs), 4→stage4 (18 msgs).
+
+        Returns updated investigation state.
+        """
+        inv = self.get_investigation(character_id)
+        if not inv:
+            self.create_investigation(character_id)
+            inv = self.get_investigation(character_id)
+            if not inv:
+                return {"stage": 0, "message_count": 0, "clues": []}
+
+        thresholds = [0, 3, 7, 12, 18]
+        new_count = inv["message_count"] + 1
+        new_stage = inv["stage"]
+        clues = inv["clues"]
+
+        # Check if we've reached the next stage threshold
+        if new_stage < len(thresholds) - 1 and new_count >= thresholds[new_stage + 1]:
+            new_stage += 1
+            if clue:
+                clues.append(clue)
+
+        now = datetime.now(timezone.utc).isoformat()
+        with self.conn() as c:
+            c.execute(
+                """UPDATE phone_investigations
+                   SET message_count=?, stage=?, clues=?, updated_at=?
+                   WHERE id=?""",
+                (new_count, new_stage, json.dumps(clues), now, inv["id"]),
+            )
+
+        return {"stage": new_stage, "message_count": new_count, "clues": clues, "advanced": new_stage > inv["stage"]}

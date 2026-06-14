@@ -515,11 +515,13 @@ def _generate_convention_variants() -> List[Dict[str, Any]]:
     for node_name in node_names:
         variants.append({
             "wrong": f'state = dict()\nstate["{node_name}"] = value',
+            # v1.58.0 [2026-06-11] — fw.get_or_create() never existed; the
+            # real API is get_scene().update_state() (see engine/mcp/framework.py)
             "right": (
                 "from engine.mcp import get_framework\n"
                 "fw = get_framework()\n"
-                f'node = fw.get_or_create("scenes.my_scene.{node_name}", dict)\n'
-                'node["value"] = value'
+                "scene = fw.get_scene(\"my_scene\")\n"
+                f'scene.update_state({{"{node_name}": value}})'
             ),
             "convention": "mcp_state",
             "instruction": "Replace raw dict with MCP node state management.",

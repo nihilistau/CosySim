@@ -76,6 +76,21 @@
 
     <span class="cs-hud__heat-icon" id="hud-heat-icon" aria-hidden="true">🔥</span>
     <span class="cs-hud__heat" id="hud-heat" aria-label="Heat level">0%</span>
+
+    {# v1.52.0 [2026-03-26] — Narrative progress + spectator count widgets #}
+    <span class="cs-hud__sep" aria-hidden="true">·</span>
+    <span class="cs-hud__narrative" id="hud-narrative" style="display:none" aria-label="Story progress">
+      <span class="cs-hud__narrative-label">ACT</span>
+      <span class="cs-hud__narrative-bar-wrap">
+        <span class="cs-hud__narrative-bar" id="hud-narrative-bar" style="width:0%"></span>
+      </span>
+      <span class="cs-hud__narrative-text" id="hud-narrative-text"></span>
+    </span>
+
+    <span class="cs-hud__spectator" id="hud-spectator" style="display:none" aria-label="Spectators">
+      <span class="cs-hud__spectator-icon" aria-hidden="true">👁</span>
+      <span class="cs-hud__spectator-count" id="hud-spectator-count">0</span>
+    </span>
   </div>
 
   {# ── Far Right: Command panel + phone toggles ─────────────────────── #}
@@ -121,10 +136,6 @@
 {# ── Global backdrop ───────────────────────────────────────────────────── #}
 <div class="cs-hud__backdrop" id="cs-hud-backdrop" aria-hidden="true"></div>
 
-{# ── World Announcer ───────────────────────────────────────────────────── #}
-{% include 'hud/hud_announcer.html' %}
-
 <script src="/shared/js/cs-component.js" defer></script>
 <script src="/shared/js/cosysim-telemetry.js" defer></script>
 <script src="/shared/js/cosysim-neon-hud.js" defer></script>
-<script src="/shared/js/cosysim-announcer.js" defer></script>

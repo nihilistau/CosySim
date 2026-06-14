@@ -1,8 +1,17 @@
-"""Fine-tuned Model LMStudio Router — routes task-specific requests to fine-tuned models.
+"""
+Fine-tuned Model LMStudio Router
+=================================
 
-When a task-specific micro-model is active and loaded in LMStudio, this router
-redirects requests of that type to the fine-tuned model instead of the large model.
+Routes task-specific requests to fine-tuned micro-models when loaded in LMStudio.
 Priority: qa_evaluator first (replaces Gemini stage F), then router_v2.
+
+Version: v1.44.0 [2026-03-21]
+Author:  CosySim Team
+
+Change Log:
+    v1.44.0 [2026-03-21] — Refactored _call_lmstudio to use LMSClient.chat()
+                            instead of raw urllib (fixes endpoint compatibility)
+    v1.43.0 [2026-03-21] — Initial finetuned router
 
 Usage::
     from engine.lmstudio.finetuned_router import get_finetuned_router
@@ -160,6 +169,7 @@ class FinetunedRouter:
 
     # ── Private ───────────────────────────────────────────────────────────────
 
+    # v1.44.0 [2026-03-21] — Uses LMSClient.chat() instead of raw urllib
     def _call_lmstudio(
         self,
         model_path: str,
@@ -168,41 +178,25 @@ class FinetunedRouter:
         max_tokens: int,
         temperature: float,
     ) -> str:
-        """Call LMStudio v1 API with a fine-tuned model."""
-        from engine.config import get_config
-        import urllib.request
-        import json
+        """Call LMStudio with a fine-tuned model via the unified LMSClient.
 
-        cfg = get_config()
-        host = cfg.get("lmstudio.host", "localhost")
-        port = cfg.get("lmstudio.port", 1234)
+        Formats the Alpaca instruction template as system + user messages
+        for the native v1 chat API.
+        """
+        from engine.lmstudio.lms_client import get_lms_client
 
-        # Format as Alpaca instruction
-        prompt = (
-            f"### Instruction:\n{instruction}\n\n"
-            f"### Input:\n{input_text}\n\n"
-            f"### Response:\n"
+        client = get_lms_client()
+        resp = client.chat(
+            messages=[
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": input_text},
+            ],
+            model=model_path,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            store=False,
         )
-
-        payload = json.dumps({
-            "model": model_path,
-            "prompt": prompt,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "stream": False,
-        }).encode("utf-8")
-
-        from engine.utils import get_lmstudio_headers
-        req = urllib.request.Request(
-            f"http://{host}:{port}/api/v1/completions",
-            data=payload,
-            method="POST",
-        )
-        for k, v in get_lmstudio_headers().items():
-            req.add_header(k, v)
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"][0]["text"].strip()
+        return (resp.content or "").strip()
 
 
 # ──── Singleton ────────────────────────────────────────────────────────────────

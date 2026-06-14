@@ -7,6 +7,7 @@ Every autonomous send cycle is recorded as an EventChain starting with an
 exactly when and why a character reached out.
 """
 
+import logging
 import time
 import random
 from datetime import datetime
@@ -24,6 +25,8 @@ from content.simulation.database.db import Database
 from content.simulation.database.events import EventChain
 from content.simulation.character_system.character import Character
 from content.simulation.services.media_generator import MediaGenerator
+
+logger = logging.getLogger(__name__)
 
 
 def _float_safe(val, default=0.5):
@@ -177,7 +180,8 @@ class AutonomousMessenger:
             if not isinstance(last, datetime):
                 try:
                     last = datetime.fromisoformat(str(last))
-                except Exception:
+                except Exception as e:
+                    logger.debug("[AutonomousMessenger] Failed to parse last_message_time (operation=check_schedule): %s", e)
                     last = None
             if last is not None:
                 time_since_last = (datetime.now() - last).total_seconds()
@@ -301,8 +305,8 @@ class AutonomousMessenger:
                         "chain_id": chain_id,
                     },
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[AutonomousMessenger] ActivityBus publish failed (operation=send_message): %s", e)
 
             print(f"📱 {character.name} sent autonomous {message_type} message")
 

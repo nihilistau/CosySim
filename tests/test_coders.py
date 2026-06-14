@@ -191,24 +191,29 @@ class TestSessionPersistence:
     def client(self, tmp_path):
         """Flask test client backed by a fully-routed CodersRoomScene."""
         from content.scenes.coders.coders_scene import CodersRoomScene
-        from engine.scenes.base_scene import BaseScene
-        from engine.mcp.framework import MCPSceneMixin
-        from engine.scenes.nexus_mixin import NexusSceneMixin
+        from engine.scenes.flask_scene import FlaskScene
 
         sessions_dir = tmp_path / "route_sessions"
 
-        def _base_init(self_inner, scene_name, host="0.0.0.0", port=5000):
-            self_inner.scene_name = scene_name
+        # v1.51.0 [2026-03-22] — Updated for FlaskScene migration
+        def _flask_scene_init(self_inner, host="0.0.0.0", port=5000):
+            from flask import Flask
+            from flask_socketio import SocketIO
+            import threading
+            self_inner.scene_name = "coders"
             self_inner.host = host
             self_inner.port = port
+            self_inner._stop_event = threading.Event()
+            self_inner.app = Flask(__name__)
+            self_inner.socketio = SocketIO(self_inner.app, cors_allowed_origins="*")
+            self_inner._ticker_running = False
+            self_inner._ticker_thread = None
+            self_inner._ticker_interval = 30.0
 
         with (
-            patch.object(BaseScene, "__init__", _base_init),
-            patch.object(MCPSceneMixin, "_mcp_init"),
-            patch.object(NexusSceneMixin, "nexus_init"),
-            patch.object(BaseScene, "mount_overlay"),
-            patch.object(BaseScene, "mount_skills_server"),
-            patch.object(BaseScene, "register_health_route"),
+            patch.object(FlaskScene, "__init__", _flask_scene_init),
+            patch.object(FlaskScene, "mount_overlay"),
+            patch.object(FlaskScene, "mount_skills_server"),
             patch(
                 "content.scenes.coders.coders_scene.get_scene_state_manager",
                 return_value=MagicMock(),

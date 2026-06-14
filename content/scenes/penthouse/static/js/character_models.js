@@ -17,6 +17,9 @@ const SKIN_TONES = {
 const HAIR_COLORS = {
     black: 0x1a1a1a, dark_brown: 0x3b2314, brown: 0x6b4423,
     auburn: 0x8b3a1a, red: 0xaa3322, blonde: 0xd4a853, platinum: 0xe8dcc8, pink: 0xff69b4,
+    // v1.58.0 [2026-06-11] — Dark Renaissance kit palette (Rei / Mira)
+    silver: 0xc9bfe2,      // Rei — silver-lavender (kit hair-silver gradient)
+    dark_plum: 0x2b1d38,   // Mira — plum-black bob (kit hair-dark gradient)
 };
 const NIPPLE_COL = 0xc4756a;
 const LIP_COL = 0xcc5566;
@@ -27,7 +30,11 @@ const CHAR_LOOKS = {
     viktor:  { gender: 'male',   skin: 'medium', hair: 'black',      iris: 0x3a5a3a },
     aria:    { gender: 'female', skin: 'light',  hair: 'blonde',     iris: 0x4488cc },
     frankie: { gender: 'male',   skin: 'tan',    hair: 'brown',      iris: 0x5a4030 },
-    mira:    { gender: 'female', skin: 'medium', hair: 'auburn',     iris: 0x654321 },
+    // v1.58.0 [2026-06-11] — rethemed to the Dark Renaissance kit identities:
+    // Mira (sofa, plum-black bob) · Rei (bar, silver-lavender) — see
+    // artifacts/new-assets/ui_kits_v2/penthouse.
+    mira:    { gender: 'female', skin: 'fair',   hair: 'dark_plum',  iris: 0x7a5a8c },
+    rei:     { gender: 'female', skin: 'pale',   hair: 'silver',     iris: 0x8d7ec9 },
 };
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -893,7 +900,20 @@ function _buildAllClothing(gender, charColor) {
 //  MAIN CREATE FUNCTION
 // ═══════════════════════════════════════════════════════════════════════
 
+// v1.53.0 [2026-03-26] — Wrapped in try/catch for diagnostic visibility
 function createDetailedCharacter(opts) {
+    console.info('[CharModels] createDetailedCharacter called — name=%s, gender=%s',
+        opts.name || '?', opts.gender || 'auto');
+    try {
+        return _createDetailedCharacterImpl(opts);
+    } catch (err) {
+        console.error('[CharModels] createDetailedCharacter FAILED for %s: %s',
+            opts.name || '?', err.message, err);
+        throw err;
+    }
+}
+
+function _createDetailedCharacterImpl(opts) {
     const name = (opts.name || '').toLowerCase();
     const look = CHAR_LOOKS[name] || {};
     const gender = opts.gender || look.gender || 'female';
@@ -1024,9 +1044,12 @@ function _makeNameLabel(name, accentColor) {
     ctx.fillText(name, 128, 40);
     ctx.shadowBlur = 0;
     const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    // v1.49.1 [2026-03-21] — Enable depthTest so name labels don't render
+    // on top of furniture. Use renderOrder to keep labels above character body.
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
     const sp = new THREE.Sprite(mat);
     sp.scale.set(1.6, 0.4, 1);
+    sp.renderOrder = 10;  // Above character body but respects scene depth
     return sp;
 }
 
@@ -1774,8 +1797,10 @@ function makeDialogBubble(text, accentColor) {
     });
 
     const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    // v1.49.1 [2026-03-21] — Enable depthTest on speech bubbles (same fix as name labels)
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
     const sp = new THREE.Sprite(mat);
+    sp.renderOrder = 11;  // Above name labels, respects scene depth
     const aspect = canvasW / canvasH;
     const scale = 2.2;
     sp.scale.set(scale, scale / aspect, 1);
@@ -1809,3 +1834,8 @@ window.CharModels = {
     FD,
     MD,
 };
+
+// v1.53.0 [2026-03-26] — Load confirmation for CharacterBridge diagnostics
+console.info('[CharModels] API registered — %d outfits, %d char looks, %d poses',
+    Object.keys(OUTFIT_MAP).length, Object.keys(CHAR_LOOKS).length,
+    typeof SEX_POSES !== 'undefined' ? Object.keys(SEX_POSES).length : 0);

@@ -1,5 +1,9 @@
-"""
-nexus_distiller.py — Distills raw session data into reusable knowledge.
+"""nexus_distiller.py — Distills raw session data into reusable knowledge.
+
+Version: v1.50.2 [2026-03-24]
+
+Change Log:
+    v1.50.2 [2026-03-24] — Wire distill() to TaskScheduler for auto task generation from fix patterns
 
 Processes conversation logs, session histories, and checkpoint data stored
 in Nexus to extract:
@@ -31,7 +35,10 @@ from engine.nexus.client import get_nexus_client
 
 logger = logging.getLogger(__name__)
 
-NEXUS_URL = "http://127.0.0.1:8700"
+
+def _get_nexus_url() -> str:
+    from engine.port_registry import get_service_url
+    return get_service_url("nexus")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -151,8 +158,8 @@ def _extract_file_conventions(text: str) -> Dict[str, List[str]]:
 class NexusDistiller:
     """Distills raw session data into reusable knowledge entries."""
 
-    def __init__(self, nexus_url: str = NEXUS_URL) -> None:
-        self._url = nexus_url
+    def __init__(self, nexus_url: str = "") -> None:
+        self._url = nexus_url or _get_nexus_url()
 
     def distill(self) -> Dict[str, int]:
         """Process all undistilled session data and extract knowledge.
@@ -245,6 +252,34 @@ class NexusDistiller:
                     })
                     if stored:
                         counts["conventions"] += 1
+
+        # v1.50.2 [2026-03-24] — Auto-generate tasks from distilled fix patterns
+        # CONNECTS: TaskScheduler — closes the distiller → task generation gap
+        if counts["fixes"] > 0:
+            try:
+                from engine.nexus.task_scheduler import (
+                    TaskScheduler, TaskPriority, TaskComplexity,
+                )
+                scheduler = TaskScheduler()
+                scheduler.create_task(
+                    title=f"Verify {counts['fixes']} distilled fix(es)",
+                    description=(
+                        f"The distiller extracted {counts['fixes']} bug-fix patterns "
+                        f"from session logs. Verify each fix is properly implemented "
+                        f"and tested. Decisions: {counts['decisions']}, "
+                        f"Conventions: {counts['conventions']}."
+                    ),
+                    priority=TaskPriority.LOW,
+                    complexity=TaskComplexity.LOW,
+                    tags=["auto-generated", "distiller", "verify-fix"],
+                )
+                counts["tasks_generated"] = 1
+                logger.info(
+                    "[NexusDistiller] Generated verification task "
+                    "(operation=task_gen, fixes=%d)", counts["fixes"],
+                )
+            except Exception as exc:
+                logger.debug("Could not generate tasks from distillation: %s", exc)
 
         return counts
 
@@ -442,9 +477,9 @@ class QADeduplicator:
     deletes the duplicate.
     """
 
-    def __init__(self, nexus_url: str = NEXUS_URL,
+    def __init__(self, nexus_url: str = "",
                  similarity_threshold: float = 0.75) -> None:
-        self._url = nexus_url
+        self._url = nexus_url or _get_nexus_url()
         self._threshold = similarity_threshold
 
     def find_duplicates(self) -> List[Dict[str, Any]]:
@@ -536,8 +571,8 @@ class SkillUsageDistiller:
         r"(?:used|called|invoked|ran)\s+(\w+?)(?:\s+tool|\s+skill|\()",
     ]
 
-    def __init__(self, nexus_url: str = NEXUS_URL) -> None:
-        self._url = nexus_url
+    def __init__(self, nexus_url: str = "") -> None:
+        self._url = nexus_url or _get_nexus_url()
 
     def _extract_skill_mentions(self, text: str) -> List[str]:
         """Extract skill/tool names mentioned in text."""
@@ -653,8 +688,8 @@ class PromptEvolutionDistiller:
     Produces a lineage report and stores best-practice observations.
     """
 
-    def __init__(self, nexus_url: str = NEXUS_URL) -> None:
-        self._url = nexus_url
+    def __init__(self, nexus_url: str = "") -> None:
+        self._url = nexus_url or _get_nexus_url()
 
     def _group_prompts(self) -> Dict[str, List[Dict[str, Any]]]:
         """Group prompt entries by base name (stripping version suffixes)."""
@@ -788,7 +823,7 @@ class PromptEvolutionDistiller:
 #  Unified Runner
 # ══════════════════════════════════════════════════════════════════════
 
-def run_all_distillers(nexus_url: str = NEXUS_URL) -> Dict[str, Any]:
+def run_all_distillers(nexus_url: str = "") -> Dict[str, Any]:
     """Run all distillers in sequence and return combined results.
 
     Returns:

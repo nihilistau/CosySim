@@ -124,16 +124,41 @@ _ACTIONS: List[Dict[str, Any]] = [
 #  REGISTRATION
 # ──────────────────────────────────────────────────────────────────────────────
 
+# v1.58.0 [2026-06-11] — Rewritten to the real SceneRulesEngine API.
+# The old code called add_rule(SCENE_ID, dict) / register_action(SCENE_ID, dict);
+# add_rule() takes a single RuleDefinition and register_action() never existed,
+# so every command-center rule silently failed to register since v1.42.
 def register_command_center_rules() -> None:
     """Register all command center rules with the SceneRulesEngine."""
     try:
-        from engine.mcp.scene_rules_engine import get_rules_engine
+        from engine.mcp.scene_rules_engine import (
+            ActionDefinition, RuleDefinition, RuleEffect, get_rules_engine,
+        )
         engine = get_rules_engine()
-        for rule in _MONITORING_RULES + _ACCESS_RULES:
-            engine.add_rule(SCENE_ID, rule)
-        for action in _ACTIONS:
-            engine.register_action(SCENE_ID, action)
-        logger.info("Registered %d command center rules + %d actions",
-                     len(_MONITORING_RULES) + len(_ACCESS_RULES), len(_ACTIONS))
+        for r in _MONITORING_RULES + _ACCESS_RULES:
+            # Threshold conditions ({metric, operator, value}) are evaluated by
+            # the scene's own metric monitor, not RuleCondition — registered
+            # here for Director/agent visibility via get_rules_text().
+            engine.add_rule(RuleDefinition(
+                rule_id=r["id"],
+                scene=SCENE_ID,
+                label=r["label"],
+                description=r["description"],
+                rule_type=r["rule_type"],
+                effects=[RuleEffect(**e) for e in r.get("effects", [])],
+            ))
+        for a in _ACTIONS:
+            engine.add_action(ActionDefinition(
+                action_id=a["id"],
+                scene=SCENE_ID,
+                label=a["label"],
+                description=a["description"],
+                category="environment",
+                cooldown_secs=float(a.get("cooldown", 0)),
+            ))
+        logger.info("[%s] Registered %d rules + %d actions (operation=rules_init)",
+                    SCENE_ID,
+                    len(_MONITORING_RULES) + len(_ACCESS_RULES), len(_ACTIONS))
     except Exception as exc:
-        logger.warning("Failed to register command center rules: %s", exc)
+        logger.warning("[%s] Failed to register rules (operation=rules_init): %s",
+                       SCENE_ID, exc)

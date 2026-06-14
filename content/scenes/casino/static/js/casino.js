@@ -18,7 +18,7 @@ class ClubNoirScene {
   init() {
     this._setupSocket();
     this._setupBenchSocket();
-    console.log('[ClubNoir] Scene initialised');
+    console.debug('[ClubNoir] Scene initialised');
   }
 
   _setupSocket() {

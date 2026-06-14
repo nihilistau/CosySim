@@ -1,0 +1,267 @@
+/*
+ * LAB BREAK — Dark Renaissance v2 Layer (2D chrome ONLY)
+ * =======================================================
+ * Loaded AFTER css/lab_break.css so it wins the cascade. Extrapolated
+ * from docs/DESIGN_SYSTEM_V2.md (no ui_kits_v2 kit for lab_break):
+ * neon-green TERMINAL voice (Share Tech Mono), CRT scanline overlays
+ * on panel surfaces, hack-green token glows, surveillance-feed header.
+ *
+ * SCOPE GUARD: this file styles the overlay chrome around the 3D
+ * canvas only — #lab-canvas / #lab-scene-container / lab_3d.js and
+ * the three.js boot blocks are untouched.
+ *
+ * Accent: #00ff88 neon green · Hack tokens: --cs-hack-* (#00ff41)
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial Dark Renaissance layer: terminal
+ *                           typography, CRT scanlines on panels,
+ *                           surveillance header + REC status, hack
+ *                           glows on items/buttons, hallucination
+ *                           overlay CRT treatment.
+ */
+
+/* ──── 1 · Terminal voice — Share Tech Mono everywhere ─────────────────
+   The scene already routes every font through --lb-font; retoning that
+   one custom property re-voices ALL chrome without touching selectors.
+   CONNECTS: lab_break.css :root --lb-font consumers                   */
+/* v1.58.0 [2026-06-11] — CRT terminal typography via --lb-font swap */
+body[data-scene="lab_break"] {
+  --lb-font: var(--cs-font-terminal, 'Share Tech Mono', 'Courier New', monospace);
+  font-family: var(--lb-font);
+}
+
+/* ──── 2 · CRT scanline overlays on panel surfaces ─────────────────────
+   Reuses the --cs-crt-scanline token (design_tokens). pointer-events
+   none + low opacity: purely visual, clicks pass straight through.   */
+/* v1.58.0 [2026-06-11] — scanline film on every chrome surface */
+.lb-panel,
+.lb-observation-header,
+.lb-vitals-panel,
+.lb-escape-panel,
+.lb-emotion-panel {
+  position: relative;
+}
+.lb-panel::after,
+.lb-observation-header::after,
+.lb-vitals-panel::after,
+.lb-escape-panel::after,
+.lb-emotion-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--cs-crt-scanline);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ──── 3 · Observation header — surveillance feed bar ─────────────── */
+/* v1.58.0 [2026-06-11] — deep glass + sweep highlight + REC status  */
+.lb-observation-header {
+  background: rgb(2 12 4 / 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.35);
+  box-shadow:
+    0 0 20px rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.12),
+    0 6px 18px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+/* Camera-feed sweep — reuses shared cs-shimmer keyframe (no dupes) */
+.lb-observation-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.05) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: cs-shimmer 7s ease-in-out infinite;
+  pointer-events: none;
+}
+.lb-header-label {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.28em;
+  text-shadow: 0 0 10px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+}
+/* LIVE status — REC dot prefix, terminal red */
+.lb-header-status {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.2em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid rgb(255 51 85 / 0.4);
+  border-radius: 3px;
+  background: rgb(255 51 85 / 0.08);
+  text-shadow: 0 0 8px var(--cs-hack-red-glow, rgba(255, 23, 68, 0.5));
+}
+.lb-header-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cs-hack-red, #ff1744);
+  box-shadow: 0 0 8px var(--cs-hack-red-glow, rgba(255, 23, 68, 0.5));
+  flex-shrink: 0;
+}
+
+/* ──── 4 · Control panels — hack-green glass terminals ────────────── */
+/* v1.58.0 [2026-06-11] — deeper glass + hack-green frame lift      */
+.lb-panel {
+  background: rgb(2 10 5 / 0.72);
+  border-color: var(--cs-hack-border, rgba(0, 255, 65, 0.15));
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.lb-panel:hover {
+  border-color: rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.4);
+  box-shadow:
+    0 0 16px rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.5);
+}
+
+/* Panel titles — prompt-style ">" tick + brighter rule */
+.lb-panel-title {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.22em;
+  border-bottom-color: rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.22);
+  text-shadow: 0 0 8px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+}
+.lb-panel-title::before {
+  content: '>';
+  color: rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.7);
+  text-shadow: 0 0 6px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+  animation: cs-cursor-blink 1.2s step-end infinite;
+}
+
+/* ──── 5 · Item buttons + tabs — contraband terminal keys ─────────── */
+/* v1.58.0 [2026-06-11] — hack glow lift, terminal labels           */
+.lb-item-btn {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  background: var(--cs-hack-green-soft, rgba(0, 255, 65, 0.08));
+  border: 1px solid var(--cs-hack-border, rgba(0, 255, 65, 0.15));
+  transition: transform 0.18s var(--cs-ease, ease), border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.lb-item-btn:hover {
+  transform: translateY(-2px);
+  background: rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.1);
+}
+.lb-item-name {
+  letter-spacing: 0.04em;
+}
+.lb-item-tab {
+  border-radius: 4px;
+}
+.lb-item-tab.active {
+  box-shadow: 0 0 10px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+}
+
+/* ──── 6 · Action buttons — terminal CTAs ─────────────────────────── */
+/* v1.58.0 [2026-06-11] — uppercase terminal keys, pulse on primary  */
+.lb-btn {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+/* Door-open CTA breathes — reuses shared cs-pulse-glow keyframe */
+.lb-btn-door {
+  animation: cs-pulse-glow 2.6s ease-in-out infinite;
+}
+.lb-btn:hover {
+  text-shadow: 0 0 8px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+}
+
+/* Position / event buttons — terminal voice, hack hover ring */
+.lb-pos-btn,
+.lb-event-btn,
+.lb-craft-btn,
+.lb-item-tab,
+.lb-btn-small {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.06em;
+}
+.lb-pos-btn.active {
+  box-shadow: 0 0 12px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+  text-shadow: 0 0 6px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+}
+
+/* ──── 7 · Vitals + escape + routes — readout polish ──────────────── */
+/* v1.58.0 [2026-06-11] — readouts in terminal voice, deeper tracks  */
+.lb-vitals-panel {
+  background: rgb(0 6 2 / 0.6);
+  border-top-color: rgb(var(--cs-scene-accent-rgb, 0 255 136) / 0.25);
+}
+.lb-vital-label,
+.lb-vital-val,
+.lb-escape-label,
+.lb-escape-val,
+.lb-metric-label,
+.lb-metric-val,
+.lb-route-status {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+.lb-bar {
+  background: rgb(0 0 0 / 0.55);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+.lb-route-status {
+  letter-spacing: 0.12em;
+}
+.lb-route.unlocked .lb-route-status {
+  text-shadow: 0 0 8px var(--cs-hack-green-glow, rgba(0, 255, 65, 0.4));
+  animation: cs-pulse-glow-text 2.2s ease-in-out infinite;
+}
+
+/* Chat log — terminal transcript */
+.lb-chat-msg {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+.lb-speak-input input {
+  background: rgb(0 8 3 / 0.6);
+  caret-color: var(--cs-hack-green, #00ff41);
+}
+
+/* ──── 8 · Hallucination overlay — CRT breakdown ──────────────────── */
+/* v1.58.0 [2026-06-11] — scanline veil + chromatic terminal text.
+   CONNECTS: lab_break.js showHallucination → .visible toggle        */
+.lb-hallucination-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--cs-crt-scanline);
+  opacity: 0;
+  pointer-events: none;
+}
+.lb-hallucination-overlay.visible::before {
+  opacity: 0.8;
+  animation: cs-crt-flicker 3s ease-in-out;
+}
+.lb-hallucination-text {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  /* chromatic aberration — cyan/red split + violet bloom */
+  text-shadow:
+    -2px 0 rgba(0, 229, 255, 0.55),
+    2px 0 rgba(255, 23, 68, 0.55),
+    0 0 24px rgba(170, 85, 255, 0.5);
+}
+
+/* Victory / death overlays — terminal lettering */
+.lb-victory-title,
+.lb-death-glitch {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+
+/* ──── 9 · Reduced motion ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .lb-observation-header::before,
+  .lb-panel-title::before,
+  .lb-btn-door,
+  .lb-route.unlocked .lb-route-status,
+  .lb-hallucination-overlay.visible::before {
+    animation: none !important;
+  }
+}

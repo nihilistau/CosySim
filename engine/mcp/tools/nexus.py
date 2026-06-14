@@ -322,7 +322,8 @@ def nexus_export_session() -> str:
             if len(conv) > 50000:
                 conv = conv[:50000] + "\n\n[TRUNCATED]"
             import requests as req
-            r = req.post("http://127.0.0.1:8700/api/entries", json={
+            from engine.port_registry import get_service_url
+            r = req.post(get_service_url("nexus", "/api/entries"), json={
                 "title": f"Conversation log — {_now()} ({len(history.get('turns', []))} turns)",
                 "content": conv,
                 "content_type": "history",
@@ -336,7 +337,8 @@ def nexus_export_session() -> str:
         for cp in history.get("checkpoints", []):
             if cp.get("work_done"):
                 import requests as req
-                r = req.post("http://127.0.0.1:8700/api/entries", json={
+                from engine.port_registry import get_service_url
+                r = req.post(get_service_url("nexus", "/api/entries"), json={
                     "title": f"Checkpoint {cp['number']}: {cp.get('title', '')}",
                     "content": f"Overview: {cp.get('overview', '')}\n\nWork: {cp.get('work_done', '')}",
                     "content_type": "history",
@@ -427,7 +429,6 @@ def nexus_quality_report() -> str:
         return json.dumps({"error": str(e)})
 
 
-@mcp.resource("nexus://status")
-def resource_nexus_status() -> str:
-    """Nexus knowledge system health and stats."""
-    return nexus_status()
+# v1.49.2 [2026-03-22] — Removed duplicate @mcp.resource("nexus://status")
+# that caused NameError (mcp not imported here). The authoritative
+# resource is registered in devtools_server.py line ~991.

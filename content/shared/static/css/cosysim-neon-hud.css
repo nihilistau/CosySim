@@ -231,6 +231,85 @@
 .cs-hud__heat--high     { color: #f97316; }
 .cs-hud__heat--critical { color: #f87171; font-weight: 700; }
 
+/* ── Narrative Progress Widget ───────────────────────────────────────── */
+/* v1.52.0 [2026-03-26] — Stage progress mini-bar in HUD strip */
+
+.cs-hud__narrative {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.cs-hud__narrative-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(168, 85, 247, 0.7);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.cs-hud__narrative-bar-wrap {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cs-hud__narrative-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #a855f7, #c084fc);
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+.cs-hud__narrative-text {
+  font-size: 9px;
+  color: rgba(168, 85, 247, 0.8);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Spectator/Danmaku Widget ────────────────────────────────────────── */
+
+.cs-hud__spectator {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+}
+
+.cs-hud__spectator-icon {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.cs-hud__spectator-count {
+  font-size: 10px;
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  color: rgba(6, 182, 212, 0.8);
+  font-weight: 600;
+}
+
+/* ── Mobile Breakpoints ──────────────────────────────────────────────── */
+/* v1.52.0 [2026-03-26] — Hide non-essential HUD elements at narrow widths */
+
+@media (max-width: 768px) {
+  .cs-hud__narrative { display: none !important; }
+  .cs-hud__spectator { display: none !important; }
+  .cs-hud__rep-label { display: none; }
+  .cs-hud__rep-bar   { width: 32px; }
+}
+
+@media (max-width: 480px) {
+  .cs-hud__left .cs-hud__sep,
+  .cs-hud__right .cs-hud__sep { display: none; }
+  .cs-hud__weather { display: none; }
+  .cs-hud__time    { display: none; }
+}
+
 /* ── Event history panel ───────────────────────────────────────────────── */
 
 .cs-hud__backdrop {
@@ -1358,182 +1437,35 @@
   .cs-phone-overlay { right: 16px; width: calc(100vw - 32px); }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   WORLD ANNOUNCER — street radio / faction news widget
-═══════════════════════════════════════════════════════════════════════════ */
+/* v1.51.2 [2026-03-22] — Announcer CSS removed (widget deleted, was blocking clicks) */
 
-.cs-announcer {
-  position: fixed;
-  bottom: 90px;   /* above HUD strip */
-  right: 24px;
-  z-index: var(--cs-z-announcer, 150);
-  font-family: var(--cs-font, 'Rajdhani', 'Segoe UI', sans-serif);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .3s;
-}
-
-.cs-announcer--visible {
-  pointer-events: auto;
-  opacity: 1;
-}
 
 /* ── LED indicator ── */
-.cs-announcer__led {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #00f5ff;
-  box-shadow: 0 0 6px #00f5ff;
-  animation: announcer-pulse 2s ease-in-out infinite;
-  z-index: 1;
-}
 
 @keyframes announcer-pulse {
   0%, 100% { opacity: .5; }
   50%       { opacity: 1;  }
 }
 
-.cs-announcer__led--flash {
-  animation: none;
-  background: #fff;
-  box-shadow: 0 0 12px #fff, 0 0 4px #00f5ff;
-}
 
 /* ── Toggle tab ── */
-.cs-announcer__toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px 6px 10px;
-  background: rgba(0,245,255,.08);
-  border: 1px solid rgba(0,245,255,.3);
-  border-radius: 8px 8px 0 0;
-  color: #00f5ff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  cursor: pointer;
-  backdrop-filter: blur(12px);
-  transition: background .2s, border-color .2s;
-  text-transform: uppercase;
-}
 
-.cs-announcer__toggle:hover {
-  background: rgba(0,245,255,.16);
-  border-color: rgba(0,245,255,.6);
-}
 
-.cs-announcer__icon { font-size: 14px; }
 
-/* ── Body panel ── */
-.cs-announcer__body {
-  width: 320px;
-  background: rgba(8,10,16,.92);
-  border: 1px solid rgba(0,245,255,.25);
-  border-bottom: none;
-  border-radius: 10px 0 0 0;
-  backdrop-filter: blur(20px);
-  overflow: hidden;
-  transform-origin: bottom right;
-  transition: transform .25s cubic-bezier(.4,0,.2,1), opacity .25s;
-}
 
-.cs-announcer--collapsed .cs-announcer__body {
-  transform: scaleY(0);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.cs-announcer--collapsed .cs-announcer__toggle {
-  border-radius: 8px;
-}
 
 /* peek: show a slim version of the current item */
-.cs-announcer--peek .cs-announcer__body {
-  transform: scaleY(1);
-  opacity: 1;
-  pointer-events: none;
-  height: 44px;
-  overflow: hidden;
-}
 
-.cs-announcer--peek .cs-announcer__scroll-list,
-.cs-announcer--peek .cs-announcer__header {
-  display: none;
-}
 
 /* ── Header ── */
-.cs-announcer__header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(0,245,255,.12);
-}
 
-.cs-announcer__station {
-  flex: 1;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  color: #00f5ff;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-.cs-announcer__freq {
-  font-size: 10px;
-  color: rgba(255,255,255,.4);
-  white-space: nowrap;
-}
 
-.cs-announcer__controls {
-  display: flex;
-  gap: 2px;
-}
 
-.cs-announcer__ctrl {
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  color: rgba(255,255,255,.5);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-}
 
-.cs-announcer__ctrl:hover {
-  background: rgba(255,255,255,.08);
-  color: #fff;
-}
 
-.cs-announcer__ctrl--close:hover { color: #ff4455; }
-.cs-announcer__ctrl--active      { color: #00f5ff !important; }
 
-/* ── Feed / current item ── */
-.cs-announcer__feed {
-  padding: 10px;
-  min-height: 56px;
-}
 
-.cs-announcer__item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.cs-announcer__item--enter {
-  animation: announcer-enter .3s ease forwards;
-}
 
 @keyframes announcer-enter {
   from { opacity: 0; transform: translateY(4px); }
@@ -1541,74 +1473,16 @@
 }
 
 /* ── Badges ── */
-.cs-announcer__badge {
-  flex-shrink: 0;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .8px;
-  text-transform: uppercase;
-  margin-top: 2px;
-}
 
-.cs-announcer__badge--world   { background: rgba(0,245,255,.2);  color: #00f5ff; }
-.cs-announcer__badge--faction { background: rgba(191,0,255,.2);  color: #bf00ff; }
-.cs-announcer__badge--event   { background: rgba(255,215,0,.2);  color: #ffd700; }
-.cs-announcer__badge--npc     { background: rgba(0,255,136,.2);  color: #00ff88; }
-.cs-announcer__badge--crime   { background: rgba(255,68,85,.2);  color: #ff4455; }
-.cs-announcer__badge--market  { background: rgba(255,159,10,.2); color: #ff9f0a; }
-.cs-announcer__badge--system  { background: rgba(120,120,130,.2); color: #999; }
-
-/* ── Announcement text ── */
-.cs-announcer__text {
-  font-size: 12px;
-  color: rgba(255,255,255,.85);
-  line-height: 1.5;
-}
 
 /* ── Recent items list ── */
-.cs-announcer__scroll-list {
-  max-height: 180px;
-  overflow-y: auto;
-  border-top: 1px solid rgba(0,245,255,.1);
-  padding: 4px 0;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0,245,255,.2) transparent;
-}
 
-.cs-announcer__list-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 6px 10px;
-  cursor: pointer;
-  transition: background .15s;
-  border-radius: 4px;
-}
 
-.cs-announcer__list-item:hover {
-  background: rgba(255,255,255,.04);
-}
 
-.cs-announcer__list-item--active {
-  background: rgba(0,245,255,.06);
-}
 
-.cs-announcer__list-text {
-  font-size: 11px;
-  color: rgba(255,255,255,.6);
-  line-height: 1.4;
-}
 
-.cs-announcer__list-item--active .cs-announcer__list-text {
-  color: rgba(255,255,255,.9);
-}
 
 /* ── Pinned state ── */
-.cs-announcer--pinned .cs-announcer__ctrl[id="announcer-pin"] {
-  color: #00f5ff;
-}
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1737,9 +1611,6 @@
 
 /* ── Scroll bounce effect (CSS only, for webkit) ── */
 .cs-hud-slide__body,
-.cs-announcer__scroll-list {
-  overscroll-behavior: contain;
-}
 
 /* ── Thread-item hover ── */
 .cs-hud-slide__crew-member,
@@ -2033,29 +1904,9 @@
 }
 
 /* ── Announcer panel: richer glass ── */
-.cs-announcer__body {
-  background:
-    linear-gradient(160deg, rgba(0,245,255,0.03) 0%, rgba(8,10,16,0.95) 40%),
-    rgba(8, 10, 16, 0.93);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.7),
-    0 0 20px rgba(0, 245, 255, 0.05),
-    inset 0 0 0 1px rgba(0, 245, 255, 0.04);
-}
 
 /* ── Announcer toggle: glowing tab ── */
-.cs-announcer__toggle {
-  background: linear-gradient(90deg,
-    rgba(0,245,255, 0.12) 0%,
-    rgba(0,245,255, 0.06) 100%);
-  box-shadow: 0 -4px 16px rgba(0, 245, 255, 0.08);
-}
 
-.cs-announcer__toggle:hover {
-  background: linear-gradient(90deg,
-    rgba(0,245,255, 0.2) 0%,
-    rgba(0,245,255, 0.1) 100%);
-}
 
 /* ── Event panel: deeper glass ── */
 .cs-hud__panel {
@@ -2360,7 +2211,9 @@
   animation: cs-overlay-in 0.25s ease-out;
 }
 
-.cs-shop[aria-hidden="true"] { display: none !important; }
+/* v1.49.2 [2026-03-22] — Ensure hidden shop doesn't intercept pointer events */
+.cs-shop[aria-hidden="true"],
+.cs-shop[hidden] { display: none !important; pointer-events: none !important; }
 
 @keyframes cs-overlay-in {
   from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }

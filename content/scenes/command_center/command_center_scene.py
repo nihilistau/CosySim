@@ -1,5 +1,8 @@
 """
-Command Center Scene — War-room dashboard for real-time CosySim monitoring.
+Command Center Scene
+=====================
+
+War-room dashboard for real-time CosySim monitoring.
 
 Displays:
 - System metrics (CPU, RAM, GPU) with live charts
@@ -10,6 +13,12 @@ Displays:
 - Live event feed
 - **Live scene monitor** — cycle through all scenes, see chats/state/turns
 - **Scene controls** — pause, resume, inject events, broadcast directives
+
+Version: v1.52.0 [2026-03-25]
+Author:  CosySim Team
+
+Change Log:
+    v1.52.0 [2026-03-25] — Added structured module header
 """
 
 from __future__ import annotations
@@ -21,30 +30,39 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask import jsonify, render_template, request
+from flask_socketio import emit
 
-from engine.scenes.base_scene import BaseScene, get_all_active_scenes, get_active_scene
-from engine.scenes.nexus_mixin import NexusSceneMixin
-from engine.mcp.framework import MCPSceneMixin, get_framework
-from content.shared import register_shared_assets
+from engine.scenes.base_scene import get_all_active_scenes, get_active_scene
+from engine.scenes.flask_scene import FlaskScene
+from engine.mcp.framework import get_framework
 from engine.mcp.scene_state import get_scene_state_manager
 from engine.mcp.tag_registry import TagRegistry
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 SCENE_ID = "command_center"
-DEFAULT_PORT = 5566
+# v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
+# v1.49.1 [2026-03-22] — Use port registry instead of hardcoded value
+try:
+    from engine.port_registry import get_port as _get_port
+    DEFAULT_PORT = _get_port("command_center", 5566)
+except Exception:
+    DEFAULT_PORT = 5566
 
 
-class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id=SCENE_ID):
+# v1.51.0 [2026-03-22] — Migrated to FlaskScene
+class CommandCenterScene(FlaskScene):
     """Real-time system observatory dashboard with live scene monitoring and control."""
 
     SCENE_METADATA = {
+        "name": "command_center",
+        "display_name": "COMMAND CENTER",
+        "port": DEFAULT_PORT,
         "title": "Command Center",
         "description": "System observatory dashboard showing real-time metrics, pipeline status, "
                        "cross-scene activity, live scene monitoring, and remote scene control.",
+        "type": "admin",
         "genre": "system_monitoring",
         "max_characters": 0,
         "features": ["metrics_dashboard", "pipeline_monitoring", "cross_scene_view",
@@ -52,26 +70,9 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                      "character_viewer"],
     }
 
+    # v1.51.0 [2026-03-22] — Migrated to FlaskScene
     def __init__(self, host: str = "127.0.0.1", port: int = DEFAULT_PORT):
-        scene_dir = Path(__file__).parent
-        self.app = Flask(
-            __name__,
-            template_folder=str(scene_dir / "templates"),
-            static_folder=str(scene_dir / "static"),
-        )
-        import jinja2
-        _shared_tmpl = str(scene_dir.parent.parent / "shared" / "templates")
-        self.app.jinja_loader = jinja2.ChoiceLoader([
-            self.app.jinja_loader,
-            jinja2.FileSystemLoader(_shared_tmpl),
-        ])
-        register_shared_assets(self.app)
-        CORS(self.app)
-        self.socketio = SocketIO(
-            self.app, cors_allowed_origins="*", async_mode="threading"
-        )
-
-        super().__init__(scene_name="command_center", host=host, port=port)
+        super().__init__(host=host, port=port)
 
         self._collector = None
         self._metrics_db = None
@@ -85,10 +86,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
         self._register_monitoring_routes()
         self._register_scene_control_routes()
         self._register_socketio()
-        self.register_health_route(self.app)
-        self.register_hud_route(self.app)
-        self.register_announcer_route(self.app)
-        self.register_inventory_route(self.app)
+
+        # v1.51.0 — FlaskScene registers health, hud, announcer, inventory, tts
 
         # Framework integration
         self._state_mgr = get_scene_state_manager()
@@ -99,9 +98,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             from content.scenes.command_center.command_center_rules import register_command_center_rules
             register_command_center_rules()
         except Exception as exc:
-            log.warning("Failed to register command center rules: %s", exc)
-
-        self.nexus_init("command_center")
+            logger.warning("[%s] Failed to register rules (operation=mcp_wire): %s", SCENE_ID, exc)
 
     # ------------------------------------------------------------------
     # Lazy accessors for singletons
@@ -113,7 +110,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                 from engine.observability.metrics_collector import get_metrics_collector
                 self._collector = get_metrics_collector()
             except Exception:
-                log.debug("MetricsCollector not available")
+                logger.debug("MetricsCollector not available")
         return self._collector
 
     def _get_metrics_db(self):
@@ -122,7 +119,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                 from engine.observability.metrics_db import get_metrics_db
                 self._metrics_db = get_metrics_db()
             except Exception:
-                log.debug("MetricsDB not available")
+                logger.debug("MetricsDB not available")
         return self._metrics_db
 
     def _get_activity_bus(self):
@@ -131,7 +128,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                 from engine.services.activity_bus import get_activity_bus
                 self._activity_bus = get_activity_bus()
             except Exception:
-                log.debug("ActivityBus not available")
+                logger.debug("ActivityBus not available")
         return self._activity_bus
 
     # ------------------------------------------------------------------
@@ -174,8 +171,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
         if db:
             try:
                 return db.get_recent_alerts(limit=limit)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return []
 
     def _activity_snapshot(self) -> Dict[str, Any]:
@@ -184,8 +181,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
         if bus:
             try:
                 return bus.snapshot()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return {"current": [], "history": []}
 
     def _pipeline_history(self, seconds: int = 60, limit: int = 100) -> List[Dict]:
@@ -195,8 +192,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             try:
                 since = time.time() - seconds
                 return db.get_pipeline_history(since=since, limit=limit)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return []
 
     def _system_history(self, seconds: int = 60) -> List[Dict]:
@@ -206,8 +203,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             try:
                 since = time.time() - seconds
                 return db.get_system_history(since=since)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return []
 
     def _training_stats(self) -> Dict[str, Any]:
@@ -217,15 +214,15 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             cap = TrainingCapture.__dict__.get("_instance")
             if cap and hasattr(cap, "get_stats"):
                 return cap.get_stats()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         db = self._get_metrics_db()
         if db:
             try:
                 candidates = db.get_training_candidates(limit=0)
                 return {"total": 0, "datasets": {}}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         return {"total": 0, "datasets": {}}
 
     def _benchmark_stats(self) -> Dict[str, Any]:
@@ -386,8 +383,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                     for k in ("phase", "heat", "round", "turn", "score"):
                         if k in d and k not in state_snap:
                             state_snap[k] = d[k]
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
         info["state"] = state_snap
 
         # Heat from framework
@@ -396,8 +393,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
             heat_data = fw.get_state(scene_id, "conversation_heat")
             if heat_data:
                 info["heat"] = heat_data.get("level", 0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # Last activity
         info["last_activity"] = time.time()
@@ -416,8 +413,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                         "text": n.get("text", "")[:200],
                         "ts": n.get("ts", 0),
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # Try EventChain as fallback
         if not messages:
@@ -431,8 +428,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                         "text": e.get("description", "")[:200],
                         "ts": e.get("timestamp", 0),
                     })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         return messages
 
@@ -450,8 +447,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                 details["energy"] = char_state.get("energy", 100)
                 details["stats"] = char_state.get("stats", {})
                 details["flags"] = char_state.get("flags", [])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # From Database (persistent data)
         try:
@@ -463,8 +460,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                 details["age"] = char.get("age")
                 details["sex"] = char.get("sex")
                 details["personality_id"] = char.get("personality_id")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # From CharacterStateCoordinator
         try:
@@ -478,8 +475,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                     "arousal": state.get("arousal", 0),
                     "inhibition": state.get("inhibition", 50),
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         # Relationships
         try:
@@ -492,8 +489,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                      "attraction": r.get("attraction", 0)}
                     for r in rels[:10]
                 ]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
         return details
 
@@ -566,8 +563,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                         "content": c.get("content", "")[:300],
                         "ts": c.get("timestamp", 0),
                     })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
             return jsonify(conversations)
 
         @app.route("/api/scenes/<scene_id>/inject", methods=["POST"])
@@ -601,7 +598,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                 else:
                     return jsonify({"error": f"Unknown event type: {event_type}"}), 400
 
-                log.info("Injected %s into %s: %s", event_type, scene_id, content[:80])
+                logger.info("[%s] Injected %s into %s (operation=inject): %s", SCENE_ID, event_type, scene_id, content[:80])
                 return jsonify({"ok": True, "type": event_type, "scene": scene_id})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -618,7 +615,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                 coord = get_coordinator()
                 for key, value in data.items():
                     coord.update(char_id, key, value, persist=True)
-                log.info("Edited stats for %s: %s", char_id, data)
+                logger.info("[%s] Edited stats (operation=edit_stats, agent=%s): %s", SCENE_ID, char_id, data)
                 return jsonify({"ok": True, "char_id": char_id, "updated": data})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -665,8 +662,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                             "ts": n.get("ts", 0),
                             "type": "narrative",
                         })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
             # Fallback: EventChain
             if not messages:
@@ -685,8 +682,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                                     "ts": e.get("timestamp", 0),
                                     "type": e.get("event_type", "event"),
                                 })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
             # Sort by timestamp, take last N
             messages.sort(key=lambda m: m.get("ts", 0))
@@ -736,8 +733,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                             for k in ("phase", "round", "turn", "score"):
                                 if k in d and k not in state_snap:
                                     state_snap[k] = d[k]
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
                 card["game_state"] = state_snap
 
                 # Conversation heat
@@ -747,8 +744,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                     heat_data = fw.get_state(sid, "conversation_heat")
                     if heat_data:
                         heat = heat_data.get("level", 0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
                 card["conversation_heat"] = heat
 
                 result.append(card)
@@ -861,8 +858,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                 from content.simulation.database.events import get_event_chain
                 ec = get_event_chain()
                 total_events = ec.get_event_count()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
             result["totals"] = {
                 "scenes": len([s for s in scenes if s != SCENE_ID]),
@@ -926,8 +923,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                     turns=int(turns),
                     issued_by="command_center",
                 )
-                log.info("Directive injected: %s in %s → %s (%d turns)",
-                         character_id, scene_id, directive[:60], turns)
+                logger.info("[%s] Directive injected (operation=directive, agent=%s, target_scene=%s, turns=%d): %s",
+                         SCENE_ID, character_id, scene_id, turns, directive[:60])
                 return jsonify({
                     "ok": True, "character_id": character_id,
                     "scene_id": scene_id, "turns": turns,
@@ -967,10 +964,10 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                         summary=f"Broadcast: {message[:80]}",
                         scene_id=scene_id,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
-                log.info("Broadcast to %s from %s: %s", scene_id, sender, message[:80])
+                logger.info("[%s] Broadcast (operation=broadcast, target_scene=%s, sender=%s): %s", SCENE_ID, scene_id, sender, message[:80])
                 return jsonify({"ok": True, "scene_id": scene_id, "sender": sender})
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -1030,8 +1027,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                         scene_id=from_scene,
                         character_id=character_id,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
                 # Emit framework events to both scenes
                 fw = get_framework()
@@ -1044,7 +1041,7 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                     "source": "command_center",
                 })
 
-                log.info("Transfer %s: %s → %s", character_id, from_scene, to_scene)
+                logger.info("[%s] Transfer (operation=transfer, agent=%s): %s → %s", SCENE_ID, character_id, from_scene, to_scene)
                 return jsonify({
                     "ok": True, "character_id": character_id,
                     "from_scene": from_scene, "to_scene": to_scene,
@@ -1168,8 +1165,8 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                     try:
                         snap = bus.snapshot()
                         self.socketio.emit("metric_activity", snap)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
                 # Broadcast scene summaries every 3 ticks
                 tick_count += 1
@@ -1185,11 +1182,11 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
                             except Exception:
                                 summaries.append({"id": sid, "running": True})
                         self.socketio.emit("scene_updates", summaries)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("[CommandCenter] Silent exception suppressed (operation=best_effort): %s", e)
 
             except Exception as exc:
-                log.debug("Command center tick error: %s", exc)
+                logger.debug("Command center tick error: %s", exc)
 
             time.sleep(self._tick_interval)
 
@@ -1197,28 +1194,18 @@ class CommandCenterScene(BaseScene, MCPSceneMixin, NexusSceneMixin, mcp_scene_id
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def start(self):
-        # NOTE: health/hud/announcer routes already registered in __init__
+    # v1.51.0 [2026-03-22] — Lifecycle delegated to FlaskScene
 
-        # Wire MetricsCollector emit_fn to our SocketIO
+    def on_before_serve(self) -> None:
+        """Hook: wire MetricsCollector emit and start ticker."""
         collector = self._get_collector()
         if collector and hasattr(collector, "emit_fn"):
             collector.emit_fn = lambda event, data: self.socketio.emit(event, data)
-
         self._start_ticker()
-        log.info("Command Center starting on %s:%s", self.host, self.port)
-        self.socketio.run(
-            self.app,
-            host=self.host,
-            port=self.port,
-            allow_unsafe_werkzeug=True,
-        )
 
-    def stop(self):
-        self.nexus_flush()
+    def on_shutdown(self) -> None:
+        """Hook: stop the ticker."""
         self._stop_ticker()
-        self._mcp_deregister_scene()
-        log.info("Command Center stopped")
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
