@@ -12,7 +12,7 @@
   <img alt="version" src="https://img.shields.io/badge/version-1.61.0-06b6d4">
   <img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB">
   <img alt="local-first" src="https://img.shields.io/badge/inference-100%25%20local-22c55e">
-  <img alt="frontend" src="https://img.shields.io/badge/frontend-vanilla%20JS%20·%20no%20build-f59e0b">
+  <img alt="frontend" src="https://img.shields.io/badge/frontend-vanilla%20JS%2C%20no%20build-f59e0b">
   <img alt="license" src="https://img.shields.io/badge/license-see%20LICENSE-9d71ea">
 </p>
 
