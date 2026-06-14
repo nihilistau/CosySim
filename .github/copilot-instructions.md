@@ -2,7 +2,7 @@
 
 > Repository-level operating context for Copilot CLI, IDE chat, and custom agents.
 > Path-specific rules live in `.github/instructions/`. Agent playbooks live in
-> `.github/agents/`. See also [`.github/README.md`](./README.md) and
+> `.github/agents/`. See also [`.github/COPILOT_MANUAL.md`](./COPILOT_MANUAL.md) and
 > [`docs/AGENT_ONBOARDING.md`](../docs/AGENT_ONBOARDING.md).
 
 ## Current Operating Priorities
@@ -282,7 +282,7 @@ When in doubt, prefer work in this order:
 
 ## References
 
-- Overview: [`.github/README.md`](./README.md)
+- Overview: [`.github/COPILOT_MANUAL.md`](./COPILOT_MANUAL.md)
 - Copilot workflow agent: [`./agents/copilot-workflow.agent.md`](./agents/copilot-workflow.agent.md)
 - Onboarding guide: [`../docs/AGENT_ONBOARDING.md`](../docs/AGENT_ONBOARDING.md)
 - Nexus usage rules: [`./instructions/nexus.instructions.md`](./instructions/nexus.instructions.md)
