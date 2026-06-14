@@ -265,7 +265,11 @@ def penthouse_game_action(action: str = "") -> str:
         "explicit_level": explicit_level,
     })
     involved = [current_pid] + ([target_id] if target_id else [])
-    pose_eligible = True
+    # v1.62.0 [2026-06-15] — consent gate fail-closed default + doc.
+    # FAIL CLOSED: default ineligible so a missing gate method can never let an
+    # explicit pose through un-gated. The gate itself returns True for
+    # non-explicit (below-threshold) poses, so normal behavior is preserved.
+    pose_eligible = False
     if hasattr(scene, "_bedgame_pose_eligible"):
         pose_eligible = scene._bedgame_pose_eligible(involved, explicit_level)
     scene.bed_game.advance_turn()
