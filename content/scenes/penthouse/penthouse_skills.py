@@ -246,18 +246,12 @@ def penthouse_game_action(action: str = "") -> str:
     # Resolve action metadata (explicit_level / mood) so the 3D paired-pose
     # chain can fire. Falls back to a mid-tier custom action when unmatched.
     # v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
-    from content.scenes.penthouse.penthouse_scene import BED_GAME_ACTIONS
-    act_meta = BED_GAME_ACTIONS.get(action, {})
-    explicit_level = act_meta.get("explicit_level", 2)
-    description = act_meta.get("description", action)
-    if explicit_level >= 5:
-        mood_hint = "ecstasy"
-    elif explicit_level >= 4:
-        mood_hint = "moaning"
-    elif explicit_level >= 3:
-        mood_hint = "aroused"
-    else:
-        mood_hint = "flirty"
+    # v1.62.0 [2026-06-15] — shared mood mapping via bedgame_action_pose_meta.
+    from content.scenes.penthouse.penthouse_scene import bedgame_action_pose_meta
+    _meta = bedgame_action_pose_meta(action)
+    explicit_level = _meta["explicit_level"]
+    description = _meta["description"]
+    mood_hint = _meta["mood_hint"]
     # Target = the next distinct player in the game (the pose's receiver).
     target_id = None
     for pid in scene.bed_game.players:

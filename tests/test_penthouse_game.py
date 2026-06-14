@@ -307,3 +307,66 @@ class TestEdgeCases:
         g = BedGameState(players=["a"], player_scores={})
         info = g.escalation_info
         assert info["leader"] is None
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Explicit-pose eligibility — consent_given gate (v1.62.0)
+# ══════════════════════════════════════════════════════════════════════
+
+class TestBedgamePoseConsentGate:
+    """_bedgame_pose_eligible must honour the consent_given flag for explicit poses."""
+
+    def _make_scene(self, openness_by_id):
+        """Build a minimal object exposing the mixin method + profiles."""
+        from content.scenes.penthouse.penthouse_combat_mixin import PenthouseCombatMixin
+        from content.scenes.penthouse.penthouse_scene import CharacterProfile, AgentStats
+
+        class _Scene(PenthouseCombatMixin):
+            pass
+
+        scene = _Scene()
+        scene.profiles = {}
+        for cid, openness in openness_by_id.items():
+            scene.profiles[cid] = CharacterProfile(stats=AgentStats(openness=openness))
+        return scene
+
+    def _set_consent(self, cid, value):
+        from engine.mcp.character_registry import get_character_registry
+        get_character_registry().set_state(cid, consent_given=value)
+
+    def test_explicit_pose_blocked_when_consent_withdrawn(self):
+        # High openness but consent_given=False → explicit pose NOT eligible.
+        scene = self._make_scene({"alice": 90})
+        self._set_consent("alice", False)
+        assert scene._bedgame_pose_eligible(["alice"], explicit_level=5) is False
+
+    def test_explicit_pose_allowed_with_consent_and_openness(self):
+        # consent_given=True + openness >= min → explicit pose eligible.
+        scene = self._make_scene({"alice": 90})
+        self._set_consent("alice", True)
+        assert scene._bedgame_pose_eligible(["alice"], explicit_level=5) is True
+
+    def test_explicit_pose_blocked_when_openness_low(self):
+        # Openness below the bar still blocks, even with consent given.
+        scene = self._make_scene({"alice": 10})
+        self._set_consent("alice", True)
+        assert scene._bedgame_pose_eligible(["alice"], explicit_level=5) is False
+
+    def test_low_explicit_level_bypasses_consent_gate(self):
+        # Below the explicit gate level, poses always play (no consent needed).
+        scene = self._make_scene({"alice": 0})
+        self._set_consent("alice", False)
+        assert scene._bedgame_pose_eligible(["alice"], explicit_level=1) is True
+
+    def test_one_participant_without_consent_blocks_all(self):
+        # If any involved character withdrew consent, the explicit pose is gated.
+        scene = self._make_scene({"alice": 90, "bob": 90})
+        self._set_consent("alice", True)
+        self._set_consent("bob", False)
+        assert scene._bedgame_pose_eligible(["alice", "bob"], explicit_level=5) is False
+
+    def test_director_treated_as_consenting(self):
+        # Director has no profile/flags and is always treated as consenting.
+        scene = self._make_scene({"alice": 90})
+        self._set_consent("alice", True)
+        assert scene._bedgame_pose_eligible(["director", "alice"], explicit_level=5) is True

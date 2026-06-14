@@ -556,6 +556,43 @@ ESCALATION_THRESHOLDS = {
 }
 
 
+# v1.62.0 [2026-06-15] — single source of truth for the bed-game action →
+#   (explicit_level, description, mood_hint) mapping. Both emit paths (the
+#   /api/bedgame/action route in penthouse_combat_mixin and the
+#   penthouse_game_action skill in penthouse_skills) derive these identically
+#   from BED_GAME_ACTIONS; factoring it here keeps them from drifting. NOTE:
+#   target_id selection deliberately stays at each call site because the two
+#   paths choose the target differently (request-supplied vs. next distinct
+#   player) — only the mood/level mapping is shared.
+def bedgame_action_pose_meta(action_id: str) -> Dict[str, Any]:
+    """Resolve the explicit_level / description / mood_hint for a bed-game action.
+
+    Args:
+        action_id: A key into BED_GAME_ACTIONS (or an unknown/custom action).
+
+    Returns:
+        Dict with ``explicit_level`` (int, default 2 when unmatched),
+        ``description`` (str, falls back to the raw action_id), and
+        ``mood_hint`` (str) derived from the explicit level.
+    """
+    act_meta = BED_GAME_ACTIONS.get(action_id, {})
+    explicit_level = act_meta.get("explicit_level", 2)
+    description = act_meta.get("description", action_id)
+    if explicit_level >= 5:
+        mood_hint = "ecstasy"
+    elif explicit_level >= 4:
+        mood_hint = "moaning"
+    elif explicit_level >= 3:
+        mood_hint = "aroused"
+    else:
+        mood_hint = "flirty"
+    return {
+        "explicit_level": explicit_level,
+        "description": description,
+        "mood_hint": mood_hint,
+    }
+
+
 @dataclass
 class BedGameState:
     """Tracks the state of the Bed Sex Game with escalation competition."""
