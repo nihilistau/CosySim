@@ -223,6 +223,8 @@ window.CharacterBridge = (function () {
       const baseY = _anchorY(locPos);
       sprite.targetPos.set(locPos.x + offsetX, baseY, locPos.z);
       if (sprite.model) sprite.model._baseY = baseY;
+      // v1.62.0 [2026-06-15] — track location so stopPose can re-infer idle state
+      sprite.locationId = locId;
     }
 
     // Remove characters no longer in state
@@ -610,38 +612,143 @@ window.CharacterBridge = (function () {
     CharModels.animatePose(dt, t);
   }
 
-  // ─── Pose Control (exposed for director UI) ──────────────────────
+  // ─── Pose Control (exposed for director UI + bed game) ───────────
 
-  function startPose(poseName, participantCharIds) {
-    const participants = participantCharIds
+  /**
+   * Resolve the world-space anchor (centre point) a pose should orbit. The
+   * bed-game plays out on the bed, so default to the bed location; fall back to
+   * scene origin if the bed is unmapped.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {string} [locId='bed'] — location id from _locationPositions
+   * @returns {{anchorX:number, anchorZ:number}}
+   */
+  function _poseAnchor(locId) {
+    const locPos = _locationPositions[locId || 'bed'] || _locationPositions.bed || { x: 0, z: 0 };
+    return { anchorX: locPos.x || 0, anchorZ: locPos.z || 0 };
+  }
+
+  /**
+   * Drive a sexual interaction pose on the given participants. Resolves each id
+   * to its tracked model, hands the pair (initiator first) to CharModels'
+   * startSexPose with the bed anchor, and sets the matching AnimManager
+   * paired/intimate state + arousal expression so faces/breathing read intimate.
+   * The pose system (CharModels.animatePose, called last in animationTick) owns
+   * the body transform; AnimManager owns expression/breathing.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {string} poseName — key from SEX_POSES / BED_GAME_ACTIONS
+   * @param {Array<string>} participantCharIds — ordered: [initiator, receiver, third?]
+   * @param {Object} [opts] — { anchorLoc, mood }
+   */
+  function startPose(poseName, participantCharIds, opts) {
+    opts = opts || {};
+    const { anchorX, anchorZ } = _poseAnchor(opts.anchorLoc);
+
+    const participants = (participantCharIds || [])
       .map(cid => characters[cid])
-      .filter(Boolean)
+      .filter(entry => entry && entry.model)
       .map(entry => ({
         model: entry.model,
+        anchorX,
+        anchorZ,
         mood: entry.currentMood || 'neutral',
       }));
 
-    if (participants.length === 0) {
-      console.warn('[CharBridge] No valid participants for pose: %s', poseName);
-      return;
+    if (participants.length < 2) {
+      console.warn('[CharBridge] Need >=2 valid participants for pose "%s" (got %d)',
+        poseName, participants.length);
+      return false;
     }
 
-    // Set expressions for pose
+    // Matching AnimManager paired/intimate state (reuses inferAnimState's keyword
+    // map) + arousal expression so faces/breathing match the action.
+    const pairedState = window.PenthouseAnim
+      ? PenthouseAnim.inferAnimState(poseName, poseName) : null;
     for (const p of participants) {
-      const expressionMood = p.mood === 'neutral' ? 'aroused' : p.mood;
+      const expressionMood = (opts.mood && opts.mood !== 'neutral')
+        ? opts.mood
+        : (p.mood === 'neutral' ? 'aroused' : p.mood);
       if (window.PenthouseAnim) {
-        PenthouseAnim.AnimManager.setMood(p.model.name || '', expressionMood);
+        const nm = p.model.name || '';
+        PenthouseAnim.AnimManager.setMood(nm, expressionMood);
+        if (pairedState) PenthouseAnim.AnimManager.setState(nm, pairedState);
       } else {
         CharModels.setExpression(p.model, expressionMood);
       }
     }
 
     CharModels.startPose(poseName, participants);
-    console.info('[CharBridge] Started pose: %s with %d participants', poseName, participants.length);
+    console.info('[CharBridge] Started pose "%s" (state=%s) with %d participants',
+      poseName, pairedState || '—', participants.length);
+    return true;
   }
 
+  /**
+   * Map a `bedgame_action` socket payload to a paired pose. Resolves the active
+   * player + target (and any remaining cast for threesomes) from the tracked
+   * `characters` map, then delegates to startPose with the bed anchor.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {Object} data — { action, player_id, target_id, mood_hint }
+   * @returns {boolean} true if a pose was started
+   */
+  function startBedGamePose(data) {
+    if (!data) return false;
+    const poseName = data.action || data.description || '';
+    const playerId = data.player_id;
+    const targetId = data.target_id;
+
+    const ids = [];
+    if (playerId && characters[playerId]) ids.push(playerId);
+
+    if (targetId && targetId !== playerId && characters[targetId]) {
+      ids.push(targetId);
+    } else if (ids.length < 2) {
+      // No explicit (distinct) target — pull in the next available cast member.
+      for (const cid of Object.keys(characters)) {
+        if (cid !== playerId && cid !== 'director' && characters[cid].model) {
+          ids.push(cid);
+          break;
+        }
+      }
+    }
+
+    // Third participant for threesome actions (any remaining tracked character).
+    if (poseName.startsWith('threesome') && ids.length === 2) {
+      for (const cid of Object.keys(characters)) {
+        if (!ids.includes(cid) && cid !== 'director' && characters[cid].model) {
+          ids.push(cid);
+          break;
+        }
+      }
+    }
+
+    if (ids.length < 2) {
+      console.warn('[CharBridge] bed-game pose "%s": fewer than 2 participants in scene', poseName);
+      return false;
+    }
+
+    return startPose(poseName, ids, { anchorLoc: 'bed', mood: data.mood_hint || 'aroused' });
+  }
+
+  /**
+   * End the active pose and ease everyone back to a standing idle. Resets each
+   * participant's AnimManager state to idle so it reclaims the body cleanly once
+   * the pose finishes its reverse lerp.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   */
   function stopPose() {
+    // Reclaim the body for AnimManager: re-infer each tracked character's idle
+    // state from its current location (the next scene_state would do this too,
+    // but resetting now avoids a stuck intimate state if none arrives promptly).
+    if (window.PenthouseAnim) {
+      for (const [cid, entry] of Object.entries(characters)) {
+        if (!entry.model || !entry.model.name) continue;
+        const locId = entry.locationId || 'bed';
+        const state = PenthouseAnim.inferAnimState(locId, 'idle');
+        PenthouseAnim.AnimManager.setState(entry.model.name, state || 'idle');
+      }
+    }
     CharModels.stopPose(false);
+    console.info('[CharBridge] Pose stopped — returning to idle');
   }
 
   // ─── Public API ──────────────────────────────────────────────────
@@ -653,6 +760,7 @@ window.CharacterBridge = (function () {
     placeDirectorAvatar,
     removeDirectorAvatar,
     startPose,
+    startBedGamePose,
     stopPose,
     getCharacter: (id) => characters[id] || null,
     getCharacterIds: () => Object.keys(characters),
