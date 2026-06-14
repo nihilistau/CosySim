@@ -1,26 +1,363 @@
-{# Executive Suite — bootable placeholder shell.
-   v1.62.0 [2026-06-15] — Initial scaffold (ES-T1). Replaced by the full OS
-   desktop in later v1.62 tasks. #}
-{% extends 'neon_base.html' %}
-{% set scene_key = 'executive_suite' %}
-{% set scene_display_name = 'EXECUTIVE SUITE' %}
-{% set scene_accent = '#ffd700' %}
-{% set scene_accent_rgb = '255 215 0' %}
+<!DOCTYPE html>
+{#
+  executive_suite.html — NeonOS desktop shell (the OS chrome).
+  ============================================================
+  v1.62.0 [2026-06-15] — OS desktop shell (ES-T2). Replaces the ES-T1 boot
+  placeholder with the full windowed desktop ported from
+  artifacts/new-assets/ui_kits_v2/executive_suite/index.html.
 
-{% block head_css %}
+  STANDALONE full-screen template (does NOT extend neon_base.html): the OS
+  desktop owns the entire viewport (no navbar / particles / footer chrome).
+  It still pulls in the project's vendored fonts, the shared Socket.IO client,
+  and the scene's own CSS/JS.
+
+  Structure (managed by static/js/executive_suite.js):
+    .es-stage           — fixed full-viewport stage
+      .es-sky           — L1 night-gradient sky (CSS)
+      .es-skyline       — L2 animated NEONCITY skyline (SVG)
+      .es-bezel         — L3 office interior frame (SVG)
+      .es-sidebar       — L4 left vertical app dock  (#es-dock renders apps)
+      .es-desktop       — L5 workspace
+        .es-dt-icons    — desktop icons (drag-drop)
+        #es-windows     — window-manager mount point (windows injected here)
+      .es-taskbar       — L6 bottom taskbar (start / search / pinned / tray / clock)
+
+  Apps are SEPARATE modules under static/js/apps/<name>.js, loaded AFTER
+  executive_suite.js; each calls ES.registerApp(...). Add new app <script>
+  tags to the "APP MODULES" include block near the bottom of this file.
+#}
+{% set scene_data = scene_data | default({}) %}
+<html lang="en" data-scene="executive_suite">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="scene-key" content="executive_suite">
+  <meta name="scene-accent" content="{{ scene_data.accent_color | default('#06b6d4') }}">
+  <title>EXECUTIVE SUITE · NeonOS Virtual Desktop</title>
+
+  {# Locally vendored fonts (Orbitron / Inter / JetBrains Mono) — offline-safe #}
+  <link rel="stylesheet" href="/shared/css/fonts.css">
+  {# Scene shell styles + animations #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/executive_suite.css') }}">
-{% endblock %}
+</head>
 
-{% block scene_content %}
-  <div class="es-boot" id="es-boot">
-    <div class="es-boot-glyph">💼</div>
-    <h1 class="es-boot-title">EXECUTIVE SUITE</h1>
-    <p class="es-boot-status" id="es-boot-status">booting&hellip;</p>
-    <div class="es-boot-bar"><span class="es-boot-bar-fill"></span></div>
-    <p class="es-boot-hint">Neon OS desktop &middot; mail &middot; files &middot; live AI assistant</p>
+<body data-screen-label="02 Executive Suite">
+<div class="es-stage" id="es-stage">
+
+  <!-- ═══ L1 · SKY GRADIENT (CSS pseudo) ═══ -->
+  <div class="es-sky"></div>
+
+  <!-- ═══ L2 · NEONCITY SKYLINE through the window ═══ -->
+  <div class="es-skyline">
+    <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-label="NEONCITY skyline">
+      <defs>
+        <linearGradient id="es-city-haze" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="rgba(157,113,234,0)"/>
+          <stop offset="100%" stop-color="rgba(157,113,234,0.18)"/>
+        </linearGradient>
+        <radialGradient id="es-moon" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0%" stop-color="#fef3c7"/>
+          <stop offset="60%" stop-color="rgba(254,243,199,0.4)"/>
+          <stop offset="100%" stop-color="rgba(254,243,199,0)"/>
+        </radialGradient>
+      </defs>
+
+      <!-- distant moon / atmosphere glow -->
+      <circle cx="1500" cy="280" r="180" fill="url(#es-moon)" opacity="0.5"/>
+
+      <!-- stars -->
+      <g fill="#fef3c7" opacity="0.4">
+        <circle cx="200" cy="120" r="0.8"/><circle cx="380" cy="200" r="0.6"/>
+        <circle cx="560" cy="80" r="0.5"/><circle cx="780" cy="160" r="0.7"/>
+        <circle cx="1020" cy="100" r="0.6"/><circle cx="1250" cy="220" r="0.5"/>
+        <circle cx="1680" cy="120" r="0.7"/><circle cx="1820" cy="280" r="0.6"/>
+        <circle cx="60" cy="280" r="0.5"/><circle cx="900" cy="320" r="0.4"/>
+      </g>
+
+      <!-- far skyline (deep purple) -->
+      <path d="M0,720 L0,560 L80,560 L80,510 L140,510 L140,470 L200,470 L200,510 L260,510 L260,460 L320,460 L320,420 L380,420 L380,470 L440,470 L440,500 L500,500 L500,440 L560,440 L560,400 L620,400 L620,460 L680,460 L680,500 L740,500 L740,450 L800,450 L800,420 L860,420 L860,470 L920,470 L920,510 L980,510 L980,460 L1040,460 L1040,420 L1100,420 L1100,470 L1160,470 L1160,500 L1220,500 L1220,440 L1280,440 L1280,400 L1340,400 L1340,460 L1400,460 L1400,500 L1460,500 L1460,450 L1520,450 L1520,420 L1580,420 L1580,470 L1640,470 L1640,510 L1700,510 L1700,460 L1760,460 L1760,500 L1820,500 L1820,540 L1920,540 L1920,720 Z" fill="#0e0822" opacity="0.85"/>
+
+      <!-- far skyline lit windows -->
+      <g>
+        <g fill="#fbbf24">
+          <rect x="42" y="580" width="3" height="6"/><rect x="42" y="595" width="3" height="6"/><rect x="42" y="610" width="3" height="6"/>
+          <rect x="98" y="525" width="3" height="6"/><rect x="98" y="540" width="3" height="6"/><rect x="98" y="555" width="3" height="6" style="animation:es-window-flicker 3s infinite"/>
+          <rect x="220" y="490" width="3" height="6"/><rect x="220" y="505" width="3" height="6"/>
+          <rect x="582" y="470" width="3" height="6"/><rect x="582" y="485" width="3" height="6"/>
+          <rect x="1040" y="445" width="3" height="6"/><rect x="1040" y="460" width="3" height="6"/>
+          <rect x="1320" y="430" width="3" height="6"/><rect x="1320" y="445" width="3" height="6" style="animation:es-window-flicker 4s infinite"/>
+          <rect x="1620" y="510" width="3" height="6"/><rect x="1780" y="525" width="3" height="6"/>
+        </g>
+        <g fill="#ec4899">
+          <rect x="60" y="570" width="3" height="6"/><rect x="300" y="495" width="3" height="6"/>
+          <rect x="500" y="465" width="3" height="6"/><rect x="980" y="490" width="3" height="6"/>
+          <rect x="1240" y="465" width="3" height="6"/><rect x="1700" y="490" width="3" height="6"/>
+        </g>
+        <g fill="#06b6d4">
+          <rect x="120" y="540" width="3" height="6"/><rect x="460" y="525" width="3" height="6"/>
+          <rect x="640" y="490" width="3" height="6"/><rect x="1140" y="500" width="3" height="6"/>
+          <rect x="1560" y="475" width="3" height="6"/><rect x="1740" y="510" width="3" height="6"/>
+        </g>
+      </g>
+
+      <!-- mid skyline (closer, more saturated) -->
+      <path d="M0,720 L0,500 L60,500 L60,440 L120,440 L120,380 L160,380 L160,340 L200,340 L200,400 L260,400 L260,460 L320,460 L320,380 L380,380 L380,330 L420,330 L420,380 L480,380 L480,440 L540,440 L540,360 L600,360 L600,300 L640,300 L640,260 L680,260 L680,320 L740,320 L740,380 L800,380 L800,440 L860,440 L860,360 L920,360 L920,310 L980,310 L980,360 L1040,360 L1040,420 L1100,420 L1100,380 L1160,380 L1160,300 L1220,300 L1220,260 L1280,260 L1280,330 L1340,330 L1340,390 L1400,390 L1400,440 L1460,440 L1460,380 L1520,380 L1520,330 L1580,330 L1580,380 L1640,380 L1640,440 L1700,440 L1700,390 L1760,390 L1760,360 L1820,360 L1820,420 L1880,420 L1880,460 L1920,460 L1920,720 Z" fill="#0a0618" opacity="0.95"/>
+
+      <!-- mid skyline lit windows -->
+      <g>
+        <g fill="#fbbf24"><rect x="70" y="460" width="4" height="8"/><rect x="70" y="475" width="4" height="8"/><rect x="84" y="455" width="4" height="8"/><rect x="98" y="465" width="4" height="8"/></g>
+        <g fill="#06b6d4"><rect x="610" y="330" width="4" height="8"/><rect x="610" y="345" width="4" height="8"/><rect x="624" y="320" width="4" height="8"/><rect x="638" y="290" width="4" height="8" style="animation:es-window-flicker 3.5s infinite"/><rect x="652" y="280" width="4" height="8"/></g>
+        <g fill="#ec4899"><rect x="1170" y="320" width="4" height="8"/><rect x="1170" y="335" width="4" height="8"/><rect x="1184" y="310" width="4" height="8"/><rect x="1184" y="325" width="4" height="8" style="animation:es-window-flicker 4s infinite"/><rect x="1198" y="290" width="4" height="8"/><rect x="1212" y="275" width="4" height="8"/><rect x="1226" y="270" width="4" height="8"/></g>
+        <g fill="#06b6d4"><rect x="1470" y="410" width="4" height="8"/><rect x="1484" y="395" width="4" height="8"/><rect x="1512" y="395" width="4" height="8"/><rect x="1540" y="400" width="4" height="8"/></g>
+      </g>
+
+      <!-- Holo-billboard on tall central tower -->
+      <g transform="translate(1145, 230)">
+        <rect x="0" y="0" width="80" height="30" fill="rgba(236,72,153,0.85)" opacity="0.9"/>
+        <text x="40" y="20" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="11" font-weight="800" fill="#fff" letter-spacing="0.1em">OMNI</text>
+        <rect x="0" y="0" width="80" height="30" fill="none" stroke="#ec4899" stroke-width="0.5" opacity="0.5"/>
+      </g>
+      <g transform="translate(540, 320)">
+        <rect x="0" y="0" width="60" height="40" fill="rgba(6,182,212,0.4)" opacity="0.85"/>
+        <text x="30" y="18" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="8" font-weight="800" fill="#06b6d4" letter-spacing="0.08em">SCARAB</text>
+        <text x="30" y="32" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6" fill="#06b6d4" letter-spacing="0.15em">v2.7</text>
+      </g>
+
+      <!-- Atmospheric haze -->
+      <rect x="0" y="0" width="1920" height="720" fill="url(#es-city-haze)"/>
+
+      <!-- Flying vehicles (animated) -->
+      <g style="animation: es-fly-r 24s linear infinite">
+        <circle cx="0" cy="380" r="2.5" fill="#ec4899"/><circle cx="-12" cy="380" r="1.8" fill="#fbbf24"/>
+        <rect x="-10" y="378.5" width="8" height="2" fill="rgba(236,72,153,0.35)"/>
+      </g>
+      <g style="animation: es-fly-l 32s linear infinite; animation-delay: -10s">
+        <circle cx="0" cy="280" r="2" fill="#06b6d4"/><circle cx="10" cy="280" r="1.6" fill="#fbbf24"/>
+      </g>
+      <g style="animation: es-fly-r 18s linear infinite; animation-delay: -6s">
+        <circle cx="0" cy="500" r="2" fill="#a855f7"/><circle cx="-10" cy="500" r="1.5" fill="#fff"/>
+      </g>
+
+      <!-- Rain streaks -->
+      <g style="animation: es-rain 0.8s linear infinite" opacity="0.35">
+        <line x1="120" y1="0" x2="100" y2="40" stroke="rgba(255,255,255,0.6)" stroke-width="0.7"/>
+        <line x1="320" y1="0" x2="300" y2="40" stroke="rgba(255,255,255,0.5)" stroke-width="0.6"/>
+        <line x1="520" y1="0" x2="500" y2="40" stroke="rgba(255,255,255,0.6)" stroke-width="0.7"/>
+        <line x1="720" y1="0" x2="700" y2="40" stroke="rgba(255,255,255,0.5)" stroke-width="0.6"/>
+        <line x1="920" y1="0" x2="900" y2="40" stroke="rgba(255,255,255,0.6)" stroke-width="0.7"/>
+        <line x1="1120" y1="0" x2="1100" y2="40" stroke="rgba(255,255,255,0.5)" stroke-width="0.6"/>
+        <line x1="1320" y1="0" x2="1300" y2="40" stroke="rgba(255,255,255,0.6)" stroke-width="0.7"/>
+        <line x1="1520" y1="0" x2="1500" y2="40" stroke="rgba(255,255,255,0.5)" stroke-width="0.6"/>
+        <line x1="1720" y1="0" x2="1700" y2="40" stroke="rgba(255,255,255,0.6)" stroke-width="0.7"/>
+      </g>
+    </svg>
   </div>
-{% endblock %}
 
-{% block body_scripts %}
-  <script src="{{ url_for('static', filename='js/executive_suite.js') }}" defer></script>
-{% endblock %}
+  <!-- ═══ L3 · OFFICE BEZEL — curved executive suite interior frame ═══ -->
+  <div class="es-bezel">
+    <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="es-ceiling" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#0a0612"/><stop offset="100%" stop-color="#1a1226"/>
+        </linearGradient>
+        <linearGradient id="es-wall-l" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0%" stop-color="#0a0612"/><stop offset="100%" stop-color="#1a1226"/>
+        </linearGradient>
+        <linearGradient id="es-wall-r" x1="1" x2="0" y1="0" y2="0">
+          <stop offset="0%" stop-color="#0a0612"/><stop offset="100%" stop-color="#1a1226"/>
+        </linearGradient>
+        <linearGradient id="es-desk-front" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#1f1a30"/><stop offset="100%" stop-color="#0a0612"/>
+        </linearGradient>
+        <linearGradient id="es-desk-top" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#2a2244"/><stop offset="100%" stop-color="#15102a"/>
+        </linearGradient>
+        <linearGradient id="es-window-rim" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="rgba(6,182,212,0.0)"/>
+          <stop offset="50%" stop-color="rgba(6,182,212,0.45)"/>
+          <stop offset="100%" stop-color="rgba(6,182,212,0.0)"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Ceiling arc -->
+      <path d="M0,0 L0,160 Q 0,80 80,80 Q 600,40 960,40 Q 1320,40 1840,80 Q 1920,80 1920,160 L1920,0 Z" fill="url(#es-ceiling)"/>
+      <path d="M0,160 Q 0,80 80,80 Q 600,40 960,40 Q 1320,40 1840,80 Q 1920,80 1920,160" stroke="rgba(6,182,212,0.45)" stroke-width="2" fill="none" style="animation: es-pulse 4s ease-in-out infinite"/>
+      <path d="M0,160 Q 0,80 80,80 Q 600,40 960,40 Q 1320,40 1840,80 Q 1920,80 1920,160" stroke="rgba(6,182,212,0.15)" stroke-width="6" fill="none"/>
+      <g fill="#1a1226" stroke="rgba(6,182,212,0.25)" stroke-width="0.5">
+        <rect x="200" y="20" width="120" height="3"/><rect x="420" y="14" width="120" height="3"/>
+        <rect x="640" y="10" width="120" height="3"/><rect x="860" y="8" width="120" height="3"/>
+        <rect x="1080" y="10" width="120" height="3"/><rect x="1300" y="14" width="120" height="3"/>
+        <rect x="1520" y="20" width="120" height="3"/>
+      </g>
+
+      <!-- LEFT wall -->
+      <path d="M0,160 Q 0,80 80,80 L 80,800 Q 0,800 0,860 Z" fill="url(#es-wall-l)"/>
+      <rect x="60" y="80" width="2" height="720" fill="rgba(6,182,212,0.25)" style="animation: es-pulse 6s ease-in-out infinite"/>
+      <g transform="translate(8, 200)">
+        <rect width="48" height="120" rx="4" fill="rgba(6,182,212,0.06)" stroke="rgba(6,182,212,0.25)" stroke-width="0.6"/>
+        <text x="24" y="20" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#06b6d4" letter-spacing="0.16em">LIFE</text>
+        <text x="24" y="36" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="7" fill="#6b7280" letter-spacing="0.10em">SUPPORT</text>
+        <circle cx="24" cy="56" r="6" fill="none" stroke="#22c55e" stroke-width="1"/>
+        <circle cx="24" cy="56" r="3" fill="#22c55e"/>
+        <text x="24" y="80" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8" fill="#22c55e">98%</text>
+      </g>
+
+      <!-- RIGHT wall -->
+      <path d="M1920,160 Q 1920,80 1840,80 L 1840,800 Q 1920,800 1920,860 Z" fill="url(#es-wall-r)"/>
+      <rect x="1858" y="80" width="2" height="720" fill="rgba(6,182,212,0.25)" style="animation: es-pulse 6s ease-in-out infinite"/>
+      <g transform="translate(1864, 200)">
+        <rect width="48" height="120" rx="4" fill="rgba(245,158,11,0.06)" stroke="rgba(245,158,11,0.25)" stroke-width="0.6"/>
+        <text x="24" y="20" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#f59e0b" letter-spacing="0.16em">CLIM</text>
+        <text x="24" y="36" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="7" fill="#6b7280" letter-spacing="0.10em">CONTROL</text>
+        <text x="24" y="62" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="14" font-weight="700" fill="#f59e0b">22°</text>
+      </g>
+
+      <!-- BUILT-IN DESK -->
+      <path d="M80,800 Q 200,790 480,786 Q 960,780 1440,786 Q 1720,790 1840,800 L1840,920 L80,920 Z" fill="url(#es-desk-front)"/>
+      <path d="M80,800 Q 200,790 480,786 Q 960,780 1440,786 Q 1720,790 1840,800 L1840,820 Q 1720,810 1440,806 Q 960,800 480,806 Q 200,810 80,820 Z" fill="url(#es-desk-top)"/>
+      <path d="M80,800 Q 200,790 480,786 Q 960,780 1440,786 Q 1720,790 1840,800" stroke="rgba(6,182,212,0.55)" stroke-width="1.5" fill="none" style="animation: es-pulse 5s ease-in-out infinite"/>
+      <g stroke="rgba(255,255,255,0.04)" stroke-width="1">
+        <line x1="240" y1="840" x2="240" y2="920"/><line x1="480" y1="838" x2="480" y2="920"/>
+        <line x1="720" y1="836" x2="720" y2="920"/><line x1="1200" y1="836" x2="1200" y2="920"/>
+        <line x1="1440" y1="838" x2="1440" y2="920"/><line x1="1680" y1="840" x2="1680" y2="920"/>
+      </g>
+
+      <!-- Window glass frame rim -->
+      <path d="M 80,80 Q 80,160 80,800 L 80,800 Q 200,790 480,786 Q 960,780 1440,786 Q 1720,790 1840,800 L1840,80 Q 1320,40 960,40 Q 600,40 80,80 Z" fill="none" stroke="rgba(6,182,212,0.30)" stroke-width="2"/>
+      <path d="M 80,82 Q 80,160 80,800" stroke="url(#es-window-rim)" stroke-width="3" fill="none"/>
+      <path d="M 1840,82 Q 1840,160 1840,800" stroke="url(#es-window-rim)" stroke-width="3" fill="none"/>
+      <rect x="638" y="42" width="3" height="745" fill="rgba(10,8,20,0.85)"/>
+      <rect x="1278" y="42" width="3" height="745" fill="rgba(10,8,20,0.85)"/>
+
+      <!-- Corner status text -->
+      <text x="120" y="100" font-family="JetBrains Mono, monospace" font-size="9" fill="rgba(6,182,212,0.65)" letter-spacing="0.20em">EXECUTIVE SUITE · F·87</text>
+      <text x="1800" y="100" text-anchor="end" font-family="JetBrains Mono, monospace" font-size="9" fill="rgba(6,182,212,0.65)" letter-spacing="0.20em">NEONOS v{{ scene_data.version | default('1.62.0') }} · root</text>
+    </svg>
+  </div>
+
+  <!-- ═══ L4 · SIDEBAR (left vertical app dock) ═══ -->
+  <aside class="es-sidebar">
+    <div class="es-side-brand">
+      <svg viewBox="0 0 24 24" fill="none">
+        <polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="rgba(6,182,212,0.18)" stroke="#06b6d4" stroke-width="1.3"/>
+        <text x="12" y="15.2" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="7.5" font-weight="800" fill="#06b6d4">CS</text>
+      </svg>
+      <div class="es-side-brand__name">NEONOS</div>
+    </div>
+    <div class="es-side-divider"></div>
+
+    {# Dock entries are rendered from the JS app registry into #es-dock. #}
+    <div class="es-apps" id="es-dock" role="navigation" aria-label="App dock"></div>
+
+    <div class="es-side-divider"></div>
+    <div class="es-app es-app--user" id="es-user" title="root">
+      <div class="es-app__icon es-app__icon--user">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#06b6d4" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1" transform="translate(2,0)"/></svg>
+      </div>
+      <div class="es-app__label" style="color:var(--es);">root</div>
+    </div>
+  </aside>
+
+  <!-- ═══ L5 · DESKTOP — icons + window-manager mount ═══ -->
+  <div class="es-desktop" id="es-desktop">
+    <div class="es-dt-icons" id="es-dt-icons">
+      <div class="es-dt-icon" draggable="true" data-name="Recycle Bin">
+        <div class="es-dt-icon__glyph">🗑</div>
+        <div class="es-dt-icon__name">Recycle Bin</div>
+      </div>
+      <div class="es-dt-icon" draggable="true" data-name="report_q3.pdf">
+        <div class="es-dt-icon__glyph" style="color:#06b6d4;background:rgba(6,182,212,0.10);border-color:rgba(6,182,212,0.25);">📄</div>
+        <div class="es-dt-icon__name">report_q3.pdf</div>
+      </div>
+      <div class="es-dt-icon" draggable="true" data-name="OmniCorp.gph">
+        <div class="es-dt-icon__glyph" style="color:#ec4899;background:rgba(236,72,153,0.10);border-color:rgba(236,72,153,0.25);">🖼</div>
+        <div class="es-dt-icon__name">OmniCorp.gph</div>
+      </div>
+      <div class="es-dt-icon" draggable="true" data-name="THE_SCORE.heist">
+        <div class="es-dt-icon__glyph" style="color:#f59e0b;background:rgba(245,158,11,0.10);border-color:rgba(245,158,11,0.25);">🎯</div>
+        <div class="es-dt-icon__name">THE_SCORE.heist</div>
+      </div>
+    </div>
+
+    {# Window-manager mount point — ES.openApp() injects .es-win elements here. #}
+    <div class="es-windows" id="es-windows" aria-live="polite"></div>
+  </div>
+
+  <!-- ═══ L6 · TASKBAR (bottom) ═══ -->
+  <footer class="es-taskbar">
+    <button class="es-tb-start" id="es-tb-start" title="NeonOS menu" aria-label="NeonOS menu">
+      <svg viewBox="0 0 24 24" fill="#0a0612" stroke="none"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+    </button>
+    <div class="es-tb-search" id="es-tb-search" title="Search (⌘K)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Type to search · ⌘K</span>
+    </div>
+    <div class="es-tb-divider"></div>
+    {# Pinned apps + per-window task buttons rendered into #es-tb-pinned by JS. #}
+    <div class="es-tb-pinned" id="es-tb-pinned"></div>
+    <div class="es-tb-spacer"></div>
+    <div class="es-tb-tray">
+      <span class="icon" title="Network" id="es-tray-network">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12.55a11 11 0 0 1 14 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1.5" fill="currentColor"/></svg>
+      </span>
+      <span class="icon" title="Heat" id="es-tray-heat">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fbbf24" stroke-width="1.8"><circle cx="12" cy="12" r="5" fill="#fbbf24"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <span style="color:#fbbf24;" id="es-tray-heat-val">--%</span>
+      </span>
+      <span class="icon" title="Volume" id="es-tray-volume">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19 12a4 4 0 0 0-4-4"/><path d="M22 12a7 7 0 0 0-7-7" opacity="0.5"/></svg>
+      </span>
+      <span class="icon" title="Battery" id="es-tray-battery">
+        <svg viewBox="0 0 24 24" width="18" height="14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="6" width="16" height="12" rx="2"/><line x1="20" y1="10" x2="20" y2="14" stroke-linecap="round"/><rect x="4" y="8" width="11" height="8" fill="#22c55e"/></svg>
+        <span style="color:#22c55e;" id="es-tray-battery-val">--%</span>
+      </span>
+    </div>
+    <div class="es-tb-divider"></div>
+    <div class="es-tb-clock">
+      <div id="es-clock-time">--:--</div>
+      <div class="date" id="es-clock-date"></div>
+    </div>
+  </footer>
+
+  <!-- Drag ghost + drop hint -->
+  <div class="es-drag-ghost" id="es-drag-ghost"></div>
+  <div class="es-drop-hint" id="es-drop-hint"></div>
+
+  <!-- ⌘K command palette (hidden until invoked) -->
+  <div class="es-palette" id="es-palette" hidden>
+    <div class="es-palette__box">
+      <input type="text" class="es-palette__input" id="es-palette-input" placeholder="Open app or search…" autocomplete="off">
+      <div class="es-palette__results" id="es-palette-results"></div>
+    </div>
+  </div>
+
+  <!-- Toast host -->
+  <div class="es-toasts" id="es-toasts" aria-live="polite"></div>
+</div>
+
+{# ── Shared Socket.IO client (served by register_shared_assets) ── #}
+<script src="/shared/js/socket.io.min.js"></script>
+
+{# ── OS core: window manager + dock/taskbar + app registry API ── #}
+<script src="{{ url_for('static', filename='js/executive_suite.js') }}"></script>
+
+{# ══════════════════════════════════════════════════════════════
+     APP MODULES — loaded AFTER the OS core; each calls ES.registerApp(...).
+     Add new app <script> tags here as later v1.62 tasks create them under
+     static/js/apps/<name>.js. Files referenced before they exist 404 quietly
+     (the dock pre-registers stub entries, so unbuilt apps still open with a
+     graceful "coming soon" window).
+     ══════════════════════════════════════════════════════════════ #}
+<script src="{{ url_for('static', filename='js/apps/files.js') }}" onerror="this.remove()"></script>
+<script src="{{ url_for('static', filename='js/apps/mail.js') }}" onerror="this.remove()"></script>
+<script src="{{ url_for('static', filename='js/apps/notes.js') }}" onerror="this.remove()"></script>
+<script src="{{ url_for('static', filename='js/apps/music.js') }}" onerror="this.remove()"></script>
+<script src="{{ url_for('static', filename='js/apps/code.js') }}" onerror="this.remove()"></script>
+<script src="{{ url_for('static', filename='js/apps/terminal.js') }}" onerror="this.remove()"></script>
+<script src="{{ url_for('static', filename='js/apps/browser.js') }}" onerror="this.remove()"></script>
+<script src="{{ url_for('static', filename='js/apps/settings.js') }}" onerror="this.remove()"></script>
+<script src="{{ url_for('static', filename='js/apps/assistant.js') }}" onerror="this.remove()"></script>
+
+</body>
+</html>

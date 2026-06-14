@@ -8,6 +8,8 @@ Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — OS desktop shell (ES-T2): window manager + dock +
+                            taskbar + skyline; app-registry API (window.ES)
     v1.62.0 [2026-06-15] — Initial scaffold (ES-T1): bootable placeholder scene
 """
 from content.scenes.executive_suite.executive_suite_scene import ExecutiveSuiteScene
