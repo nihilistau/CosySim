@@ -4,6 +4,46 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.62.0] — "LIVING PENTHOUSE" — 2026-06-15
+
+Five fixes that take the penthouse 3D scene from "wired but lifeless" to a room
+that feels inhabited: characters rest *on* the furniture, the Director appears
+and persists, bed-game actions drive consent-gated paired poses, every present
+character is driven by its own local agent, and idle characters move and emote
+on a cheap scripted layer between the slow LLM ticks. Verified end-to-end against
+the live scene on `:5556` with LMStudio up.
+
+### Penthouse — naturalism &amp; intimacy
+- **Anchor-aware placement** — `_locationPositions` now carries a per-location
+  anchor (`lie`/`sit`/`stand`) and surface height, and `character_bridge.js`
+  places the model group origin (feet) *on* the surface instead of sinking
+  through it; backend `scene_state["locations"]` Y values were synced to match.
+- **Director avatar renders + persists** — placement was aligned with the working
+  `spawnCharacter` path and `_onSceneState` now re-places the Director from
+  `scene_state.director_avatar`, so the avatar shows on load for every client
+  (not only after a manual "Place Avatar" click) and survives reconnects.
+- **Bed-game → paired poses (consent-gated)** — the missing UI→pose chain was
+  built: `POST /api/bedgame/action` resolves participants and emits
+  `bedgame_action` with a `pose_eligible` flag; the frontend listener maps it to
+  `CharacterBridge.startPose` → `CharModels.startSexPose`. Explicit poses
+  (`explicit_level` ≥ threshold) are gated fail-closed behind the existing adult
+  surface — every involved character must clear `openness ≥ 60` **and** a truthy
+  `consent_given` flag; the Director is exempt. Low-explicit actions always pose.
+- **Per-character agents (cap fix + nexus guard)** — every character entering the
+  scene now registers its own `CharacterAgent`, the hard 2-character cap was
+  replaced with the `SCENE_METADATA`-driven `_max_characters()`, and a runtime
+  invariant logs when `agents ≠ present characters`. Three characters now each
+  take distinct agent-driven turns per tick.
+- **Cheap config-driven ambient behavior** — new `engine/agents/ambient_behavior.py`
+  adds a fast scripted ambient layer (fidget/glance/expression/reposition,
+  mood- and presence-weighted) that reuses the existing `set_animation` /
+  `set_expression` emit path between the slow LLM ticks, with a rare config-gated
+  LLM line via the existing agent path. Tunable under `penthouse.ambient.*`;
+  guarded to never override an active pose, a busy character, or a viewerless
+  scene — so idle characters feel alive without spamming the model.
+
+---
+
 ## [1.61.0] — "PUBLIC RELEASE PREP" — 2026-06-13
 
 Made the repository safe and inviting to publish: a full credential security
