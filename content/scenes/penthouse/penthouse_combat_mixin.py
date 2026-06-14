@@ -57,6 +57,11 @@ class PenthouseCombatMixin:
         except Exception:
             _registry = None
         for cid in char_ids:
+            # v1.62.0 [2026-06-15] — consent gate fail-closed default + doc.
+            # Intentional skip: characters and profiles are populated atomically,
+            # so a profile-less actor here is the director (or another non-stat
+            # participant) and is treated as consenting — not a missing profile
+            # for a real, gated character.
             if cid == "director" or cid not in self.profiles:
                 continue
             openness = getattr(self.profiles[cid].stats, "openness", 0.0)
@@ -457,11 +462,15 @@ class PenthouseCombatMixin:
             # v1.62.0 [2026-06-15] — gate the 3D paired-pose trigger behind the
             #   existing adult/consent surface. The bed game itself is already a
             #   consent opt-in (named players added via /api/bedgame/start), but
-            #   explicit poses (level >= 3) strip outfits on the client, so we
-            #   additionally require each involved character's existing `openness`
-            #   stat to clear the consent threshold the intimacy rules use
-            #   (penthouse_rules: openness >= 60). Below threshold → the round
-            #   text still plays, but the explicit pose is suppressed.
+            #   explicit poses (level >= threshold) strip outfits on the client,
+            #   so we additionally require, for EACH involved character, BOTH:
+            #     - openness >= the threshold the intimacy rules use (>= 60), AND
+            #     - a truthy `consent_given` character flag.
+            #   The director (no profile/flags) is exempt and treated as
+            #   consenting. Below the explicit threshold → no consent check.
+            #   If either condition fails → the round text still plays, but the
+            #   explicit pose is suppressed.
+            # v1.62.0 [2026-06-15] — consent gate fail-closed default + doc.
             pose_eligible = self._bedgame_pose_eligible(involved, explicit_level)
             self.socketio.emit("bedgame_action", {
                 **record, "next_player": next_name, "game_over": game_over,

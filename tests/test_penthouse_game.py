@@ -370,3 +370,47 @@ class TestBedgamePoseConsentGate:
         scene = self._make_scene({"alice": 90})
         self._set_consent("alice", True)
         assert scene._bedgame_pose_eligible(["director", "alice"], explicit_level=5) is True
+
+    def test_skill_path_fail_closed_without_gate_method(self):
+        # v1.62.0 — regression: the skill path defaults pose_eligible=False so a
+        # scene lacking _bedgame_pose_eligible can never let an EXPLICIT pose
+        # through un-gated. We feed an explicit action into the skill via a fake
+        # scene with NO gate method and assert the emitted payload is gated.
+        from content.scenes.penthouse import penthouse_skills
+        from content.scenes.penthouse.penthouse_scene import BedGameState
+
+        emitted = {}
+
+        class _FakeSceneNoGate:
+            # Deliberately NO _bedgame_pose_eligible method.
+            def __init__(self):
+                self.bed_game = BedGameState(
+                    active=True,
+                    players=["alice", "bob"],
+                    player_names={"alice": "Alice", "bob": "Bob"},
+                )
+
+                class _SIO:
+                    def emit(_self, event, payload, *a, **k):
+                        emitted[event] = payload
+
+                self.socketio = _SIO()
+
+            def _broadcast_state(self):
+                pass
+
+        fake = _FakeSceneNoGate()
+        penthouse_skills._get_penthouse_scene = lambda: fake
+        try:
+            # "ride" is an explicit_level=5 action (>= the gate level of 3).
+            penthouse_skills.penthouse_game_action(action="ride")
+        finally:
+            # Restore the original lookup so other tests are unaffected.
+            import importlib
+            importlib.reload(penthouse_skills)
+
+        assert "bedgame_action" in emitted
+        # Sanity: confirm this really exercised the explicit branch.
+        assert emitted["bedgame_action"]["explicit_level"] >= 3
+        # Explicit action with no gate method present must be suppressed.
+        assert emitted["bedgame_action"]["pose_eligible"] is False
