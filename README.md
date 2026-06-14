@@ -1188,6 +1188,37 @@ Every arrow is also callable as a skill — an agent can run the whole loop end 
 
 ---
 
+## Scene showcase
+
+Every scene ships with a hand-crafted **Dark Renaissance** UI kit. A sample of the 12 design kits that
+drive the live scenes:
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/assets/scenes/kits/penthouse.png" alt="The Penthouse"><br><sub><b>The Penthouse</b> — 3D scene director (three.js r184)</sub></td>
+    <td width="33%"><img src="docs/assets/scenes/kits/neoncity.png" alt="NEON CITY"><br><sub><b>NEON CITY</b> — living-world dashboard</sub></td>
+    <td width="33%"><img src="docs/assets/scenes/kits/oracle.png" alt="The Oracle"><br><sub><b>The Oracle</b> — fortunes + all-seeing telemetry</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/scenes/kits/briefing.png" alt="The Briefing Room"><br><sub><b>The Briefing Room</b> — mission control / intel hub</sub></td>
+    <td><img src="docs/assets/scenes/kits/heist.png" alt="The Score"><br><sub><b>The Score</b> — heist planning board</sub></td>
+    <td><img src="docs/assets/scenes/kits/grid.png" alt="The Grid"><br><sub><b>The Grid</b> — underground market</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/scenes/kits/signal.png" alt="SIGNAL"><br><sub><b>SIGNAL</b> — encrypted messenger</sub></td>
+    <td><img src="docs/assets/scenes/kits/neonos.png" alt="NEON OS"><br><sub><b>NEON OS</b> — desktop shell + scene launcher</sub></td>
+    <td><img src="docs/assets/scenes/kits/hub.png" alt="The Terminal"><br><sub><b>The Terminal</b> — scene catalogue</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/scenes/kits/asset_studio.png" alt="Asset Studio"><br><sub><b>Asset Studio</b> — generation + VL scoring</sub></td>
+    <td><img src="docs/assets/scenes/kits/executive_suite.png" alt="Executive Suite"><br><sub><b>Executive Suite</b> — panoramic ops view</sub></td>
+    <td><img src="docs/assets/scenes/kits/admin.png" alt="Admin Loft"><br><sub><b>Admin Loft</b> — CRT hack-green terminal</sub></td>
+  </tr>
+</table>
+
+> Plus 18 game scenes in all — Club Noir, The Colosseum, The Velvet Pit, The Rusty Anchor, The Obscura,
+> The Shattered Throne, The Lab, The Arcade, Lab Break, Cyberspace, The Auction House, and more — each a
+> live local-agent simulation. Run `python launcher.py --list` to see every target.
 
 ---
 
