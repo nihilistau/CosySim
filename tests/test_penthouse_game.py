@@ -552,3 +552,142 @@ class TestNexusStoreEventGuard:
         # Deliberately do NOT call _connect_nexus(): _nexus_scene_id is unset.
         # This must be a no-op, not an AttributeError.
         scene.nexus_store_event("agent_speak", "Mira: hello", tags=["mira", "speak"])
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Ambient micro-behavior selector (v1.62.0)
+# ══════════════════════════════════════════════════════════════════════
+
+class TestAmbientSelector:
+    """Cheap scripted ambient layer — engine.agents.ambient_behavior.
+
+    The selector is pure: given a mood/stat vector and player-presence flags it
+    returns a single scripted micro-action (or None). These tests pin the
+    config gate, the active-pose / busy guards, payload validity, and the
+    mood/presence weighting — without touching sockets or the LLM.
+    """
+
+    def _cfg(self, **over):
+        from engine.agents.ambient_behavior import get_ambient_config
+        cfg = get_ambient_config()
+        # Force action_chance=1.0 so the per-tick dice never suppresses output
+        # in deterministic assertions (the gate itself is tested separately).
+        cfg["action_chance"] = 1.0
+        cfg.update(over)
+        return cfg
+
+    def test_returns_valid_scripted_action(self):
+        import random
+        from engine.agents.ambient_behavior import select_ambient_action
+        from content.scenes.penthouse.penthouse_skills import (
+            VALID_ANIM_STATES, VALID_EXPRESSIONS,
+        )
+        cfg = self._cfg()
+        rng = random.Random(7)
+        seen = set()
+        for _ in range(400):
+            a = select_ambient_action(
+                stats={"arousal": 70, "happiness": 70, "tiredness": 10,
+                       "dominance": 75},
+                player_present=True, player_active=True,
+                has_other_characters=True,
+                nearby_locations=["couch", "bar"],
+                config=cfg, rng=rng,
+            )
+            assert a is not None  # action_chance=1.0 => always acts
+            assert a["ambient"] is True
+            seen.add(a["kind"])
+            if a["channel"] == "animation":
+                assert a["state"] in VALID_ANIM_STATES
+            elif a["channel"] == "expression":
+                assert a["expression"] in VALID_EXPRESSIONS
+            elif a["channel"] == "move":
+                assert a["target"] in ("couch", "bar")
+                assert a["state"] == "walk"
+            else:
+                raise AssertionError("unexpected channel: %r" % (a.get("channel"),))
+        # Over many draws we should see several kinds, all scripted.
+        assert seen <= {"fidget", "glance", "expression", "reposition"}
+        assert "fidget" in seen or "expression" in seen
+
+    def test_disabled_returns_none(self):
+        from engine.agents.ambient_behavior import select_ambient_action
+        cfg = self._cfg(enabled=False)
+        assert select_ambient_action(stats={"arousal": 90}, config=cfg) is None
+
+    def test_active_pose_guard(self):
+        import random
+        from engine.agents.ambient_behavior import select_ambient_action
+        cfg = self._cfg()
+        # Even with action_chance=1.0, an active pose must suppress ambient.
+        for seed in range(20):
+            a = select_ambient_action(
+                stats={"arousal": 80}, player_present=True,
+                has_other_characters=True, in_active_pose=True,
+                config=cfg, rng=random.Random(seed),
+            )
+            assert a is None
+
+    def test_busy_guard(self):
+        import random
+        from engine.agents.ambient_behavior import select_ambient_action
+        cfg = self._cfg()
+        for seed in range(20):
+            a = select_ambient_action(
+                stats={"arousal": 80}, player_present=True,
+                has_other_characters=True, is_busy=True,
+                config=cfg, rng=random.Random(seed),
+            )
+            assert a is None
+
+    def test_action_chance_gate(self):
+        import random
+        from engine.agents.ambient_behavior import select_ambient_action
+        # action_chance=0.0 => the character never acts this tick.
+        cfg = self._cfg(action_chance=0.0)
+        for seed in range(20):
+            a = select_ambient_action(
+                stats={"arousal": 90}, player_present=True,
+                has_other_characters=True,
+                config=cfg, rng=random.Random(seed),
+            )
+            assert a is None
+
+    def test_player_presence_increases_glances(self):
+        import random
+        from engine.agents.ambient_behavior import select_ambient_action
+        cfg = self._cfg()
+
+        def glance_rate(present):
+            rng = random.Random(123)
+            g = n = 0
+            for _ in range(2000):
+                a = select_ambient_action(
+                    stats={"arousal": 50, "happiness": 60, "tiredness": 20},
+                    player_present=present, player_active=present,
+                    has_other_characters=True,
+                    nearby_locations=["couch"],
+                    config=cfg, rng=rng,
+                )
+                if a:
+                    n += 1
+                    if a["kind"] == "glance":
+                        g += 1
+            return g / max(1, n)
+
+        assert glance_rate(True) > glance_rate(False)
+
+    def test_no_glance_when_alone_and_no_player(self):
+        import random
+        from engine.agents.ambient_behavior import select_ambient_action
+        cfg = self._cfg()
+        rng = random.Random(5)
+        for _ in range(500):
+            a = select_ambient_action(
+                stats={"arousal": 50}, player_present=False,
+                has_other_characters=False, nearby_locations=[],
+                config=cfg, rng=rng,
+            )
+            if a:
+                assert a["kind"] != "glance"

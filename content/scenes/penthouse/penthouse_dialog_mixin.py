@@ -102,6 +102,9 @@ class PenthouseDialogMixin:
         self.agent_loop.set_action_callback(self._on_agent_action)
         self.agent_loop.start(interval=interval)
         self.scene_state["agent_loop_running"] = True
+        # v1.62.0 [2026-06-15] — start the cheap scripted ambient layer alongside
+        # the LLM agent loop so idle characters feel alive between slow ticks.
+        self._start_ambient_loop()
         self._broadcast_state()
 
         # v1.62.0 [2026-06-15] — Runtime invariant: every present character must
@@ -268,6 +271,8 @@ class PenthouseDialogMixin:
         @self.app.route("/api/director/broadcast", methods=["POST"])
         def director_broadcast():
             msg = (request.json or {}).get("message", "")
+            # v1.62.0 [2026-06-15] — director input counts as player activity.
+            self._mark_player_activity()
             name = self.director_name if self.director_in_scene else "(The Director)"
             self._inject_to_loop(name, msg, "director")
             self.socketio.emit("director_speaks", {"name": name, "message": msg,
@@ -493,6 +498,8 @@ class PenthouseDialogMixin:
         def stop_agent_loop():
             if self.agent_loop:
                 self.agent_loop.stop()
+            # v1.62.0 [2026-06-15] — stop the ambient layer with the agent loop.
+            self._stop_ambient_loop()
             self.scene_state["agent_loop_running"] = False
             self._broadcast_state()
             return jsonify({"success": True})
