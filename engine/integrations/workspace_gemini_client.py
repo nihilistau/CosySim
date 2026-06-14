@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 from typing import Any, Callable, Dict, Generator, List, Optional
 
@@ -59,24 +60,27 @@ MIME_SHEETS = "application/vnd.google-apps.ritz"
 MIME_DOCS = "application/vnd.google-apps.kix"
 
 # Default API keys per service (Google-embedded client keys from HAR mining)
+# v1.61.0 [2026-06-13] — move hardcoded Workspace Gemini API keys to env
+# (empty-string fallback). The three drive_* entries share the same real
+# values as the Drive client, so they reuse the GOOGLE_DRIVE_KEY_* env vars.
 _API_KEYS: Dict[str, str] = {
-    "sheets": "AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU",
-    "docs": "AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk",
-    "cloud_search": "AIzaSyDuAie05b1MZ0lMd9XCQczokBQUf4qjkzM",
-    "people_autocomplete": "AIzaSyDPU3TWHmg0FmLJIrGonio1GD6KQVrPRz4",
-    "people_autocomplete_alt": "AIzaSyBpa8DlAVbnBsgTphEHO_YL7uokzq4vqns",
-    "experiments": "AIzaSyABqJ85_R2irnKzMtGBL0iHuyFBi6Efk1w",
-    "consent": "AIzaSyCkcC5gPzlgNSjZjziQc6bLO00y0vCRSrE",
-    "addons": "AIzaSyAHUDTRUejznz_jO_ry16wnA0YCiSVEdWs",
-    "addons_alt": "AIzaSyCN_JjPef6gm_RblmK24Wxks1UPK1g9pMw",
-    "growth_promos": "AIzaSyAdssGVZZ7gdCUguDajJZjJys9fvi2DEWM",
-    "analytics": "AIzaSyBGb5fGAyC-pRcRU6MUHb__b_vKha71HRE",
-    "feedback": "AIzaSyCB6OnnfuitFnaYWu4BvtGKaoLFk4cm-GE",
-    "feedback_trigger": "AIzaSyD2io-Kkh49oO30SyPhbrurJXHMeUHhpOM",
-    "drive_files": "AIzaSyBWdFphCtg4EBuxpHu9EhAjyIiY9C-4Uq4",
-    "drive_files_alt": "AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc",
-    "drive_permissions": "AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc",
-    "ogads": "AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E",
+    "sheets": os.getenv("GOOGLE_WORKSPACE_KEY_SHEETS", ""),
+    "docs": os.getenv("GOOGLE_WORKSPACE_KEY_DOCS", ""),
+    "cloud_search": os.getenv("GOOGLE_WORKSPACE_KEY_CLOUD_SEARCH", ""),
+    "people_autocomplete": os.getenv("GOOGLE_WORKSPACE_KEY_PEOPLE_AUTOCOMPLETE", ""),
+    "people_autocomplete_alt": os.getenv("GOOGLE_WORKSPACE_KEY_PEOPLE_AUTOCOMPLETE_ALT", ""),
+    "experiments": os.getenv("GOOGLE_WORKSPACE_KEY_EXPERIMENTS", ""),
+    "consent": os.getenv("GOOGLE_WORKSPACE_KEY_CONSENT", ""),
+    "addons": os.getenv("GOOGLE_WORKSPACE_KEY_ADDONS", ""),
+    "addons_alt": os.getenv("GOOGLE_WORKSPACE_KEY_ADDONS_ALT", ""),
+    "growth_promos": os.getenv("GOOGLE_WORKSPACE_KEY_GROWTH_PROMOS", ""),
+    "analytics": os.getenv("GOOGLE_WORKSPACE_KEY_ANALYTICS", ""),
+    "feedback": os.getenv("GOOGLE_WORKSPACE_KEY_FEEDBACK", ""),
+    "feedback_trigger": os.getenv("GOOGLE_WORKSPACE_KEY_FEEDBACK_TRIGGER", ""),
+    "drive_files": os.getenv("GOOGLE_DRIVE_KEY_UPLOAD", ""),
+    "drive_files_alt": os.getenv("GOOGLE_DRIVE_KEY_READ", ""),
+    "drive_permissions": os.getenv("GOOGLE_DRIVE_KEY_PERMS", ""),
+    "ogads": os.getenv("GOOGLE_WORKSPACE_KEY_OGADS", ""),
 }
 
 

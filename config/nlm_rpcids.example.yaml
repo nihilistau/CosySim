@@ -1,3 +1,10 @@
+# nlm_rpcids.example.yaml — STRUCTURE TEMPLATE (committed)
+# The real config/nlm_rpcids.yaml is gitignored (contains live Google
+# API keys + account data) and is regenerated at runtime by
+# engine/integrations/rpcid_updater.py from HAR captures. Copy this to
+# config/nlm_rpcids.yaml and fill in real values, or let the updater
+# build it. All secrets below are REDACTED.
+#
 meta:
   version: '6.0'
   updated: '2026-07-14'
@@ -2145,8 +2152,8 @@ workspace_gemini:
 
       '
     api_keys:
-      sheets: AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU
-      docs: AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk
+      sheets: AIza_REDACTED_SET_IN_LOCAL_FILE
+      docs: AIza_REDACTED_SET_IN_LOCAL_FILE
     context_codes:
       sheets: 3
       docs: 1
@@ -2372,11 +2379,11 @@ sheets_gemini:
         '1': Google Docs (inferred)
         '2': Google Slides (inferred)
     known_api_keys: &id001
-    - AIzaSyCSt0nZexCAx3F3vQRqBowSHFtsOEcCXf4
-    - AIzaSyBJYe7k9rD5mlZOkSa7ADy2N9v5YuhijII
-    - AIzaSyAUm0Y-FiebN1_g4-AJoTII8NVxP5qZZVI
-    - AIzaSyBZVupqzpydHPgrWGNu0UT0837Fe2BwqB4
-    - AIzaSyBQ8vuVaujV35Gl88_HrPfQ6Xw5ejTaOI0
+    - AIza_REDACTED_SET_IN_LOCAL_FILE
+    - AIza_REDACTED_SET_IN_LOCAL_FILE
+    - AIza_REDACTED_SET_IN_LOCAL_FILE
+    - AIza_REDACTED_SET_IN_LOCAL_FILE
+    - AIza_REDACTED_SET_IN_LOCAL_FILE
     response_format:
       type: chunked streaming
       content_type: application/json+protobuf
@@ -2390,7 +2397,7 @@ cloud_search:
     service_name: CloudSearch
     base_url: https://cloudsearch.clients6.google.com
     auth_method: api_key_query_param_plus_sapisidhash
-    api_key: AIzaSyDuAie05b1MZ0lMd9XCQczokBQUf4qjkzM
+    api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
     protocol: rest_json
     source: argus_har_capture_2026-07
     last_verified: '2026-07-08'
@@ -2518,8 +2525,8 @@ workspace_support:
 
         '
       api_keys:
-        sheets: AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU
-        docs: AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk
+        sheets: AIza_REDACTED_SET_IN_LOCAL_FILE
+        docs: AIza_REDACTED_SET_IN_LOCAL_FILE
       parameters:
         context_code: 7=sheets (NOT 3!), 1=docs — differs from streamGenerate
       payload_map:
@@ -2542,7 +2549,7 @@ workspace_support:
       path: /v1/promotion/FetchRecommendation
       method: POST
       auth_method: api_key_query_param
-      api_key: AIzaSyAdssGVZZ7gdCUguDajJZjJys9fvi2DEWM
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: recommendation
       description: Fetch AI-powered feature recommendations
       notes: 'Returns contextual suggestions and feature recommendations based on current user activity and document state.  Can
@@ -2554,7 +2561,7 @@ workspace_support:
       path: /v1/promotion/FetchRecommendations
       method: POST
       auth_method: api_key_query_param
-      api_key: AIzaSyAdssGVZZ7gdCUguDajJZjJys9fvi2DEWM
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: recommendation
       description: Batch fetch multiple AI recommendations
     peoplestack_autocomplete:
@@ -2625,9 +2632,9 @@ drive_v2internal:
 
       '
     api_keys:
-      files_upload: AIzaSyBWdFphCtg4EBuxpHu9EhAjyIiY9C-4Uq4
-      files_read: AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc
-      permissions: AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc
+      files_upload: AIza_REDACTED_SET_IN_LOCAL_FILE
+      files_read: AIza_REDACTED_SET_IN_LOCAL_FILE
+      permissions: AIza_REDACTED_SET_IN_LOCAL_FILE
     common_params:
       supportsTeamDrives: true
       includeTeamDriveItems: true
@@ -2637,7 +2644,7 @@ drive_v2internal:
     upload_file:
       path: /upload/drive/v2internal/files
       method: POST
-      api_key: AIzaSyBWdFphCtg4EBuxpHu9EhAjyIiY9C-4Uq4
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: upload
       content_type: multipart/related; boundary=...
       description: Upload file to Drive with metadata (multipart)
@@ -2659,7 +2666,7 @@ drive_v2internal:
     get_file:
       path: /drive/v2internal/files/{file_id}
       method: GET
-      api_key: AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: read
       description: Get file metadata from Drive
       parameters:
@@ -2670,7 +2677,7 @@ drive_v2internal:
     list_files:
       path: /drive/v2internal/files
       method: GET
-      api_key: AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: list
       description: List/search files in Drive
       parameters:
@@ -2682,7 +2689,7 @@ drive_v2internal:
     get_permissions:
       path: /drive/v2internal/files/{file_id}/permissions
       method: GET
-      api_key: AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: permissions
       description: List permissions on a Drive file
       parameters:
@@ -2692,7 +2699,7 @@ drive_v2internal:
     update_file:
       path: /drive/v2internal/files/{file_id}
       method: PUT
-      api_key: AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: update
       description: Update file metadata (title, description, parents)
       parameters:
@@ -2702,7 +2709,7 @@ drive_v2internal:
     copy_file:
       path: /drive/v2internal/files/{file_id}/copy
       method: POST
-      api_key: AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: copy
       description: Copy a file in Drive (e.g. template duplication)
       parameters:
@@ -2712,7 +2719,7 @@ drive_v2internal:
     trash_file:
       path: /drive/v2internal/files/{file_id}/trash
       method: POST
-      api_key: AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: delete
       description: Move file to trash in Drive
       parameters:
@@ -2720,7 +2727,7 @@ drive_v2internal:
     insert_permission:
       path: /drive/v2internal/files/{file_id}/permissions
       method: POST
-      api_key: AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: permissions
       description: Add/modify sharing permissions on a Drive file
       parameters:
@@ -2738,7 +2745,7 @@ drive_v2internal:
     export_file:
       path: /drive/v2internal/files/{file_id}/export
       method: GET
-      api_key: AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: export
       description: Export a Google Workspace file in a specified format
       parameters:
@@ -2842,7 +2849,7 @@ people_stack:
     autocomplete:
       path: /$rpc/peoplestack.PeopleStackAutocompleteService/Autocomplete
       method: POST
-      api_key: AIzaSyDPU3TWHmg0FmLJIrGonio1GD6KQVrPRz4
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: search
       description: Autocomplete people/contacts for sharing and @mentions
       notes: 'Returns matching contacts as the user types.  Used in sharing dialogs, @mention dropdowns, and collaborator
@@ -2856,14 +2863,14 @@ people_stack:
     autocomplete_alt:
       path: /$rpc/peoplestack.PeopleStackAutocompleteService/Autocomplete
       method: POST
-      api_key: AIzaSyBpa8DlAVbnBsgTphEHO_YL7uokzq4vqns
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: search
       description: Alternative API key for people autocomplete (load balancing)
       notes: Same endpoint, different key — likely for rate-limit distribution.
     warmup:
       path: /$rpc/peoplestack.PeopleStackAutocompleteService/Warmup
       method: POST
-      api_key: AIzaSyDPU3TWHmg0FmLJIrGonio1GD6KQVrPRz4
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: performance
       description: Pre-warm people autocomplete service
       notes: 'Fire-and-forget call to pre-load contact data and ML models for faster autocomplete responses.  Similar pattern
@@ -2887,7 +2894,7 @@ experiments:
     get_experiment_flags:
       path: /$rpc/peoplestackwebexperiments.PeopleStackExperimentsService/GetExperimentFlags
       method: POST
-      api_key: AIzaSyABqJ85_R2irnKzMtGBL0iHuyFBi6Efk1w
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: feature_flags
       description: Get all active experiment/feature flags for the current user
       notes: 'Returns a comprehensive set of feature flags that control which Workspace features are enabled.  Flags include
@@ -2917,7 +2924,7 @@ feedback:
     startup_config:
       path: /v1/survey/startup_config
       method: POST
-      api_key: AIzaSyCB6OnnfuitFnaYWu4BvtGKaoLFk4cm-GE
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: survey
       description: Fetch startup survey configuration
       notes: 'Called on app startup to determine if surveys should be shown. Response includes survey configs, frequency caps,
@@ -2927,7 +2934,7 @@ feedback:
     trigger_survey:
       path: /v1/survey/trigger
       method: POST
-      api_key: AIzaSyD2io-Kkh49oO30SyPhbrurJXHMeUHhpOM
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: survey
       description: Trigger a specific survey based on user action
       notes: 'Sends user action context to determine if a survey should be triggered.  Returns survey content if eligibility
@@ -2937,7 +2944,7 @@ feedback:
     trigger_survey_alt:
       path: /v1/survey/trigger
       method: POST
-      api_key: AIzaSyACu2NRukBwIrGYv8Dg1yKhfA8jVugGs2E
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: survey
       description: Alternative survey trigger (different feedback context)
 workspace_analytics:
@@ -2945,7 +2952,7 @@ workspace_analytics:
     service_name: WorkspaceAnalytics
     base_url: https://waa-pa.clients6.google.com
     auth_method: api_key_query_param
-    api_key: AIzaSyBGb5fGAyC-pRcRU6MUHb__b_vKha71HRE
+    api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
     protocol: grpc_web_json
     source: argus_har_capture_2026-07
     last_verified: '2026-07-14'
@@ -2987,7 +2994,7 @@ addons:
     list_installations:
       path: /$rpc/google.internal.apps.addons.v1.AddOnService/ListInstallations
       method: POST
-      api_key: AIzaSyAHUDTRUejznz_jO_ry16wnA0YCiSVEdWs
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: extensions
       description: List all installed Workspace add-ons
       notes: 'Returns the full list of installed add-ons with their metadata, permissions, and status.  Useful for understanding
@@ -2997,7 +3004,7 @@ addons:
     list_installations_alt:
       path: /$rpc/google.internal.apps.addons.v1.AddOnService/ListInstallations
       method: POST
-      api_key: AIzaSyCN_JjPef6gm_RblmK24Wxks1UPK1g9pMw
+      api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
       category: extensions
       description: Alternative API key for add-on listing (admin context)
 ogads:
@@ -3005,7 +3012,7 @@ ogads:
     service_name: OgAdsAsyncData
     base_url: https://ogads-pa.clients6.google.com
     auth_method: api_key_query_param
-    api_key: AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E
+    api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
     protocol: grpc_web_json
     source: argus_har_capture_2026-07
     last_verified: '2026-07-14'
@@ -3028,7 +3035,7 @@ consent:
     service_name: WorkspaceConsent
     base_url: https://workspaceui-pa.clients6.google.com
     auth_method: api_key_query_param
-    api_key: AIzaSyCkcC5gPzlgNSjZjziQc6bLO00y0vCRSrE
+    api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
     protocol: rest_json
     source: argus_har_capture_2026-07
     last_verified: '2026-07-14'
@@ -3052,7 +3059,7 @@ growth_promos:
     service_name: AppsGrowthPromo
     base_url: https://appsgrowthpromo-pa.clients6.google.com
     auth_method: api_key_query_param
-    api_key: AIzaSyAdssGVZZ7gdCUguDajJZjJys9fvi2DEWM
+    api_key: AIza_REDACTED_SET_IN_LOCAL_FILE
     protocol: rest_json
     source: argus_har_capture_2026-07
     last_verified: '2026-07-14'
@@ -3088,7 +3095,7 @@ api_key_catalog:
     source: argus_har_capture_2026-07 (docs-google-sheets-gemini x2, drive-google-gemini)
     last_verified: '2026-07-14'
   keys:
-    AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Workspace Gemini
       context: Sheets
       endpoints:
@@ -3099,7 +3106,7 @@ api_key_catalog:
       - updateUserSettings
       - prewarm (espresso)
       notes: Primary Gemini key for Sheets context
-    AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Workspace Gemini
       context: Docs
       endpoints:
@@ -3110,13 +3117,13 @@ api_key_catalog:
       - updateUserSettings
       - prewarm (espresso)
       notes: Primary Gemini key for Docs context
-    AIzaSyBWdFphCtg4EBuxpHu9EhAjyIiY9C-4Uq4:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Drive v2internal
       context: File upload
       endpoints:
       - upload_file
       notes: Upload-specific API key
-    AIzaSyAGzWfHQsxTHRSNkBG0DVRYon-iLYCkzCc:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Drive v2internal
       context: File CRUD
       endpoints:
@@ -3127,82 +3134,82 @@ api_key_catalog:
       - trash_file
       - export_file
       notes: Read/write operations key
-    AIzaSyCdvSDZmdqokt5jTUat-x7mWlUoDCZzHHc:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Drive v2internal
       context: Permissions
       endpoints:
       - get_permissions
       - insert_permission
       notes: Permissions-specific key
-    AIzaSyDuAie05b1MZ0lMd9XCQczokBQUf4qjkzM:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Cloud Search
       context: Cross-workspace search
       endpoints:
       - query_search
       notes: Also requires SAPISIDHASH dual auth
-    AIzaSyDPU3TWHmg0FmLJIrGonio1GD6KQVrPRz4:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: PeopleStack
       context: Autocomplete primary
       endpoints:
       - Autocomplete
       - Warmup
-    AIzaSyBpa8DlAVbnBsgTphEHO_YL7uokzq4vqns:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: PeopleStack
       context: Autocomplete alternate
       endpoints:
       - Autocomplete
       notes: Load-balancing alternate key
-    AIzaSyABqJ85_R2irnKzMtGBL0iHuyFBi6Efk1w:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: PeopleStack Experiments
       context: Feature flags
       endpoints:
       - GetExperimentFlags
       notes: Reveals all active feature flags and A/B test states
-    AIzaSyCB6OnnfuitFnaYWu4BvtGKaoLFk4cm-GE:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Workspace Feedback
       context: Startup surveys
       endpoints:
       - startup_config
-    AIzaSyD2io-Kkh49oO30SyPhbrurJXHMeUHhpOM:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Workspace Feedback
       context: In-session surveys
       endpoints:
       - trigger
-    AIzaSyACu2NRukBwIrGYv8Dg1yKhfA8jVugGs2E:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Workspace Feedback
       context: Targeted surveys
       endpoints:
       - trigger
-    AIzaSyBGb5fGAyC-pRcRU6MUHb__b_vKha71HRE:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: WAA Analytics
       context: Activity tracking
       endpoints:
       - Ping
       - Create
       notes: Web App Activity telemetry
-    AIzaSyAdssGVZZ7gdCUguDajJZjJys9fvi2DEWM:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Growth Promos
       context: Feature recommendations
       endpoints:
       - FetchRecommendation
       - FetchRecommendations
-    AIzaSyAHUDTRUejznz_jO_ry16wnA0YCiSVEdWs:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Add-ons
       context: User installations
       endpoints:
       - ListInstallations
-    AIzaSyCN_JjPef6gm_RblmK24Wxks1UPK1g9pMw:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Add-ons
       context: Admin installations
       endpoints:
       - ListInstallations
       notes: Admin-context key
-    AIzaSyCkcC5gPzlgNSjZjziQc6bLO00y0vCRSrE:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: Workspace UI
       context: Data consent
       endpoints:
       - udpConsent:fetchCompiled
-    AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E:
+    AIza_REDACTED_SET_IN_LOCAL_FILE:
       service: OgAds
       context: Cross-product data
       endpoints:

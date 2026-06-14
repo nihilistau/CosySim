@@ -270,7 +270,9 @@ lmstudio:
     max_queue_depth: 100        # max queued tasks before submit rejects
   # API authentication (optional — LMStudio defaults to no auth)
   # Generate a token in LMStudio → Developer → Server Settings → Manage Tokens
-  api_token: "${LMSTUDIO_API_TOKEN:-sk-lm-j8v22Hz0:XmuG1AdltLqaegp2OEAd}"
+  # v1.61.0 [2026-06-13] — no real token in the committed repo; set LMSTUDIO_API_TOKEN
+  # in your gitignored .env (LMStudio defaults to no auth, so empty is fine locally).
+  api_token: "${LMSTUDIO_API_TOKEN:-}"
   # API version: "v1" = legacy OpenAI-compat, "api_v1" = new LMStudio protocol
   api_version: "v1"
   # Default model-load options (tuned for RTX 2060 12 GB)

@@ -12,6 +12,7 @@ Change Log:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -536,10 +537,9 @@ HEAP_OVERRIDE_TARGETS: Dict[str, Dict] = {
 # FLAG_ID_RANGE = range(300, 1500) — moved above HEAP_OVERRIDE_TARGETS
 
 # ──── Known API keys (rotatable via GenerateCloudApiKey) ────
+# v1.61.0 [2026-06-13] — move harvested AI Studio API keys to env (comma-separated)
 AISTUDIO_API_KEYS: List[str] = [
-    "AIzaSyCB6OnnfuitFnaYWu4BvtGKaoLFk4cm-GE",
-    "AIzaSyDdP816MREB3SkjZO04XQbjsigfcI0GWOs",
-    "AIzaSyDHAQL7kdN6lNBcBok1eNB8dG7wwo6E6io",
+    k.strip() for k in os.getenv("GOOGLE_AISTUDIO_API_KEYS", "").split(",") if k.strip()
 ]
 
 # ──── Crawl timeouts ────

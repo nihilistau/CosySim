@@ -170,10 +170,10 @@ class TestChromeLiveScanner:
 
     def test_google_api_key_pattern(self):
         from scripts.chrome_live_scanner import CRED_PATTERNS
-        text = "some data AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM more data"
+        text = "some data AIzaSyA00000000000000000000000000000000 more data"
         matches = CRED_PATTERNS["goog_api_key"].findall(text)
         assert len(matches) == 1
-        assert matches[0] == "AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM"
+        assert matches[0] == "AIzaSyA00000000000000000000000000000000"
 
     def test_jwt_pattern(self):
         from scripts.chrome_live_scanner import CRED_PATTERNS
@@ -195,7 +195,7 @@ class TestChromeLiveScanner:
     def test_github_token_pattern(self):
         from scripts.chrome_live_scanner import CRED_PATTERNS
         # 36 alphanum chars after ghp_
-        text = "Authorization: token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"
+        text = "Authorization: token ghp_000000000000000000000000000000000000"
         matches = CRED_PATTERNS["github_classic"].findall(text)
         assert len(matches) == 1
 
@@ -207,7 +207,7 @@ class TestChromeLiveScanner:
 
     def test_scan_region_for_credentials_finds_api_key(self):
         from scripts.chrome_live_scanner import scan_region_for_credentials
-        api_key = "AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM"
+        api_key = "AIzaSyA00000000000000000000000000000000"
         data = f"garbage data {api_key} more garbage".encode("latin-1")
         results: dict = {}
         scan_region_for_credentials(data, 0x1000, results)
@@ -346,7 +346,7 @@ class TestHeapToolkit:
             "metamap_found": False,
             "processes": [{"pid": 1234, "desc": "test"}],
             "credentials": {
-                "goog_api_key": ["AIzaSyC_pzrI0AjEDXDYcg7kkq3uQEjnXV50pBM"],
+                "goog_api_key": ["AIzaSyA00000000000000000000000000000000"],
                 "jwt": ["eyJhbGciOiJFUzI1NiIsImtpZCI6IkI3UGVrQSJ9.abc.def"],
             },
         }

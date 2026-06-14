@@ -16,7 +16,7 @@ Usage:
     python apps/multi_proxy.py                              # All protocols on :5801
     python apps/multi_proxy.py --default opus               # Default to Claude Opus
     python apps/multi_proxy.py --port 5800                  # Custom port
-    python apps/multi_proxy.py --account nihilistcod        # Copilot account
+    python apps/multi_proxy.py --account <account>        # Copilot account
     python apps/multi_proxy.py --lmstudio-url http://X:1234/v1
     python apps/multi_proxy.py --list-models                # Print model catalog
 """
