@@ -414,3 +414,84 @@ class TestBedgamePoseConsentGate:
         assert emitted["bedgame_action"]["explicit_level"] >= 3
         # Explicit action with no gate method present must be suppressed.
         assert emitted["bedgame_action"]["pose_eligible"] is False
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  v1.62.0 — Multi-agent registration: every present character gets an agent
+# ══════════════════════════════════════════════════════════════════════
+
+class TestMultiAgentRegistration:
+    """Every present non-player character must register its own agent.
+
+    Regression for v1.62.0: the load path capped characters at a hardcoded
+    2 (contradicting SCENE_METADATA['max_characters'] = 3), so a 3rd
+    character could never enter the scene and therefore never receive a
+    CharacterAgent. These tests pin the cap to the metadata value and pin
+    the AgentLoop invariant: N registered characters → N agents.
+    """
+
+    def test_character_cap_uses_scene_metadata_not_hardcoded_two(self):
+        # The load-path capacity check must reference the configured maximum,
+        # not a literal `>= 2`. SCENE_METADATA declares max_characters = 3.
+        from pathlib import Path
+        from content.scenes.penthouse.penthouse_scene import PenthouseScene
+
+        cap = PenthouseScene.SCENE_METADATA.get("max_characters")
+        assert cap == 3, "SCENE_METADATA max_characters should be 3"
+
+        src = (
+            Path(__file__).parent.parent
+            / "content" / "scenes" / "penthouse" / "penthouse_social_mixin.py"
+        ).read_text(encoding="utf-8")
+        # The old hardcoded gate must be gone; capacity is derived from config.
+        assert ">= 2 and" not in src, (
+            "penthouse_social_mixin must not hardcode a 2-character cap; "
+            "derive it from SCENE_METADATA['max_characters']"
+        )
+
+    def test_agent_loop_registers_one_agent_per_character(self):
+        # Pin the core invariant: registering N characters with non-None
+        # agents yields N entries in agent_loop._agents.
+        from engine.agents.agent_loop import AgentLoop
+
+        class _Char:
+            def __init__(self, cid):
+                self.id = cid
+                self.name = cid.title()
+
+        class _Map:
+            def remove_character(self, *_a, **_k):
+                pass
+
+        loop = AgentLoop(scene_map=_Map(), db=None, socketio=None, scene_id="penthouse")
+        cids = ["mira", "lola", "aria"]
+        for cid in cids:
+            loop.register_character(_Char(cid), agent=object())
+
+        assert len(loop._agents) == len(cids)
+        assert set(loop._agents.keys()) == set(cids)
+        # And the present-character / agent counts must match (the runtime assertion).
+        assert len(loop._agents) == len(loop._characters)
+
+
+class TestNexusStoreEventGuard:
+    """nexus_store_event must not raise when the Nexus layer is uninitialised.
+
+    Regression for v1.62.0: _on_agent_action calls nexus_store_event for
+    every agent action. When _connect_nexus() has not run (any tick path
+    that doesn't go through the full server run(), e.g. manual tick or
+    tests), `self._nexus_scene_id` is unset and the method raised
+    AttributeError — which AgentLoop.tick() caught and turned into a
+    duplicate idle/error action per character, corrupting agent turns.
+    """
+
+    def test_store_event_no_attribute_error_when_uninitialised(self):
+        from engine.scenes.nexus_mixin import NexusSceneMixin
+
+        class _Scene(NexusSceneMixin):
+            pass
+
+        scene = _Scene()
+        # Deliberately do NOT call _connect_nexus(): _nexus_scene_id is unset.
+        # This must be a no-op, not an AttributeError.
+        scene.nexus_store_event("agent_speak", "Mira: hello", tags=["mira", "speak"])
