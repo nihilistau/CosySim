@@ -10,6 +10,8 @@
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations
+ *                          (_onBedGameStarted/Action/Ended → CharacterBridge)
  *   v1.57.3 [2026-05-12] — Elevator reveal animation on page load
  *   v0.68   [prior]      — Dark Renaissance: full overlay UI + 3D canvas
  */
@@ -195,6 +197,12 @@ class PenthouseScene {
     s.on('paired_animation',   data => this._onPairedAnimation(data));
     s.on('outfit_change',      data => this._onOutfitChange(data));
     s.on('interaction_chain',  data => this._onInteractionChain(data));
+
+    // v1.62.0 [2026-06-15] — bed-game → paired pose animations.
+    //   Backend (penthouse_combat_mixin) emits these; drive the 3D pose chain.
+    s.on('bedgame_started',    data => this._onBedGameStarted(data));
+    s.on('bedgame_action',     data => this._onBedGameAction(data));
+    s.on('bedgame_ended',      data => this._onBedGameEnded(data));
   }
 
   _onConnect() {
@@ -551,6 +559,66 @@ class PenthouseScene {
       }, step.delay);
     });
     _addActivityItem(`${character_id} started ${chain}`, '✨');
+  }
+
+  /* ── Bed-game → paired pose animation handlers ───────────────────── */
+
+  /**
+   * The bed game has started. The backend already enforces the adult/consent
+   * gate (≥2 explicitly-added players via /api/bedgame/start; director must opt
+   * in). Nothing to animate yet — the first `bedgame_action` drives the pose.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {Object} data — BedGameState.to_dict() payload
+   */
+  _onBedGameStarted(data) {
+    const players = (data && (data.player_names || data.players)) || {};
+    const names = Array.isArray(players) ? players : Object.values(players);
+    _addActivityItem(`Bed game started: ${names.join(', ')}`, '🔥');
+  }
+
+  /**
+   * A bed-game action fired on the backend. Maps the action → a paired 3D pose
+   * via CharacterBridge.startBedGamePose, which resolves participant models from
+   * the tracked `characters` map and sets the matching AnimManager intimate
+   * state. The backend payload carries action/player_id/target_id/mood_hint and
+   * is only emitted while the (gated) bed game is active.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {Object} data — { action, description, player_id, target_id, mood_hint, game_over }
+   */
+  _onBedGameAction(data) {
+    if (!data) return;
+    // Respect the backend adult/consent gate: pose_eligible === false means an
+    // explicit action was below the consent (openness) threshold — play the
+    // round text but suppress the explicit 3D pose.
+    if (window.CharacterBridge && data.pose_eligible !== false) {
+      const ok = window.CharacterBridge.startBedGamePose(data);
+      if (!ok) {
+        console.warn('[Penthouse] bed-game pose not started for "%s"',
+          data.action || data.description || '?');
+      }
+    } else if (data.pose_eligible === false) {
+      console.info('[Penthouse] bed-game pose suppressed by consent gate: "%s"',
+        data.action || data.description || '?');
+    }
+    if (data.description) {
+      _addActivityItem(`${data.player || 'Player'}: ${data.description}`, '💋');
+    }
+    // A game_over action is the last beat — ease everyone back to idle.
+    if (data.game_over && window.CharacterBridge) {
+      window.CharacterBridge.stopPose();
+    }
+  }
+
+  /**
+   * The bed game ended — release the active pose so participants ease back to a
+   * standing idle (CharacterBridge.stopPose reclaims the body for AnimManager).
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {Object} data — { rounds }
+   */
+  _onBedGameEnded(data) {
+    if (window.CharacterBridge) window.CharacterBridge.stopPose();
+    const rounds = (data && data.rounds) || 0;
+    _addActivityItem(`Bed game ended after ${rounds} round(s)`, '🛏');
   }
 
   /* ── Typing indicator ───────────────────────────────────────────── */

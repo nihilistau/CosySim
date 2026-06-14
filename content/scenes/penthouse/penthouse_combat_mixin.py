@@ -17,6 +17,51 @@ class PenthouseCombatMixin:
 
     # ── Bed Game helpers ────────────────────────────────────────────────
 
+    def _bedgame_pose_eligible(self, char_ids: List[str], explicit_level: int) -> bool:
+        """Decide whether a bed-game action may drive an explicit 3D paired pose.
+
+        Reuses the EXISTING adult/consent surface rather than inventing a new
+        flag: low-explicit actions (level < threshold) always pose, but explicit
+        actions (which strip outfits client-side) additionally require every
+        involved character's existing ``openness`` stat to clear the same
+        consent bar the intimacy rules use (penthouse_rules: openness >= 60).
+        The director (no profile/stats) is always treated as consenting.
+
+        v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+
+        Args:
+            char_ids: Character ids involved in this action (initiator + target).
+            explicit_level: The action's explicit_level (1-5).
+
+        Returns:
+            True if the explicit pose may play; False to suppress it.
+        """
+        try:
+            from engine.config import get_config
+            gate_level = int(get_config().get("penthouse.bedgame.explicit_pose_level", 3))
+            openness_min = float(get_config().get("penthouse.bedgame.explicit_openness_min", 60))
+        except Exception:
+            gate_level, openness_min = 3, 60.0
+        if explicit_level < gate_level:
+            return True
+        for cid in char_ids:
+            if cid == "director" or cid not in self.profiles:
+                continue
+            openness = getattr(self.profiles[cid].stats, "openness", 0.0)
+            if openness < openness_min:
+                logger.info(
+                    "[penthouse] Explicit pose gated — %s openness %.0f < %.0f "
+                    "(operation=bedgame_pose_gate)",
+                    cid, openness, openness_min,
+                )
+                return False
+        logger.info(
+            "[penthouse] Explicit pose cleared for %d participant(s) at level %d "
+            "(operation=bedgame_pose_gate)",
+            len(char_ids), explicit_level,
+        )
+        return True
+
     def _end_bed_game(self, reason: str = "The game ends.") -> None:
         """End the bed sex game and announce it."""
         if not self.bed_game.active:
@@ -383,10 +428,23 @@ class PenthouseCombatMixin:
                     f"The dirtier you go, the more points you score.",
                     "bedgame"
                 )
-            self.socketio.emit("bedgame_action", {**record, "next_player": next_name, "game_over": game_over})
+            # v1.62.0 [2026-06-15] — gate the 3D paired-pose trigger behind the
+            #   existing adult/consent surface. The bed game itself is already a
+            #   consent opt-in (named players added via /api/bedgame/start), but
+            #   explicit poses (level >= 3) strip outfits on the client, so we
+            #   additionally require each involved character's existing `openness`
+            #   stat to clear the consent threshold the intimacy rules use
+            #   (penthouse_rules: openness >= 60). Below threshold → the round
+            #   text still plays, but the explicit pose is suppressed.
+            pose_eligible = self._bedgame_pose_eligible(involved, explicit_level)
+            self.socketio.emit("bedgame_action", {
+                **record, "next_player": next_name, "game_over": game_over,
+                "pose_eligible": pose_eligible,
+            })
             self._broadcast_state()
             return jsonify({"success": True, "record": record, "next_player": next_name,
-                            "game_over": game_over, "game": self.bed_game.to_dict()})
+                            "game_over": game_over, "pose_eligible": pose_eligible,
+                            "game": self.bed_game.to_dict()})
 
         @self.app.route("/api/bedgame/end", methods=["POST"])
         def bedgame_end():
