@@ -15,6 +15,7 @@ pillars:
     - casino
     - grid
     - lab_break
+    - executive_suite
     requires:
     - nexus_kms
     - hub
@@ -41,6 +42,8 @@ scenes:
     auto_start: false
   cyberspace:
     auto_start: false
+  executive_suite:
+    auto_start: true
   gallery:
     auto_start: false
   games:

@@ -15,6 +15,7 @@ Version: v1.42.1 [2026-03-21]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — Registered executive_suite scene (ES-T1 scaffold, auto-start)
     v1.42.1 [2026-03-21] â€” Added module header, section dividers, version stamps
     v1.42.0 [2026-03-21] â€” Three-pillar architecture, managed Nexus KMS
     v1.41.0 [2026-03-20] â€” ARGUS deep polish, extended rpcids
@@ -139,7 +140,7 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
 # Interactive game scenes and content scenes.  Each scene is a Flask app with
 # Socket.IO, served on its own port (resolved by port_registry at runtime).
 
-# v1.52.0 [2026-03-25] â€” 22 scene targets (18 game, 2 service, 2 creation)
+# v1.62.0 [2026-06-15] — 23 scene targets (19 game, 2 service, 2 creation)
 SCENE_DEFS: Dict[str, Dict[str, Any]] = {
     "phone": {
         "type": "flask",
@@ -297,6 +298,14 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "cls": "content.scenes.cyberspace.cyberspace_scene.CyberspaceScene",
         "label": "CYBERSPACE",
         "auto_start": False,
+        "pillar": "game",
+    },
+    # v1.62.0 [2026-06-15] — Executive Suite neon OS desktop (ES-T1 scaffold)
+    "executive_suite": {
+        "type": "flask",
+        "cls": "content.scenes.executive_suite.executive_suite_scene.ExecutiveSuiteScene",
+        "label": "EXECUTIVE SUITE",
+        "auto_start": True,
         "pillar": "game",
     },
 }
