@@ -995,6 +995,29 @@ npc_scheduler:
     - "chatting with someone"
     - "lost in thought"
 
+# Penthouse scene runtime tuning (read via get_config().get("penthouse.<...>"))
+# v1.62.0 [2026-06-15] — ambient micro-behavior layer config namespace.
+penthouse:
+  # Cheap, scripted idle micro-behaviors that run BETWEEN the slow LLM agent
+  # ticks so idle characters feel alive without spamming the local model.
+  ambient:
+    enabled: true
+    tick_interval: 3.0        # seconds between cheap ambient ticks (≪ agent tick)
+    action_chance: 0.6        # P(an eligible character does a micro-action per tick)
+    max_per_tick: 2           # cap characters touched per tick (cheap fan-out)
+    llm_line_chance: 0.04     # P(a micro-action escalates to an LLM line via agent path)
+    reposition_chance: 0.15   # extra gate on the (rare) drift-to-nearby-location kind
+    player_present_boost: 1.6 # weight multiplier for player-facing glances
+    action_weights:
+      fidget: 4.0
+      glance: 3.0
+      expression: 3.0
+      reposition: 1.0
+  # Bed-game / explicit-pose consent gate (existing reads in penthouse_combat_mixin).
+  bedgame:
+    explicit_pose_level: 3
+    explicit_openness_min: 60
+
 # Automated Testing Scheduler
 testing:
   default_suite: "full"

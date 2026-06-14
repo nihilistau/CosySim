@@ -1179,6 +1179,12 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         self.agent_loop: Optional[AgentLoop] = None
         self.agent_model_config: Dict[str, Dict] = {}
 
+        # v1.62.0 [2026-06-15] — Cheap ambient micro-behavior layer + the two
+        # signals it gates on: connected-client count and last player activity.
+        self.ambient_loop = None            # engine.agents.ambient_behavior.AmbientLoop
+        self._client_count: int = 0
+        self._last_player_activity: float = 0.0
+
         # Director state
         self.story_beats: List[str] = []
         self.active_scenario: Optional[str] = None
@@ -1257,6 +1263,152 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         )
         self.socketio.emit("scene_state", self.scene_state)
         self._sync_to_mcp()
+
+    # ── Ambient micro-behavior layer (v1.62.0) ──────────────────────────
+    # Cheap, scripted idle motions BETWEEN the slow LLM agent ticks. See
+    # engine/agents/ambient_behavior.py. The scene supplies small provider
+    # callables so the loop reuses the EXISTING set_animation / set_expression
+    # emit path and never fights deliberate poses / moves.
+
+    def _mark_player_activity(self) -> None:
+        """Record that the player just interacted (drives ambient weighting)."""
+        import time as _t
+        self._last_player_activity = _t.time()
+
+    def _ambient_is_active(self) -> bool:
+        """True only while it is safe to run the ambient layer.
+
+        Gates on BOTH the agent loop running AND at least one connected client,
+        so ambient motion stops the moment the scene has no viewers or the loop
+        is stopped.
+        """
+        loop_running = bool(self.agent_loop and self.agent_loop.is_running)
+        return loop_running and self._client_count > 0
+
+    def _ambient_player_state(self):
+        """Return (player_present, player_active) for ambient weighting."""
+        import time as _t
+        present = self._client_count > 0 or self.director_in_scene
+        active = (_t.time() - self._last_player_activity) < 30.0
+        return present, active
+
+    def _ambient_character_state(self, cid: str) -> dict:
+        """Snapshot one character's state for the ambient selector.
+
+        Includes the stat vector (mood / neurochemistry), pose / busy guards,
+        and nearby empty locations to drift toward.
+        """
+        profile = self.profiles.get(cid)
+        stats = profile.stats.to_dict() if profile else {}
+
+        # Guard: never override a deliberate paired pose (Task 3) or an
+        # in-progress bed-game turn for this character.
+        in_active_pose = False
+        try:
+            in_active_pose = bool(self.bed_game.active and cid in self.bed_game.players)
+        except Exception:
+            in_active_pose = False
+
+        # Busy if the NPC registry marks this character busy (deliberate action).
+        is_busy = False
+        try:
+            from engine.world.npc_state import get_npc_state_registry
+            st = get_npc_state_registry().get(cid)
+            is_busy = bool(getattr(st, "is_busy", False)) if st else False
+        except Exception:
+            is_busy = False
+
+        # Nearby empty locations to reposition toward (exclude current).
+        nearby_locations: list = []
+        try:
+            cur = self.scene_map.get_character_location(cid)
+            cur_id = cur.id if cur else ""
+            for loc in self.scene_map.get_empty_locations():
+                if loc.id != cur_id:
+                    nearby_locations.append(loc.name)
+        except Exception:
+            nearby_locations = []
+
+        return {
+            "stats": stats,
+            "in_active_pose": in_active_pose,
+            "is_busy": is_busy,
+            "nearby_locations": nearby_locations,
+        }
+
+    def _ambient_emit_action(self, cid: str, action: dict) -> None:
+        """Render a scripted ambient micro-action via the existing emit path.
+
+        Reuses the SAME socket events the animation skills / agent path use:
+        ``set_animation`` (body micro-state / walk) and ``set_expression``
+        (mood flicker). For reposition we also relocate in the scene map so the
+        client's next state refresh keeps anchors correct.
+        """
+        channel = action.get("channel")
+        try:
+            if channel == "expression":
+                self.socketio.emit("set_expression", {
+                    "character_id": cid,
+                    "expression": action.get("expression", "neutral"),
+                })
+            elif channel == "move":
+                target = action.get("target", "")
+                loc = self.scene_map.get_location_by_name(target) if target else None
+                if loc and self.scene_map.move_character(cid, loc.id):
+                    # Walk animation + tell clients to refresh positions/anchors.
+                    self.socketio.emit("set_animation", {"character_id": cid, "state": "walk"})
+                    self.socketio.emit("scene_state", self.scene_state)
+            else:  # animation (fidget / glance)
+                self.socketio.emit("set_animation", {
+                    "character_id": cid,
+                    "state": action.get("state", "idle"),
+                })
+        except Exception as exc:
+            logger.debug("[penthouse] ambient emit failed for %s: %s", cid, exc)
+
+    def _ambient_request_llm_line(self, cid: str) -> None:
+        """Rare ambient LLM line via the EXISTING agent path (not a new model call site).
+
+        Injects a light prompt nudge into the shared agent loop so the next
+        agent decision can surface a brief ambient remark. We do NOT spin up a
+        separate inference here — escalation stays on the agent loop's cadence.
+        """
+        char = self.characters.get(cid)
+        name = char.name if char else cid
+        self._inject_to_loop(
+            "(ambient)",
+            f"[ambient cue] {name} might let a small, idle remark or gesture slip — keep it brief.",
+            "ambient",
+        )
+
+    def _start_ambient_loop(self) -> None:
+        """Create + start the cheap ambient micro-behavior loop (idempotent)."""
+        try:
+            from engine.agents.ambient_behavior import AmbientLoop
+            if self.ambient_loop and self.ambient_loop.is_running:
+                return
+            self.ambient_loop = AmbientLoop(
+                is_active=self._ambient_is_active,
+                list_characters=lambda: list(self.characters.keys()),
+                get_state=self._ambient_character_state,
+                emit_action=self._ambient_emit_action,
+                player_state=self._ambient_player_state,
+                request_llm_line=self._ambient_request_llm_line,
+            )
+            self.ambient_loop.start()
+        except Exception as exc:
+            logger.warning(
+                "[penthouse] ambient layer failed to start "
+                "(operation=ambient_start): %s", exc,
+            )
+
+    def _stop_ambient_loop(self) -> None:
+        """Stop the ambient micro-behavior loop if running."""
+        try:
+            if self.ambient_loop:
+                self.ambient_loop.stop()
+        except Exception as exc:
+            logger.debug("[penthouse] ambient layer stop failed: %s", exc)
 
     def _sync_to_mcp(self, event_name: str = None, payload: dict = None):
         """Push scene state into MCP framework and optionally emit an event."""
@@ -1655,9 +1807,14 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
                              for k, v in PREMADE_SCENARIOS.items()},
             })
 
+            # v1.62.0 [2026-06-15] — track connected clients so the ambient
+            # layer can stop emitting when the scene has no viewers.
+            self._client_count += 1
+
         @self.socketio.on("disconnect")
         def handle_disconnect():
-            pass
+            # v1.62.0 [2026-06-15] — clamp at 0; ambient layer idles when 0.
+            self._client_count = max(0, self._client_count - 1)
 
         @self.socketio.on("request_state")
         def handle_request():
@@ -1667,6 +1824,8 @@ class PenthouseScene(PenthouseAnimStudioMixin, PenthouseModelMixin, PenthouseCom
         def handle_chat(data):
             msg = data.get("message", "")
             ts = datetime.now().isoformat()
+            # v1.62.0 [2026-06-15] — mark recent player activity for ambient weighting.
+            self._mark_player_activity()
             name = self.director_name if self.director_in_scene else "You"
             self._inject_to_loop(name, msg, "speech")
             self.socketio.emit("chat_message", {"name": name, "message": msg, "timestamp": ts})
