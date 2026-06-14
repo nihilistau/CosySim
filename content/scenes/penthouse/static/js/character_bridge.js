@@ -44,6 +44,18 @@ window.CharacterBridge = (function () {
   let _animRegistered = false;
   let _directorSprite = null;
 
+  /**
+   * Feet-origin Y for a location entry. Delegates to penthouse3D.resolveAnchorY
+   * so the posed body rests ON the surface; falls back to the raw surface Y if
+   * the helper is unavailable (older penthouse_3d.js).
+   * v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink).
+   */
+  function _anchorY(locPos) {
+    const p3d = window.penthouse3D;
+    if (p3d && typeof p3d.resolveAnchorY === 'function') return p3d.resolveAnchorY(locPos);
+    return (locPos && locPos.y) || 0;
+  }
+
   // ─── Initialise ──────────────────────────────────────────────────
   // v1.49.2 [2026-03-22] — Use onReady() callback instead of blind setTimeout polling
   let _initAttempts = 0;
@@ -193,7 +205,12 @@ window.CharacterBridge = (function () {
       if (count === 2) offsetX = (idx === 0) ? -BRIDGE_CONFIG.occupantOffset2P : BRIDGE_CONFIG.occupantOffset2P;
       else if (count >= 3) offsetX = (idx - 1) * BRIDGE_CONFIG.occupantOffsetNP;
 
-      sprite.targetPos.set(locPos.x + offsetX, locPos.y || 0, locPos.z);
+      // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink):
+      //   target the feet-origin Y for this location's anchor, and refresh the
+      //   pose system's base Y so its per-pose offset lands the body on-surface.
+      const baseY = _anchorY(locPos);
+      sprite.targetPos.set(locPos.x + offsetX, baseY, locPos.z);
+      if (sprite.model) sprite.model._baseY = baseY;
     }
 
     // Remove characters no longer in state
@@ -257,9 +274,15 @@ window.CharacterBridge = (function () {
     _scene.add(model.group);
 
     // Position at initial location
+    // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink):
+    //   place the GROUP at the feet-origin Y for the anchor, and (re)seed
+    //   model._baseY — AnimManager.register() captured it BEFORE this position
+    //   was applied, so without this the pose offset would sink the body.
     const locId = info?.location_id || 'bed';
     const locPos = _locationPositions[locId] || { x: 0, y: 0, z: 0 };
-    model.group.position.set(locPos.x, locPos.y || 0, locPos.z);
+    const baseY = _anchorY(locPos);
+    model.group.position.set(locPos.x, baseY, locPos.z);
+    model._baseY = baseY;
 
     // Create name label sprite
     const label = createNameLabel(name, color);
@@ -267,7 +290,7 @@ window.CharacterBridge = (function () {
 
     const entry = {
       model: model,
-      targetPos: new THREE.Vector3(locPos.x, locPos.y || 0, locPos.z),
+      targetPos: new THREE.Vector3(locPos.x, baseY, locPos.z),
       currentOutfit: outfit,
       currentMood: 'neutral',
       label: label,
@@ -443,8 +466,11 @@ window.CharacterBridge = (function () {
     CharModels.updateOutfit(model, outfit);
     _scene.add(model.group);
 
+    // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink)
     const locPos = _locationPositions[locationId] || { x: 0, y: 0, z: 0 };
-    model.group.position.set(locPos.x + 1.2, locPos.y || 0, locPos.z);
+    const baseY = _anchorY(locPos);
+    model.group.position.set(locPos.x + 1.2, baseY, locPos.z);
+    model._baseY = baseY;
 
     const label = createNameLabel('Director', '#ffd700');
     if (label) model.group.add(label);
@@ -452,6 +478,7 @@ window.CharacterBridge = (function () {
     // Register with AnimManager for full animation support
     if (window.PenthouseAnim && PenthouseAnim.AnimManager) {
       PenthouseAnim.AnimManager.register('Director', model);
+      model._baseY = baseY;  // re-seed: register() captures _baseY at call time
       const inferredState = PenthouseAnim.inferAnimState(locationId, 'idle');
       if (inferredState) {
         PenthouseAnim.AnimManager.setState('Director', inferredState);
@@ -461,7 +488,7 @@ window.CharacterBridge = (function () {
     // Track in characters map so director participates like agents
     characters['director'] = {
       model: model,
-      targetPos: new THREE.Vector3(locPos.x + 1.2, locPos.y || 0, locPos.z),
+      targetPos: new THREE.Vector3(locPos.x + 1.2, baseY, locPos.z),
       locationId: locationId,
       currentMood: 'neutral',
       label: label,
@@ -617,8 +644,11 @@ window.CharacterBridge = (function () {
     moveDirectorTo: (locationId) => {
       const dir = characters['director'];
       if (!dir) return;
+      // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink)
       const locPos = _locationPositions[locationId] || { x: 0, y: 0, z: 0 };
-      dir.targetPos.set(locPos.x + 1.2, locPos.y || 0, locPos.z);
+      const baseY = _anchorY(locPos);
+      dir.targetPos.set(locPos.x + 1.2, baseY, locPos.z);
+      if (dir.model) dir.model._baseY = baseY;
       dir.locationId = locationId;
       if (window.PenthouseAnim) {
         const state = PenthouseAnim.inferAnimState(locationId, 'idle');

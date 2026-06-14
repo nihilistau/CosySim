@@ -14,9 +14,13 @@
  *   window.penthouse3D.switchView(name)
  *   window.penthouse3D.getViewNames() → string[]
  *
- * Version: v1.58.0 [2026-06-11]
+ * Version: v1.62.0 [2026-06-15]
  *
  * Change Log:
+ *   v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink):
+ *                           _locationPositions entries carry an `anchor`;
+ *                           resolveAnchorY(loc) returns the feet-origin Y
+ *                           so the posed body rests ON each surface
  *   v1.58.0 [2026-06-11] — r128→r184 migration (physical lights, sRGB
  *                           default); Dark Renaissance overhaul: rose
  *                           #fb7185 accent, RoomEnvironment IBL,
@@ -243,16 +247,51 @@
   // v1.53.1 [2026-03-26] — Y at furniture surface; X/Z offset from center to avoid clipping
   //   Bed headboard at local x=-2.85, footboard at x=1.82 → place near foot (local x=0.8)
   //   Anim system handles pose: bed→lie, couch→lounge, bar→drink, vanity→primp, bath→bathe
+  // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink):
+  //   `y` is the furniture SURFACE height (where the body rests). `anchor`
+  //   names the pose the character adopts there; resolveAnchorY() converts
+  //   surface+anchor into the feet-origin Y the model GROUP must sit at so
+  //   the posed body lands ON the surface (the pose system in
+  //   penthouse_anim.js then re-adds its own Y offset — see ANCHOR_POSE_DY).
   let _locationPositions = {
-    bed:       { x: -4.2, y: 0.70, z: -1 },
-    couch:     { x:  5.5, y: 0.50, z:  0.5 },
-    fireplace: { x: -2,   y: 0,    z:  4.5 },
-    bar:       { x: -3,   y: 0.55, z: -4.8 },
-    vanity:    { x:  3,   y: 0.40, z: -5.2 },
-    bath:      { x:  6.2, y: 0.45, z: -4.5 },
-    balcony:   { x:  5,   y: 0,    z:  5.5 },
-    doorway:   { x:  0,   y: 0,    z: -6.5 },
+    bed:       { x: -4.2, y: 0.70, z: -1,   anchor: 'lie'   },
+    couch:     { x:  5.5, y: 0.50, z:  0.5, anchor: 'lounge'},
+    fireplace: { x: -2,   y: 0,    z:  4.5, anchor: 'warm'  },
+    bar:       { x: -3,   y: 0,    z: -4.8, anchor: 'stand' },
+    vanity:    { x:  3,   y: 0.40, z: -5.2, anchor: 'primp' },
+    bath:      { x:  6.2, y: 0.05, z: -4.5, anchor: 'bathe' },
+    balcony:   { x:  5,   y: 0,    z:  5.5, anchor: 'stand' },
+    doorway:   { x:  0,   y: 0,    z: -6.5, anchor: 'stand' },
   };
+
+  // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink):
+  //   Per-anchor Y offset the pose system (penthouse_anim.js) applies to the
+  //   model GROUP once the pose is fully blended in. Mirrors the constants in
+  //   _applyAnimState(). resolveAnchorY() subtracts this so that
+  //   group.y = poseOffset + resolveAnchorY = surfaceY (no double-counting).
+  const ANCHOR_POSE_DY = {
+    lie:    -0.10,  // bed — reclining on back
+    lounge: -0.30,  // couch — semi-reclined sprawl
+    warm:   -0.30,  // fireplace — seated on floor
+    primp:  -0.35,  // vanity — seated at mirror
+    bathe:  -0.40,  // bath — seated in tub
+    sit:    -0.32,  // generic seat
+    stand:   0,     // standing poses (drink/gaze/idle) keep feet on floor
+  };
+
+  /**
+   * Resolve the feet-origin (model GROUP) Y for a location so that, once the
+   * pose system re-applies its anchor offset, the posed body rests ON the
+   * furniture surface. Pass a _locationPositions entry (or {y, anchor}).
+   * Returns surfaceY - poseOffset(anchor); falls back to the raw surface Y
+   * for unknown anchors. v1.62.0 [2026-06-15] — anchor-aware placement.
+   */
+  function resolveAnchorY(loc) {
+    if (!loc) return 0;
+    const surfaceY = loc.y || 0;
+    const dy = ANCHOR_POSE_DY[loc.anchor];
+    return (dy === undefined) ? surfaceY : (surfaceY - dy);
+  }
 
   // v1.49.2 [2026-03-22] — Initialization tracking + onReady callback for race condition fix
   let _initialized = false;
@@ -280,6 +319,10 @@
     getRenderer: () => renderer,
 
     getLocationPositions: () => ({ ..._locationPositions }),
+
+    // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink):
+    //   feet-origin Y for a location entry so posed bodies rest on the surface
+    resolveAnchorY,
 
     addToAnimationLoop: (cb) => {
       if (typeof cb === 'function') _externalAnimCallbacks.push(cb);
