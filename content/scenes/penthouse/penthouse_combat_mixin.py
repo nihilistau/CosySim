@@ -237,11 +237,21 @@ class PenthouseCombatMixin:
         char = self.characters.get(character_id)
         char_name = char.name if char else character_id
         action_type = action.get("action", "")
-        self.nexus_store_event(
-            action_type,
-            f"{char_name}: {action.get('message', action_type)[:120]}",
-            tags=[character_id, action_type],
-        )
+        # v1.62.0 [2026-06-15] — Defense-in-depth: a failure here must never
+        # propagate into AgentLoop.tick()'s per-character try/except, which
+        # would record the action as a duplicate idle/error and break the
+        # illusion that every present character is taking its own agent turn.
+        try:
+            self.nexus_store_event(
+                action_type,
+                f"{char_name}: {action.get('message', action_type)[:120]}",
+                tags=[character_id, action_type],
+            )
+        except Exception as _nx:
+            logger.warning(
+                "[penthouse] nexus_store_event failed (operation=agent_action, character=%s): %s",
+                character_id, _nx,
+            )
 
         # ── Agent → World feedback loop ────────────────────────────────
         _SIGNIFICANT_ACTIONS = {

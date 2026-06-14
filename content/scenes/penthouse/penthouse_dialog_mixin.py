@@ -3,10 +3,12 @@ Penthouse Dialog Mixin
 ======================
 Director directives, conversation starters, events, and agent-loop wiring.
 
-Version: v1.53.1 [2026-03-26]
+Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — Runtime invariant log: agents registered == present
+                            characters (warn if any character lacks an agent)
     v1.53.1 [2026-03-26] — Added _register_char_with_loop() for hot-registration
     v1.50.0 [2026-03-24] — Initial extraction from penthouse_scene.py
 """
@@ -102,6 +104,25 @@ class PenthouseDialogMixin:
         self.scene_state["agent_loop_running"] = True
         self._broadcast_state()
 
+        # v1.62.0 [2026-06-15] — Runtime invariant: every present character must
+        # have its own registered agent so all take agent-driven turns.
+        n_agents = len(self.agent_loop._agents)
+        n_chars = len(self.characters)
+        if n_agents != n_chars:
+            logger.warning(
+                "[penthouse] agent/character count mismatch — only some characters "
+                "are agent-driven (operation=start_agent_loop, agents=%d, characters=%d, "
+                "missing=%s)",
+                n_agents, n_chars,
+                [c for c in self.characters if c not in self.agent_loop._agents],
+            )
+        else:
+            logger.info(
+                "[penthouse] all characters registered with agents "
+                "(operation=start_agent_loop, agents=%d, characters=%d)",
+                n_agents, n_chars,
+            )
+
     # v1.53.0 [2026-03-26] — Hot-register a single character with a running agent loop
     def _register_char_with_loop(self, char) -> None:
         """Register a character with the running agent loop + inject context."""
@@ -141,6 +162,14 @@ class PenthouseDialogMixin:
             pass
 
         self.agent_loop.register_character(char, agent=agent)
+
+        # v1.62.0 [2026-06-15] — Confirm the hot-added character actually got an
+        # agent (not just a character entry), so it takes agent-driven turns.
+        if char.id not in self.agent_loop._agents:
+            logger.warning(
+                "[penthouse] hot-added character has no agent — it will stay idle "
+                "(operation=register_char, character=%s)", char.id,
+            )
 
         # Inject roleplay context for the new character
         profile = self.profiles.get(char.id, CharacterProfile())
