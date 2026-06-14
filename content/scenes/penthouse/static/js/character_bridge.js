@@ -43,6 +43,9 @@ window.CharacterBridge = (function () {
   let _locationPositions = {};
   let _animRegistered = false;
   let _directorSprite = null;
+  // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+  //   holds a director descriptor that arrived before the 3D scene was ready.
+  let _pendingDirector = null;
 
   /**
    * Feet-origin Y for a location entry. Delegates to penthouse3D.resolveAnchorY
@@ -122,6 +125,15 @@ window.CharacterBridge = (function () {
         Object.keys(_pendingSync.chars || {}).length);
       syncCharacters(_pendingSync.chars, _pendingSync.locs);
       _pendingSync = null;
+    }
+
+    // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+    //   replay a director descriptor that arrived before the scene was ready.
+    if (_pendingDirector) {
+      console.info('[CharBridge] Replaying queued director avatar placement');
+      const pd = _pendingDirector;
+      _pendingDirector = null;
+      placeDirectorAvatar(pd);
     }
   }
 
@@ -214,7 +226,13 @@ window.CharacterBridge = (function () {
     }
 
     // Remove characters no longer in state
+    // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+    //   the Director is tracked in this same `characters` map under 'director'
+    //   but is NEVER part of scene_state.characters (it lives in
+    //   scene_state.director_avatar). Skip it here, otherwise every scene_state
+    //   reaps the director right after it is placed.
     for (const cid of Object.keys(characters)) {
+      if (cid === 'director') continue;
       if (!chars[cid]) removeCharacter(cid);
     }
   }
@@ -448,14 +466,36 @@ window.CharacterBridge = (function () {
 
   // ─── Director Avatar ─────────────────────────────────────────────
 
+  /**
+   * Place (or replace) the Director's 3D avatar in the scene.
+   * @param {Object} opts - avatar descriptor. Accepts BOTH the manual-click
+   *   shape (`location`/`skin`/`hair`) and the scene_state shape emitted by the
+   *   backend (`location_id`/`skin_tone`/`hair_color`), so persistence on
+   *   reload/reconnect renders identically to the manual placement.
+   * v1.62.0 [2026-06-15] — director avatar render/persist fix.
+   */
   function placeDirectorAvatar(opts) {
+    opts = opts || {};
+
+    // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+    //   scene_state can arrive before the 3D scene is ready (e.g. on reload).
+    //   Mirror the syncCharacters() queue so the director is not silently
+    //   dropped (and so _scene.add() below never throws on null).
+    if (!_scene) {
+      console.info('[CharBridge] placeDirectorAvatar called but _scene is null — queuing');
+      _pendingDirector = opts;
+      init();
+      return;
+    }
+
     removeDirectorAvatar();
 
+    // Accept both the manual-click and scene_state key shapes.
     const gender = opts.gender || 'male';
-    const skin = opts.skin || 'fair';
-    const hair = opts.hair || 'brown';
+    const skin = opts.skin || opts.skin_tone || 'fair';
+    const hair = opts.hair || opts.hair_color || 'brown';
     const outfit = opts.outfit || 'casual';
-    const locationId = opts.location || 'couch';
+    const locationId = opts.location || opts.location_id || 'couch';
 
     const model = CharModels.create({
       name: 'Director',
