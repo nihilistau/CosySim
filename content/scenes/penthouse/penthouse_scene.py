@@ -958,7 +958,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 0.35, "comfort": 0.5, "spiciness": 6,
-                "pos": {"x": -3, "y": 0.9, "z": -5.5},  # v1.49.2 — bar stool height
+                "pos": {"x": -3, "y": 0.0, "z": -5.5},  # v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink): bar anchor is standing → feet on floor
                 "mountable": True,
                 "mount_positions": [
                     "sitting", "standing", "leaning", "bent over",
@@ -983,7 +983,7 @@ def _build_penthouse_map() -> SceneMap:
             capacity=2,
             properties={
                 "privacy": 1.0, "comfort": 0.8, "spiciness": 10,
-                "pos": {"x": 6.5, "y": 0.4, "z": -4.5},  # v1.49.2 — bath edge height
+                "pos": {"x": 6.5, "y": 0.05, "z": -4.5},  # v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink): tub interior (seated body rests here), not the edge
                 "mountable": True,
                 "mount_positions": [
                     "standing", "kneeling", "bent over", "against the wall",
