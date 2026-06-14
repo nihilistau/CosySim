@@ -219,6 +219,6 @@ After work:
 ## Related Documents
 
 - Copilot repository policy: [`../.github/copilot-instructions.md`](../.github/copilot-instructions.md)
-- Copilot operating manual: [`../.github/README.md`](../.github/README.md)
+- Copilot operating manual: [`../.github/COPILOT_MANUAL.md`](../.github/COPILOT_MANUAL.md)
 - Workflow agent: [`../.github/agents/copilot-workflow.agent.md`](../.github/agents/copilot-workflow.agent.md)
 - Nexus path rules: [`../.github/instructions/nexus.instructions.md`](../.github/instructions/nexus.instructions.md)
