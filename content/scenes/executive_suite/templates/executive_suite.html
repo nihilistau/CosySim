@@ -1,0 +1,26 @@
+{# Executive Suite — bootable placeholder shell.
+   v1.62.0 [2026-06-15] — Initial scaffold (ES-T1). Replaced by the full OS
+   desktop in later v1.62 tasks. #}
+{% extends 'neon_base.html' %}
+{% set scene_key = 'executive_suite' %}
+{% set scene_display_name = 'EXECUTIVE SUITE' %}
+{% set scene_accent = '#ffd700' %}
+{% set scene_accent_rgb = '255 215 0' %}
+
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/executive_suite.css') }}">
+{% endblock %}
+
+{% block scene_content %}
+  <div class="es-boot" id="es-boot">
+    <div class="es-boot-glyph">💼</div>
+    <h1 class="es-boot-title">EXECUTIVE SUITE</h1>
+    <p class="es-boot-status" id="es-boot-status">booting&hellip;</p>
+    <div class="es-boot-bar"><span class="es-boot-bar-fill"></span></div>
+    <p class="es-boot-hint">Neon OS desktop &middot; mail &middot; files &middot; live AI assistant</p>
+  </div>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="{{ url_for('static', filename='js/executive_suite.js') }}" defer></script>
+{% endblock %}
