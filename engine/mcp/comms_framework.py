@@ -598,6 +598,19 @@ class AgentGovernor:
         )
 
         # ── 2. Execute AUTO skills ───────────────────────────────────
+        # v1.59.0 [2026-06-13] — Enforce cooldown + prerequisites for
+        # registered skills before auto-invocation. The auto-skill path
+        # bypassed SkillRegistry.execute_skill (which enforces these), so
+        # auto skills could fire every single turn regardless of their
+        # declared cooldown. Unregistered MCP tools (no SkillMeta) are not
+        # throttled here.
+        try:
+            from engine.skills.registry import SKILL_REGISTRY
+            from engine.skills.skill import COOLDOWN_TRACKER
+        except Exception:  # skills layer optional in minimal builds
+            SKILL_REGISTRY = None
+            COOLDOWN_TRACKER = None
+
         for skill_entry in manifest.auto_skills():
             # v1.54.0 [2026-03-26] — Validate skill entry before invocation
             if not hasattr(skill_entry, "name") or not skill_entry.name:
@@ -605,9 +618,31 @@ class AgentGovernor:
                     "[AgentGovernor] Invalid auto skill entry skipped (operation=auto_skill)"
                 )
                 continue
+
+            # v1.59.0 — cooldown + prerequisite gate (registered skills only)
+            meta = SKILL_REGISTRY.get_skill(skill_entry.name) if SKILL_REGISTRY else None
+            if meta is not None and COOLDOWN_TRACKER is not None:
+                if not COOLDOWN_TRACKER.can_use(meta.name, meta.cooldown_secs):
+                    logger.debug(
+                        "[AgentGovernor] Auto skill on cooldown, skipped "
+                        "(operation=auto_skill, skill=%s, remaining=%.1fs)",
+                        meta.name, COOLDOWN_TRACKER.get_remaining(meta.name, meta.cooldown_secs),
+                    )
+                    continue
+                unmet = [p for p in meta.prerequisites if not COOLDOWN_TRACKER.was_used(p)]
+                if unmet:
+                    logger.debug(
+                        "[AgentGovernor] Auto skill prerequisites unmet, skipped "
+                        "(operation=auto_skill, skill=%s, missing=%s)",
+                        meta.name, unmet,
+                    )
+                    continue
+
             try:
                 result = _invoke_mcp_tool(skill_entry.name, skill_entry.args_template, ctx)
                 ctx["auto_results"][skill_entry.name] = result
+                if meta is not None and COOLDOWN_TRACKER is not None:
+                    COOLDOWN_TRACKER.mark_used(meta.name)
                 logger.debug("Auto skill %s: %s", skill_entry.name, str(result)[:80])
             except Exception as exc:
                 # v1.49.1 [2026-03-22] — Upgrade from debug to warning for visibility

@@ -326,21 +326,34 @@ class TestCrewManager:
         assert "not available" in msg.lower() or "unavailable" in msg.lower()
 
     def test_check_operations_completes_immediately(self):
+        # v1.60.0: operations now resolve via a graded skill-check (success/
+        # partial/failure) instead of always paying full reward. Assert the
+        # durable contract — a 0-duration op is picked up and resolved, the
+        # member is freed, and the reward matches the rolled outcome tier.
         cm = self._get()
         cm.recruit("aria", role="hacker", skip_check=True)
-        # Start op with 0-second duration — it's already done
+        m = cm.get_member("aria")
+        m.level = 5
+        m.loyalty = 100  # maximise odds for a stable (usually-success) roll
         cm.start_operation(
             op_type="hack",
             assigned_crew=["aria"],
             duration_secs=0,
             reward_credits=100,
+            reward_xp=25,
         )
         import time
         time.sleep(0.01)
         results = cm.check_operations()
         assert len(results) == 1
-        assert results[0]["credits_earned"] == 100
+        r = results[0]
+        assert r["outcome"] in ("success", "partial", "failure")
+        # member is always freed when an operation resolves
         assert cm.get_member("aria").available is True
+        # full reward only on a clean success; never negative
+        assert r["credits_earned"] >= 0
+        if r["outcome"] == "success":
+            assert r["credits_earned"] == 100
 
     def test_crew_member_xp_and_level_up(self):
         from engine.world.crew import CrewMember

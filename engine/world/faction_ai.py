@@ -30,6 +30,23 @@ Usage::
     ai = get_faction_ai()
     results = ai.tick()  # each faction makes one decision
     print(results["decisions"])  # list of faction actions taken
+
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.60.0 [2026-06-13] — "Living Systems": _decide() now weights actions by
+        the *player's* standing with each faction — allies expand near the
+        player and avoid raiding them, rivals raid/sabotage the player's turf.
+        Territory control shifts are now persisted/broadcast on the EventBus
+        (NEONCITY_FACTION_SHIFT) so other scenes can react. War thresholds and
+        player-influence knobs are configurable under ``territory.faction_ai``.
+    v1.0 — Initial NeonCity faction AI (decisions never considered the player;
+        control shifts were computed but never broadcast).
+
+CONNECTS: EventBus, PlayerState (faction_standings), get_config, territory
+CALLED BY: world_sim faction tick, faction AI scheduler
+EMITS: faction_decision, faction_war, neoncity.faction_shift (EventBus)
 """
 from __future__ import annotations
 
@@ -47,11 +64,39 @@ logger = logging.getLogger(__name__)
 # ──── Lazy imports ────
 
 try:
+    from engine.events.event_bus import EventTypes as _EventTypes
     from engine.events.event_bus import get_event_bus as _get_event_bus
     _HAS_BUS = True
 except ImportError:  # pragma: no cover
     _get_event_bus = lambda: None  # type: ignore[assignment]
+    _EventTypes = None  # type: ignore[assignment]
     _HAS_BUS = False
+
+
+# v1.60.0 [2026-06-13] — Player-standing influence config (safe defaults so the
+# engine and hermetic tests run with no config file present).
+_DEFAULT_PLAYER_INFLUENCE: float = 0.4   # how strongly player standing tilts decisions (0–1)
+_DEFAULT_PLAYER_DISTRICT: str = ""       # district the player currently occupies
+
+
+def _cfg(key: str, default: Any) -> Any:
+    """Read a ``territory.faction_ai.<key>`` config value, never raising."""
+    try:
+        from engine.config import get_config
+
+        return get_config().get(f"territory.faction_ai.{key}", default)
+    except Exception:  # pragma: no cover - config absent in unit tests
+        return default
+
+
+def _get_player_standings() -> Dict[str, int]:
+    """Return the player's faction→standing map (empty if unavailable)."""
+    try:
+        from engine.world.player_state import get_player_state
+
+        return dict(get_player_state().faction_standings)
+    except Exception:  # pragma: no cover - PlayerState absent in unit tests
+        return {}
 
 
 # ──── Enums & Data ────
@@ -224,7 +269,11 @@ class FactionAI:
         self._history: List[FactionDecision] = []
         self._war_active: Dict[str, Dict[str, str]] = {}  # district → {attacker, defender}
         self._control: Dict[str, Dict[str, float]] = {}
-        logger.info("FactionAI initialized")
+        # v1.60.0 — live snapshot of the player's faction standings and location,
+        # so factions can react to the player (allies expand near you, rivals raid).
+        self._player_standings: Dict[str, int] = {}
+        self._player_district: str = ""
+        logger.info("[FactionAI] Initialized (operation=init)")
 
     def set_control(self, control: Dict[str, Dict[str, float]]) -> None:
         """Update the AI's view of territory control.
@@ -234,6 +283,30 @@ class FactionAI:
         """
         with self._lock:
             self._control = {d: dict(f) for d, f in control.items()}
+
+    # v1.60.0 [2026-06-13] — Player context injection for standing-aware decisions
+    def set_player_context(
+        self,
+        standings: Optional[Dict[str, int]] = None,
+        district: str = "",
+    ) -> None:
+        """Inform the AI of the player's faction standings and location.
+
+        Allies (high player standing) will favour expanding into / defending the
+        player's district; rivals (low standing) will favour raiding / sabotaging
+        it. When *standings* is ``None`` the live :class:`PlayerState` is read.
+
+        Args:
+            standings: {faction: standing} (-100…+100). ``None`` → read PlayerState.
+            district: District the player currently occupies (uppercase id).
+        """
+        with self._lock:
+            self._player_standings = (
+                dict(standings) if standings is not None else _get_player_standings()
+            )
+            self._player_district = (
+                district or str(_cfg("player_district", _DEFAULT_PLAYER_DISTRICT))
+            )
 
     def tick(self) -> Dict[str, Any]:
         """Execute one decision cycle for all factions.
@@ -251,21 +324,39 @@ class FactionAI:
             wars_triggered: List[Dict[str, Any]] = []
             control_changes: List[Dict[str, Any]] = []
 
+            # v1.60.0 — refresh player context from PlayerState if not explicitly
+            # provided, so faction decisions react to the live player.
+            if not self._player_standings:
+                self._player_standings = _get_player_standings()
+
             for faction_name, profile in FACTION_PROFILES.items():
                 decision = self._decide(faction_name, profile)
                 decisions.append(decision)
 
                 if decision.control_delta != 0.0 and decision.target_district:
+                    before = dict(
+                        self._control.get(decision.target_district, {})
+                    )
                     self._apply_control_shift(
                         decision.target_district,
                         faction_name,
                         decision.control_delta,
                         decision.target_faction,
                     )
+                    after = dict(
+                        self._control.get(decision.target_district, {})
+                    )
                     control_changes.append({
                         "district": decision.target_district,
                         "faction": faction_name,
                         "delta": decision.control_delta,
+                        "target_faction": decision.target_faction,
+                        "control_before": before,
+                        "control_after": after,
+                        "action": decision.action,
+                        "near_player": (
+                            decision.target_district == self._player_district
+                        ),
                     })
 
                     # Check for war trigger (>10% shift)
@@ -293,6 +384,12 @@ class FactionAI:
             self._emit("faction_decision", d.to_dict())
         for w in wars_triggered:
             self._emit("faction_war", w)
+        # v1.60.0 — persist/broadcast territory control shifts so other scenes
+        # (HUD, neoncity map, director) can react. Uses the canonical
+        # NEONCITY_FACTION_SHIFT event type when available.
+        shift_type = getattr(_EventTypes, "NEONCITY_FACTION_SHIFT", "neoncity.faction_shift")
+        for change in control_changes:
+            self._emit(shift_type, change)
 
         return {
             "tick": self._tick_count,
@@ -362,6 +459,8 @@ class FactionAI:
             self._history.clear()
             self._war_active.clear()
             self._control.clear()
+            self._player_standings = {}
+            self._player_district = ""
 
     # ──── Decision Logic ────
 
@@ -421,6 +520,12 @@ class FactionAI:
         # Fortify: useful when holding strong positions
         scores["fortify"] = profile.defense * 0.7
 
+        # v1.60.0 [2026-06-13] — Weight actions by the PLAYER's standing with
+        # this faction. Allies (high standing) protect/expand near the player and
+        # avoid hostility toward them; rivals (low standing) raid and sabotage the
+        # player's turf. This closes the loop where FactionAI ignored the player.
+        self._apply_player_standing_bias(faction_name, scores)
+
         # Add randomness (±20%)
         for action in scores:
             scores[action] += random.uniform(-0.2, 0.2)
@@ -428,6 +533,52 @@ class FactionAI:
         # Pick top action
         best_action = max(scores, key=scores.get)
         return self._execute_action(faction_name, profile, best_action)
+
+    def _apply_player_standing_bias(
+        self, faction_name: str, scores: Dict[str, float]
+    ) -> None:
+        """Tilt a faction's action scores based on the player's standing.
+
+        Mutates *scores* in place. The strength of the tilt is governed by the
+        configurable ``territory.faction_ai.player_influence`` knob (0–1).
+
+        Logic:
+          * standing > 0 (ally)  → boost expand/defend/negotiate, suppress
+            raid/sabotage. Bonus toward expand/defend when the player is *in*
+            this faction's district (allies hold ground near you).
+          * standing < 0 (rival) → boost raid/sabotage, suppress negotiate.
+            Bonus toward raid when the player is in this district (rivals come
+            for your turf).
+
+        Args:
+            faction_name: The acting faction.
+            scores: Action→score map (mutated in place).
+        """
+        standing = int(self._player_standings.get(faction_name, 0))
+        if standing == 0:
+            return
+
+        influence = float(_cfg("player_influence", _DEFAULT_PLAYER_INFLUENCE))
+        # Normalised magnitude in [0,1] from a -100…+100 standing.
+        magnitude = min(1.0, abs(standing) / 100.0) * influence
+        near_player = (
+            bool(self._player_district)
+            and self._player_district in self._control
+        )
+
+        if standing > 0:
+            # Ally: build and defend, especially near the player; de-escalate.
+            scores["expand"] += magnitude * (0.6 + (0.4 if near_player else 0.0))
+            scores["defend"] += magnitude * (0.4 + (0.3 if near_player else 0.0))
+            scores["negotiate"] += magnitude * 0.3
+            scores["raid"] -= magnitude * 0.6
+            scores["sabotage"] -= magnitude * 0.4
+        else:
+            # Rival: raid and sabotage, especially the player's district.
+            scores["raid"] += magnitude * (0.6 + (0.5 if near_player else 0.0))
+            scores["sabotage"] += magnitude * (0.5 + (0.3 if near_player else 0.0))
+            scores["negotiate"] -= magnitude * 0.5
+            scores["fortify"] -= magnitude * 0.2
 
     def _execute_action(
         self, faction_name: str, profile: FactionProfile, action: str
@@ -460,6 +611,20 @@ class FactionAI:
         ]
 
         if action in ("expand", "raid"):
+            # v1.60.0 — steer toward the player's district when the player has a
+            # strong relationship with this faction: allies expand to be near
+            # the player, rivals raid the player's turf.
+            standing = int(self._player_standings.get(faction, 0))
+            if (
+                self._player_district
+                and self._player_district in districts
+                and abs(standing) >= int(_cfg("player_target_threshold", 25))
+            ):
+                if (action == "expand" and standing > 0) or (
+                    action == "raid" and standing < 0
+                ):
+                    return self._player_district
+
             # Target a preferred district where we have low control
             preferred = [d for d in districts if d in profile.preferred_districts]
             if preferred:
@@ -612,15 +777,19 @@ class FactionAI:
         return False
 
     def _emit(self, event_type: str, data: Dict[str, Any]) -> None:
-        """Publish event on EventBus."""
+        """Publish event on EventBus (best-effort, never raises)."""
         if not _HAS_BUS:
             return
         try:
             bus = _get_event_bus()
             if bus:
-                bus.publish(event_type, data)
+                bus.publish(event_type, data, scene="faction_ai")
         except Exception as exc:
-            logger.debug("FactionAI event emit failed: %s", exc)
+            logger.debug(
+                "[FactionAI] Event emit failed (operation=emit, event=%s): %s",
+                event_type,
+                exc,
+            )
 
 
 # ──── Singleton ────
