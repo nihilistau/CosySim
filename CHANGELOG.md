@@ -4,6 +4,116 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.60.0] — "LIVING SYSTEMS" — 2026-06-13
+
+A 10-agent fleet upgrade (disjoint file ownership; shared-file hooks integrated
+centrally) that takes the gameplay + infra subsystems from "wired" to pro level.
+Builds directly on the v1.59 feedback loops.
+
+### Gameplay depth
+- **Faction standing now matters** — new `engine/world/faction_gates.py` with
+  reusable helpers scenes call: `shop_access_allowed`, `price_multiplier_for`
+  (matching faction −10%, rival +15%, graded by band), `filter_missions_by_standing`,
+  `npc_standing_note`. `FactionAI._decide()` now weights actions by the player's
+  standing (allies expand/defend near you, rivals raid/sabotage toward your
+  district), and territory-control shifts are broadcast on the EventBus
+  (`NEONCITY_FACTION_SHIFT`) — previously computed but never emitted.
+- **Mission consequences + chains** — completion/failure applies faction-control,
+  reputation, and heat deltas via the player API; new
+  `engine/world/mission_chains.py` defines gated multi-mission arcs (off by
+  default); difficulty/reward scale with player skill levels; crew availability
+  is enforced on assignment.
+- **Crew skill-checks** — operations resolve via a graded success/partial/failure
+  check derived from crew level + loyalty + op difficulty (was: always full
+  reward). Loyalty shifts on outcome; rewards scale per tier.
+- **Equipment & consumables** — new `engine/world/equipment_effects.py` maps
+  equipped cyberware/weapons to real skill/stat bonuses
+  (`get_equipment_bonuses`); consumable effects generalised to work by item
+  *category* instead of a 9-item hardcoded list; optional condition wear.
+- **Economy world-event shocks** — `Market.subscribe_to_world_events()` wires
+  world events → supply/demand shocks via `apply_event` (war→weapons,
+  festival→luxury, shortage→surge), and territory control now flows into
+  specialty-good pricing (`refresh_territory_multipliers`). Activated once at
+  LivingWorld bootstrap. Preserves v1.59 buy/sell settlement.
+
+### Agent depth
+- **Neurochemistry from dialogue** — new `StimulusDetectInterceptor` (pri 88)
+  NLP-detects compliment/insult/kiss/touch/rejection/threat/comfort in replies
+  and applies the matching neurochemistry stimulus to the speaker/addressee, so
+  characters affect each other emotionally from what they actually say (was:
+  stimuli only ever triggered manually).
+
+### Infra hardening
+- **Scheduler** — per-task timeout enforcement (a hung task no longer blocks the
+  loop); stub tasks log an honest "not implemented" instead of faking success.
+- **LMStudio federation** — exponential backoff + jitter on peer health retries;
+  `__del__`/close no longer spews logging noise during interpreter shutdown.
+- **Observability** — flood-guard and error-bucket growth are now LRU-bounded;
+  error-rate threshold alerting (throttled); structured-logging init self-check.
+- **Dead code resolved** — TaskQueue / finetune orchestrator / auto_train either
+  wired into a real path or removed cleanly with exports updated.
+
+### Integration & config
+- All knobs exposed in `config/default.yaml` (faction_gates, territory.faction_ai,
+  mission, crew.skill_check, world.equipment, economy.event_shocks,
+  neurochemistry.stimulus_detect, scheduler, observability.error_aggregator/oracle,
+  lmstudio.task_queue_v2, lmlink.health.backoff) with safe in-code defaults.
+- Each agent shipped hermetic pytest coverage; shared-file edits (interceptor
+  registration, config, activation calls) were applied centrally to avoid
+  parallel-edit conflicts.
+
+---
+
+## [1.59.0] — "CONSEQUENTIAL WORLD" — 2026-06-13
+
+Closed the open feedback loops surfaced by a full subsystem audit. The
+infrastructure was strong (MCP pipeline, agent loop, LMStudio client, Nexus
+router) but state changes flowed downstream and were discarded instead of
+feeding back into the world or agent decisions. This release makes actions
+consequential.
+
+### Added — feedback loops
+- **StatSyncInterceptor (pri 91)** — agents emit `[STAT:arousal+10]` /
+  `[STAT:trust=60]` and the deltas are now **applied to character game state**
+  via the state coordinator (with stat-name aliases: desire→horniness,
+  joy→happiness, …). Runs just before MoodSync (92) so its threshold-rule
+  auto-evaluation sees the new values. Previously these tags were parsed and
+  thrown away — the single biggest "plumbing without payoff" gap.
+- **Economy settlement** — `market.buy()`/`sell()` now move real value:
+  buy deducts credits from the player wallet, adds the good to inventory, and
+  raises **heat** on contraband; sell requires possession, removes the item,
+  and credits the wallet. Unaffordable/unheld trades are rejected and leave the
+  market untouched. Configurable under `economy:` in `config/default.yaml`
+  (`settle`, `contraband_heat_per_unit`, `sell_to_inventory`).
+- **EventCascade ↔ WorldSim** — WorldSim gained an `on_event(callback)`
+  subscriber registry fired from its single event funnel (`_log_event`);
+  `EventCascade.start()` (which already probed for `on_event`) now actually
+  connects, and the handler maps `SimEventType` → `WorldEventType` so scene
+  subscriptions match. Cross-scene ripples finally receive world events.
+
+### Changed — governance
+- **Skill cooldown + prerequisites enforced** in the AgentGovernor auto-skill
+  loop. The auto path bypassed `SkillRegistry.execute_skill` (which enforces
+  these), so auto skills could fire every turn regardless of their declared
+  `cooldown`. Registered skills are now throttled and gated on prerequisites;
+  unregistered MCP tools are unaffected. Added `CooldownTracker.was_used()`.
+
+### Audit notes (verified, no change needed)
+- Heat already gates the casino (≥80) and drives lounge NPC behaviour (≥65/85).
+- The rules engine is already auto-applied every reply (MoodSync threshold eval),
+  and action tags already bump conversation heat — the static audit understated
+  existing wiring.
+- Crew operations already complete via scene routes + the `crew_check_operations`
+  skill (request-driven); a redundant background timer was intentionally **not**
+  added to avoid double-resolution races.
+
+### Tests
+- `test_stat_sync_interceptor.py` (6), `test_market_settlement.py` (5),
+  `test_eventcascade_worldsim.py` (3) — all green; adjacent dialog/skills/scene
+  suites unaffected.
+
+---
+
 ## [1.58.0] — "DARK RENAISSANCE" — 2026-06-11
 
 All-scene visual glow-up from the `artifacts/new-assets` design system, three.js

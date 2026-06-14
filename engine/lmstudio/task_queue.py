@@ -1,14 +1,27 @@
 """
 TaskQueue — Priority queue for model-affinity task dispatch
+===========================================================
 
 Routes coding, vision, chat, and router tasks to the best model
 instance based on capability, affinity, and priority.
+
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.60.0 [2026-06-13] — Living Systems: closed the dead-code loop.
+        Workers now AUTO-START lazily on the first ``submit()`` (config-gated
+        via ``lmstudio.task_queue_v2.*``) so the ``lms_submit_task`` /
+        ``lms_queue_status`` skills actually execute enqueued tasks instead of
+        leaving them permanently QUEUED. Added ``reset_task_queue()`` for
+        hermetic singleton teardown in tests.
+    v1.44.0 [2026-03-21] — InferenceMonitor feed on task completion.
 
 Usage::
 
     from engine.lmstudio.task_queue import get_task_queue, Task, TaskType
 
-    queue = get_task_queue()
+    queue = get_task_queue()           # workers auto-start on first submit
     task = queue.submit(
         TaskType.CODE,
         prompt="Fix the bug in parser.py",
@@ -204,17 +217,41 @@ class TaskQueue:
         *,
         max_workers: int = 4,
         max_queue_depth: int = 100,
+        auto_start: Optional[bool] = None,
     ) -> None:
         if config is None:
             from engine.config import get_config
             config = get_config()
 
         self._config = config
-        self._max_workers = max_workers
-        self._max_queue_depth = max_queue_depth
+
+        # v1.60.0 [2026-06-13] — Config-driven worker pool. Use a DEDICATED
+        # config namespace (`lmstudio.task_queue_v2`) so we never collide with
+        # the legacy `lmstudio.task_queue` block, which is owned by the
+        # separate LMSTaskBridge queue in engine.nexus.lms_task_bridge.
+        cfg_workers = config.get("lmstudio.task_queue_v2.workers", max_workers)
+        cfg_depth = config.get("lmstudio.task_queue_v2.max_queue_depth", max_queue_depth)
+        self._max_workers = int(cfg_workers) if cfg_workers else max_workers
+        self._max_queue_depth = int(cfg_depth) if cfg_depth else max_queue_depth
+
+        # When True, the first submit() spins up the worker pool automatically.
+        # This is what makes the queue actually execute tasks end-to-end — the
+        # skill callers (lms_submit_task) never call start() explicitly.
+        #
+        # Resolution order: explicit constructor arg wins (used by tests and by
+        # the singleton factory); otherwise fall back to config. The DEFAULT is
+        # False so a bare, directly-constructed TaskQueue stays inert until told
+        # to run — the production wiring is opt-in through get_task_queue(), which
+        # enables auto-start from config so the skill dispatch loop is closed.
+        if auto_start is not None:
+            self._auto_start: bool = bool(auto_start)
+        else:
+            self._auto_start = bool(
+                config.get("lmstudio.task_queue_v2.auto_start", False)
+            )
 
         # Priority queue (lower priority value = higher priority)
-        self._queue: PriorityQueue[Task] = PriorityQueue(maxsize=max_queue_depth)
+        self._queue: PriorityQueue[Task] = PriorityQueue(maxsize=self._max_queue_depth)
         self._lock = threading.Lock()
 
         # Task registry for lookup
@@ -246,9 +283,25 @@ class TaskQueue:
         self._on_error: Optional[Callable[[Task, Exception], None]] = None
 
         logger.info(
-            "TaskQueue initialized: max_workers=%d, max_depth=%d",
-            max_workers, max_queue_depth,
+            "[task_queue] TaskQueue initialized (operation=init): "
+            "max_workers=%d, max_depth=%d, auto_start=%s",
+            self._max_workers, self._max_queue_depth, self._auto_start,
         )
+
+    # v1.60.0 [2026-06-13] — Lazy worker bootstrap.
+    # CONNECTS: lms_submit_task skill, worker_loop
+    # CALLED BY: submit()
+    def _ensure_started(self) -> None:
+        """Start the worker pool on demand if auto-start is enabled.
+
+        The skill callers (``lms_submit_task``) never invoke ``start()``
+        explicitly, so without this hook every submitted task would remain
+        permanently QUEUED. This is the wire that closes the dispatch loop.
+        """
+        if self._started or not self._auto_start:
+            return
+        # Double-checked under the start lock inside start().
+        self.start()
 
     # ── Task submission ──────────────────────────────────────────────
 
@@ -328,6 +381,10 @@ class TaskQueue:
             self._completion_events[task.id] = completion
             self._metrics.total_submitted += 1
 
+        # v1.60.0 [2026-06-13] — Ensure workers are running before enqueue so
+        # the task is actually dispatched (closes the previously-dead loop).
+        self._ensure_started()
+
         try:
             self._queue.put_nowait(task)
         except Exception:
@@ -391,24 +448,28 @@ class TaskQueue:
     # ── Worker management ────────────────────────────────────────────
 
     def start(self, num_workers: Optional[int] = None) -> None:
-        """Start worker threads."""
-        if self._started:
-            return
+        """Start worker threads (idempotent, thread-safe)."""
+        # v1.60.0 [2026-06-13] — Guard against concurrent lazy-start races from
+        # multiple submitters by double-checking under the instance lock.
+        with self._lock:
+            if self._started:
+                return
 
-        n = num_workers or self._max_workers
-        self._stop_event.clear()
+            n = num_workers or self._max_workers
+            self._stop_event.clear()
 
-        for i in range(n):
-            t = threading.Thread(
-                target=self._worker_loop,
-                name=f"task-queue-worker-{i}",
-                daemon=True,
-            )
-            t.start()
-            self._workers.append(t)
+            for i in range(n):
+                t = threading.Thread(
+                    target=self._worker_loop,
+                    name=f"task-queue-worker-{i}",
+                    daemon=True,
+                )
+                t.start()
+                self._workers.append(t)
 
-        self._started = True
-        logger.info("TaskQueue started with %d workers", n)
+            self._started = True
+
+        logger.info("[task_queue] Workers started (operation=start): count=%d", n)
 
     def stop(self) -> None:
         """Stop all worker threads."""
@@ -654,5 +715,34 @@ def get_task_queue(config: Any = None) -> TaskQueue:
     with _instance_lock:
         if _instance is not None:
             return _instance
-        _instance = TaskQueue(config=config)
+        # v1.60.0 [2026-06-13] — The singleton IS the production dispatch path
+        # used by the lms_submit_task / lms_queue_status skills, so it auto-starts
+        # its workers by default (config-overridable). Without this the skills
+        # would enqueue tasks that never execute.
+        if config is None:
+            from engine.config import get_config
+            config = get_config()
+        auto_start = bool(config.get("lmstudio.task_queue_v2.auto_start", True))
+        _instance = TaskQueue(config=config, auto_start=auto_start)
         return _instance
+
+
+# v1.60.0 [2026-06-13] — Hermetic singleton teardown for tests.
+def reset_task_queue() -> None:
+    """Shut down and discard the global TaskQueue singleton.
+
+    Intended for test isolation: parallel test runs (and the rest of the
+    suite) must not inherit worker threads or queued state from a prior
+    ``get_task_queue()`` call.
+    """
+    global _instance
+    with _instance_lock:
+        if _instance is not None:
+            try:
+                _instance.shutdown()
+            except Exception:  # pragma: no cover - best-effort teardown
+                logger.debug(
+                    "[task_queue] Singleton shutdown failed (operation=reset)",
+                    exc_info=True,
+                )
+            _instance = None

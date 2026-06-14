@@ -341,7 +341,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.58.0** (Dark Renaissance — all-scene glow-up via ui_kits_v2, three.js r128→r184 ES-module migration, penthouse 3D overhaul with curtain-wall skyline, NEONCITY landing on hub `/` + catalogue at `/terminal`, TUI arrow-key/subprocess launch overhaul, lab_break/grid launch fix, scene-rules registration fixes)
+- Current: **v1.60.0** (Living Systems — 10-agent fleet pro-upgrade: faction standing gates shops/missions/pricing + tilts FactionAI; mission consequences + chains + skill-scaling; crew skill-check outcomes; equipment skill-bonuses + category consumables; economy world-event price shocks; NLP neurochemistry interceptor; scheduler per-task timeouts; LMStudio backoff; observability LRU+alerts; dead-code resolved. Built on v1.59 Consequential World feedback loops + v1.58 Dark Renaissance visual overhaul)
 
 ### Navigational Comments
 

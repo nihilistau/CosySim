@@ -281,14 +281,31 @@ class EventCascade:
         """
         try:
             if isinstance(event, dict):
-                event_type = event.get("type", WorldEventType.SOCIAL)
+                raw_type = event.get("event_type", event.get("type", WorldEventType.SOCIAL))
                 payload = event
             else:
-                event_type = getattr(event, "type", WorldEventType.SOCIAL)
+                # v1.59.0 [2026-06-13] — WorldSim's SimEvent uses `event_type`
+                # (a SimEventType enum); fall back to `type` for other producers.
+                raw_type = getattr(event, "event_type", None) or getattr(event, "type", WorldEventType.SOCIAL)
                 payload = asdict(event) if hasattr(event, "__dataclass_fields__") else vars(event)
+            # Normalise enum → value, then map SimEventType → WorldEventType so
+            # scene subscriptions (keyed on WorldEventType) actually match.
+            raw_value = getattr(raw_type, "value", raw_type)
+            event_type = self._SIM_TO_CASCADE.get(raw_value, raw_value)
             self.dispatch(event_type, payload, source="world_sim")
         except Exception as exc:
             logger.debug("EventCascade: error handling WorldSim event: %s", exc)
+
+    # v1.59.0 [2026-06-13] — SimEventType.value → WorldEventType bridge.
+    _SIM_TO_CASCADE: Dict[str, str] = {
+        "npc_action":     WorldEventType.NPC,
+        "faction_shift":  WorldEventType.FACTION,
+        "scene_ambient":  WorldEventType.SOCIAL,
+        "hacker_message": WorldEventType.RUMOUR,
+        "arena_match":    WorldEventType.COMBAT,
+        "world_event":    WorldEventType.SOCIAL,
+        "economy_tick":   WorldEventType.ECONOMY,
+    }
 
     # ── Stats ─────────────────────────────────────────────────────────────
 

@@ -149,6 +149,10 @@ class TestMarketTrading:
         assert sell["unit_price"] < buy["unit_price"]
 
     def test_trade_history(self, market):
+        # v1.59.0: selling now requires possession (economy settlement), so
+        # seed the medkit into inventory before selling it.
+        from engine.world.inventory import get_inventory
+        get_inventory().add_item("medkit", 1)
         market.buy("DOWNTOWN", "stim_pack", quantity=1)
         market.sell("DOWNTOWN", "medkit", quantity=1)
         history = market.get_history(limit=10)

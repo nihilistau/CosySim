@@ -128,6 +128,12 @@ class CooldownTracker:
         with self._lock:
             self._last_used[skill_name] = time.time()
 
+    # v1.59.0 [2026-06-13] — prerequisite checking: has this skill run this session?
+    def was_used(self, skill_name: str) -> bool:
+        """Return True if *skill_name* has been invoked at least once."""
+        with self._lock:
+            return skill_name in self._last_used
+
     def get_remaining(self, skill_name: str, cooldown_secs: float) -> float:
         with self._lock:
             last = self._last_used.get(skill_name, 0.0)

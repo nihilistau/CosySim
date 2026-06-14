@@ -50,6 +50,8 @@ from engine.agents.interceptors.character_registry import CharacterRegistryInter
 from engine.agents.interceptors.dialog_directive import DialogDirectiveInterceptor
 from engine.agents.interceptors.tts_style import TTSStyleInterceptor
 from engine.agents.interceptors.mood_sync import MoodSyncInterceptor
+from engine.agents.interceptors.stat_sync import StatSyncInterceptor
+from engine.agents.interceptors.stimulus_detect import StimulusDetectInterceptor
 from engine.agents.interceptors.natural_mood_drift import NaturalMoodDriftInterceptor
 from engine.agents.interceptors.conversation_recap import ConversationRecapInterceptor
 from engine.agents.interceptors.relationship_event import RelationshipEventInterceptor
@@ -109,7 +111,9 @@ _REGISTRY: list[Type] = [
     HeatAwarenessInterceptor,       # pri 75 — heat/wanted level awareness
     ResponseShaperInterceptor,      # pri 80 — response formatting/shaping
     TTSStyleInterceptor,            # pri 85 — TTS voice style tags
+    StimulusDetectInterceptor,      # pri 88 — NLP stimulus detection → neurochemistry
     ActivityLoggerInterceptor,      # pri 90 — EventChain + training logging
+    StatSyncInterceptor,            # pri 91 — apply [STAT:x±y] tags to game state
     MoodSyncInterceptor,            # pri 92 — mood sync to CharacterRegistry
     SpectatorBroadcastInterceptor,  # pri 92 — danmaku spectator broadcast
     RelationshipEventInterceptor,   # pri 93 — relationship buff detection
@@ -174,6 +178,7 @@ __all__ = [
     "HeatAwarenessInterceptor",
     "ResponseShaperInterceptor",
     "TTSStyleInterceptor",
+    "StimulusDetectInterceptor",
     "ActivityLoggerInterceptor",
     "MoodSyncInterceptor",
     "SpectatorBroadcastInterceptor",
