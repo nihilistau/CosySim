@@ -269,13 +269,19 @@
   //   model GROUP once the pose is fully blended in. Mirrors the constants in
   //   _applyAnimState(). resolveAnchorY() subtracts this so that
   //   group.y = poseOffset + resolveAnchorY = surfaceY (no double-counting).
+  // v1.62.0 [2026-06-15] — review hardening: document 3-way anchor/pose coupling.
+  //   INVARIANT: ANCHOR_POSE_DY[anchor] MUST equal the group.position.y offset
+  //   that `_applyAnimState` (penthouse_anim.js) applies for the state that
+  //   `inferAnimState(locationId)` (penthouse_anim.js) returns for a location
+  //   using that anchor. Three tables must agree:
+  //   _locationPositions.anchor ↔ inferAnimState ↔ _applyAnimState offsets.
+  //   If you change one, change all three.
   const ANCHOR_POSE_DY = {
     lie:    -0.10,  // bed — reclining on back
     lounge: -0.30,  // couch — semi-reclined sprawl
     warm:   -0.30,  // fireplace — seated on floor
     primp:  -0.35,  // vanity — seated at mirror
     bathe:  -0.40,  // bath — seated in tub
-    sit:    -0.32,  // generic seat
     stand:   0,     // standing poses (drink/gaze/idle) keep feet on floor
   };
 

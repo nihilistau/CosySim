@@ -96,7 +96,6 @@ def capture(loc: str, out: Path, legacy: bool) -> dict:
             page.evaluate(
                 """() => {
                     const s = window.penthouse3D.getScene();
-                    s.traverse(o => { if (o.userData) {} });
                     // Reach the model via PenthouseAnim states (keyed by name).
                     const st = window.PenthouseAnim.AnimManager.getState('Probe');
                     if (st && st.model) { st.model._baseY = 0; }
