@@ -15,7 +15,7 @@ Change Log:
 Usage:
     python apps/account.py list                              # List all accounts
     python apps/account.py import github.har                 # Import GitHub cookies
-    python apps/account.py import nlm.har --name knack112358 # Import NLM cookies
+    python apps/account.py import nlm.har --name <account> # Import NLM cookies
     python apps/account.py import github.har --analyze       # Analyze without importing
     python apps/account.py cookies                           # Extract from Chrome
     python apps/account.py refresh                           # Refresh via CDP
@@ -93,9 +93,11 @@ def main() -> int:
 
             account_name = parsed.name
             if not account_name:
+                # v1.61.0 [2026-06-13] — known accounts from env, not hardcoded
                 fname = os.path.basename(filepath).lower()
-                for known in ["knack112358", "knack122358", "nihilistcod", "nihilistau"]:
-                    if known in fname:
+                _known = [a.strip() for a in os.getenv("COSYSIM_KNOWN_ACCOUNTS", "").split(",") if a.strip()]
+                for known in _known:
+                    if known.lower() in fname:
                         account_name = known
                         break
                 if not account_name:

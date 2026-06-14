@@ -57,6 +57,29 @@ def _is_secret_config_path(path: str) -> bool:
 # ──── ConfigManager ──────────────────────────────────────────────────────────
 
 
+# v1.61.0 [2026-06-13] — one-time .env loader (gitignored local secrets)
+_DOTENV_LOADED = False
+
+
+def _load_dotenv_once() -> None:
+    """Load project-root .env into os.environ exactly once (best-effort).
+
+    Does not override variables already set in the real environment.
+    """
+    global _DOTENV_LOADED
+    if _DOTENV_LOADED:
+        return
+    _DOTENV_LOADED = True
+    try:
+        from dotenv import load_dotenv
+        from engine.paths import ROOT
+        env_path = ROOT / ".env"
+        if env_path.exists():
+            load_dotenv(env_path, override=False)
+    except Exception:
+        pass  # dotenv optional — ${VAR} still resolves from real env vars
+
+
 class ConfigManager:
     """Manages system configuration with environment-based overrides."""
 
@@ -68,11 +91,17 @@ class ConfigManager:
             environment: Environment name (development, production, etc.)
                         If None, uses COSYVOICE_ENV environment variable or "default"
         """
+        # v1.61.0 [2026-06-13] — Load the gitignored .env so secret env vars
+        # (LMSTUDIO_API_TOKEN, etc.) referenced as ${VAR} in YAML resolve for
+        # local runs. Real secrets live in .env / config/secrets.yaml, never in
+        # the committed config. Best-effort; never blocks startup.
+        _load_dotenv_once()
+
         self.environment = environment or os.getenv("COSYSIM_ENV") or os.getenv("COSYVOICE_ENV", "default")
         from engine.paths import CONFIG_DIR
         self.config_dir = CONFIG_DIR
         self._config: Dict[str, Any] = {}
-        
+
         self._load_config()
     
     def _load_config(self) -> None:

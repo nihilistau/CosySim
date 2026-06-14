@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
@@ -28,13 +29,32 @@ STREAMING_BASE = "https://webchannel-alkalimakersuite-pa.clients6.google.com"
 _REST_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 # Confirmed API keys (rotate via GenerateCloudApiKey)
-API_KEYS = [
-    "REDACTED-GOOGLE-API-KEY",
-    "REDACTED-GOOGLE-API-KEY",
-    "REDACTED-GOOGLE-API-KEY",
-    "REDACTED-GOOGLE-API-KEY",
-    "REDACTED-GOOGLE-API-KEY",
-]
+# v1.61.0 [2026-06-13] — move hardcoded AI Studio API keys to env
+# Keys are read from env vars GOOGLE_AISTUDIO_KEY_1..5 (comma-separated
+# GOOGLE_AISTUDIO_KEYS also accepted). Empty entries are filtered out so the
+# module imports cleanly even when no keys are configured locally.
+def _load_aistudio_keys() -> List[str]:
+    """Load AI Studio API keys from environment, filtering empties."""
+    bulk = os.getenv("GOOGLE_AISTUDIO_KEYS", "")
+    if bulk:
+        return [k.strip() for k in bulk.split(",") if k.strip()]
+    return [
+        k
+        for k in (
+            os.getenv("GOOGLE_AISTUDIO_KEY_1", ""),
+            os.getenv("GOOGLE_AISTUDIO_KEY_2", ""),
+            os.getenv("GOOGLE_AISTUDIO_KEY_3", ""),
+            os.getenv("GOOGLE_AISTUDIO_KEY_4", ""),
+            os.getenv("GOOGLE_AISTUDIO_KEY_5", ""),
+        )
+        if k
+    ]
+
+
+API_KEYS = _load_aistudio_keys()
+
+# Default key used as a fallback argument; empty string when none configured.
+_DEFAULT_API_KEY = API_KEYS[0] if API_KEYS else ""
 
 
 def _build_sapisidhash(sapisid: str, origin: str = "https://aistudio.google.com") -> str:
@@ -63,7 +83,8 @@ class AIStudioClient:
         api_key: AI Studio API key (defaults to first in list).
     """
 
-    def __init__(self, cookies: dict[str, str], api_key: str = API_KEYS[0]) -> None:
+    # v1.61.0 [2026-06-13] — default key from env-loaded list (was API_KEYS[0])
+    def __init__(self, cookies: dict[str, str], api_key: str = _DEFAULT_API_KEY) -> None:
         self._cookies = cookies
         self._api_key = api_key
         self._session = requests.Session()
@@ -2465,7 +2486,7 @@ class AIStudioClient:
 _client: Optional[AIStudioClient] = None
 
 
-def get_aistudio_client(cookies: Optional[dict] = None, api_key: str = API_KEYS[0]) -> AIStudioClient:
+def get_aistudio_client(cookies: Optional[dict] = None, api_key: str = _DEFAULT_API_KEY) -> AIStudioClient:
     """Get or create the singleton AI Studio client.
 
     Args:

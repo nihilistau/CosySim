@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cosysim"
-# v1.60.0 [2026-06-13] — Living Systems: 10-agent fleet pro-upgrade across
-# faction/mission/crew/inventory/economy/neuro/scheduler/lmstudio/observability
-# + dead-code resolution. Built on v1.59 Consequential World feedback loops.
-version = "1.60.0"
+# v1.61.0 [2026-06-13] — Public Release Prep: credential security audit (all
+# secrets externalized to gitignored .env / examples), hardened .gitignore,
+# and a complete professional README + docs pass. Built on v1.60 Living Systems.
+version = "1.61.0"
 description = "CosySim - AI Virtual Companion Simulation System with voice/video calls and interactive scenes"
 readme = "README.md"
 requires-python = ">=3.10"

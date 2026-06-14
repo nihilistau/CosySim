@@ -123,9 +123,9 @@ data.hailuoai.video   ── reporting ────────> same meerkat-re
 | Field | Value |
 |-------|-------|
 | Firebase Project | `talkie-e5d0e` |
-| API Key 1 | `REDACTED-GOOGLE-API-KEY` |
-| API Key 2 | `REDACTED-GOOGLE-API-KEY` |
-| API Key 3 | `REDACTED-GOOGLE-API-KEY` |
+| API Key 1 | `AIza_REDACTED` |
+| API Key 2 | `AIza_REDACTED` |
+| API Key 3 | `AIza_REDACTED` |
 | Auth Provider | Google Sign-In (`securetoken.google.com/talkie-e5d0e`) |
 | Token Type | RS256 JWT (Firebase ID Token) |
 

@@ -143,6 +143,37 @@ data/hars/
 
 # ──── Backups ─────────────────────────────────────────────────────
 backups/
+**/backups/
+*.bak
+*.bak.*
+config/launcher.yaml.bak
+
+# ──── Secrets & credentials (v1.61.0 — never commit real values) ──
+# Real secrets live in gitignored local files; committed *.example.* files
+# show the structure. See docs/CONFIGURATION.md / .env.example.
+config/secrets.yaml
+config/secrets.local.yaml
+config/*.local.yaml
+# contains extracted Google API keys — runtime-regenerable; ship nlm_rpcids.example.yaml
+config/nlm_rpcids.yaml
+# runtime rpcid cache (also matched by data/*.json)
+data/nlm_rpc_registry.json
+# legacy cookie store
+data/google_accounts/
+data/credentials/
+**/*credentials*.json
+**/*_cookies.json
+**/*.credentials
+**/service_account*.json
+**/client_secret*.json
+
+# ──── Heap / dump / capture intelligence (may contain mined secrets) ──
+data/heap_findings*
+data/heap-output/
+heap_output/
+**/*.dump
+**/*.heap
+data/dumps/
 
 # ──── Copilot session files ───────────────────────────────────────
 copilot-session-*.md

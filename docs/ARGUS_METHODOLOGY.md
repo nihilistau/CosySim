@@ -229,7 +229,7 @@ strings into:
 | **Method names** | `Create*`, `Get*`, `List*`, `Delete*` | `CreateNotebook`, `GetFeatureFlags` |
 | **Service paths** | `*.Service/*` | `google.internal.alkali...MakerSuiteService/CountTokens` |
 | **RPC IDs** | 4-8 char alphanumeric | `wXbhsf`, `Bgzyjc`, `ozz5Z` |
-| **API keys** | `AIza*`, `sk-*`, `ghp_*` | `REDACTED-GOOGLE-API-KEY` |
+| **API keys** | `AIza*`, `sk-*`, `ghp_*` | `AIza_REDACTED` |
 
 ### 2.3 Heap Diffing
 

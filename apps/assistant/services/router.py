@@ -143,7 +143,7 @@ def _call_copilot(messages: List[Dict[str, Any]], model: str) -> str:
     """Route to GitHub Copilot."""
     from engine.integrations.github_copilot_client import GithubCopilotClient
 
-    account = DEFAULT_SETTINGS.get("account", "nihilistcod")
+    account = DEFAULT_SETTINGS.get("account", "")
     client = GithubCopilotClient(account)
     thread_id = client.create_thread()
 
@@ -170,7 +170,7 @@ def _stream_copilot(messages: List[Dict[str, Any]], model: str) -> Generator[str
     """Stream from GitHub Copilot token-by-token."""
     from engine.integrations.github_copilot_client import GithubCopilotClient
 
-    account = DEFAULT_SETTINGS.get("account", "nihilistcod")
+    account = DEFAULT_SETTINGS.get("account", "")
     client = GithubCopilotClient(account)
     thread_id = client.create_thread()
 
@@ -314,7 +314,7 @@ def check_backend_status() -> Dict[str, Dict[str, Any]]:
     # Copilot
     try:
         from engine.integrations.github_copilot_client import GithubCopilotClient
-        client = GithubCopilotClient(DEFAULT_SETTINGS.get("account", "nihilistcod"))
+        client = GithubCopilotClient(DEFAULT_SETTINGS.get("account", ""))
         models = client.list_models()
         status["copilot"] = {"online": True, "models": len(models)}
     except Exception as e:

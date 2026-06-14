@@ -4,6 +4,44 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.61.0] — "PUBLIC RELEASE PREP" — 2026-06-13
+
+Made the repository safe and inviting to publish: a full credential security
+audit (no live secrets in the tree), a hardened ignore policy, and a complete
+professional README + documentation pass.
+
+### Security — credentials externalized (no real secret remains in tracked source)
+- **80+ secrets removed**: 24 hardcoded Google API keys across
+  `engine/integrations/` (aistudio/drive/workspace) → `os.getenv`; 55 keys in
+  `config/nlm_rpcids.yaml` → file gitignored + redacted
+  `config/nlm_rpcids.example.yaml` shipped; the LMStudio API token and a real
+  personal email pulled out of `config/default.yaml` and source; a live
+  `FIREBASE_API_KEY` in the ARGUS sesame client; and key/email stragglers
+  redacted from `docs/ARGUS_*` reports and a heap test fixture.
+- **Secret pattern**: real values live only in a gitignored `.env` (auto-loaded
+  by `engine/config.py` via python-dotenv) or `config/secrets.yaml`; committed
+  config uses `${ENV_VAR}` placeholders resolved at read time. `.env.example`
+  documents every variable. **Local runtime is preserved** — verified config
+  loads, all scenes import, and NEON CITY launches clean.
+- **Personal identifiers** (account handles) moved to
+  `COSYSIM_DEFAULT_ACCOUNT` / `COSYSIM_KNOWN_ACCOUNTS` env vars.
+- **`.gitignore` hardened**: secrets, `config/nlm_rpcids.yaml`,
+  `data/heap_findings*`, dumps, `*.bak`, cookies/credentials, heap variants;
+  `git rm --cached` applied to the two tracked sensitive files (kept on disk).
+
+### Documentation — flagship README + assets
+- **Complete README rewrite** (drafted by an 8-agent fleet, assembled by hand):
+  hero, badges, "Start here" navigation table, quickstart, security/config guide,
+  then deep sections — Overview &amp; Architecture, NEON CITY living world, Engine
+  Internals (interceptors · stream-tag spec decoding · custom LMStudio steering ·
+  ephemeral servers · the Oracle's dual role), NLM + NEXUS frontier-from-local,
+  CONTROL (training/finetune/self-improvement), Integrations/Apps/CLI, the ARGUS
+  protocol, and the Creation pillar. Emphasizes the open, learn-from-it nature.
+- **`docs/assets/scenes/`** — 21 curated scene screenshots embedded/linked.
+- README deep-links the existing `docs/` tree (all links verified to resolve).
+
+---
+
 ## [1.60.0] — "LIVING SYSTEMS" — 2026-06-13
 
 A 10-agent fleet upgrade (disjoint file ownership; shared-file hooks integrated

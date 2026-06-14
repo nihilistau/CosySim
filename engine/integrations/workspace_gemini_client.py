@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 from typing import Any, Callable, Dict, Generator, List, Optional
 
@@ -59,24 +60,27 @@ MIME_SHEETS = "application/vnd.google-apps.ritz"
 MIME_DOCS = "application/vnd.google-apps.kix"
 
 # Default API keys per service (Google-embedded client keys from HAR mining)
+# v1.61.0 [2026-06-13] — move hardcoded Workspace Gemini API keys to env
+# (empty-string fallback). The three drive_* entries share the same real
+# values as the Drive client, so they reuse the GOOGLE_DRIVE_KEY_* env vars.
 _API_KEYS: Dict[str, str] = {
-    "sheets": "REDACTED-GOOGLE-API-KEY",
-    "docs": "REDACTED-GOOGLE-API-KEY",
-    "cloud_search": "REDACTED-GOOGLE-API-KEY",
-    "people_autocomplete": "REDACTED-GOOGLE-API-KEY",
-    "people_autocomplete_alt": "REDACTED-GOOGLE-API-KEY",
-    "experiments": "REDACTED-GOOGLE-API-KEY",
-    "consent": "REDACTED-GOOGLE-API-KEY",
-    "addons": "REDACTED-GOOGLE-API-KEY",
-    "addons_alt": "REDACTED-GOOGLE-API-KEY",
-    "growth_promos": "REDACTED-GOOGLE-API-KEY",
-    "analytics": "REDACTED-GOOGLE-API-KEY",
-    "feedback": "REDACTED-GOOGLE-API-KEY",
-    "feedback_trigger": "REDACTED-GOOGLE-API-KEY",
-    "drive_files": "REDACTED-GOOGLE-API-KEY",
-    "drive_files_alt": "REDACTED-GOOGLE-API-KEY",
-    "drive_permissions": "REDACTED-GOOGLE-API-KEY",
-    "ogads": "REDACTED-GOOGLE-API-KEY",
+    "sheets": os.getenv("GOOGLE_WORKSPACE_KEY_SHEETS", ""),
+    "docs": os.getenv("GOOGLE_WORKSPACE_KEY_DOCS", ""),
+    "cloud_search": os.getenv("GOOGLE_WORKSPACE_KEY_CLOUD_SEARCH", ""),
+    "people_autocomplete": os.getenv("GOOGLE_WORKSPACE_KEY_PEOPLE_AUTOCOMPLETE", ""),
+    "people_autocomplete_alt": os.getenv("GOOGLE_WORKSPACE_KEY_PEOPLE_AUTOCOMPLETE_ALT", ""),
+    "experiments": os.getenv("GOOGLE_WORKSPACE_KEY_EXPERIMENTS", ""),
+    "consent": os.getenv("GOOGLE_WORKSPACE_KEY_CONSENT", ""),
+    "addons": os.getenv("GOOGLE_WORKSPACE_KEY_ADDONS", ""),
+    "addons_alt": os.getenv("GOOGLE_WORKSPACE_KEY_ADDONS_ALT", ""),
+    "growth_promos": os.getenv("GOOGLE_WORKSPACE_KEY_GROWTH_PROMOS", ""),
+    "analytics": os.getenv("GOOGLE_WORKSPACE_KEY_ANALYTICS", ""),
+    "feedback": os.getenv("GOOGLE_WORKSPACE_KEY_FEEDBACK", ""),
+    "feedback_trigger": os.getenv("GOOGLE_WORKSPACE_KEY_FEEDBACK_TRIGGER", ""),
+    "drive_files": os.getenv("GOOGLE_DRIVE_KEY_UPLOAD", ""),
+    "drive_files_alt": os.getenv("GOOGLE_DRIVE_KEY_READ", ""),
+    "drive_permissions": os.getenv("GOOGLE_DRIVE_KEY_PERMS", ""),
+    "ogads": os.getenv("GOOGLE_WORKSPACE_KEY_OGADS", ""),
 }
 
 
