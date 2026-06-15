@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+{#
+  war_room.html — THE WAR ROOM faction command center (C-T1 scaffold).
+  ===================================================================
+  v1.63.0 [2026-06-16] — Bootable placeholder (C-T1). Renders a neon
+  "THE WAR ROOM — booting…" page in the red faction-command aesthetic and
+  loads the scene's CSS/JS + the shared Socket.IO client. The live command
+  center (faction select, crew orders, territory ops) replaces this in later
+  v1.63 tasks. Fed by GET /api/state (a stub) + Socket.IO state_update.
+
+  STANDALONE full-screen template (does NOT extend neon_base.html): the
+  command center owns the entire viewport (like the_sprawl / executive_suite).
+#}
+{% set scene_data = scene_data | default({}) %}
+<html lang="en" data-scene="war_room">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="scene-key" content="war_room">
+  <meta name="scene-accent" content="{{ scene_data.accent_color | default('#ef4444') }}">
+  <title>THE WAR ROOM · Faction Command</title>
+
+  {# Locally vendored fonts (Orbitron / Inter / JetBrains Mono) — offline-safe #}
+  <link rel="stylesheet" href="/shared/css/fonts.css">
+  {# Scene styles + animations #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/war_room.css') }}">
+</head>
+
+<body data-screen-label="04 The War Room">
+<div class="war-stage" id="war-stage">
+
+  <!-- ═══ Backdrop layers (CSS) ═══ -->
+  <div class="war-sky" aria-hidden="true"></div>
+  <div class="war-scanlines" aria-hidden="true"></div>
+  <div class="war-vignette" aria-hidden="true"></div>
+
+  <!-- ═══ Booting placeholder ═══ -->
+  <main class="war-boot">
+    <div class="war-boot__logo" aria-hidden="true">⚔</div>
+    <h1 class="war-boot__title">THE WAR ROOM</h1>
+    <p class="war-boot__tagline">Pick a faction. Command crews. Take the city.</p>
+    <p class="war-boot__status">
+      <span class="war-boot__pulse" aria-hidden="true"></span>
+      <span id="war-status">booting…</span>
+    </p>
+    <p class="war-boot__link" id="war-link">connecting…</p>
+  </main>
+
+</div>
+
+{# ── Shared Socket.IO client (served by register_shared_assets) ── #}
+<script src="/shared/js/socket.io.min.js"></script>
+
+{# ── Scene script: Socket.IO connect + log ── #}
+<script src="{{ url_for('static', filename='js/war_room.js') }}"></script>
+
+</body>
+</html>

@@ -18,6 +18,7 @@ Version: v1.42.1 [2026-03-21]
 Author:  CosySim Team
 
 Change Log:
+    v1.63.0 [2026-06-16] — war_room port (5598) + hub catalogue + scenes group
     v1.63.0 [2026-06-15] — the_sprawl port (5597) + hub catalogue + scenes group
     v1.62.0 [2026-06-15] — executive_suite port (5596) + hub catalogue: surface
                             auction, cyberspace, executive_suite
@@ -68,6 +69,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "neonos": 5593,        # v1.51.0 — NEON OS virtual desktop shell
     "executive_suite": 5596,  # v1.62.0 — Executive Suite neon OS desktop (ES-T1)
     "the_sprawl": 5597,    # v1.63.0 — The Sprawl living-city map (B-T1)
+    "war_room": 5598,      # v1.63.0 — The War Room faction command center (C-T1)
     "intel_hub": 5580,
     # ── Launcher-managed services (8500–8800) ──
     "hub": 8500,
@@ -118,6 +120,7 @@ SERVICE_GROUPS: Dict[str, List[str]] = {
         "lab_break",
         "executive_suite",
         "the_sprawl",
+        "war_room",
         "intel_hub", "nexus_panel", "system_control",
     ],
     # v1.49.2 [2026-03-22] — dashboard migrated from Streamlit to Flask
@@ -197,6 +200,8 @@ HUB_CATALOGUE_TARGETS: Tuple[str, ...] = (
     "executive_suite", # v1.62.0 — Executive Suite neon OS desktop (ES-T1)
     # v1.63.0 [2026-06-15] — The Sprawl living-city map (B-T1)
     "the_sprawl",      # v1.63.0 — The living city map
+    # v1.63.0 [2026-06-16] — The War Room faction command center (C-T1)
+    "war_room",        # v1.63.0 — Pick a faction and command the city
 )
 
 HUB_HEALTH_TARGETS: Tuple[str, ...] = (
