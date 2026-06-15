@@ -1199,14 +1199,22 @@ emergent:
   goals:
     rel_negative: -0.4       # relationship <= this is hostile -> revenge goal
     rel_positive: 0.6        # relationship >= this is close   -> romance goal
-    base_wealth: 0.30        # baseline priority of the always-on wealth goal
+    # v1.63.0 [2026-06-15] — A6 live-run tuning: raise wealth so trade competes
+    # every tick (market stays lively) and damp romance so a single close pair
+    # cannot pin every pass; nudge rank/territory above baseline so faction NPCs
+    # actually pursue turf (contests) when present.
+    base_wealth: 0.35        # baseline priority of the always-on wealth goal
     revenge_weight: 0.80     # multiplies |relationship| for revenge priority
-    romance_weight: 0.70     # multiplies relationship for romance priority
-    rank_priority: 0.45      # priority of a faction RANK goal
-    territory_priority: 0.40  # priority of a faction TERRITORY goal
+    romance_weight: 0.45     # multiplies relationship for romance priority
+    rank_priority: 0.50      # priority of a faction RANK goal
+    territory_priority: 0.50  # priority of a faction TERRITORY goal
     lay_low_boost: 0.50      # added on top of the current max so LAY_LOW sorts first
     success_decay: 0.30      # subtracted from a satisfied goal's priority
     failure_bump: 0.30       # added to a thwarted goal's priority
+    # v1.63.0 [2026-06-15] — A6: a satisfied goal never decays below this floor,
+    # so always-on drives (WEALTH) stay above planner.min_utility and the world
+    # remains perpetually lively instead of going silent after a few ticks.
+    success_floor: 0.05
   # ── v1.63.0 [2026-06-15] — A4: hybrid planner tuning ──
   # Weights for the PURE action planner (utility = priority * fit * feasibility)
   # and the verb dispatcher. engine/world/emergent/planner.py reads these via
@@ -1218,9 +1226,11 @@ emergent:
     fit_weight: 1.0          # weight on how well the verb fits the goal
     feasibility_weight: 1.0  # weight on whether the action is even possible
     min_utility: 0.01        # below this, plan_action returns None
-    llm_chance: 0.05         # P(use_llm) for a PIVOTAL action (kept rare)
+    llm_chance: 0.05         # P(use_llm) for a PIVOTAL action (kept rare — model stays calm)
     trade_default_qty: 1     # default quantity for a trade dispatch
-    contest_delta: 3.0       # control delta for a contest (clamped to CONTROL_SHIFT_RANGE)
+    # v1.63.0 [2026-06-15] — A6: 2.0 keeps territory contests visible but not
+    # runaway (clamped to CONTROL_SHIFT_RANGE) so control shifts gradually.
+    contest_delta: 2.0       # control delta for a contest (clamped to CONTROL_SHIFT_RANGE)
   # ── v1.63.0 [2026-06-15] — A5: agency driver (on the LivingWorld tick) ──
   # The agency subscribes to the EXISTING living_world_tick EventBus event (no
   # second daemon) and, each tick, runs a bounded goals→plan→execute pass over a

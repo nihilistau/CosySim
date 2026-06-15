@@ -1904,6 +1904,13 @@ class NeonCityScene(FlaskScene):
             lw = get_living_world()
             lw.start()
             logger.info("[%s] LivingWorld daemon started (operation=lifecycle)", SCENE_ID)
+            # v1.63.0 [2026-06-15] — A6: live-wire emergent agency to the running
+            # LivingWorld. start() is idempotent + config-gated (emergent.agency.
+            # enabled); it subscribes to the EXISTING living_world_tick event so a
+            # bounded goals->plan->execute pass runs whenever the world ticks.
+            from engine.world.emergent.agency import get_emergent_agency
+            get_emergent_agency().start()
+            logger.info("[emergent] agency started (operation=lifecycle)")
         except Exception as exc:
             logger.warning("[%s] LivingWorld start failed (operation=lifecycle): %s", SCENE_ID, exc)
 
@@ -1981,6 +1988,14 @@ class NeonCityScene(FlaskScene):
         try:
             from engine.world.living_world import get_living_world
             get_living_world().stop()
+        except Exception:
+            pass
+        # v1.63.0 [2026-06-15] — A6: stop the emergent agency on the matching
+        # shutdown (idempotent unsubscribe; never raises).
+        try:
+            from engine.world.emergent.agency import get_emergent_agency
+            get_emergent_agency().stop()
+            logger.info("[emergent] agency stopped (operation=lifecycle)")
         except Exception:
             pass
         for sub_id in self._bus_subs:

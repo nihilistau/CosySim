@@ -413,6 +413,19 @@ class EmergentAgency:
 
             res = get_market().apply_event(nudge)
             ok = bool(res) and res.get("status") != "error"
+            # v1.63.0 [2026-06-15] — A6: log the trade to the emergent feed so the
+            # most common verb is visible in recent_events() (mirrors planner's
+            # _log_world_event for the non-trade verbs). Best-effort; never raises.
+            if ok:
+                try:
+                    _default_store().log_event(
+                        kind="trade",
+                        actor=npc_id,
+                        summary=f"{npc_id} performed trade ({nudge} supply nudge)",
+                        payload={"nudge": nudge, "side": side, "detail": "supply_nudge"},
+                    )
+                except Exception:
+                    logger.debug("Suppressed trade-log exception", exc_info=True)
             return {"verb": "trade", "ok": ok, "detail": "supply_nudge", "nudge": nudge}
         except Exception as exc:
             logger.error(

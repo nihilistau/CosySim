@@ -4,6 +4,48 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.63.0] — "EMERGENT LIVING WORLD" — 2026-06-15
+
+Sub-project A of v1.63: a per-NPC **emergent agency** layer that gives the city's
+characters genuine, self-directed behaviour — each runs a goal → plan → verb loop
+every world tick and acts on the world through the systems that already exist. No
+second daemon, no new managers: the agency rides the existing `living_world_tick`
+EventBus event and dispatches to Territory, Market, Crew, FactionAI,
+relationship_effects, npc_comms and phone_hack. Verified live against the running
+LivingWorld with the model staying calm (rule-based actions; LLM use ≈
+`emergent.planner.llm_chance`). Sub-projects B/C/D (player-facing scenes) are
+forthcoming.
+
+### Emergent agency — per-NPC goal → verb on the LivingWorld loop
+- **Agency driver wired into the live boot** — `get_emergent_agency().start()` now
+  runs from `neoncity_scene.on_before_serve` immediately after the LivingWorld
+  daemon starts (and `stop()` on the matching shutdown), config-gated by
+  `emergent.agency.enabled`. The agency subscribes to the existing
+  `living_world_tick` event and, each tick, drives up to
+  `emergent.agency.active_npcs_per_tick` NPCs through a bounded
+  goals → plan → execute → reprioritize → persist → emit pass.
+- **Reuse-first dispatch** — verbs route to the existing managers: `trade` →
+  a non-settling `Market.apply_event` supply nudge (never drains the player
+  wallet), `contest` → `TerritoryManager.shift_control`, plus crew_op, romance,
+  hack and message via CrewManager / relationship_effects / phone_hack /
+  npc_comms. Each action logs to the persistent emergent store and emits an
+  `emergent_action` event for scenes/Oracle.
+- **Persistent goals & feed** — NPC goals (wealth, revenge, romance, faction
+  rank/territory, lay-low) persist across restarts in `data/emergent.db`; goal
+  priorities decay on success and bump on failure.
+- **Liveliness fix (`goals.success_floor`)** — a satisfied goal no longer decays
+  below a floor, so always-on drives (WEALTH) stay above `planner.min_utility`
+  and the world remains perpetually active instead of going silent after a few
+  ticks. Trades are now also logged to the emergent feed.
+- **Live-run tuning** — `goals.base_wealth` 0.30→0.35, `goals.romance_weight`
+  0.70→0.45, `goals.rank_priority` 0.45→0.50, `goals.territory_priority`
+  0.40→0.50, `goals.success_floor` 0.05 (new), `planner.contest_delta` 3.0→2.0.
+  Live run: trade×9 / romance×3 across the NPCs, avg good price 521→554, LLM
+  use 0/15 (≤ `llm_chance` 0.05). Knobs all read via `get_config()` —
+  designers retune without code changes.
+
+---
+
 ## [1.62.1] — "LIVING CITY — LOOP COMPLETIONS" — 2026-06-15
 
 Finished wiring the v1.62 "Living City" systems end-to-end: the Executive Suite
