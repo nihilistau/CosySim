@@ -14,9 +14,13 @@ actually needs:
 * ``app_slots`` — how many apps the phone can hold (base + per-tier bonus).
 
 This is the FOUNDATION for the phone-OS hacking/upgrades sub-project (PH-T2+).
-PH-T2 adds the real software/hardware catalog; for now a small, extensible
-internal map (:data:`_SOFTWARE_BONUSES`) covers whatever already exists so the
-derivation is meaningful today.
+PH-T2 adds the real software/hardware upgrade catalog. The effect magnitudes for
+those upgrades are NOT declared here — they live as the single source of truth in
+:data:`engine.world.inventory.ITEM_CATALOG` (the ``phone_upgrade`` block on each
+upgrade item). :func:`PhoneOS._upgrade_bonuses` reads them so the numbers a
+player buys are exactly the numbers derived here. A small legacy in-code map
+(:data:`_SOFTWARE_BONUSES`) covers the pre-PH-T2 software ids so older saves and
+PH-T1 derivations keep working.
 
 Design notes
 ------------
@@ -42,6 +46,14 @@ Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — PH-T2: phone-OS upgrades. Derived stats now also sum
+                            the effects of installed *upgrade* items, reading the
+                            magnitudes from the single source of truth in
+                            ``engine.world.inventory`` (``phone_upgrade.effects``)
+                            instead of re-declaring them. ``app_slots`` gains an
+                            installed-upgrade bonus (e.g. CPU v2). New ``stats``
+                            snapshot helper for the install skill / UI to read
+                            all derived stats at once.
     v1.62.0 [2026-06-15] — PH-T1: initial PhoneOS accessor. Wraps PhoneDB
                             ``npc_phone`` records with derived effective
                             security/firewall/hack_power/app_slots, player
@@ -69,10 +81,12 @@ PLAYER_ID = "user"
 # Config root for every tunable magnitude in this module.
 _CFG_ROOT = "phone.os"
 
-# Default per-installed-software/hardware bonuses. Extensible: PH-T2 replaces
-# this with the real upgrade catalog. Keys are ``installed_apps`` entries; each
-# maps to the derived stats it boosts. Only items that already exist in the game
-# (see engine.world.inventory.ITEM_CATALOG) are listed today.
+# Legacy per-installed-software bonuses (pre-PH-T2). Keys are ``installed_apps``
+# entries; each maps to the derived stats it boosts. PH-T2 upgrade items do NOT
+# appear here — their effects come from the single source of truth in
+# engine.world.inventory.ITEM_CATALOG (see :meth:`PhoneOS._upgrade_bonuses`).
+# This map is kept for the pre-PH-T2 software ids so older saves / PH-T1
+# derivations remain correct.
 _SOFTWARE_BONUSES: Dict[str, Dict[str, int]] = {
     # Defensive software → harder to crack / better firewall.
     "shadow_protocol": {"security": 2, "firewall": 1},
@@ -306,7 +320,8 @@ class PhoneOS:
             base_slots = int(self._cfg("base_app_slots") or 1)
             per_sec = int(self._cfg("app_slots_per_security") or 0)
             sec = int(rec.get("security_level", 1) or 0)
-            return max(1, base_slots + per_sec * sec)
+            upgrade_slots = self._software_bonus(rec, "app_slots")
+            return max(1, base_slots + per_sec * sec + upgrade_slots)
         except Exception as exc:
             logger.error(
                 "[phone_os] app_slots failed, returning base default "
@@ -314,6 +329,25 @@ class PhoneOS:
                 char_id, exc,
             )
             return int(self._cfg("base_app_slots") or 6)
+
+    def stats(self, char_id: str) -> Dict[str, int]:
+        """Return all derived stats for *char_id* as a single dict.
+
+        Convenience snapshot for the install skill and the PH-T5 UI.
+
+        Args:
+            char_id: The character id.
+
+        Returns:
+            Dict with ``effective_security``, ``effective_firewall``,
+            ``hack_power`` and ``app_slots``.
+        """
+        return {
+            "effective_security": self.effective_security(char_id),
+            "effective_firewall": self.effective_firewall(char_id),
+            "hack_power": self.hack_power(char_id),
+            "app_slots": self.app_slots(char_id),
+        }
 
     # ── seeding ─────────────────────────────────────────────────────────
 
@@ -366,21 +400,58 @@ class PhoneOS:
     # ── internals ───────────────────────────────────────────────────────
 
     def _software_bonus(self, rec: Dict[str, Any], stat: str) -> int:
-        """Sum the *stat* bonus granted by a record's installed apps.
+        """Sum the *stat* bonus granted by a record's installed apps/upgrades.
+
+        Each entry in ``installed_apps`` is looked up first in the legacy
+        :data:`_SOFTWARE_BONUSES` map and then in the PH-T2 upgrade catalog
+        (the single source of truth — see :meth:`_upgrade_bonuses`). Both
+        contributions are summed so a phone carrying both kinds is handled.
 
         Args:
             rec: A phone record dict.
-            stat: One of ``"security"``, ``"firewall"``, ``"hack_power"``.
+            stat: One of ``"security"``, ``"firewall"``, ``"hack_power"``,
+                ``"app_slots"``.
 
         Returns:
             The summed bonus (0 when no installed app grants *stat*).
         """
         total = 0
+        catalog_bonuses = self._upgrade_bonuses()
         for app in rec.get("installed_apps", []) or []:
             grant = _SOFTWARE_BONUSES.get(app)
             if grant:
                 total += int(grant.get(stat, 0))
+            up = catalog_bonuses.get(app)
+            if up:
+                total += int(up.get(stat, 0))
         return total
+
+    @staticmethod
+    def _upgrade_bonuses() -> Dict[str, Dict[str, int]]:
+        """Return the PH-T2 upgrade-effect map from the inventory catalog.
+
+        The magnitudes are the single source of truth declared on each
+        ``is_phone_upgrade`` item in :data:`engine.world.inventory.ITEM_CATALOG`
+        under its ``phone_upgrade.effects`` block. This module never re-declares
+        them. Import is lazy + defensive so a missing/broken inventory module
+        never crashes a phone-OS read.
+
+        Returns:
+            Mapping of ``item_id`` → ``{stat: delta}`` for every upgrade item.
+        """
+        try:
+            from engine.world.inventory import get_phone_upgrades
+            out: Dict[str, Dict[str, int]] = {}
+            for iid, meta in get_phone_upgrades().items():
+                effects = (meta.get("phone_upgrade") or {}).get("effects") or {}
+                out[iid] = {k: int(v) for k, v in effects.items()}
+            return out
+        except Exception as exc:
+            logger.error(
+                "[phone_os] upgrade catalog unavailable, no upgrade bonuses "
+                "(operation=upgrade_bonuses): %s", exc,
+            )
+            return {}
 
     def _player_bonus(self, char_id: str, stat: str) -> int:
         """Return the player's equipment contribution to *stat*.
