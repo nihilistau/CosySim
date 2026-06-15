@@ -1,15 +1,31 @@
 /*
- * the_sprawl.css — THE SPRAWL booting placeholder styles (B-T1 scaffold).
- * =======================================================================
- * v1.63.0 [2026-06-15] — Initial scaffold (B-T1). Minimal neon styling for the
- * "booting…" placeholder. The live-map styles land in later v1.63 tasks.
+ * the_sprawl.css — THE SPRAWL living-city map styles (B-T3 UI).
+ * ============================================================
+ * v1.63.0 [2026-06-16] — Living-city map UI (B-T3). Replaces the B-T1 "booting…"
+ * placeholder styling. Layered neon skyline backdrop (sky + skyline + scanlines
+ * + vignette) in the executive_suite/landing aesthetic, an SVG district map
+ * shaded by dominant faction, NPC tokens, a faction leaderboard and a live City
+ * Pulse feed, plus a top HUD strip. Reuses the CosySim neon palette.
  */
 
 :root {
+  /* Scene palette (NEONCITY green accent, deep-black glass foundation). */
   --sprawl-accent: #39ff14;
   --sprawl-bg: #05080a;
   --sprawl-ink: #d7ffe0;
   --sprawl-dim: #4f6b54;
+  --sprawl-panel: rgba(8, 14, 12, 0.72);
+  --sprawl-border: rgba(57, 255, 20, 0.18);
+  --sprawl-danger: #ef4444;
+
+  /* Faction → color map (mirrors the JS FACTION_COLORS in the_sprawl.js). */
+  --fac-OmniCorp: #06b6d4;
+  --fac-NeoTech: #39ff14;
+  --fac-BlackMarket: #f97316;
+  --fac-Ghost_Net: #d500f9;
+  --fac-SynthSec: #ef4444;
+  --fac-DeepState: #a855f7;
+  --fac-none: #6b7280;
 }
 
 * { box-sizing: border-box; }
@@ -26,111 +42,407 @@ html, body {
 .sprawl-stage {
   position: fixed;
   inset: 0;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(120% 80% at 50% 0%, rgba(57, 255, 20, 0.10), transparent 60%),
-    radial-gradient(100% 100% at 50% 120%, rgba(157, 113, 234, 0.12), transparent 60%),
-    var(--sprawl-bg);
+  display: flex;
+  flex-direction: column;
 }
 
-/* Perspective neon grid backdrop */
-.sprawl-grid {
+/* ─── L1 · Sky gradient ─────────────────────────────────────── */
+.sprawl-sky {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(57, 255, 20, 0.10) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(57, 255, 20, 0.10) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(120% 90% at 50% 40%, #000 30%, transparent 80%);
-  animation: sprawl-drift 16s linear infinite;
+  z-index: 0;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(57, 255, 20, 0.08), transparent 60%),
+    radial-gradient(100% 100% at 50% 120%, rgba(157, 113, 234, 0.14), transparent 60%),
+    linear-gradient(180deg, #07040f 0%, #05080a 55%, #04060a 100%);
 }
 
-@keyframes sprawl-drift {
-  from { background-position: 0 0, 0 0; }
-  to   { background-position: 48px 96px, 48px 96px; }
+/* ─── L2 · Skyline backdrop ─────────────────────────────────── */
+.sprawl-skyline {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.sprawl-skyline svg { width: 100%; height: 100%; display: block; }
+
+@keyframes sprawl-window-flicker {
+  0%, 90%, 100% { opacity: 1; }
+  92% { opacity: 0.25; }
+  94% { opacity: 1; }
+}
+@keyframes sprawl-fly-r {
+  from { transform: translateX(-60px); }
+  to   { transform: translateX(1980px); }
+}
+@keyframes sprawl-fly-l {
+  from { transform: translateX(1980px); }
+  to   { transform: translateX(-60px); }
 }
 
-.sprawl-boot {
-  position: relative;
+/* ─── L3 · Scanlines + vignette ─────────────────────────────── */
+.sprawl-scanlines {
+  position: absolute;
+  inset: 0;
   z-index: 1;
-  text-align: center;
-  padding: 2rem;
-  max-width: 640px;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    180deg, rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.16) 3px, rgba(0, 0, 0, 0) 4px);
+  mix-blend-mode: multiply;
+  opacity: 0.6;
+}
+.sprawl-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.7) 100%);
 }
 
-.sprawl-kicker {
-  font-family: "JetBrains Mono", monospace;
-  letter-spacing: 0.42em;
-  font-size: 0.72rem;
-  color: var(--sprawl-dim);
-  margin: 0 0 1rem;
+/* ─── L4 · HUD strip ────────────────────────────────────────── */
+.sprawl-hud {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 1.4rem;
+  border-bottom: 1px solid var(--sprawl-border);
+  background: linear-gradient(180deg, rgba(5, 8, 10, 0.92), rgba(5, 8, 10, 0.55));
+  backdrop-filter: blur(6px);
 }
-
-.sprawl-title {
+.sprawl-hud__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+}
+.sprawl-hud__logo {
+  color: var(--sprawl-accent);
+  font-size: 1.1rem;
+  text-shadow: 0 0 12px rgba(57, 255, 20, 0.7);
+}
+.sprawl-hud__title {
   font-family: "Orbitron", sans-serif;
-  font-size: clamp(2.5rem, 8vw, 5rem);
   font-weight: 800;
-  letter-spacing: 0.12em;
-  margin: 0;
+  letter-spacing: 0.14em;
+  font-size: 1.05rem;
   color: var(--sprawl-accent);
-  text-shadow:
-    0 0 12px rgba(57, 255, 20, 0.7),
-    0 0 38px rgba(57, 255, 20, 0.35);
-  animation: sprawl-flicker 4.5s infinite;
+  text-shadow: 0 0 12px rgba(57, 255, 20, 0.5);
 }
-
-@keyframes sprawl-flicker {
-  0%, 92%, 100% { opacity: 1; }
-  93%           { opacity: 0.55; }
-  95%           { opacity: 1; }
-  96%           { opacity: 0.7; }
-}
-
-.sprawl-status {
+.sprawl-hud__kicker {
   font-family: "JetBrains Mono", monospace;
-  color: var(--sprawl-accent);
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  font-size: 0.85rem;
-  margin: 1rem 0 0.25rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.32em;
+  color: var(--sprawl-dim);
 }
-
-.sprawl-sub {
-  color: rgba(215, 255, 224, 0.6);
-  margin: 0.5rem 0 2rem;
-  font-size: 0.95rem;
+.sprawl-hud__stats {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
-
-.sprawl-readout {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.75rem;
-  margin: 0;
-  text-align: left;
-}
-
-.sprawl-readout > div {
-  border: 1px solid rgba(57, 255, 20, 0.18);
+.sprawl-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--sprawl-border);
   border-radius: 8px;
-  padding: 0.6rem 0.8rem;
   background: rgba(57, 255, 20, 0.03);
+  min-width: 80px;
 }
-
-.sprawl-readout dt {
+.sprawl-stat__label {
   font-family: "JetBrains Mono", monospace;
-  font-size: 0.62rem;
+  font-size: 0.55rem;
   letter-spacing: 0.2em;
   color: var(--sprawl-dim);
-  margin: 0 0 0.25rem;
 }
-
-.sprawl-readout dd {
-  margin: 0;
+.sprawl-stat__value {
   font-family: "JetBrains Mono", monospace;
   font-size: 0.9rem;
   color: var(--sprawl-ink);
+  white-space: nowrap;
+}
+#hud-link.is-live { color: var(--sprawl-accent); }
+#hud-link.is-down { color: #ff5470; }
+#hud-heat.is-hot { color: #fbbf24; }
+
+/* ─── L5 · Content grid ─────────────────────────────────────── */
+.sprawl-layout {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 1rem;
+  padding: 1rem 1.2rem 1.2rem;
 }
 
-.sprawl-readout dd.is-live { color: var(--sprawl-accent); }
-.sprawl-readout dd.is-down { color: #ff5470; }
+/* ─── City map ──────────────────────────────────────────────── */
+.sprawl-map {
+  position: relative;
+  min-height: 0;
+  border: 1px solid var(--sprawl-border);
+  border-radius: 12px;
+  background:
+    radial-gradient(110% 80% at 50% 0%, rgba(57, 255, 20, 0.05), transparent 60%),
+    rgba(5, 9, 8, 0.45);
+  overflow: hidden;
+}
+#sprawl-map-svg { width: 100%; height: 100%; display: block; }
+
+/* District zone hexes/blocks (drawn by JS). */
+.district-zone { cursor: default; }
+.district-zone__fill {
+  transition: fill 0.6s ease, fill-opacity 0.6s ease, filter 0.3s ease;
+}
+.district-zone__label {
+  font-family: "Orbitron", sans-serif;
+  font-weight: 700;
+  fill: #ffffff;
+  letter-spacing: 0.06em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+.district-zone__dom {
+  font-family: "JetBrains Mono", monospace;
+  pointer-events: none;
+}
+.district-zone__pct {
+  font-family: "JetBrains Mono", monospace;
+  fill: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+/* Contested zones pulse + show a hatch overlay. */
+.district-zone.is-contested .district-zone__edge {
+  animation: sprawl-contest-pulse 1.6s ease-in-out infinite;
+}
+@keyframes sprawl-contest-pulse {
+  0%, 100% { stroke-opacity: 0.4; }
+  50% { stroke-opacity: 1; }
+}
+/* Brief flash when an event hits a district. */
+.district-zone.is-flash .district-zone__fill {
+  animation: sprawl-district-flash 1.1s ease-out;
+}
+@keyframes sprawl-district-flash {
+  0% { filter: brightness(2.4) drop-shadow(0 0 18px currentColor); }
+  100% { filter: brightness(1); }
+}
+
+/* NPC tokens. */
+.npc-token {
+  stroke: rgba(0, 0, 0, 0.65);
+  stroke-width: 0.8;
+  cursor: pointer;
+  transition: r 0.15s ease, opacity 0.4s ease;
+}
+.npc-token:hover { stroke: #ffffff; stroke-width: 1.4; }
+
+/* NPC tooltip. */
+.sprawl-tip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  min-width: 150px;
+  max-width: 220px;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--sprawl-border);
+  background: rgba(4, 8, 7, 0.96);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+  font-size: 0.78rem;
+  transform: translate(-50%, calc(-100% - 12px));
+}
+.sprawl-tip__name {
+  font-family: "Orbitron", sans-serif;
+  font-weight: 700;
+  color: var(--sprawl-ink);
+  margin-bottom: 0.2rem;
+}
+.sprawl-tip__row {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  color: rgba(215, 255, 224, 0.7);
+}
+.sprawl-tip__fac { font-weight: 700; }
+
+/* ─── Side panels ───────────────────────────────────────────── */
+.sprawl-side {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1rem;
+  min-height: 0;
+}
+.sprawl-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--sprawl-border);
+  border-radius: 12px;
+  background: var(--sprawl-panel);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+.sprawl-panel__title {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: var(--sprawl-accent);
+  border-bottom: 1px solid var(--sprawl-border);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.sprawl-pulse-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--sprawl-accent);
+  box-shadow: 0 0 8px var(--sprawl-accent);
+  animation: sprawl-pulse-blink 2s ease-in-out infinite;
+}
+@keyframes sprawl-pulse-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* Leaderboard. */
+.sprawl-leaderboard {
+  list-style: none;
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+.lb-row__rank {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  color: var(--sprawl-dim);
+}
+.lb-row__body { min-width: 0; }
+.lb-row__name {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  color: var(--sprawl-ink);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.lb-row__swatch {
+  width: 9px; height: 9px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+.lb-row__bar {
+  margin-top: 0.25rem;
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.lb-row__fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+.lb-row__total {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  color: rgba(215, 255, 224, 0.8);
+}
+
+/* City Pulse feed. */
+.sprawl-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0.5rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.sprawl-feed::-webkit-scrollbar { width: 8px; }
+.sprawl-feed::-webkit-scrollbar-thumb {
+  background: rgba(57, 255, 20, 0.2);
+  border-radius: 4px;
+}
+.feed-item {
+  display: grid;
+  grid-template-columns: 4px 1fr;
+  gap: 0.5rem;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  animation: sprawl-feed-in 0.4s ease;
+}
+@keyframes sprawl-feed-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.feed-item__bar {
+  border-radius: 2px;
+  background: var(--sprawl-dim);
+}
+.feed-item__main { min-width: 0; }
+.feed-item__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.feed-item__kind {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sprawl-accent);
+}
+.feed-item__ts {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.58rem;
+  color: var(--sprawl-dim);
+  white-space: nowrap;
+}
+.feed-item__summary {
+  font-size: 0.74rem;
+  color: rgba(215, 255, 224, 0.85);
+  line-height: 1.3;
+}
+.feed-item__actor { color: var(--sprawl-ink); font-weight: 600; }
+
+/* Empty states. */
+.sprawl-empty {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.74rem;
+  color: var(--sprawl-dim);
+  letter-spacing: 0.08em;
+  padding: 0.8rem;
+  text-align: center;
+}
+.sprawl-map .sprawl-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* Responsive: stack side panel under the map on narrow viewports. */
+@media (max-width: 900px) {
+  .sprawl-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+    overflow-y: auto;
+  }
+  .sprawl-side { grid-template-rows: auto auto; }
+  .sprawl-map { min-height: 360px; }
+}
