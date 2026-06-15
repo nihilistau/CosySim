@@ -44,6 +44,33 @@ forthcoming.
   use 0/15 (≤ `llm_chance` 0.05). Knobs all read via `get_config()` —
   designers retune without code changes.
 
+### The Sprawl — the living city map (sub-project B)
+- **A new living city-map scene** (`content/scenes/the_sprawl/`, port 5597) — a
+  full-screen, real-time SVG map of NEONCITY that composes the EXISTING managers
+  (no new world state). Six districts are shaded by their dominant faction with a
+  live control% label and a pulsing **CONTESTED** hatch; the faction power
+  **leaderboard** and a streaming **City Pulse** feed render alongside.
+- **Live, read-only world state** — `GET /api/sprawl/state` + `/api/sprawl/events`
+  are assembled from `TerritoryManager` (control + ranking + history),
+  `RoutineManager` (NPC location/activity), the character `Database`
+  (`metadata.faction`), `EmergentStore` (agency feed) and `PlayerState`. Socket.IO
+  pushes a throttled `sprawl_update` on every `living_world_tick` and individual
+  `sprawl_event`s on `emergent_action` / `territory_shift`. Every source sits
+  behind a defensive seam — the endpoints never 500.
+- **NPC tokens coloured by faction** — tokens read the canonical
+  `metadata.faction` persisted in the shared `data/simulation.db`; any
+  world-bearing scene now idempotently ensures the factioned population on boot
+  (the same `seed_cast_factions` + `seed_generated_population` neoncity uses), so a
+  standalone Sprawl process surfaces faction colours instead of grey unaligned
+  dots. The scene also re-reads persisted `territory.json` when it changes, so the
+  map reflects the live world's territory shifts across processes.
+- **Avatar travel + intervene via existing verbs** — the player's avatar walks the
+  city (`POST /api/sprawl/travel`) and acts on it (`POST /api/sprawl/intervene`):
+  **talk** (player relationship), **hack** (`phone_hack`), **deal** (market quote),
+  **recruit** (crew) and **contest** (`TerritoryManager.shift_control`, gated on
+  faction allegiance). Successful interventions write to the City Pulse feed and
+  flash the map.
+
 ---
 
 ## [1.62.1] — "LIVING CITY — LOOP COMPLETIONS" — 2026-06-15
