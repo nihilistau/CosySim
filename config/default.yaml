@@ -1161,3 +1161,18 @@ maintenance:
   wal_checkpoint_on_startup: true    # Checkpoint all SQLite WAL files at scene startup
   meta_metrics_retention_days: 30    # Prune meta_metrics data older than this
 
+# ── v1.62.0 [2026-06-15] — OR-T1: Oracle omniscience (reads the comms log) ──
+# The Oracle "sees all" by reading the GlobalCommsLog and turning overheard
+# chatter (player↔NPC + NPC↔NPC) into cryptic fortunes, intel, and omens —
+# all bounded by a privacy/spoiler budget (cryptic + occasional, NOT a dump).
+oracle:
+  comms:
+    fortune_chance: 0.4        # P(a fortune weaves in real overheard comms); else stays atmospheric
+    max_refs: 2                # hard cap on comms entries referenced in a single reading (never dump everything)
+    recent_window: 30          # how many recent entries to scan for npc_dm chatter / signal sourcing
+    omen_weight: 6             # OracleCompanion weighted-action weight for the rare comms omen (small → rare)
+    signal_reward_credits: 75  # bounded credit reward granted by read_the_signal (0 disables)
+    signal_reward_item: "intel_fragment"  # small intel item granted by read_the_signal ("" disables)
+    signal_cooldown_sec: 900   # read_the_signal cooldown (also enforced by the @skill decorator)
+    respect_sensitive: true    # skip/abstract comms flagged sensitive/mature/intimate (privacy + consent)
+

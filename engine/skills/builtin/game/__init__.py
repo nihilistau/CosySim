@@ -23,6 +23,7 @@ from engine.skills.builtin import (
     npc_backstory_skills,
     npc_skills,
     onboarding_skills,
+    oracle_skills,
     player_profile_skills,
     progression_skills,
     relationship_skills,
