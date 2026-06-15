@@ -19,6 +19,11 @@ Version: v1.51.1 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — CB-T2: GlobalCommsLog write-through — explicit USER
+                            sends (DM + group) logged here; NPC replies logged
+                            by the CommsLoggerInterceptor (no double-logging).
+                            Governor calls scoped with comms context so logged
+                            thread_id aligns with the phone thread.
     v1.51.1 [2026-03-25] — Group chat: multi-character group conversations
     v1.51.0 [2026-03-22] — Migrated to FlaskScene
     v1.52.0 [2026-03-22] — 0xGH0ST investigation arc, world events, news feed
@@ -523,7 +528,10 @@ class PhoneSceneV2(FlaskScene):
                     pass
 
                 prompt = autotxt_prompt(conv_mode)
-                reply  = self._generate_reply(char_id, prompt, system_override=prompt)
+                # v1.62.0 [2026-06-15] — CB-T2: pass thread_id so the autotext
+                # reply is logged against the DM thread by the interceptor.
+                reply  = self._generate_reply(char_id, prompt, thread_id=thread_id,
+                                              system_override=prompt)
                 text   = reply.get("text", "").strip()
                 if not text:
                     return
@@ -563,7 +571,9 @@ class PhoneSceneV2(FlaskScene):
 
     def _generate_reply(self, char_id: str, user_msg: str, *,
                         thread_id: Optional[str] = None,
-                        system_override: Optional[str] = None) -> Dict[str, Any]:
+                        system_override: Optional[str] = None,
+                        comms_channel: str = "phone_dm",
+                        comms_recipients: Optional[List[str]] = None) -> Dict[str, Any]:
         """Run the governor pipeline and return a rich reply dict.
 
         Returns dict with keys: text, mood, image_requests, action_tags, voice_style.
@@ -572,7 +582,21 @@ class PhoneSceneV2(FlaskScene):
         v2.8: Uses ConversationManager for stateful conversations. History is loaded
         from phone_db only for the first interaction; subsequent calls use
         previous_response_id for server-side KV cache continuation.
+
+        v1.62.0 [2026-06-15] — CB-T2: the governor call is scoped with comms
+        context (channel/thread_id/recipients) so the CommsLoggerInterceptor
+        writes the agent reply into GlobalCommsLog aligned with the phone thread.
+        The interceptor — NOT this method — logs NPC replies, to avoid duplicates.
+
+        Args:
+            char_id: The character producing the reply.
+            user_msg: The user/prompt message that triggered the reply.
+            thread_id: The originating phone thread id (for comms-log alignment).
+            system_override: Optional system-prompt override (autotext path).
+            comms_channel: Comms-log channel for this reply (``'phone_dm'``).
+            comms_recipients: Addressed recipient ids; defaults to ``['user']``.
         """
+        from engine.agents.interceptors.comms_logger import comms_context
         from engine.agents.stream_processor import strip_token_artifacts
 
         # Build conversation history from phone_db (last 20 msgs for context)
@@ -600,7 +624,15 @@ class PhoneSceneV2(FlaskScene):
             agent._last_processed = None
 
             gov = get_governor(agent, scene=SCENE_ID)
-            text = gov.reply(user_msg, chain_id=None, history=history or None)
+            # v1.62.0 [2026-06-15] — CB-T2: scope comms context so the
+            # CommsLoggerInterceptor logs this reply against the phone thread.
+            with comms_context(
+                channel=comms_channel,
+                thread_id=thread_id,
+                recipient_ids=comms_recipients or ["user"],
+                sender_id=char_id,
+            ):
+                text = gov.reply(user_msg, chain_id=None, history=history or None)
             # Strip token artifacts from governor output
             text = strip_token_artifacts(text or "")
             result["text"] = text
@@ -653,6 +685,7 @@ class PhoneSceneV2(FlaskScene):
             action_tags, voice_style, response_id.
         """
         from engine.agents.stream_processor import strip_token_artifacts
+        from engine.agents.interceptors.comms_logger import comms_context
 
         # Build the participant name list (excluding the replying character)
         other_names: List[str] = []
@@ -737,7 +770,16 @@ class PhoneSceneV2(FlaskScene):
             gov = get_governor(agent, scene=SCENE_ID)
             # Inject the group context as system_override by prepending to history
             group_history = [{"role": "system", "content": group_context}] + history
-            text = gov.reply(prompt, chain_id=None, history=group_history or None)
+            # v1.62.0 [2026-06-15] — CB-T2: log group reply against the group
+            # thread; recipients are every other member (chars + user).
+            group_recipients = [m for m in member_ids if m != char_id] or ["user"]
+            with comms_context(
+                channel="phone_group",
+                thread_id=thread_id,
+                recipient_ids=group_recipients,
+                sender_id=char_id,
+            ):
+                text = gov.reply(prompt, chain_id=None, history=group_history or None)
             text = strip_token_artifacts(text or "")
             result["text"] = text
 
@@ -762,6 +804,50 @@ class PhoneSceneV2(FlaskScene):
             logger.error("[%s] Group reply failed (operation=group_chat, agent=%s): %s", SCENE_ID, char_id, exc)
             result["text"] = "(I'm having trouble replying right now. Try again in a moment.)"
             return result
+
+    # ── GlobalCommsLog write-through ──────────────────────────────────────────
+
+    # v1.62.0 [2026-06-15] — CB-T2: feed explicit USER sends into GlobalCommsLog.
+    # NPC replies are logged by the CommsLoggerInterceptor (pri 90), NOT here, to
+    # avoid double-logging. This method only logs user/system-originated messages.
+    # CONNECTS: engine.world.comms_log.get_comms_log
+    def _log_user_comms(self, *, channel: str, thread_id: str,
+                        recipient_ids: List[str], content: str,
+                        sender_id: str = "user", kind: str = "message",
+                        metadata: Optional[Dict[str, Any]] = None) -> None:
+        """Write an explicit user (or system) send into the GlobalCommsLog.
+
+        Defensive: a comms-log failure is logged in Oracle format and never
+        propagates, so a logging error can't break a message send.
+
+        Args:
+            channel: Logical channel, e.g. ``'phone_dm'`` / ``'phone_group'``.
+            thread_id: The phone thread id (aligns with ``comms_log.thread``).
+            recipient_ids: Recipient character ids addressed by the send.
+            content: The message body.
+            sender_id: Originator id (``'user'`` for player sends).
+            kind: Entry kind (``'message'`` by default).
+            metadata: Optional extra metadata stored on the entry.
+        """
+        if not content:
+            return
+        try:
+            from engine.world.comms_log import get_comms_log
+            get_comms_log().log(
+                channel,
+                sender_id,
+                recipient_ids,
+                content,
+                thread_id=thread_id,
+                kind=kind,
+                metadata={"scene": SCENE_ID, **(metadata or {})},
+            )
+        except Exception as exc:  # never break the send path
+            logger.error(
+                "[comms_logger] phone user write-through failed "
+                "(operation=log, channel=%s, sender=%s, thread=%s): %s",
+                channel, sender_id, thread_id, exc,
+            )
 
     # ── Socket.IO ────────────────────────────────────────────────────────────
 
@@ -1237,6 +1323,15 @@ class PhoneSceneV2(FlaskScene):
             member_ids = thread_info.get("members", [])
             char_members = [m for m in member_ids if m != "user"]
 
+            # v1.62.0 [2026-06-15] — CB-T2: log the explicit USER group send.
+            self._log_user_comms(
+                channel="phone_group",
+                thread_id=thread_id,
+                recipient_ids=char_members or ["user"],
+                content=content,
+                metadata={"group_name": group_name},
+            )
+
             logger.info(
                 "[%s] Group message sent to '%s' (%d chars) (operation=group_message, thread=%s)",
                 SCENE_ID, group_name, len(char_members), thread_id,
@@ -1606,6 +1701,16 @@ class PhoneSceneV2(FlaskScene):
                 members = self.phone_db.get_thread_members(thread_id)
             except Exception:
                 members = []
+
+            # v1.62.0 [2026-06-15] — CB-T2: log the explicit USER send.
+            char_recipients = [m for m in members if m != "user"] or ["user"]
+            self._log_user_comms(
+                channel="phone_dm",
+                thread_id=thread_id,
+                recipient_ids=char_recipients,
+                content=content,
+                metadata={"msg_type": msg_type},
+            )
 
             # Generate AI replies (off-thread to return fast)
             def _reply_worker():
