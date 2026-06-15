@@ -1190,4 +1190,11 @@ oracle:
 emergent:
   store:
     db_path: "data/emergent.db"  # persistent sim store for the emergent engine
+  # v1.63.0 [2026-06-15] — A2: faction model tunables (power/treasury/territory).
+  faction:
+    start_power: 50          # starting power for every seeded faction (0..100)
+    start_treasury: 1000     # starting treasury (credits) for every faction
+    flip_power_delta: 5      # power moved on a territory flip (loser −, winner +)
+    recovery_floor: 15       # factions below this power get a recovery nudge
+    recovery_rate: 2         # power restored per recovery_tick to weak factions
 
