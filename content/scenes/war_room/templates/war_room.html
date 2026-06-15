@@ -1,15 +1,32 @@
 <!DOCTYPE html>
 {#
-  war_room.html — THE WAR ROOM faction command center (C-T1 scaffold).
+  war_room.html — THE WAR ROOM faction command center (C-T3 UI).
   ===================================================================
-  v1.63.0 [2026-06-16] — Bootable placeholder (C-T1). Renders a neon
-  "THE WAR ROOM — booting…" page in the red faction-command aesthetic and
-  loads the scene's CSS/JS + the shared Socket.IO client. The live command
-  center (faction select, crew orders, territory ops) replaces this in later
-  v1.63 tasks. Fed by GET /api/state (a stub) + Socket.IO state_update.
+  v1.63.0 [2026-06-16] — Command-center dashboard UI (C-T3). Replaces the
+  C-T1/C-T2 "booting…" placeholder with the full tactical situation room:
+    • Allegiance picker (shown when state.allegiance is null): the 6 factions
+      as selectable crest cards (color / power / territory / traits / relation)
+      → POST /api/warroom/allegiance {faction} → flips to the dashboard.
+    • Dashboard (when an allegiance is set): my-faction header (crest / power /
+      rank ladder / territory count), a territory panel (your districts, tinted,
+      contested flagged), a crew roster, a rivals panel (power bars + relation
+      badges), and a live Intel feed (recent FactionAI decisions, newest-first).
+    • HUD strip: in-game clock + a "change allegiance" affordance + live link.
+    • An inert command-bar placeholder (the live commands ship in C-T4).
+  Fed by GET /api/warroom/{state,factions} + POST /api/warroom/allegiance and
+  live Socket.IO `warroom_update` (full state → re-render everything).
 
-  STANDALONE full-screen template (does NOT extend neon_base.html): the
-  command center owns the entire viewport (like the_sprawl / executive_suite).
+  STANDALONE full-screen template (does NOT extend neon_base.html): the command
+  center owns the entire viewport (like the_sprawl / executive_suite). Reuses
+  the CosySim neon design-system fonts + the shared Socket.IO client.
+
+  Structure (managed by static/js/war_room.js):
+    .war-stage                 — fixed full-viewport stage
+      .war-sky / .war-grid     — L1 tactical backdrop (CSS gradient + grid)
+      .war-scanlines/.war-vignette — L2 scanline + vignette overlays (CSS)
+      .war-hud                 — L3 top HUD (clock / allegiance / link)
+      .war-picker              — allegiance picker (6 faction cards) [no allegiance]
+      .war-dash                — command dashboard [allegiance set]
 #}
 {% set scene_data = scene_data | default({}) %}
 <html lang="en" data-scene="war_room">
@@ -30,29 +47,153 @@
 <body data-screen-label="04 The War Room">
 <div class="war-stage" id="war-stage">
 
-  <!-- ═══ Backdrop layers (CSS) ═══ -->
+  <!-- ═══ L1 · TACTICAL BACKDROP (CSS) ═══ -->
   <div class="war-sky" aria-hidden="true"></div>
+  <div class="war-grid" aria-hidden="true"></div>
+
+  <!-- ═══ L2 · SCANLINES + VIGNETTE overlay ═══ -->
   <div class="war-scanlines" aria-hidden="true"></div>
   <div class="war-vignette" aria-hidden="true"></div>
 
-  <!-- ═══ Booting placeholder ═══ -->
-  <main class="war-boot">
-    <div class="war-boot__logo" aria-hidden="true">⚔</div>
-    <h1 class="war-boot__title">THE WAR ROOM</h1>
-    <p class="war-boot__tagline">Pick a faction. Command crews. Take the city.</p>
-    <p class="war-boot__status">
-      <span class="war-boot__pulse" aria-hidden="true"></span>
-      <span id="war-status">booting…</span>
-    </p>
-    <p class="war-boot__link" id="war-link">connecting…</p>
+  <!-- ═══ L3 · HUD STRIP (top) ═══ -->
+  <header class="war-hud">
+    <div class="war-hud__brand">
+      <span class="war-hud__logo" aria-hidden="true">⚔</span>
+      <span class="war-hud__title">THE WAR ROOM</span>
+      <span class="war-hud__kicker">NEONCITY · COMMAND</span>
+    </div>
+    <div class="war-hud__stats">
+      <div class="war-stat" title="Your allegiance">
+        <span class="war-stat__label">ALLEGIANCE</span>
+        <span class="war-stat__value" id="hud-allegiance">—</span>
+      </div>
+      <div class="war-stat" title="City time">
+        <span class="war-stat__label">CITY TIME</span>
+        <span class="war-stat__value" id="hud-clock">--:--</span>
+      </div>
+      <div class="war-stat war-stat--link" title="Live link">
+        <span class="war-stat__label">LINK</span>
+        <span class="war-stat__value" id="hud-link">connecting…</span>
+      </div>
+      <button type="button" class="war-hud__change" id="war-change" hidden
+              title="Switch your faction allegiance">⟲ CHANGE ALLEGIANCE</button>
+    </div>
+  </header>
+
+  <!-- ═══ ALLEGIANCE PICKER (no allegiance) ═══ -->
+  <main class="war-picker" id="war-picker" hidden>
+    <div class="war-picker__head">
+      <h1 class="war-picker__title">DECLARE YOUR ALLEGIANCE</h1>
+      <p class="war-picker__sub">Six factions wage war for NEONCITY. Choose one — command its
+        crews, hold its turf, and crush the rest.</p>
+    </div>
+    <div class="war-picker__grid" id="war-picker-grid" aria-live="polite">
+      <div class="war-empty" id="war-picker-empty">loading factions…</div>
+    </div>
   </main>
+
+  <!-- ═══ COMMAND DASHBOARD (allegiance set) ═══ -->
+  <main class="war-dash" id="war-dash" hidden>
+
+    <!-- ── My faction header ── -->
+    <section class="war-myhead" id="war-myhead" aria-label="Your faction">
+      <div class="war-myhead__crest" id="my-crest" aria-hidden="true"></div>
+      <div class="war-myhead__id">
+        <h1 class="war-myhead__name" id="my-name">—</h1>
+        <div class="war-myhead__rank" id="my-rank-row">
+          <span class="war-myhead__rank-label" id="my-rank">—</span>
+          <span class="war-rankladder" id="my-rankladder" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="war-myhead__metrics">
+        <div class="war-metric" title="Total territorial control">
+          <span class="war-metric__value" id="my-power">—</span>
+          <span class="war-metric__label">POWER</span>
+        </div>
+        <div class="war-metric" title="Districts you dominate">
+          <span class="war-metric__value" id="my-territory">—</span>
+          <span class="war-metric__label">TERRITORY</span>
+        </div>
+        <div class="war-metric" title="Crew members under your command">
+          <span class="war-metric__value" id="my-crewcount">—</span>
+          <span class="war-metric__label">CREW</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Content grid ── -->
+    <div class="war-grid-3">
+
+      <!-- Column A: Territory + Crew -->
+      <div class="war-col">
+        <section class="war-panel war-panel--territory">
+          <h2 class="war-panel__title">TERRITORY</h2>
+          <div class="war-panel__body">
+            <ul class="war-territory" id="war-territory" aria-live="polite">
+              <li class="war-empty" id="war-territory-empty">no districts held</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="war-panel war-panel--crew">
+          <h2 class="war-panel__title">CREW ROSTER</h2>
+          <div class="war-panel__body">
+            <ul class="war-crew" id="war-crew" aria-live="polite">
+              <li class="war-empty" id="war-crew-empty">no crew recruited</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <!-- Column B: Rivals -->
+      <div class="war-col">
+        <section class="war-panel war-panel--rivals">
+          <h2 class="war-panel__title">RIVAL FACTIONS</h2>
+          <div class="war-panel__body">
+            <ul class="war-rivals" id="war-rivals" aria-live="polite">
+              <li class="war-empty" id="war-rivals-empty">no rival data</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <!-- Column C: Intel feed -->
+      <div class="war-col">
+        <section class="war-panel war-panel--intel">
+          <h2 class="war-panel__title">INTEL FEED
+            <span class="war-pulse-dot" aria-hidden="true"></span>
+          </h2>
+          <div class="war-panel__body">
+            <ul class="war-intel" id="war-intel" aria-live="polite">
+              <li class="war-empty" id="war-intel-empty">listening for rival moves…</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+    </div>
+
+    <!-- ── Command bar (inert placeholder — live commands ship in C-T4) ── -->
+    <footer class="war-cmdbar" id="war-cmdbar" aria-label="Command bar (coming soon)">
+      <span class="war-cmdbar__hint">COMMAND</span>
+      <button type="button" class="war-cmd" disabled title="Available in a later update">⚑ Claim Territory</button>
+      <button type="button" class="war-cmd" disabled title="Available in a later update">⚔ Order Strike</button>
+      <button type="button" class="war-cmd" disabled title="Available in a later update">🜲 Recruit Crew</button>
+      <button type="button" class="war-cmd" disabled title="Available in a later update">⚐ Negotiate</button>
+      <span class="war-cmdbar__soon">commands online soon</span>
+    </footer>
+
+  </main>
+
+  <!-- transient toasts (allegiance result / errors) -->
+  <div class="war-toasts" id="war-toasts" aria-live="polite"></div>
 
 </div>
 
 {# ── Shared Socket.IO client (served by register_shared_assets) ── #}
 <script src="/shared/js/socket.io.min.js"></script>
 
-{# ── Scene script: Socket.IO connect + log ── #}
+{# ── Scene script: Socket.IO + command-center renderer ── #}
 <script src="{{ url_for('static', filename='js/war_room.js') }}"></script>
 
 </body>
