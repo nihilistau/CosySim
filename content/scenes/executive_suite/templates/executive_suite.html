@@ -294,6 +294,12 @@
       <span>Type to search · ⌘K</span>
     </div>
     <div class="es-tb-divider"></div>
+    {# v1.62.1 [2026-06-15] — L1: Oracle button (reads the signal) + breach badge. #}
+    <button class="es-tb-oracle" id="es-oracle" title="Consult the Oracle — read the signal" aria-label="Consult the Oracle">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/></svg>
+      <span class="es-tb-oracle__badge" id="es-oracle-badge" hidden>0</span>
+    </button>
+    <div class="es-tb-divider"></div>
     {# Pinned apps + per-window task buttons rendered into #es-tb-pinned by JS. #}
     <div class="es-tb-pinned" id="es-tb-pinned"></div>
     <div class="es-tb-spacer"></div>

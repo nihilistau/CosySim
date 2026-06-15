@@ -59,7 +59,7 @@ All targets defined in `engine/control_plane_registry.py`:
 |-----|-------------|
 | [Scenes](SCENES.md) | All 32 targets, mechanics, APIs, routes, Socket.IO events |
 | [Skills](SKILLS.md) | @skill decorator, 95 packs, runtime registry, governance filtering |
-| [Game Systems](GAME_SYSTEMS.md) | WorldSim, factions, NPCs, missions, inventory, cyberspace |
+| [Game Systems](GAME_SYSTEMS.md) | WorldSim, factions, NPCs, missions, inventory, cyberspace, and the v1.62 Living City comms/phone systems (GlobalCommsLog, NPC↔NPC messaging, phone hacking, Oracle comms) |
 | [Character System](CHARACTER_SYSTEM.md) | Profiles, personality, stats, neurochemistry, relationships |
 | [Economy Guide](ECONOMY_GUIDE.md) | EconomyManager, cross-scene credits, markets, consequences |
 | [Arena Guide](ARENA_GUIDE.md) | THE COLOSSEUM, card game mechanics, betting |

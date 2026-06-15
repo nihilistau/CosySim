@@ -135,6 +135,11 @@ body { user-select: none; }
 .es-tb-search:hover { background: rgba(var(--es-rgb),0.08); border-color: rgba(var(--es-rgb),0.25); }
 .es-tb-search svg { width: 12px; height: 12px; opacity: .6; }
 .es-tb-divider { width: 1px; height: 24px; background: rgba(255,255,255,.08); }
+/* v1.62.1 [2026-06-15] — L1: Oracle taskbar button + breach badge. */
+.es-tb-oracle { position: relative; width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(157,113,234,.10); border: 1px solid rgba(157,113,234,.30); color: #a855f7; transition: all .2s; }
+.es-tb-oracle:hover { background: rgba(157,113,234,.20); box-shadow: 0 0 16px rgba(168,85,247,.4); }
+.es-tb-oracle.querying { animation: es-pulse 1.2s ease-in-out infinite; }
+.es-tb-oracle__badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 9999px; background: #ec4899; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .es-tb-pinned { display: flex; gap: 4px; }
 .es-tb-pin { width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; background: rgba(255,255,255,.02); border: 1px solid transparent; font-size: 15px; position: relative; }
 .es-tb-pin:hover { background: rgba(var(--es-rgb),.10); }
@@ -286,6 +291,17 @@ body { user-select: none; }
 .es-em__inbox-hd b { color: #c0c8d8; font-weight: 600; }
 .es-em__inbox-hd .cnt { margin-left: auto; padding: 1px 6px; background: rgba(var(--es-rgb),.15); color: var(--es); border-radius: 9999px; font-size: 8.5px; font-weight: 700; }
 .es-em__list { flex: 1; overflow-y: auto; min-height: 0; }
+/* v1.62.1 [2026-06-15] — L1: Mail folder tabs (INBOX / INTERCEPTS). */
+.es-em__tabs { display: flex; gap: 2px; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
+.es-em__tab { flex: 1; padding: 5px 8px; background: rgba(255,255,255,0.03); border: 1px solid transparent; border-radius: 6px; color: #6b7280; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase; cursor: pointer; transition: all .12s; }
+.es-em__tab:hover { color: #c0c8d8; }
+.es-em__tab.active { background: rgba(var(--es-rgb),.14); border-color: rgba(var(--es-rgb),.35); color: var(--es); font-weight: 700; }
+/* v1.62.1 [2026-06-15] — L1: intercepted/planted comms rows + labels. */
+.es-em__row--intercept { border-left-color: rgba(236,72,153,.55); }
+.es-em__tagline { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.es-em__tag { font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
+.es-em__tag--intercepted { background: rgba(236,72,153,.16); color: #ec4899; }
+.es-em__tag--planted { background: rgba(245,158,11,.16); color: #f59e0b; }
 .es-em__row { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: background .12s; border-left: 2px solid transparent; }
 .es-em__row:hover { background: rgba(255,255,255,.03); }
 .es-em__row.unread { border-left-color: var(--es); }
