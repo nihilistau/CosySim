@@ -4,6 +4,37 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.62.1] — "LIVING CITY — LOOP COMPLETIONS" — 2026-06-15
+
+Finished wiring the v1.62 "Living City" systems end-to-end: the Executive Suite
+desktop now reads from the same unified comms backbone the rest of the city writes
+to, faction hostility actually drives the reverse hack, and the pre-existing test
+debt was repaired so the suite is green again. No new subsystems — these are the
+last connectors between systems that already shipped.
+
+### Executive Suite — unified comms &amp; surfaced signals
+- **Mail → GlobalCommsLog** — the Suite's Mail app now reads the unified
+  `engine/world/comms_log.py` (`GlobalCommsLog`) instead of the legacy phone-only
+  thread store, so player↔NPC and NPC↔NPC traffic share one inbox; intercepted
+  messages (from phone hacking) surface in a dedicated **Intercepts** folder.
+- **Desktop breach alerts + Oracle taskbar button** — `phone_hacked` /
+  `message_intercepted` breach events now raise a desktop alert in the Suite, and
+  the taskbar gains an **Oracle** button so the omniscience surface is reachable
+  from the OS shell.
+
+### Phone OS — faction-driven reverse hacking
+- **Hostility triggers NPC→player hacking** — the rare, firewall-defended
+  `NpcHackPlayerService` reverse hack is now actually invoked by faction hostility
+  (sufficiently negative standing), closing the loop with the v1.62.0 phone-defence
+  upgrades: PH-T2 firewall upgrades raise the defence and can flip a hostile
+  attacker's breach to **BLOCKED**.
+
+### Tests — pre-existing debt repaired
+- **Suite green** — repaired all pre-existing failing/broken tests inherited on
+  this branch so the full pytest suite passes again.
+
+---
+
 ## [1.62.0] — "LIVING PENTHOUSE" — 2026-06-15
 
 Five fixes that take the penthouse 3D scene from "wired but lifeless" to a room

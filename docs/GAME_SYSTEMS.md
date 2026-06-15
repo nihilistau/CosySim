@@ -980,6 +980,29 @@ world:
 
 ---
 
+## Living City comms &amp; phone systems (v1.62)
+
+The v1.62 "Living City" line added a city-wide messaging layer, an NPC phone OS,
+two-way phone hacking, and Oracle comms-awareness. These are documented in full in
+[`CHANGELOG.md`](../CHANGELOG.md); the implementing modules are:
+
+| System | Module | What it does |
+|--------|--------|--------------|
+| **GlobalCommsLog** | `engine/world/comms_log.py` | Single source of truth for every message (player↔NPC, autotexts, NPC↔NPC) in one SQLite log; `query`/`thread`/`about`/`recent` accessors + `mark_observed` for later hacking/Oracle reads |
+| **Comms write-through** | `engine/agents/interceptors/comms_logger.py` | `CommsLoggerInterceptor` (pri 90) logs every governed agent reply into the comms log |
+| **NPC↔NPC messaging** | `engine/world/npc_comms.py` | Own-daemon scheduler that has NPCs text each other on a template-dominant / occasional-LLM mix, affinity-weighted with anti-spam |
+| **Leave-a-message** | `engine/world/presence.py` | Offline-NPC / offline-player messages stored `left_unread` and delivered on (re)connect |
+| **Relationship effects** | `engine/world/relationship_effects.py` | Clamped, tone-derived nudges to each NPC pair's `relationship_level` per exchange |
+| **Phone OS + security** | `engine/world/phone_os.py` | `PhoneOS` over an `npc_phone` table; derives `effective_security`/`firewall`/`hack_power`/`app_slots` from base stats + installed upgrades |
+| **Phone hacking** | `content/scenes/phone/phone_hack.py` | Player→NPC intercept/plant/steal and rare firewall-defended NPC→player reverse hack (faction-hostility triggered in v1.62.1) |
+| **Oracle comms** | `engine/world/oracle_comms.py` | Privacy/spoiler-budgeted read layer that lets the Oracle weave overheard chatter into fortunes, the `read_the_signal` skill, and omens without leaking raw bodies |
+
+Phone upgrades are sold by the Grid vendor — see [The Grid](THE_GRID.md). The
+Executive Suite desktop scene (`content/scenes/executive_suite/`) surfaces the
+comms log (Mail + Intercepts) and breach alerts.
+
+---
+
 ## See Also
 
 - [Scenes](SCENES.md) — Per-scene configuration and launch targets
@@ -997,6 +1020,7 @@ world:
 
 | Version | Date | Description |
 |---------|------|-------------|
+| v1.62.1 | 2026-06-15 | Added "Living City comms &amp; phone systems" section (GlobalCommsLog, NPC↔NPC messaging, phone OS/hacking, Oracle comms) with implementing-module references |
 | v1.50 | 2026-03-22 | Updated to v1.50; fixed PlayerState fields (added health, hunger); confirmed 6 factions with power %; 60s WorldSim tick; removed stale cross-refs |
 | v1.42 | 2025-12-15 | Consolidated from NeonCity 2 game systems, living world, and world system docs |
 | v1.04b | 2025-09-01 | Initial game systems documentation |
