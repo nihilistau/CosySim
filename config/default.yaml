@@ -1184,3 +1184,10 @@ oracle:
     signal_cooldown_sec: 900   # read_the_signal cooldown (also enforced by the @skill decorator)
     respect_sensitive: true    # skip/abstract comms flagged sensitive/mature/intimate (privacy + consent)
 
+# ── v1.63.0 [2026-06-15] — Emergent Engine (A1: persistent sim store) ──
+# The emergent engine persists living-world state (factions, territory, NPC
+# goals, world events) across restarts in a single SQLite store.
+emergent:
+  store:
+    db_path: "data/emergent.db"  # persistent sim store for the emergent engine
+
