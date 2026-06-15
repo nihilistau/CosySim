@@ -211,6 +211,28 @@ _SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
         "accent": "#f59e0b",
         "desc": "Visual scene builder + character wizard — drag-and-drop components",
     },
+    # v1.62.0 [2026-06-15] — hub presentation for auction/cyberspace/executive_suite + safe lookup
+    "auction": {
+        "subtitle": "Highest Bidder Wins",
+        "icon": "🔨",
+        "group": "neon_world",
+        "accent": "#eab308",
+        "desc": "Underground black-market auction house — bid on contraband, art, and secrets",
+    },
+    "cyberspace": {
+        "subtitle": "Dive the Grid",
+        "icon": "💾",
+        "group": "neon_world",
+        "accent": "#00ff88",
+        "desc": "Netrunning hacking minigame — breach ICE, ride the data streams, jack in",
+    },
+    "executive_suite": {
+        "subtitle": "Neon OS Desktop",
+        "icon": "💼",
+        "group": "system",
+        "accent": "#06b6d4",
+        "desc": "A full neon OS desktop — mail, files, and your live AI assistant",
+    },
 }
 
 
@@ -218,7 +240,8 @@ def _build_scene_catalogue() -> List[Dict[str, Any]]:
     """Build the hub catalogue from canonical control-plane metadata plus hub-only presentation."""
     catalogue: List[Dict[str, Any]] = []
     for target in build_target_listing(HUB_CATALOGUE_TARGETS):
-        presentation = _SCENE_PRESENTATION[target["id"]]
+        # v1.62.0 [2026-06-15] — safe lookup so a missing presentation entry can never crash the hub
+        presentation = _SCENE_PRESENTATION.get(target["id"], {})
         catalogue.append(
             {
                 "id": target["id"],
