@@ -256,6 +256,10 @@ class PhoneSceneV2(FlaskScene):
             # Wire up framework event listeners
             fw.on("mood_contagion", lambda evt: self._on_mood_event(evt))
             fw.on("story_beat", lambda evt: self._on_story_beat(evt))
+            # v1.62.0 [2026-06-15] — PH-T4: surface NPC→player breach events over
+            # the phone Socket.IO so the (PH-T5) notifications centre can react.
+            fw.on("phone_hacked", lambda evt: self._on_phone_hacked(evt))
+            fw.on("message_intercepted", lambda evt: self._on_message_intercepted(evt))
         except Exception as exc:
             logger.warning("[%s] MCP rule registration skipped (operation=mcp_wire): %s", SCENE_ID, exc)
         self._subscribe_world_events()
@@ -314,6 +318,34 @@ class PhoneSceneV2(FlaskScene):
                 self.socketio.emit("story_beat", evt.payload)
             except Exception:
                 pass
+
+    # v1.62.0 [2026-06-15] — PH-T4: NPC→player phone-breach surfacing.
+    def _on_phone_hacked(self, evt) -> None:
+        """Re-emit a ``phone_hacked`` breach event over the phone Socket.IO.
+
+        The breach record itself is already persisted as a ``system`` comms
+        entry by :class:`~content.scenes.phone.phone_hack.NpcHackPlayerService`
+        (the read path for the PH-T5 notifications centre); this only pushes the
+        live event so connected clients can react immediately. Best-effort.
+
+        Args:
+            evt: The framework event carrying the breach ``payload``.
+        """
+        try:
+            self.socketio.emit("phone_hacked", getattr(evt, "payload", {}) or {})
+        except Exception:
+            pass
+
+    def _on_message_intercepted(self, evt) -> None:
+        """Re-emit a ``message_intercepted`` event over the phone Socket.IO.
+
+        Args:
+            evt: The framework event carrying the intercept ``payload``.
+        """
+        try:
+            self.socketio.emit("message_intercepted", getattr(evt, "payload", {}) or {})
+        except Exception:
+            pass
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {

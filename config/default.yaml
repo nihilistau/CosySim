@@ -963,6 +963,19 @@ phone:
     success_heat: 2                # heat added on a quiet successful breach
     fail_heat: 8                   # heat added on a noisy failed breach (recoverable)
     fail_rel_delta: -0.08          # standing hit toward the player when the NPC notices (bounded)
+    # ── v1.62.0 [2026-06-15] — PH-T4: reverse direction (NPC hacks the PLAYER) ──
+    npc:
+      enabled: true                      # master toggle for NPC→player hacking
+      die_sides: 20                      # size of the attacker's d20 roll
+      base_difficulty: 8                 # flat difficulty added to the player's defence
+      attacker_power_floor: 2            # innate attack floor for NPCs (no offensive software)
+      read_limit: 3                      # max player threads an NPC reads per breach (bounded)
+      success_heat: 3                    # capped heat a successful breach adds to the player
+      rel_delta: -0.08                   # bounded (player, attacker) standing hit (recoverable)
+      trigger_probability: 0.05          # P(roll a hack) once an NPC is hostile — keep RARE
+      hostility_standing_threshold: 0.3  # NPC→player standing at/below this counts as hostile
+      hostile_factions: []               # faction ids whose hostility can trigger a hack
+      faction_hostile_threshold: -40     # player faction standing at/below this counts as hostile
 
 # Framework settings
 framework:
