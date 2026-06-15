@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+{#
+  the_sprawl.html — THE SPRAWL booting placeholder (B-T1 scaffold).
+  ================================================================
+  v1.63.0 [2026-06-15] — Initial scaffold (B-T1). Bootable placeholder for the
+  living-city map. The live map (territory, NPCs, the player's avatar) renders
+  here in later v1.63 tasks.
+
+  STANDALONE full-screen template (does NOT extend neon_base.html): the city
+  map owns the entire viewport. It pulls in the project's vendored fonts, the
+  shared Socket.IO client, and the scene's own CSS/JS.
+#}
+{% set scene_data = scene_data | default({}) %}
+<html lang="en" data-scene="the_sprawl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="scene-key" content="the_sprawl">
+  <meta name="scene-accent" content="{{ scene_data.accent_color | default('#39ff14') }}">
+  <title>THE SPRAWL · The Living City</title>
+
+  {# Locally vendored fonts (Orbitron / Inter / JetBrains Mono) — offline-safe #}
+  <link rel="stylesheet" href="/shared/css/fonts.css">
+  {# Scene styles + animations #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/the_sprawl.css') }}">
+</head>
+
+<body data-screen-label="03 The Sprawl">
+<div class="sprawl-stage" id="sprawl-stage">
+
+  <!-- ═══ neon grid backdrop ═══ -->
+  <div class="sprawl-grid" aria-hidden="true"></div>
+
+  <!-- ═══ boot panel ═══ -->
+  <main class="sprawl-boot">
+    <p class="sprawl-kicker">NEONCITY · LIVE FEED</p>
+    <h1 class="sprawl-title" data-text="THE SPRAWL">THE SPRAWL</h1>
+    <p class="sprawl-status" id="sprawl-status">booting&hellip;</p>
+    <p class="sprawl-sub">The living city — watch it move, walk its streets, change its fate.</p>
+
+    <!-- live readouts populated by the_sprawl.js over Socket.IO -->
+    <dl class="sprawl-readout">
+      <div><dt>STATUS</dt><dd id="sprawl-r-status">—</dd></div>
+      <div><dt>BUILD</dt><dd id="sprawl-r-version">—</dd></div>
+      <div><dt>CITY TIME</dt><dd id="sprawl-r-clock">—</dd></div>
+      <div><dt>LINK</dt><dd id="sprawl-r-link">connecting&hellip;</dd></div>
+    </dl>
+  </main>
+
+</div>
+
+{# ── Shared Socket.IO client (served by register_shared_assets) ── #}
+<script src="/shared/js/socket.io.min.js"></script>
+
+{# ── Scene boot script: Socket.IO connect + live readouts ── #}
+<script src="{{ url_for('static', filename='js/the_sprawl.js') }}"></script>
+
+</body>
+</html>

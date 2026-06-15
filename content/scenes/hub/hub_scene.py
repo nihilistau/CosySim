@@ -14,6 +14,7 @@ Version: v1.52.0 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.63.0 [2026-06-15] — Added The Sprawl scene card (B-T1)
     v1.62.0 [2026-06-15] — Surfaced missing hub scenes (auction, cyberspace) and
                             added Executive Suite (ES-T1)
     v1.52.0 [2026-03-25] — Added structured module header
@@ -273,6 +274,15 @@ def _build_scene_categories() -> Dict[str, Dict[str, Any]]:
                     "realm",
                     "AI-directed LitRPG — dual-agent Director + Assistant, murder mystery, inventory, fourth-wall mechanics",
                     "#e94560",
+                ),
+                # v1.63.0 [2026-06-15] — The Sprawl living-city map (B-T1)
+                _scene_entry(
+                    "The Sprawl",
+                    "🌆",
+                    "the_sprawl",
+                    "the_sprawl",
+                    "The living city map — territory, NPCs, your avatar",
+                    "#39ff14",
                 ),
                 _scene_entry(
                     "NeonCity",

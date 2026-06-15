@@ -1,0 +1,136 @@
+/*
+ * the_sprawl.css — THE SPRAWL booting placeholder styles (B-T1 scaffold).
+ * =======================================================================
+ * v1.63.0 [2026-06-15] — Initial scaffold (B-T1). Minimal neon styling for the
+ * "booting…" placeholder. The live-map styles land in later v1.63 tasks.
+ */
+
+:root {
+  --sprawl-accent: #39ff14;
+  --sprawl-bg: #05080a;
+  --sprawl-ink: #d7ffe0;
+  --sprawl-dim: #4f6b54;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--sprawl-bg);
+  color: var(--sprawl-ink);
+  font-family: "Inter", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.sprawl-stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(57, 255, 20, 0.10), transparent 60%),
+    radial-gradient(100% 100% at 50% 120%, rgba(157, 113, 234, 0.12), transparent 60%),
+    var(--sprawl-bg);
+}
+
+/* Perspective neon grid backdrop */
+.sprawl-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(57, 255, 20, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(57, 255, 20, 0.10) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(120% 90% at 50% 40%, #000 30%, transparent 80%);
+  animation: sprawl-drift 16s linear infinite;
+}
+
+@keyframes sprawl-drift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 48px 96px, 48px 96px; }
+}
+
+.sprawl-boot {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 2rem;
+  max-width: 640px;
+}
+
+.sprawl-kicker {
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: 0.42em;
+  font-size: 0.72rem;
+  color: var(--sprawl-dim);
+  margin: 0 0 1rem;
+}
+
+.sprawl-title {
+  font-family: "Orbitron", sans-serif;
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin: 0;
+  color: var(--sprawl-accent);
+  text-shadow:
+    0 0 12px rgba(57, 255, 20, 0.7),
+    0 0 38px rgba(57, 255, 20, 0.35);
+  animation: sprawl-flicker 4.5s infinite;
+}
+
+@keyframes sprawl-flicker {
+  0%, 92%, 100% { opacity: 1; }
+  93%           { opacity: 0.55; }
+  95%           { opacity: 1; }
+  96%           { opacity: 0.7; }
+}
+
+.sprawl-status {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--sprawl-accent);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  margin: 1rem 0 0.25rem;
+}
+
+.sprawl-sub {
+  color: rgba(215, 255, 224, 0.6);
+  margin: 0.5rem 0 2rem;
+  font-size: 0.95rem;
+}
+
+.sprawl-readout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  text-align: left;
+}
+
+.sprawl-readout > div {
+  border: 1px solid rgba(57, 255, 20, 0.18);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  background: rgba(57, 255, 20, 0.03);
+}
+
+.sprawl-readout dt {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  color: var(--sprawl-dim);
+  margin: 0 0 0.25rem;
+}
+
+.sprawl-readout dd {
+  margin: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.9rem;
+  color: var(--sprawl-ink);
+}
+
+.sprawl-readout dd.is-live { color: var(--sprawl-accent); }
+.sprawl-readout dd.is-down { color: #ff5470; }
