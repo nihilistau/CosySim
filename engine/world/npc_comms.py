@@ -27,8 +27,10 @@ Design
 * **Selection signals.** Pairs are weighted by co-presence (same location in
   the city map), recent interaction (from the comms log), and a pair-affinity
   signal (``character_relationships.relationship_level``, defaulting when the
-  pair has no formal relationship yet — CB-T6 will populate these). Recently
-  used pairs are penalised to avoid spamming the same two NPCs.
+  pair has no formal relationship yet). As of CB-T6 each exchange UPDATES this
+  signal (see :func:`_apply_relationship_effect`), so the pool self-organises:
+  friendly pairs talk more and escalate to the LLM, soured pairs drift apart.
+  Recently used pairs are penalised to avoid spamming the same two NPCs.
 
 Configuration (read via ``get_config().get("comms.npc.<key>")``)::
 
@@ -42,6 +44,12 @@ Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — CB-T6: pairwise relationship effects. Each exchange
+        now nudges the PAIR's ``relationship_level`` (warm tone / positive
+        keywords → +, cool tone / negative keywords → −) via the canonical
+        ``Database`` write path, closing the loop with selection's affinity
+        signal. Delta logic lives in ``engine/world/relationship_effects.py``;
+        magnitudes are config-driven under ``comms.npc.relationship.*``.
     v1.62.0 [2026-06-15] — CB-T4: leave-a-message. When the recipient NPC is
         "offline" (not co-present with the sender) the exchange is stored as a
         left message (``metadata.left_unread=True``, phone row via
@@ -679,6 +687,14 @@ class NPCCommsScheduler:
             metadata=comms_meta,
         )
 
+        # v1.62.0 [2026-06-15] — CB-T6: close the loop with selection. The
+        # exchange nudges the PAIR's relationship_level (warm tone / positive
+        # keywords → +, cool tone / negative keywords → −) via the canonical
+        # Database write path, so affinity drifts gradually and CB-T3 selection
+        # increasingly favours pairs that get along. Best-effort: never let a
+        # relationship write break message delivery.
+        self._apply_relationship_effect(a, b, content)
+
         self._remember_pair(a, b)
         self._emit_event(a, b, thread_id, content, generated)
 
@@ -695,6 +711,35 @@ class NPCCommsScheduler:
             "comms_id": comms_id,
             "left_message": leaving,
         }
+
+    def _apply_relationship_effect(self, a: str, b: str, content: str) -> None:
+        """Nudge the pair's relationship_level from this exchange (CB-T6).
+
+        Derives the tone from the pair's current affinity bucket (the same
+        ``warm``/``neutral``/``cool`` mapping the template pool uses) and lets
+        :func:`engine.world.relationship_effects.apply_exchange_effect` combine
+        it with keyword affect detected in ``content`` to produce a small,
+        clamped, config-driven delta applied via the canonical Database write
+        path. Best-effort: any failure is logged and swallowed so a relationship
+        write can never break message delivery.
+
+        Args:
+            a: Sender NPC id.
+            b: Recipient NPC id.
+            content: The delivered exchange body (template line or LLM output).
+        """
+        db = self._get_db()
+        if db is None:
+            return
+        try:
+            from engine.world.relationship_effects import apply_exchange_effect
+            tone = self._affinity_tone(a, b)
+            apply_exchange_effect(db, a, b, content, tone)
+        except Exception as exc:
+            logger.debug(
+                "[npc_comms] relationship effect failed (operation=run_exchange, pair=%s/%s): %s",
+                a, b, exc,
+            )
 
     def _recipient_online(self, sender: str, recipient: str) -> bool:
         """Return whether ``recipient`` is reachable by ``sender`` right now.

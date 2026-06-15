@@ -897,6 +897,21 @@ comms:
       - aria
       - frankie
       - mira
+    # ── v1.62.0 [2026-06-15] — CB-T6: pairwise relationship effects ──────
+    # Each NPC↔NPC exchange nudges the pair's relationship_level (0..1) so
+    # affinity drifts gradually over many exchanges. Deltas are intentionally
+    # SMALL; tone (warm/neutral/cool) and detected keywords combine, then the
+    # result is clamped to [min_level, max_level].
+    relationship:
+      enabled: true               # master toggle for pairwise relationship drift
+      warm_delta: 0.02            # template-tone "warm" exchange → +affinity
+      neutral_delta: 0.005        # template-tone "neutral" exchange → tiny +affinity
+      cool_delta: -0.02           # template-tone "cool" exchange → -affinity
+      keyword_positive: 0.015     # per-exchange bonus when a positive keyword is present
+      keyword_negative: -0.03     # per-exchange penalty when a negative keyword is present
+      max_step: 0.06              # absolute cap on a single exchange's net delta
+      min_level: 0.0              # clamp floor for relationship_level
+      max_level: 1.0              # clamp ceiling for relationship_level
   # ── v1.62.0 [2026-06-15] — CB-T5: calmer + more varied user inbox ─────
   # Tunes the USER-facing autotext path ONLY (phone autotxt ticker). The
   # NPC↔NPC scheduler (comms.npc, above) is a separate path and is NOT
