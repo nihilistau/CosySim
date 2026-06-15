@@ -113,6 +113,26 @@ It is built to be read. This is a flagship example of what *agentic coding + loc
 | **It governs itself** | 36 interceptors (`engine/agents/interceptors/`) inject mood, knowledge, scene rules, faction standing, and heat awareness — then shape, log, and sync the response. Skills enforce cooldowns, costs, and prerequisites. |
 | **Open and inspectable** | Vanilla-JS frontend (no build step), Google-style docstrings, version-stamped change logs, and a deep `docs/` tree with `INDEX.md` as the door. |
 
+## Features &amp; living systems
+
+A running ledger of the systems that make the city feel alive, newest release first. Each row points at the file or scene that implements it, so you can jump straight from "what" to "where". Full per-change detail lives in [`CHANGELOG.md`](CHANGELOG.md).
+
+<!-- FEATURES: add new release subsections here, newest first. Each release = a `###` heading + one table (System · What it does · Lives in). Keep one-line descriptions; link the primary implementing file/scene. Detailed notes go in CHANGELOG.md, not here. -->
+
+### v1.62 — "Living City" (latest)
+
+The v1.62 line turns NEON CITY from a world you talk *at* into one that talks *to itself*: NPCs phone each other, the Oracle overhears the chatter, phones can be hacked, and a full neon desktop OS surfaces it all.
+
+| System | What it does | Lives in |
+|---|---|---|
+| **Penthouse naturalism &amp; intimacy** | Characters rest *on* furniture (anchor fix), the Director renders + persists, bed-game actions drive a consent-gated (fail-closed) paired-pose chain, every present character runs its own local agent, and a cheap ambient layer keeps idle characters moving between LLM ticks. | `content/scenes/penthouse/`, `engine/agents/ambient_behavior.py` |
+| **Comms backbone &amp; NPC↔NPC messaging** | `GlobalCommsLog` is the single source of truth for every message; a write-through interceptor logs governed replies; NPCs carry phones and text each other on a hybrid template/LLM scheduler, with offline leave-a-message delivery, a calmer/varied user inbox, and pairwise relationship effects. | `engine/world/comms_log.py`, `engine/world/npc_comms.py`, `engine/world/relationship_effects.py` |
+| **Phone OS overhaul** | Every NPC gets a real phone with derived security/firewall/hack-power; buyable + skill-installable upgrades from Grid vendors; two-way hacking (player→NPC intercept/plant/steal, rare firewall-defended NPC→player); and an OS-like phone UI (notifications center, search, installed apps, Breach + Upgrades). | `engine/world/phone_os.py`, `content/scenes/phone/phone_hack.py` |
+| **Oracle omniscience** | The Oracle reads the comms log under a single privacy/spoiler budget — comms-aware cryptic fortunes, the `read_the_signal` intel skill, and autonomous omens — hinting at the city's chatter without ever leaking raw message bodies. | `engine/world/oracle_comms.py`, `content/scenes/oracle/oracle_scene.py` |
+| **Executive Suite OS** | A new neon-noir desktop scene (`:5596`): window manager, dock, taskbar, 8 functional apps, and a live AI assistant; registered as a default auto-start scene, and surfaced the previously-missing `auction` + `cyberspace` hub scenes. | `content/scenes/executive_suite/` |
+
+**v1.62.1 follow-ups** — closed the remaining loops on the v1.62 systems: Executive Suite **Mail** now reads the unified `GlobalCommsLog` (inbox + an Intercepts folder), the desktop surfaces breach alerts and an Oracle taskbar button, and **faction hostility now triggers** the NPC→player reverse hack. Plus a full repair of pre-existing test debt (suite green).
+
 ## Architecture overview
 
 CosySim is a **reusable engine + swappable content + tunable config**. Scenes subclass `BaseScene`; the engine provides agents, governance, knowledge, world simulation, and inference; YAML config tunes behavior without touching code.

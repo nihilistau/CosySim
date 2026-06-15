@@ -53,6 +53,18 @@ Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.1 [2026-06-15] — L2: faction hostility now actually triggers the
+                            NPC→player hack. ``is_hostile_to_player`` gained a
+                            data-driven faction path: it resolves the ATTACKER's
+                            faction (via the canonical character→faction map in
+                            ``engine.agents.interceptors.faction_context``) and
+                            treats the NPC as hostile when the PLAYER's standing
+                            with that faction is ``<= faction_hostile_threshold``
+                            — no explicit list required. ``hostile_factions``
+                            stays as an optional always-hostile override. The
+                            per-NPC standing path is unchanged; the trigger stays
+                            rare (``trigger_probability``) and firewall-defended.
+                            Each path logs which signal fired in Oracle format.
     v1.62.0 [2026-06-15] — PH-T4: reverse direction — an NPC hacks the PLAYER's
                             phone. NpcHackPlayerService reuses the same
                             hack_power+d20 check math, but flips it: attacker =
@@ -151,8 +163,13 @@ _NPC_DEFAULTS: Dict[str, Any] = {
     # Trigger gate — keep it RARE.
     "trigger_probability": 0.05,         # P(roll a hack) once an attacker is hostile
     "hostility_standing_threshold": 0.3,  # NPC→player standing at/below this = hostile
-    "hostile_factions": [],              # faction ids the player is hostile-standing with
+    # Faction hostility (L2): the PRIMARY faction path derives hostility from the
+    # ATTACKER's own faction — if the player's standing with that faction is
+    # <= faction_hostile_threshold the NPC is hostile (no list needed).
     "faction_hostile_threshold": -40,    # player faction standing at/below this = hostile
+    # Optional explicit override: faction ids listed here are ALWAYS hostile
+    # (regardless of standing); the attacker's faction matching one forces a hack.
+    "hostile_factions": [],
 }
 
 
@@ -1266,6 +1283,59 @@ def _npc_cfg(key: str) -> Any:
         return _NPC_DEFAULTS.get(key)
 
 
+def _resolve_attacker_faction(attacker_id: str) -> Optional[str]:
+    """Resolve the faction *attacker_id* belongs to, or ``None`` if independent.
+
+    Reuses the canonical character→faction map maintained for the faction-aware
+    agent prompt injection
+    (:func:`engine.agents.interceptors.faction_context._get_character_faction`)
+    rather than duplicating membership data here, so an NPC's faction is derived
+    from one place across the sim.
+
+    Args:
+        attacker_id: The NPC whose faction to resolve.
+
+    Returns:
+        The faction id the NPC belongs to (as keyed in the membership map), or
+        ``None`` when the NPC is independent / unresolved.
+    """
+    try:
+        from engine.agents.interceptors.faction_context import _get_character_faction
+        return _get_character_faction(attacker_id)
+    except Exception as exc:
+        logger.debug(
+            "[phone_hack] faction resolution failed "
+            "(operation=hostility, attacker=%s): %s", attacker_id, exc,
+        )
+        return None
+
+
+def _player_standing_with_faction(
+    faction: str, standings: Dict[str, Any]
+) -> Optional[int]:
+    """Return the player's standing with *faction* from a standings map.
+
+    The character→faction map and ``PlayerState.faction_standings`` use slightly
+    different id spellings/casing (e.g. ``"ghost_net"`` vs ``"Ghost_Net"``), so
+    the lookup is case-insensitive against the standings keys before giving up.
+
+    Args:
+        faction: The faction id to look up (as resolved from the attacker).
+        standings: The player's ``faction_id -> standing`` map.
+
+    Returns:
+        The integer standing if a (case-insensitive) match is found, else
+        ``None`` (the player has no tracked standing with that faction).
+    """
+    if faction in standings:
+        return int(standings[faction])
+    lowered = faction.lower()
+    for key, value in standings.items():
+        if str(key).lower() == lowered:
+            return int(value)
+    return None
+
+
 def is_hostile_to_player(
     attacker_id: str,
     *,
@@ -1274,11 +1344,21 @@ def is_hostile_to_player(
 ) -> bool:
     """Return whether *attacker_id* is currently HOSTILE toward the player.
 
-    An NPC is hostile when EITHER their ``(npc, user)`` relationship standing is
-    at/below ``phone.hack.npc.hostility_standing_threshold``, OR the player is in
-    bad standing (``<= faction_hostile_threshold``) with one of the NPC's
-    configured ``hostile_factions``. Used to gate the rare hack trigger so only
-    antagonistic NPCs ever roll an attempt.
+    An NPC is hostile when ANY of these hold (each is an independent trigger):
+
+    1. **Per-NPC standing** — their ``(npc, user)`` relationship standing is
+       at/below ``phone.hack.npc.hostility_standing_threshold``.
+    2. **Faction hostility (derived)** — the NPC belongs to a faction (resolved
+       via :func:`_resolve_attacker_faction`) and the PLAYER's standing with
+       THAT faction is at/below ``phone.hack.npc.faction_hostile_threshold``.
+       This is the primary, data-driven faction path: hostility follows the
+       player's actual faction standings, so no explicit list is required.
+    3. **Explicit override** — the attacker's faction id appears in the
+       configured ``phone.hack.npc.hostile_factions`` list, which forces
+       hostility regardless of standing.
+
+    Used to gate the rare hack trigger so only antagonistic NPCs ever roll an
+    attempt. Never raises — any lookup failure degrades to "not hostile".
 
     Args:
         attacker_id: The candidate attacker NPC id.
@@ -1301,6 +1381,12 @@ def is_hostile_to_player(
             rel = db.get_relationship(attacker_id, PLAYER_ID)
             if rel is not None and rel.get("relationship_level") is not None:
                 if float(rel["relationship_level"]) <= threshold:
+                    logger.info(
+                        "[phone_hack] hostility detected via per-NPC standing "
+                        "(operation=hostility, attacker=%s, path=npc_standing, "
+                        "standing=%.3f, threshold=%.3f)",
+                        attacker_id, float(rel["relationship_level"]), threshold,
+                    )
                     return True
         except Exception as exc:
             logger.debug(
@@ -1308,27 +1394,73 @@ def is_hostile_to_player(
                 "(operation=hostility, attacker=%s): %s", attacker_id, exc,
             )
 
-    # 2) Faction hostility — player in bad standing with this NPC's faction(s).
-    hostile_factions = list(_npc_cfg("hostile_factions") or [])
+    # 2) & 3) Faction hostility — needs the player's faction standings + the
+    # attacker's faction. Resolve the player state lazily, once.
+    if player_state is None:
+        try:
+            from engine.world.player_state import get_player_state
+            player_state = get_player_state()
+        except Exception:
+            player_state = None
+
+    attacker_faction = _resolve_attacker_faction(attacker_id)
+
+    # 3) Explicit override — configured faction ids are ALWAYS hostile. Matches
+    # the attacker's own faction OR (legacy behaviour) any faction the player is
+    # already in bad standing with, so an operator can force a hostile faction
+    # regardless of the derived standing.
+    hostile_factions = [str(f) for f in (_npc_cfg("hostile_factions") or [])]
+    fac_threshold = int(_npc_cfg("faction_hostile_threshold") or 0)
     if hostile_factions:
-        fac_threshold = int(_npc_cfg("faction_hostile_threshold") or 0)
-        if player_state is None:
-            try:
-                from engine.world.player_state import get_player_state
-                player_state = get_player_state()
-            except Exception:
-                player_state = None
+        lowered_override = {f.lower() for f in hostile_factions}
+        if attacker_faction and attacker_faction.lower() in lowered_override:
+            logger.info(
+                "[phone_hack] hostility forced via explicit override "
+                "(operation=hostility, attacker=%s, path=faction_override, "
+                "faction=%s)", attacker_id, attacker_faction,
+            )
+            return True
+        # Legacy: any explicitly-listed faction the player is below threshold on.
         if player_state is not None:
             try:
                 standings = player_state.faction_standings
                 for fac in hostile_factions:
-                    if int(standings.get(fac, 0)) <= fac_threshold:
+                    standing = _player_standing_with_faction(fac, standings)
+                    if standing is not None and standing <= fac_threshold:
+                        logger.info(
+                            "[phone_hack] hostility detected via listed faction "
+                            "(operation=hostility, attacker=%s, path=faction_listed, "
+                            "faction=%s, standing=%d, threshold=%d)",
+                            attacker_id, fac, standing, fac_threshold,
+                        )
                         return True
             except Exception as exc:
                 logger.debug(
-                    "[phone_hack] faction hostility lookup failed "
+                    "[phone_hack] listed-faction hostility lookup failed "
                     "(operation=hostility, attacker=%s): %s", attacker_id, exc,
                 )
+
+    # 2) Derived faction hostility — the PRIMARY faction path. The attacker's
+    # own faction's standing with the player drives hostility, so no explicit
+    # list is needed: sour the player's standing with a faction and its members
+    # become eligible attackers.
+    if attacker_faction and player_state is not None:
+        try:
+            standings = player_state.faction_standings
+            standing = _player_standing_with_faction(attacker_faction, standings)
+            if standing is not None and standing <= fac_threshold:
+                logger.info(
+                    "[phone_hack] hostility detected via attacker's faction "
+                    "(operation=hostility, attacker=%s, path=faction, "
+                    "faction=%s, standing=%d, threshold=%d)",
+                    attacker_id, attacker_faction, standing, fac_threshold,
+                )
+                return True
+        except Exception as exc:
+            logger.debug(
+                "[phone_hack] derived faction hostility lookup failed "
+                "(operation=hostility, attacker=%s): %s", attacker_id, exc,
+            )
     return False
 
 

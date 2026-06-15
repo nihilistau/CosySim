@@ -18,10 +18,26 @@ The scene mirrors the canonical FlaskScene template (see
 Socket.IO, a one-route full-screen desktop UI, a ``/api/state`` endpoint,
 and minimal lifecycle hooks.
 
-Version: v1.62.0 [2026-06-15]
+Version: v1.62.1 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.1 [2026-06-15] — Unified comms backbone wiring (L1): Mail now reads
+                            the :class:`~engine.world.comms_log.GlobalCommsLog`
+                            as the single source of truth — the inbox is built
+                            from the player's conversations (``query(participants=
+                            ['user'])`` grouped by thread) and a new INTERCEPTS
+                            folder surfaces comms the player obtained via phone
+                            hacking (entries the player wasn't a party to but
+                            ``observed_by`` includes ``'user'``, plus
+                            ``metadata.planted by user``). Send still persists to
+                            the phone thread AND logs to the comms backbone.
+                            Added a desktop Intel surface: ``/api/intel/breaches``
+                            (``kind='notification' metadata.notification=
+                            'phone_hacked'``) → breach toasts/badge, and
+                            ``/api/intel/oracle`` → the Oracle ``read_the_signal``
+                            cryptic line. Defensive throughout (empty states,
+                            comms-log failure degrades gracefully).
     v1.62.0 [2026-06-15] — Final polish (ES-T5): module-level
                             ``_sanitize_assistant_reply`` strips leaked model
                             meta/instruction artifacts (``<<DOC|...>>`` blocks,
@@ -74,6 +90,17 @@ _SAFE_FILE_ROOTS = {"inventory", "catalog", "data"}
 # Whitelist of console commands the sandboxed Terminal app accepts. NO shell
 # exec, NO arbitrary code — each maps to a small read-only handler.
 _CONSOLE_COMMANDS = ("help", "status", "whoami", "scenes", "world", "inbox", "clear")
+
+# v1.62.1 [2026-06-15] — Mail/Intel (L1) constants. The player is 'user' in the
+# comms log; player conversations live on the phone channels; NPC↔NPC chatter
+# (which the player can only see by hacking) lives on 'npc_dm'.
+_PLAYER_ID = "user"
+_PLAYER_CHANNELS = ("phone_dm", "phone_group")
+# Channels whose entries, when observed_by 'user', count as a HACK intercept
+# (comms the player was never originally a party to).
+_INTERCEPT_CHANNELS = ("npc_dm", "npc_group")
+# How many comms-log rows to scan when building the inbox / intercepts views.
+_MAIL_SCAN_LIMIT = 400
 
 # v1.62.0 [2026-06-15] — Assistant (ES-T4) constants. Seeded companions the
 # "Add my Agent" picker may drive the live AI assistant with; default is aria.
@@ -192,7 +219,7 @@ class ExecutiveSuiteScene(FlaskScene):
         "type": "game",
         "accent_color": "#06b6d4",
         "description": "A full neon OS desktop — mail, files, your live AI assistant.",
-        "version": "1.62.0",
+        "version": "1.62.1",
     }
 
     def __init__(self, config: Optional[Dict[str, Any]] = None,
@@ -254,7 +281,9 @@ class ExecutiveSuiteScene(FlaskScene):
                              SCENE_ID, path, exc)
                 return jsonify({"error": "read unavailable"}), 200
 
-        # ── mail (phone comms; repoints to GlobalCommsLog in sub-project 2) ──
+        # ── mail (unified GlobalCommsLog — inbox + intercepts) ──────────────
+        # v1.62.1 [2026-06-15] — L1: reads the comms backbone (single source of
+        # truth). /api/mail/intercepts surfaces hacked/planted comms.
         @app.route("/api/mail/threads")
         def mail_threads():
             try:
@@ -262,6 +291,14 @@ class ExecutiveSuiteScene(FlaskScene):
             except Exception as exc:
                 logger.error("[%s] mail threads failed (operation=mail): %s", SCENE_ID, exc)
                 return jsonify({"threads": [], "unread": 0, "empty": True}), 200
+
+        @app.route("/api/mail/intercepts")
+        def mail_intercepts():
+            try:
+                return jsonify(self._mail_intercepts())
+            except Exception as exc:
+                logger.error("[%s] mail intercepts failed (operation=mail): %s", SCENE_ID, exc)
+                return jsonify({"intercepts": [], "count": 0, "empty": True}), 200
 
         @app.route("/api/mail/thread/<thread_id>")
         def mail_thread(thread_id: str):
@@ -334,6 +371,30 @@ class ExecutiveSuiteScene(FlaskScene):
                 return jsonify({
                     "text": _ASSISTANT_FALLBACK, "agent_id": agent_id,
                     "fallback": True, "error": "assistant unavailable",
+                }), 200
+
+        # ── intel (L1) — breach alerts + oracle signal on the desktop ──────
+        # v1.62.1 [2026-06-15] — Surface the phone-hacking + oracle features in
+        # the OS. Both routes read the unified GlobalCommsLog / oracle pack and
+        # degrade gracefully (never a 500).
+        @app.route("/api/intel/breaches")
+        def intel_breaches():
+            since = request.args.get("since")
+            try:
+                return jsonify(self._intel_breaches(since))
+            except Exception as exc:
+                logger.error("[%s] intel breaches failed (operation=intel): %s", SCENE_ID, exc)
+                return jsonify({"breaches": [], "count": 0}), 200
+
+        @app.route("/api/intel/oracle", methods=["POST"])
+        def intel_oracle():
+            try:
+                return jsonify(self._intel_oracle())
+            except Exception as exc:
+                logger.error("[%s] intel oracle failed (operation=intel): %s", SCENE_ID, exc)
+                return jsonify({
+                    "text": "The streams writhe and refuse me. Return when the static settles.",
+                    "ok": False,
                 }), 200
 
     # ── App backend helpers (ES-T3) ─────────────────────────────────────
@@ -458,8 +519,15 @@ class ExecutiveSuiteScene(FlaskScene):
         from content.scenes.phone.phone_db import PhoneDB
         return PhoneDB()
 
+    def _comms_log(self):
+        """Return the GlobalCommsLog singleton (lazy import — optional peer)."""
+        from engine.world.comms_log import get_comms_log
+        return get_comms_log()
+
     def _char_name(self, char_id: str, cache: Dict[str, str]) -> str:
         """Resolve a character id to a display name (cached per request)."""
+        if not char_id:
+            return "unknown"
         if char_id in cache:
             return cache[char_id]
         name = char_id
@@ -473,80 +541,304 @@ class ExecutiveSuiteScene(FlaskScene):
         cache[char_id] = name
         return name
 
-    def _mail_threads(self) -> Dict[str, Any]:
-        """Inbox list from the EXISTING phone comms (PhoneDB threads).
+    # ── Mail (L1) — reads the unified GlobalCommsLog ─────────────────────
+    # v1.62.1 [2026-06-15] — The Mail app is now backed by the single source of
+    # truth (GlobalCommsLog) instead of raw PhoneDB. The inbox is the player's
+    # conversations; the INTERCEPTS folder surfaces comms the player obtained by
+    # hacking. Compose/send still persists to the phone thread (so NPC replies
+    # keep flowing) AND logs to the comms backbone.
 
-        NOTE: this reads phone_threads / phone_messages. In sub-project 2 this
-        repoints to GlobalCommsLog — keep the response shape stable.
+    @staticmethod
+    def _is_intercept(entry: Dict[str, Any]) -> bool:
+        """Return whether a comms entry is a player HACK intercept/plant.
+
+        An entry is an intercept when the player ``observed_by`` it on a channel
+        the player was never a party to (NPC↔NPC), or when the player planted it
+        (``metadata.planted`` with ``by == 'user'``). Player-facing breach
+        notifications are surfaced separately (Intel), not in the Mail folder.
+
+        Args:
+            entry: A deserialized comms-log entry dict.
+
+        Returns:
+            ``True`` if the entry should appear in the INTERCEPTS folder.
         """
-        db = self._phone_db()
-        threads = db.list_threads()
+        meta = entry.get("metadata") or {}
+        if meta.get("planted") and meta.get("by") == _PLAYER_ID:
+            return True
+        observed = entry.get("observed_by") or []
+        if _PLAYER_ID in observed and entry.get("channel") in _INTERCEPT_CHANNELS:
+            # The player only "owns" this exchange because they hacked it —
+            # they are neither sender nor a listed recipient.
+            recipients = entry.get("recipient_ids") or []
+            if entry.get("sender_id") != _PLAYER_ID and _PLAYER_ID not in recipients:
+                return True
+        return False
+
+    def _mail_threads(self) -> Dict[str, Any]:
+        """Inbox list from the unified GlobalCommsLog (player conversations).
+
+        Builds one inbox row per ``thread_id`` from the player's conversations
+        (``query(participants=['user'])``), newest entry per thread. Unread is
+        derived from the phone DB read-receipts when available (the comms log is
+        append-only and carries no per-user read state). Degrades to an empty
+        inbox if the comms log is unavailable.
+        """
+        try:
+            cl = self._comms_log()
+            entries = cl.query(participants=[_PLAYER_ID], limit=_MAIL_SCAN_LIMIT)
+        except Exception as exc:
+            logger.error("[%s] mail threads comms-log read failed (operation=mail): %s",
+                         SCENE_ID, exc)
+            entries = []
+
         cache: Dict[str, str] = {}
-        out = []
-        for t in threads:
-            members = t.get("members") or []
-            if t.get("name"):
-                frm = t["name"]
-            elif members:
-                frm = self._char_name(members[0], cache)
+        # entries are newest-first; first time we see a thread is its latest msg.
+        threads: Dict[str, Dict[str, Any]] = {}
+        loose: List[Dict[str, Any]] = []
+        for e in entries:
+            # Breach/system notifications are surfaced via Intel, not the inbox;
+            # hacked/planted comms live in the INTERCEPTS folder.
+            if e.get("kind") == "notification" or self._is_intercept(e):
+                continue
+            tid = e.get("thread_id")
+            sender = e.get("sender_id", "")
+            frm = "You" if sender == _PLAYER_ID else self._char_name(sender, cache)
+            row = {
+                "id": tid or ("dm:" + sender),
+                "from": frm if sender != _PLAYER_ID else self._counterparty(e, cache),
+                "preview": (e.get("content") or "")[:120],
+                "time": e.get("ts", ""),
+                "channel": e.get("channel", ""),
+            }
+            if tid:
+                if tid not in threads:
+                    threads[tid] = row
             else:
-                frm = "unknown"
-            out.append({
-                "id": t["id"],
-                "from": frm,
-                "preview": (t.get("last_message") or "")[:120],
-                "unread": int(t.get("unread") or 0),
-                "time": t.get("updated_at", ""),
-            })
-        total_unread = sum(x["unread"] for x in out)
+                loose.append(row)
+
+        out = list(threads.values()) + loose
+        out.sort(key=lambda r: r.get("time", ""), reverse=True)
+
+        # Unread counts from the phone read-receipts (best-effort; comms log has none).
+        total_unread = self._apply_unread(out)
         logger.info("[%s] mail threads served (operation=mail, threads=%d, unread=%d)",
                     SCENE_ID, len(out), total_unread)
         return {"threads": out, "unread": total_unread, "empty": not out}
 
+    def _counterparty(self, entry: Dict[str, Any], cache: Dict[str, str]) -> str:
+        """Resolve the non-player display name for a player-sent entry."""
+        for rid in entry.get("recipient_ids") or []:
+            if rid != _PLAYER_ID:
+                return self._char_name(rid, cache)
+        return "thread"
+
+    def _apply_unread(self, rows: List[Dict[str, Any]]) -> int:
+        """Annotate inbox rows with a per-thread unread count; return the total.
+
+        The comms log is append-only with no per-user read state, so unread is
+        sourced from the phone DB read-receipts when available. Any failure
+        leaves unread at 0 (never blocks the inbox).
+        """
+        total = 0
+        try:
+            db = self._phone_db()
+        except Exception:
+            for r in rows:
+                r["unread"] = 0
+            return 0
+        for r in rows:
+            n = 0
+            tid = r.get("id", "")
+            if tid and not tid.startswith("dm:"):
+                try:
+                    n = int(db.thread_unread(tid))
+                except Exception:
+                    n = 0
+            r["unread"] = n
+            total += n
+        return total
+
     def _mail_thread(self, thread_id: str) -> Dict[str, Any]:
-        """Full message list for one thread (the preview pane)."""
-        db = self._phone_db()
-        meta = db.get_thread(thread_id)
-        if not meta:
+        """Full message list for one thread (the preview pane), from the comms log.
+
+        Reads ``comms_log.thread(thread_id)`` (chronological). Marks the matching
+        phone thread read (best-effort) so unread counts settle. Intercept-folder
+        rows (planted/no real thread) are handled by :meth:`_mail_intercepts`.
+        """
+        try:
+            cl = self._comms_log()
+            entries = cl.thread(thread_id, limit=200)
+        except Exception as exc:
+            logger.error("[%s] mail thread comms-log read failed (operation=mail, thread=%s): %s",
+                         SCENE_ID, thread_id, exc)
+            entries = []
+        if not entries:
             return {"error": "not found", "messages": []}
+
         cache: Dict[str, str] = {}
         msgs = []
-        for m in db.get_messages(thread_id, limit=100):
+        counterparties: List[str] = []
+        for m in entries:
             sid = m.get("sender_id", "")
+            if sid and sid != _PLAYER_ID and sid not in counterparties:
+                counterparties.append(sid)
             msgs.append({
                 "id": m.get("id"),
                 "sender_id": sid,
-                "from": "You" if sid == "user" else self._char_name(sid, cache),
-                "mine": sid == "user",
+                "from": "You" if sid == _PLAYER_ID else self._char_name(sid, cache),
+                "mine": sid == _PLAYER_ID,
                 "content": m.get("content", ""),
-                "time": m.get("created_at", ""),
+                "time": m.get("ts", ""),
             })
         try:
-            db.mark_read(thread_id)
+            self._phone_db().mark_read(thread_id)
         except Exception:
             pass
-        members = [c for c in (meta.get("members") or []) if c != "user"]
-        title = meta.get("name") or (self._char_name(members[0], cache) if members else "thread")
+        title = self._char_name(counterparties[0], cache) if counterparties else "thread"
         logger.info("[%s] mail thread served (operation=mail, thread=%s, msgs=%d)",
                     SCENE_ID, thread_id, len(msgs))
         return {"id": thread_id, "title": title, "messages": msgs}
 
+    def _mail_intercepts(self) -> Dict[str, Any]:
+        """Return the INTERCEPTS folder — comms the player obtained by hacking.
+
+        Scans the comms log for entries the player ``observed_by`` on NPC↔NPC
+        channels (comms they weren't a party to) plus messages the player
+        planted (``metadata.planted by user``). Each row is clearly labelled
+        ``intercepted`` / ``planted`` so the OS makes the payoff of phone hacking
+        visible. Degrades to an empty list on any comms-log failure.
+        """
+        try:
+            cl = self._comms_log()
+            entries = cl.query(limit=_MAIL_SCAN_LIMIT)
+        except Exception as exc:
+            logger.error("[%s] mail intercepts comms-log read failed (operation=mail): %s",
+                         SCENE_ID, exc)
+            entries = []
+
+        cache: Dict[str, str] = {}
+        out = []
+        for e in entries:
+            if not self._is_intercept(e):
+                continue
+            meta = e.get("metadata") or {}
+            planted = bool(meta.get("planted"))
+            sender = e.get("sender_id", "")
+            recipients = [r for r in (e.get("recipient_ids") or []) if r != _PLAYER_ID]
+            out.append({
+                "id": e.get("id"),
+                "label": "planted" if planted else "intercepted",
+                "from": self._char_name(sender, cache),
+                "to": ", ".join(self._char_name(r, cache) for r in recipients) or "—",
+                "content": e.get("content", ""),
+                "channel": e.get("channel", ""),
+                "time": e.get("ts", ""),
+            })
+        out.sort(key=lambda r: r.get("time", ""), reverse=True)
+        logger.info("[%s] mail intercepts served (operation=mail, count=%d)",
+                    SCENE_ID, len(out))
+        return {"intercepts": out, "count": len(out), "empty": not out}
+
     def _mail_send(self, body: Dict[str, Any]) -> Dict[str, Any]:
-        """Persist an outbound message into the phone comms thread."""
+        """Persist an outbound message into the phone thread AND the comms log.
+
+        Writing to the phone thread keeps NPC replies flowing (the phone scene
+        owns reply generation); logging to the GlobalCommsLog keeps the unified
+        backbone — and therefore this Mail inbox — consistent. The comms-log
+        write is best-effort and never blocks the send.
+        """
         thread_id = str(body.get("thread_id", "")).strip()
         content = str(body.get("content", "")).strip()
         if not thread_id or not content:
             return {"success": False, "error": "thread_id and content required"}
         db = self._phone_db()
-        if not db.get_thread(thread_id):
+        meta = db.get_thread(thread_id)
+        if not meta:
             return {"success": False, "error": "unknown thread"}
-        msg = db.save_message(thread_id, "user", content)
+        msg = db.save_message(thread_id, _PLAYER_ID, content)
+
+        # Mirror the send into the unified comms backbone (single source of truth)
+        # so the Mail inbox + Oracle + any observer see it. Best-effort.
+        try:
+            members = [c for c in (meta.get("members") or []) if c != _PLAYER_ID]
+            channel = "phone_group" if (meta.get("type") == "group") else "phone_dm"
+            self._comms_log().log(
+                channel, _PLAYER_ID, members, content,
+                thread_id=thread_id, kind="message",
+                metadata={"scene": SCENE_ID},
+            )
+        except Exception as exc:
+            logger.error("[%s] mail send comms-log mirror failed (operation=mail, thread=%s): %s",
+                         SCENE_ID, thread_id, exc)
+
         logger.info("[%s] mail sent (operation=mail, thread=%s, msg=%s)",
                     SCENE_ID, thread_id, msg.get("id"))
         return {"success": True, "message": {
             "id": msg["id"], "from": "You", "mine": True,
             "content": content, "time": msg["created_at"],
         }}
+
+    # ── Intel (L1) — breach alerts + oracle signal ───────────────────────
+    # v1.62.1 [2026-06-15] — Surface the phone-hacking + oracle features on the
+    # desktop. Breaches read the player's persisted breach notifications from the
+    # comms log; the oracle action runs the existing read_the_signal skill.
+
+    def _intel_breaches(self, since: Optional[str] = None) -> Dict[str, Any]:
+        """Return persisted phone-breach notifications addressed to the player.
+
+        Reads ``kind='notification'`` entries with
+        ``metadata.notification='phone_hacked'`` from the comms log (newest
+        first). ``since`` (an entry id) lets the client poll only for breaches it
+        hasn't surfaced yet so toasts don't repeat. Degrades to empty on failure.
+        """
+        try:
+            cl = self._comms_log()
+            entries = cl.query(participants=[_PLAYER_ID], limit=_MAIL_SCAN_LIMIT)
+        except Exception as exc:
+            logger.error("[%s] intel breaches comms-log read failed (operation=intel): %s",
+                         SCENE_ID, exc)
+            return {"breaches": [], "count": 0}
+
+        try:
+            since_id = int(since) if since not in (None, "") else None
+        except (TypeError, ValueError):
+            since_id = None
+
+        cache: Dict[str, str] = {}
+        out = []
+        for e in entries:
+            meta = e.get("metadata") or {}
+            if e.get("kind") != "notification" or meta.get("notification") != "phone_hacked":
+                continue
+            eid = e.get("id")
+            if since_id is not None and isinstance(eid, int) and eid <= since_id:
+                continue
+            out.append({
+                "id": eid,
+                "attacker": self._char_name(meta.get("attacker") or e.get("sender_id", ""), cache),
+                "content": e.get("content", ""),
+                "blocked": bool(meta.get("blocked")),
+                "success": bool(meta.get("success")),
+                "action": meta.get("action", ""),
+                "time": e.get("ts", ""),
+            })
+        logger.info("[%s] intel breaches served (operation=intel, count=%d)",
+                    SCENE_ID, len(out))
+        return {"breaches": out, "count": len(out)}
+
+    def _intel_oracle(self) -> Dict[str, Any]:
+        """Run the Oracle ``read_the_signal`` skill and return its cryptic line.
+
+        Reuses the existing oracle pack (which reads the comms log and grants a
+        small bounded reward) rather than re-implementing intel here. Any failure
+        returns a graceful in-world line (never a 500).
+        """
+        from engine.skills.builtin.oracle_skills import read_the_signal
+        text = read_the_signal()
+        logger.info("[%s] intel oracle served (operation=intel, chars=%d)",
+                    SCENE_ID, len(text or ""))
+        return {"text": text, "ok": True}
 
     def _notes_path(self) -> Path:
         from engine.paths import DATA_DIR

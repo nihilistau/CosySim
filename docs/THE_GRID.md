@@ -54,6 +54,13 @@ faction_discount = clamp(faction_standing / 200, 0, 0.25)
 
 Selling returns 40–60% of base price depending on item condition.
 
+> **Phone upgrades (v1.62).** The Grid vendor also carries `is_phone_upgrade`
+> hardware/software from `engine.world.inventory.ITEM_CATALOG` (encryption patch,
+> firewall v1/v2, comms tap, ICE, app packs, modem/CPU/OS-kernel). The
+> `install_phone_upgrade` skill gates install on owned-item → credits →
+> `skill_check` and raises the owner's derived security/firewall/hack-power via
+> `engine/world/phone_os.py`. See [Game Systems](GAME_SYSTEMS.md#living-city-comms--phone-systems-v162).
+
 ---
 
 ### STATION
@@ -241,6 +248,7 @@ __all__ = ["GridScene"]
 
 | Version | Date | Description |
 |---------|------|-------------|
+| v1.62 | 2026-06-15 | Noted phone-upgrade items sold by the Grid vendor (`install_phone_upgrade` + `phone_os.py`) |
 | v1.50 | 2026-03-22 | Updated header to v1.50, fixed cross-references |
 | v1.04 | 2026-03-15 | Added Ghost Terminal 0xGH0ST integration |
 | v0.75 | 2026-03-10 | Initial THE GRID documentation — 4 zones, 7 skills, 15 travel nodes |

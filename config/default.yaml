@@ -974,8 +974,16 @@ phone:
       rel_delta: -0.08                   # bounded (player, attacker) standing hit (recoverable)
       trigger_probability: 0.05          # P(roll a hack) once an NPC is hostile — keep RARE
       hostility_standing_threshold: 0.3  # NPC→player standing at/below this counts as hostile
-      hostile_factions: []               # faction ids whose hostility can trigger a hack
+      # ── v1.62.1 [2026-06-15] — L2: faction hostility triggers the hack ──
+      # PRIMARY faction path: hostility is DERIVED from the attacker's own
+      # faction. The NPC's faction is resolved from the canonical character→
+      # faction map; if the PLAYER's standing with that faction is <=
+      # faction_hostile_threshold, the NPC is hostile (no list needed).
       faction_hostile_threshold: -40     # player faction standing at/below this counts as hostile
+      # Optional explicit OVERRIDE: faction ids listed here are ALWAYS hostile
+      # regardless of standing (an attacker in one of these factions is forced
+      # hostile). Leave empty to rely purely on the derived path above.
+      hostile_factions: []
 
 # Framework settings
 framework:

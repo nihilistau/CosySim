@@ -635,8 +635,73 @@
     const socket = io();
     socket.on('connect', () => { console.log('[executive_suite] connected', socket.id); socket.emit('request_state'); });
     socket.on('state_update', applyState);
+    // v1.62.1 [2026-06-15] — L1: live breach alerts straight off the wire.
+    socket.on('phone_hacked', (d) => {
+      d = d || {};
+      surfaceBreach({ attacker: d.attacker, blocked: !!d.blocked });
+    });
     socket.on('disconnect', () => console.log('[executive_suite] disconnected'));
     return socket;
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // Intel surface (v1.62.1 [2026-06-15] — L1)
+  // Breach alerts + Oracle signal surfaced on the desktop. Breaches are read
+  // from the unified comms log (/api/intel/breaches) and shown as toasts +
+  // a taskbar badge; live `phone_hacked` socket events surface immediately.
+  // The Oracle taskbar button calls /api/intel/oracle (read_the_signal).
+  // ════════════════════════════════════════════════════════════
+  let lastBreachId = 0;           // highest breach id already surfaced
+  let breachCount = 0;            // unseen breach count (taskbar badge)
+
+  function surfaceBreach(b, opts) {
+    opts = opts || {};
+    const who = b.attacker || 'unknown';
+    const verb = b.blocked ? 'blocked a breach attempt by' : 'was breached by';
+    toast('⚠ Your phone ' + verb + ' ' + who, b.blocked ? 'warn' : 'error');
+    if (!opts.silent) {
+      breachCount++;
+      updateOracleBadge();
+    }
+  }
+
+  function pollBreaches() {
+    fetch('/api/intel/breaches' + (lastBreachId ? ('?since=' + lastBreachId) : ''))
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d && d.breaches) || [];
+        // breaches are newest-first; surface oldest→newest, skipping the prime.
+        const fresh = lastBreachId === 0 ? [] : list.slice().reverse();
+        let maxId = lastBreachId;
+        list.forEach((b) => { if (typeof b.id === 'number' && b.id > maxId) maxId = b.id; });
+        fresh.forEach((b) => surfaceBreach(b));
+        lastBreachId = maxId;
+      })
+      .catch(() => { /* comms offline — keep last known */ });
+  }
+
+  function updateOracleBadge() {
+    const badge = document.getElementById('es-oracle-badge');
+    if (!badge) return;
+    if (breachCount > 0) { badge.textContent = String(breachCount); badge.hidden = false; }
+    else { badge.hidden = true; }
+  }
+
+  function wireOracle() {
+    const btn = document.getElementById('es-oracle');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      breachCount = 0; updateOracleBadge();
+      btn.classList.add('querying');
+      toast('Consulting the Oracle…', 'info');
+      fetch('/api/intel/oracle', { method: 'POST' })
+        .then((r) => r.json())
+        .then((d) => {
+          btn.classList.remove('querying');
+          toast((d && d.text) || 'The streams are silent.', 'info');
+        })
+        .catch(() => { btn.classList.remove('querying'); toast('The Oracle is unreachable.', 'error'); });
+    });
   }
 
   // ════════════════════════════════════════════════════════════
@@ -692,6 +757,10 @@
     // User profile click → assistant
     const user = document.getElementById('es-user');
     if (user) user.addEventListener('click', () => openApp('assistant'));
+    // v1.62.1 [2026-06-15] — L1: Oracle button + breach polling (prime, then ~20s).
+    wireOracle();
+    pollBreaches();
+    setInterval(pollBreaches, 20000);
     console.log('[executive_suite] OS core ready');
   }
 
