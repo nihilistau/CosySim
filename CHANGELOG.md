@@ -69,6 +69,36 @@ the live scene on `:5556` with LMStudio up.
 - **Surfaced previously-missing hub scenes** — `auction` and `cyberspace` were
   registered but absent from the hub UI; both now appear in-world and in `--list`.
 
+### Comms backbone &amp; NPC↔NPC messaging
+- **GlobalCommsLog — single source of truth** — new `engine/world/comms_log.py`
+  backs every message (phone DMs, autotexts, NPC↔NPC) in one SQLite log
+  (`data/comms_log.db`) with `query`/`thread`/`about`/`recent` accessors,
+  `mark_observed` for later phone-hacking/Oracle reads, and a `prune` row cap.
+  All writes are defensive — a logging failure can never break a send.
+- **Comms interceptor + phone write-through** — new
+  `engine/agents/interceptors/comms_logger.py` (`CommsLoggerInterceptor`, pri 90)
+  logs every governed agent reply, while the phone scene logs explicit user
+  sends; a per-call `comms_context` aligns `thread_id`/recipients so the two
+  halves of a conversation share a thread without duplicates.
+- **NPC phones + NPC↔NPC hybrid messaging** — new `engine/world/npc_comms.py`
+  scheduler (with `npc_dm` threads + an `npc_phone` stub in `phone_db.py`) has
+  NPCs text each other on a template-dominant / occasional-LLM mix, weighted by
+  affinity and anti-spam. It runs on its **own** daemon thread and lock (the
+  `_tick_lock` fix) so NPC traffic never blocks the user-facing phone ticker, and
+  is started/stopped from the phone scene lifecycle.
+- **Leave-a-message** — new `engine/world/presence.py` plus phone changes let a
+  player message an offline NPC (and NPCs leave autotexts for an offline player):
+  messages are stored `left_unread`, delivered on (re)connect, and surfaced via a
+  "left you a message" affordance in `phone_v2.js` / `phone_ui_v2.html`.
+- **Calmer, more varied user inbox** — `phone_rules_v2.py` gains a config-driven
+  `comms.autotxt.user_multiplier` (cooldown scaling, per-character overrides),
+  topic seeds drawn from real city events, style pools, and anti-repeat, so
+  user-facing autotexts feel less spammy and less repetitive.
+- **Pairwise relationship effects** — new `engine/world/relationship_effects.py`
+  nudges each NPC pair's `character_relationships.relationship_level` (0–1) by a
+  small, tone-/keyword-derived, clamped delta per NPC↔NPC exchange, closing the
+  loop with the affinity-weighted pair selection in the scheduler.
+
 ---
 
 ## [1.61.0] — "PUBLIC RELEASE PREP" — 2026-06-13
