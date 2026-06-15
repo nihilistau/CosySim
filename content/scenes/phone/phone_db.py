@@ -3,6 +3,14 @@ Phone Scene v2 — Database Layer
 ================================
 Manages phone-specific tables: threads, messages, read receipts.
 Keeps character data in the main DB; only phone-conversation state lives here.
+
+Change Log:
+    v1.62.0 [2026-06-15] — CB-T3: NPC-owned threads + minimal npc_phone stub.
+        Added thread types ``npc_dm`` / ``npc_group`` (owned by NPCs, not the
+        player), a stable get-or-create helper for an ordered NPC pair, and a
+        minimal forward-compatible ``npc_phone`` table marking an NPC as
+        phone-enabled. The full ``npc_phone`` schema (os_version/security)
+        lands in sub-project 3.
 """
 from __future__ import annotations
 
@@ -158,6 +166,19 @@ class PhoneDB:
                     ON phone_news_items(is_deleted);
             """)
 
+        # ── NPC phone stub (v1.62.0 [2026-06-15] — CB-T3) ─────────────────
+        # Minimal "this NPC has a phone" marker. Kept intentionally small and
+        # forward-compatible: sub-project 3 extends this with os_version,
+        # security posture, etc. Only ``char_id`` is load-bearing today.
+        with self.conn() as c:
+            c.executescript("""
+                CREATE TABLE IF NOT EXISTS npc_phone (
+                    char_id    TEXT PRIMARY KEY,
+                    enabled    INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL
+                );
+            """)
+
     # ─── thread helpers ──────────────────────────────────────────────
 
     def get_or_create_dm(self, char_id: str) -> str:
@@ -216,6 +237,92 @@ class PhoneDB:
                 (tid, "user", now),
             )
             return tid
+
+    # ─── NPC-owned threads (v1.62.0 [2026-06-15] — CB-T3) ────────────────
+
+    @staticmethod
+    def npc_pair_thread_id(char_a: str, char_b: str) -> str:
+        """Return the stable thread id for an NPC pair, order-independent.
+
+        The id is deterministic for a given unordered pair so the same two
+        NPCs always share one ``npc_dm`` thread regardless of who speaks
+        first.
+
+        Args:
+            char_a: One participant's character id.
+            char_b: The other participant's character id.
+
+        Returns:
+            A stable thread id of the form ``npc_dm:<lo>:<hi>``.
+        """
+        lo, hi = sorted((char_a, char_b))
+        return f"npc_dm:{lo}:{hi}"
+
+    def mark_npc_phone(self, char_id: str, enabled: bool = True) -> None:
+        """Mark an NPC as owning a phone (minimal forward-compatible stub).
+
+        Args:
+            char_id: The NPC's character id.
+            enabled: Whether the NPC's phone is active. Defaults to ``True``.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        with self.conn() as c:
+            c.execute(
+                "INSERT INTO npc_phone(char_id, enabled, created_at) VALUES(?,?,?) "
+                "ON CONFLICT(char_id) DO UPDATE SET enabled=?",
+                (char_id, 1 if enabled else 0, now, 1 if enabled else 0),
+            )
+
+    def npc_has_phone(self, char_id: str) -> bool:
+        """Return whether an NPC is marked as phone-enabled.
+
+        Args:
+            char_id: The NPC's character id.
+
+        Returns:
+            ``True`` if a phone row exists and is enabled.
+        """
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT enabled FROM npc_phone WHERE char_id=?", (char_id,)
+            ).fetchone()
+        return bool(row and row["enabled"])
+
+    def get_or_create_npc_dm(self, char_a: str, char_b: str) -> str:
+        """Return the ``npc_dm`` thread for an NPC pair, creating it if needed.
+
+        The thread is owned by NPCs (no ``user`` member) and uses a stable,
+        order-independent id (see :meth:`npc_pair_thread_id`) so repeated calls
+        for the same pair always resolve to one thread.
+
+        Args:
+            char_a: One participant's character id.
+            char_b: The other participant's character id.
+
+        Returns:
+            The stable thread id for the pair.
+        """
+        tid = self.npc_pair_thread_id(char_a, char_b)
+        with self._dm_lock:
+            with self.conn() as c:
+                row = c.execute(
+                    "SELECT id FROM phone_threads WHERE id=?", (tid,)
+                ).fetchone()
+                if row:
+                    return tid
+                now = datetime.now(timezone.utc).isoformat()
+                c.execute(
+                    "INSERT INTO phone_threads(id,type,created_at,updated_at)"
+                    " VALUES(?,?,?,?)",
+                    (tid, "npc_dm", now, now),
+                )
+                for cid in (char_a, char_b):
+                    c.execute(
+                        "INSERT OR IGNORE INTO phone_members(thread_id,character_id,joined_at)"
+                        " VALUES(?,?,?)",
+                        (tid, cid, now),
+                    )
+                return tid
 
     def list_threads(self) -> List[Dict]:
         """Return all threads with last message + unread count, newest first."""

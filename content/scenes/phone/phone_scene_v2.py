@@ -236,6 +236,7 @@ class PhoneSceneV2(FlaskScene):
         """Hook: seed characters, start ticker, register MCP rules, subscribe world events."""
         self._seed_characters()
         self._start_ticker()
+        self._start_npc_comms()
         try:
             fw = get_framework()
             node = fw.get_scene(SCENE_ID)
@@ -250,10 +251,41 @@ class PhoneSceneV2(FlaskScene):
     def on_shutdown(self) -> None:
         """Hook: stop ticker and save framework state."""
         self._ticker_stop.set()
+        self._stop_npc_comms()
         try:
             get_framework().save_state()
         except Exception:
             pass
+
+    # v1.62.0 [2026-06-15] — CB-T3: NPC↔NPC comms scheduler lifecycle.
+    # Owned here but DECOUPLED from the autotext ticker — the scheduler runs
+    # on its OWN thread + OWN lock and never touches ``self._tick_lock``, so
+    # NPC↔NPC traffic cannot contend with player-facing messaging.
+    def _start_npc_comms(self) -> None:
+        """Start the NPC↔NPC comms scheduler (best-effort, non-fatal)."""
+        try:
+            from engine.world.npc_comms import get_npc_comms_scheduler
+            self._npc_comms = get_npc_comms_scheduler()
+            # Reuse this scene's PhoneDB/Database and socket emitter so npc_dm
+            # threads land in the same store and clients get live events.
+            self._npc_comms._phone_db = self.phone_db
+            self._npc_comms._db = self.db
+            self._npc_comms._emit = lambda evt, payload: self._emit(evt, payload)
+            self._npc_comms.start()
+        except Exception as exc:
+            logger.warning(
+                "[%s] NPC comms scheduler start skipped (operation=npc_comms): %s",
+                SCENE_ID, exc,
+            )
+
+    def _stop_npc_comms(self) -> None:
+        """Stop the NPC↔NPC comms scheduler if running (best-effort)."""
+        try:
+            sched = getattr(self, "_npc_comms", None)
+            if sched is not None:
+                sched.stop()
+        except Exception as exc:
+            logger.debug("[%s] NPC comms stop failed: %s", SCENE_ID, exc)
 
     def _on_mood_event(self, evt) -> None:
         """React to mood contagion events from the framework bus."""

@@ -884,6 +884,19 @@ comms:
   log:
     db_path: "data/comms_log.db"  # single source of truth for all communication
     max_rows: 50000               # prune() cap to bound growth
+  # ── v1.62.0 [2026-06-15] — CB-T3: NPC↔NPC hybrid messaging ───────────
+  npc:
+    enabled: true                 # master toggle for the NPC comms scheduler
+    tick_interval: 30             # seconds between NPC↔NPC scheduling ticks
+    max_pairs_per_tick: 2         # NPC pairs processed per tick
+    llm_chance: 0.25              # P(an "important" exchange uses a live LLM turn)
+    recent_pair_window: 6         # how many recently-messaged pairs to penalise
+    roster:                       # fallback cast when the character DB is empty
+      - lola
+      - viktor
+      - aria
+      - frankie
+      - mira
 
 # Framework settings
 framework:
