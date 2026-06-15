@@ -16,6 +16,10 @@ Version: v1.49.5 [2026-03-22]
 Author:  Claude (Anthropic)
 
 Change Log:
+    v1.62.0 [2026-06-15] — OR-T1 Oracle omniscience: comms-aware fortunes weave
+                            real overheard chatter cryptically (privacy-budgeted,
+                            mark_observed); read_the_signal skill loaded; the
+                            OracleCompanion gains a rare comms-derived omen.
     v1.49.5 [2026-03-22] — Wire AlertRouter into All-Seeing Eye dashboard:
                              /api/oracle/alerts route, alert_feed SocketIO event,
                              real-time alert callback registration
@@ -595,10 +599,26 @@ class OracleScene(FlaskScene):
         return random.choice(fallbacks)
 
     def _generate_fortune(self) -> str:
-        """Generate a fortune/prophecy.
+        """Generate a fortune/prophecy, occasionally weaving real comms.
+
+        Most fortunes stay purely atmospheric (LLM or template). Under the
+        privacy/spoiler budget (``oracle.comms.fortune_chance``) the Oracle
+        OCCASIONALLY pulls 1–2 real comms entries (player↔NPC + recent npc_dm
+        chatter) and weaves them in CRYPTICALLY (never a raw dump), marking each
+        referenced entry observed by ``'oracle'``. If no comms exist or the roll
+        fails, the normal fortune is returned unchanged.
 
         Returns:
-            Fortune string.
+            Fortune string, possibly with cryptic comms hints appended.
+        """
+        base = self._base_fortune()
+        return self._maybe_weave_comms(base)
+
+    def _base_fortune(self) -> str:
+        """Generate the atmospheric base fortune (LLM with template fallback).
+
+        Returns:
+            A fortune string with no comms references.
         """
         try:
             from engine.lmstudio.chat import chat
@@ -620,6 +640,41 @@ class OracleScene(FlaskScene):
             logger.debug("Fortune LLM call failed: %s", exc)
 
         return random.choice(_FORTUNES)
+
+    # v1.62.0 [2026-06-15] — OR-T1: comms-aware fortune weaving (privacy-budgeted)
+    # CONNECTS: engine.world.oracle_comms (select_entries/weave_into/mark_observed)
+    def _maybe_weave_comms(self, base_fortune: str) -> str:
+        """Occasionally weave real overheard comms into ``base_fortune``.
+
+        Gated by ``oracle.comms.fortune_chance`` and capped at
+        ``oracle.comms.max_refs``. Defensive: any failure logs in Oracle format
+        and returns the base fortune unchanged.
+
+        Args:
+            base_fortune: The atmospheric fortune to (maybe) extend.
+
+        Returns:
+            The base fortune, optionally with cryptic comms hints appended.
+        """
+        try:
+            from engine.world import oracle_comms
+            cfg = oracle_comms.get_oracle_comms_config()
+            if random.random() >= float(cfg["fortune_chance"]):
+                return base_fortune
+            entries = oracle_comms.select_entries()
+            if not entries:
+                return base_fortune
+            woven = oracle_comms.weave_into(base_fortune, entries)
+            logger.info(
+                "[oracle] fortune wove comms (operation=fortune, refs=%d)", len(entries)
+            )
+            return woven
+        except Exception as exc:
+            logger.error(
+                "[oracle] comms-aware fortune failed, using plain (operation=fortune): %s",
+                exc,
+            )
+            return base_fortune
 
     def _extract_insight(self, response: str) -> str:
         """Extract a short insight from an Oracle response.
@@ -678,6 +733,13 @@ class OracleScene(FlaskScene):
                 logger.info("[%s] Oracle registered in CharacterRegistry (operation=lifecycle)", SCENE_ID)
         except Exception as exc:
             logger.debug("[%s] Oracle registration failed (non-fatal): %s", SCENE_ID, exc)
+
+        # v1.62.0 [2026-06-15] — OR-T1: ensure the oracle skill pack is registered
+        try:
+            from engine.skills.builtin import oracle_skills  # noqa: F401
+            logger.info("[%s] Oracle skill pack loaded (operation=lifecycle)", SCENE_ID)
+        except Exception as exc:
+            logger.debug("[%s] Oracle skill pack load failed (non-fatal): %s", SCENE_ID, exc)
 
         # Start Oracle Companion autonomous agent loop
         try:
