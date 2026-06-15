@@ -5,11 +5,14 @@
 {% set scene_accent_rgb = '0 255 136' %}
 
 {% block head_scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+{# v1.58.0 [2026-06-11] — r128 CDN global → vendored r184 ES modules #}
+{% include 'partials/three_importmap.html' %}
 {% endblock %}
 
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/lab_break.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 cascade layer, 2D chrome only (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab_break_v2.css') }}">
 {% endblock %}
 
 {% block scene_background %}
@@ -362,5 +365,11 @@
 
 {% block body_scripts %}
   <script src="/static/js/lab_break.js"></script>
-  <script src="{{ url_for('static', filename='lab_3d.js') }}"></script>
+  <!-- v1.58.0 [2026-06-11] — lab_3d.js needs window.THREE from the boot module -->
+  <script>
+    window.__THREE_LEGACY_SCRIPTS__ = [
+      "{{ url_for('static', filename='lab_3d.js') }}",
+    ];
+  </script>
+  <script type="module" src="/shared/js/three_boot.js"></script>
 {% endblock %}

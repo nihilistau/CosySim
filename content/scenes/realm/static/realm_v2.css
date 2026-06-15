@@ -1,0 +1,255 @@
+/*
+ * THE SHATTERED THRONE — Dark Renaissance v2 Layer
+ * =================================================
+ * Loaded AFTER realm.css so it wins the cascade. Extrapolated from
+ * docs/DESIGN_SYSTEM_V2.md (no ui_kits_v2 kit for realm): 4-layer
+ * background stack, Orbitron display voice for the wordmark, royal
+ * gold + rune/parchment touches, rotating sigil halo "wow".
+ *
+ * Accent: #6366f1 royal indigo · Gold: #d97706 / #fbbf24
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial Dark Renaissance layer: bg stack,
+ *                           typography, glass depth, parchment quest
+ *                           strip, royal sigil halo + drop-cap wow.
+ */
+
+/* ──── 1 · 4-Layer Background Stack ───────────────────────────────────
+   black #02030a → 80px drift grid → radial indigo glow → CRT scanlines.
+   CONNECTS: neon_base.html .neon-grid-bg / .neon-scanlines layers     */
+body[data-scene="realm"] {
+  background: #02030a;
+}
+
+/* Layer 3 — throne-room glow: indigo from below, faint gold candle
+   light from the top corners */
+body[data-scene="realm"] .neon-grid-bg {
+  background:
+    radial-gradient(ellipse 95% 60% at 50% 100%, rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.15) 0%, transparent 62%),
+    radial-gradient(ellipse 40% 25% at 12% 0%, rgb(217 119 6 / 0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 25% at 88% 0%, rgb(217 119 6 / 0.05) 0%, transparent 60%),
+    #02030a;
+}
+
+/* Layer 2 — 80px drift grid */
+body[data-scene="realm"] .neon-grid-bg::before {
+  background-image:
+    repeating-linear-gradient(90deg, rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.045) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.045) 0 1px, transparent 1px 80px);
+  animation: realm-grid-drift 30s linear infinite;
+}
+@keyframes realm-grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 80px, 0 80px; }
+}
+
+/* Layer 4 — CRT scanlines */
+body[data-scene="realm"] .neon-scanlines {
+  opacity: 0.55;
+}
+
+/* ──── 2 · Typography — Orbitron wordmark, royal gold flourish ────── */
+/* v1.58.0 [2026-06-11] — indigo→gold gradient wordmark               */
+.realm-header__title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.18em;
+  background: linear-gradient(95deg, #c7d2fe 0%, var(--cs-scene-accent, #6366f1) 50%, var(--realm-gold, #d97706) 115%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 14px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.5));
+}
+
+.realm-header__subtitle {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Section titles — small-caps rune ticks */
+.realm-section-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.14em;
+  color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.85);
+  border-bottom-color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.3);
+}
+
+/* ──── 3 · Royal Sigil Halo (signature wow) ───────────────────────── */
+/* v1.58.0 [2026-06-11] — rotating conic halo behind the crown crest  */
+.realm-header__crest {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+}
+.realm-header__crest::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.55) 12%,
+    transparent 28%,
+    transparent 50%,
+    rgb(217 119 6 / 0.4) 62%,
+    transparent 78%
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  animation: cs-rotate 7s linear infinite;
+  pointer-events: none;
+}
+.realm-header__crest::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.22) 0%, transparent 70%);
+  animation: cs-pulse-glow 3.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Player title — gilded royal script */
+.realm-header__player-title {
+  color: var(--realm-gold, #d97706);
+  text-shadow: 0 0 10px rgb(217 119 6 / 0.45);
+}
+
+/* Arc progress — glowing royal thread */
+.realm-arc-bar__fill {
+  background: linear-gradient(90deg, var(--realm-accent-dim, #4f46e5), var(--cs-scene-accent, #6366f1), #a5b4fc);
+  box-shadow: 0 0 10px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.6);
+}
+
+/* ──── 4 · Glass depth on panels ──────────────────────────────────── */
+.realm-panel {
+  background: rgb(7 8 22 / 0.62);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.realm-panel:hover {
+  border-color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.38);
+  box-shadow:
+    0 0 18px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.12),
+    0 6px 24px rgba(0, 0, 0, 0.5);
+}
+
+.realm-header {
+  background: rgb(4 5 16 / 0.78);
+  border-bottom-color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.32);
+  box-shadow: 0 0 24px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.12);
+}
+.realm-footer {
+  background: rgb(4 5 16 / 0.78);
+  border-top-color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.28);
+}
+
+/* ──── 5 · Parchment + rune touches ───────────────────────────────── */
+/* v1.58.0 [2026-06-11] — hatched parchment strip on the quest card   */
+.quest-card {
+  position: relative;
+  overflow: hidden;
+  padding-left: calc(0.75rem + 5px);
+}
+.quest-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(217 119 6 / 0.65) 0 4px,
+    rgb(120 60 10 / 0.45) 4px 8px
+  );
+  box-shadow: 0 0 8px rgb(217 119 6 / 0.3);
+}
+
+/* Scene art — indigo-tinted parchment with rune spotlight
+   v1.58.0 [2026-06-11] — was a flat warm-brown slab; now layered    */
+.realm-scene-art {
+  background:
+    radial-gradient(ellipse 60% 80% at 50% 55%, rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.12) 0%, transparent 70%),
+    linear-gradient(180deg, rgb(20 12 8 / 0.5) 0%, rgb(8 7 20 / 0.7) 100%);
+}
+.realm-scene-art__placeholder { opacity: 0.85; }
+.realm-art-rune {
+  color: #a5b4fc;
+  text-shadow: 0 0 30px var(--cs-scene-accent, #6366f1), 0 0 70px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.5);
+}
+
+/* Narrative drop-cap — illuminated manuscript first letter */
+.narrative-panel__text::first-letter {
+  font-family: var(--realm-font-fantasy, Georgia, serif);
+  font-size: 1.85em;
+  line-height: 1;
+  color: var(--realm-gold, #d97706);
+  text-shadow: 0 0 12px rgb(217 119 6 / 0.5);
+  padding-right: 2px;
+}
+
+/* Choice buttons — rune-edge hover with scan-sweep light */
+.choice-btn {
+  position: relative;
+  overflow: hidden;
+}
+.choice-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 30%;
+  background: linear-gradient(100deg, transparent, rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.14), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.45s ease;
+  pointer-events: none;
+}
+.choice-btn:hover::after {
+  left: 115%;
+}
+
+/* Inventory slots — arcane socket glow on occupied */
+.inventory-slot.occupied {
+  box-shadow: inset 0 0 10px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.18);
+}
+
+/* Spell bar — incantation glow */
+.spell-btn:hover {
+  text-shadow: 0 0 8px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.8);
+}
+
+/* Faction bars — house colours stay, track gets depth */
+.faction-bar-wrap {
+  border: 1px solid rgb(255 255 255 / 0.05);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* Timeline — candle-lit entries */
+.timeline-item:first-child {
+  background: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.06);
+  border-radius: 0 4px 4px 0;
+}
+
+/* ──── 6 · Reduced motion ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  body[data-scene="realm"] .neon-grid-bg::before,
+  .realm-header__crest::before,
+  .realm-header__crest::after {
+    animation: none !important;
+  }
+  .choice-btn::after { display: none; }
+}

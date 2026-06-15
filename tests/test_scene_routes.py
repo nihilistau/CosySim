@@ -228,25 +228,37 @@ class TestSkillRegistration:
 # ═══════════════════════════════════════════════════════════════
 
 class TestMCPFrameworkIntegration:
-    """Verify all showcase scenes properly integrate with MCPSceneMixin."""
+    """Verify all showcase scenes properly integrate with the MCP framework.
 
-    def test_realm_has_mcp_mixin(self):
+    v1.62.0 [2026-06-15] — MCP integration moved from MCPSceneMixin into
+    FlaskScene (``FlaskScene._connect_mcp()`` replaces ``MCPSceneMixin._mcp_init()``,
+    per v1.51.0 "Migrated to FlaskScene"). Scenes no longer subclass MCPSceneMixin
+    nor carry ``_mcp_scene_id``; the framework binding is now expressed via the
+    FlaskScene base class, the ``mcp`` property, and ``SCENE_METADATA["name"]``.
+    The old ``issubclass(..., MCPSceneMixin)`` / ``_mcp_scene_id`` assertions were
+    stale and asserted an obsolete mechanism — updated to the current contract.
+    """
+
+    def test_realm_has_mcp_integration(self):
         from content.scenes.realm.realm_scene import RealmScene
-        from engine.mcp.framework import MCPSceneMixin
-        assert issubclass(RealmScene, MCPSceneMixin)
-        assert RealmScene._mcp_scene_id == "realm"
+        from engine.scenes.flask_scene import FlaskScene
+        assert issubclass(RealmScene, FlaskScene)
+        assert isinstance(getattr(RealmScene, "mcp", None), property)
+        assert RealmScene.SCENE_METADATA["name"] == "realm"
 
-    def test_neoncity_has_mcp_mixin(self):
+    def test_neoncity_has_mcp_integration(self):
         from content.scenes.neoncity.neoncity_scene import NeonCityScene
-        from engine.mcp.framework import MCPSceneMixin
-        assert issubclass(NeonCityScene, MCPSceneMixin)
-        assert NeonCityScene._mcp_scene_id == "neoncity"
+        from engine.scenes.flask_scene import FlaskScene
+        assert issubclass(NeonCityScene, FlaskScene)
+        assert isinstance(getattr(NeonCityScene, "mcp", None), property)
+        assert NeonCityScene.SCENE_METADATA["name"] == "neoncity"
 
-    def test_coders_has_mcp_mixin(self):
+    def test_coders_has_mcp_integration(self):
         from content.scenes.coders.coders_scene import CodersRoomScene
-        from engine.mcp.framework import MCPSceneMixin
-        assert issubclass(CodersRoomScene, MCPSceneMixin)
-        assert CodersRoomScene._mcp_scene_id == "coders"
+        from engine.scenes.flask_scene import FlaskScene
+        assert issubclass(CodersRoomScene, FlaskScene)
+        assert isinstance(getattr(CodersRoomScene, "mcp", None), property)
+        assert CodersRoomScene.SCENE_METADATA["name"] == "coders"
 
     def test_realm_mcp_node_created(self):
         from content.scenes.realm.realm_scene import RealmScene

@@ -17,6 +17,9 @@ Version: v1.51.1 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — OR-T1: low-weight comms-derived OMEN action that
+                            occasionally surfaces a cryptic line drawn from real
+                            recent comms (privacy-budgeted, marks entries observed).
     v1.51.1 [2026-03-25] — Initial: 5 autonomous actions, weighted selection
 
 CONNECTS: CharacterRegistry, LMStudio chat, NexusFilesystem,
@@ -51,7 +54,7 @@ ORACLE_SYSTEM_PROMPT = (
     "Keep responses to 2-4 sentences. Every word matters."
 )
 
-# Weighted action selection (total = 100)
+# Weighted action selection (base; the comms "omen" weight is added from config)
 _ACTION_WEIGHTS = {
     "diary": 30,        # Most common — Oracle reflects
     "message": 25,      # Signal messages to player
@@ -146,11 +149,31 @@ class OracleCompanion:
             self._compose_email()
         elif action == "observation":
             self._write_observation()
+        elif action == "omen":
+            self._surface_comms_omen()
 
     def _choose_action(self) -> str:
-        """Weighted random action selection."""
-        actions = list(_ACTION_WEIGHTS.keys())
-        weights = list(_ACTION_WEIGHTS.values())
+        """Weighted random action selection.
+
+        The base weights are augmented with a low-weight ``omen`` action whose
+        weight comes from ``oracle.comms.omen_weight`` (config-driven so it stays
+        rare). When the weight is 0 the omen never fires.
+
+        Returns:
+            The chosen action name.
+        """
+        weights_map = dict(_ACTION_WEIGHTS)
+        # v1.62.0 [2026-06-15] — OR-T1: add the rare comms-derived omen action.
+        try:
+            from engine.world.oracle_comms import get_oracle_comms_config
+            omen_weight = int(get_oracle_comms_config().get("omen_weight", 0) or 0)
+            if omen_weight > 0:
+                weights_map["omen"] = omen_weight
+        except Exception as exc:
+            logger.debug("[OracleCompanion] omen weight lookup failed: %s", exc)
+
+        actions = list(weights_map.keys())
+        weights = list(weights_map.values())
         return random.choices(actions, weights=weights, k=1)[0]
 
     # ── LLM Helper ───────────────────────────────────────────────────
@@ -342,6 +365,33 @@ class OracleCompanion:
             )
         except Exception as exc:
             logger.debug("[OracleCompanion] Observation write failed: %s", exc)
+
+    # v1.62.0 [2026-06-15] — OR-T1: comms-derived autonomous omen
+    # CONNECTS: engine.world.oracle_comms (select_entries/cryptic_hint/mark_observed)
+    # EMITS: phone thread message (cryptic, privacy-budgeted)
+    def _surface_comms_omen(self) -> None:
+        """Surface a rare cryptic omen drawn from real recent comms.
+
+        Pulls 1 budget-capped comms entry, renders it as a cryptic line (raw
+        bodies never surfaced), marks it observed by ``'oracle'``, and delivers
+        it to the player as a phone message. Falls back silently when no comms
+        exist or the comms layer is unavailable.
+        """
+        try:
+            from engine.world import oracle_comms
+            entries = oracle_comms.select_entries(max_refs=1)
+            if not entries:
+                logger.debug("[OracleCompanion] omen: no comms to read")
+                return
+            entry = entries[0]
+            line = oracle_comms.cryptic_hint(entry)
+            oracle_comms.mark_observed(entry)
+            logger.info(
+                "[OracleCompanion] Omen surfaced from comms (operation=autonomous_action)"
+            )
+            self._save_phone_message(line)
+        except Exception as exc:
+            logger.debug("[OracleCompanion] Comms omen failed: %s", exc)
 
     # ── Status ───────────────────────────────────────────────────────
 

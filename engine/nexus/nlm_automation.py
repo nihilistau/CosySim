@@ -845,9 +845,10 @@ def update_registry(analysis: Dict[str, Any], bl: Optional[str] = None) -> Dict[
     registry["bl"] = bl or registry.get("bl", "unknown")
     registry["all_rpcs_seen"] = analysis.get("all_rpcs", [])
 
-    _REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(_REGISTRY_FILE, "w", encoding="utf-8") as f:
-        json.dump(registry, f, indent=2)
+    # v1.58.0 [2026-06-11] — Atomic write via shared helper (plain writes
+    # corrupted the registry for concurrent readers)
+    from engine.utils import atomic_write_json
+    atomic_write_json(_REGISTRY_FILE, registry)
 
     logger.info("Registry updated: %d operations mapped", len(op_rpcs))
     return registry

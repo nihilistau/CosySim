@@ -263,9 +263,16 @@ lmstudio:
   host: "127.0.0.1"
   port: 1234
   base_url: "http://127.0.0.1:1234"
+  # v1.60.0 [2026-06-13] — affinity TaskQueue (engine/lmstudio/task_queue.py)
+  task_queue_v2:
+    auto_start: true            # singleton get_task_queue() auto-starts its worker pool
+    workers: 2                  # background worker threads
+    max_queue_depth: 100        # max queued tasks before submit rejects
   # API authentication (optional — LMStudio defaults to no auth)
   # Generate a token in LMStudio → Developer → Server Settings → Manage Tokens
-  api_token: "${LMSTUDIO_API_TOKEN:-sk-lm-j8v22Hz0:XmuG1AdltLqaegp2OEAd}"
+  # v1.61.0 [2026-06-13] — no real token in the committed repo; set LMSTUDIO_API_TOKEN
+  # in your gitignored .env (LMStudio defaults to no auth, so empty is fine locally).
+  api_token: "${LMSTUDIO_API_TOKEN:-}"
   # API version: "v1" = legacy OpenAI-compat, "api_v1" = new LMStudio protocol
   api_version: "v1"
   # Default model-load options (tuned for RTX 2060 12 GB)
@@ -611,6 +618,15 @@ observability:
       stalled_count:
         yellow: 1
         red: 3
+  # v1.60.0 [2026-06-13] — error-aggregator LRU + rate alerting
+  error_aggregator:
+    max_buckets: 2000           # LRU cap on retained fingerprint buckets
+    alert_threshold: 100        # errors within window that trip a rate alert (0 disables)
+    alert_window_sec: 300       # sliding window for the rate alert
+    alert_cooldown_sec: 300     # min spacing between alerts (throttle)
+  oracle:
+    flood_cooldown_sec: 5.0     # per-fingerprint callback cooldown
+    flood_guard_max_keys: 1000  # LRU cap on fingerprints in the flood guard
 
 # Training data pipeline
 training:
@@ -686,6 +702,13 @@ neurochemistry:
   save_interval_ticks: 5        # persist every N ticks
   detailed_prompt_injection: false  # true = full NT levels in prompt; false = summary
   interceptor_priority: 4       # lower = earlier in pipeline
+  # v1.60.0 [2026-06-13] — NLP stimulus auto-detection from dialogue (StimulusDetectInterceptor)
+  stimulus_detect:
+    enabled: true
+    incoming_intensity: 0.6     # effect strength of a line said TO an agent
+    reply_intensity: 0.5        # reflexive effect of the agent's own line on itself
+    max_rules_per_text: 4       # cap stimuli applied per text
+    min_text_len: 2
   baselines:
     dopamine: 0.45
     serotonin: 0.50
@@ -746,6 +769,95 @@ territory:
     - Ghost_Net
     - SynthSec
     - DeepState
+  # v1.60.0 [2026-06-13] — Player standing tilts autonomous faction decisions
+  faction_ai:
+    player_influence: 0.4         # 0-1, how strongly player standing tilts action scores
+    player_target_threshold: 25   # |standing| above which a faction steers toward player's district
+    player_district: ''           # optional fallback for the player's current district id
+
+# v1.59.0 [2026-06-13] — Economy settlement (market.buy/sell ↔ player wallet,
+# inventory, and heat). Closes the inventory↔market↔heat feedback loop.
+# v1.60.0 [2026-06-13] — event_shocks: world events drive supply/demand.
+economy:
+  settle: true                  # market.buy/sell deduct/credit the player wallet + inventory
+  contraband_heat_per_unit: 4   # heat added per illegal unit purchased
+  sell_to_inventory: true       # sell removes the item from inventory (requires possession)
+  event_shocks:
+    enabled: true               # gates Market.subscribe_to_world_events() world-event→price loop
+    scale: 1.0                  # global multiplier on every world-event supply/demand shock
+
+# ════════════════════════════════════════════════════════════════════════
+# v1.60.0 [2026-06-13] — "Living Systems" — feedback-loop tunables. Every key
+# below has a safe in-code default; these expose the knobs for retuning.
+# ════════════════════════════════════════════════════════════════════════
+
+# Faction standing → shop access, pricing, mission gating (engine/world/faction_gates.py)
+faction_gates:
+  allied_threshold: 50          # standing >= this => 'allied' band
+  friendly_threshold: 20        # >= this => 'friendly'
+  hostile_threshold: -20        # <= this => 'unfriendly'
+  enemy_threshold: -50          # <= this => 'hostile'
+  shop_min_standing: -50        # default min standing to enter a faction shop
+  match_discount: 0.10          # matching-faction discount (-10%)
+  rival_surcharge: 0.15         # rival-faction surcharge (+15%)
+  ally_bonus_discount: 0.05     # extra discount for full allies
+  enemy_bonus_surcharge: 0.15   # extra surcharge for sworn enemies
+
+# Mission consequences, skill-scaling, and chain gating (engine/world/mission*.py)
+mission:
+  consequences:
+    enabled: true
+    control_per_difficulty: 3   # faction control gained on success (× difficulty)
+    rep_success: 4              # flat reputation gained on success
+    rep_fail_per_difficulty: 2  # reputation lost on failure (× difficulty)
+    heat_fail_per_difficulty: 4 # heat gained on failure (× difficulty)
+    heat_success_heist: 5       # heat left by a successful (loud) heist
+    heist_control_bonus: 4      # extra faction control for a successful heist
+  scaling:
+    enabled: true
+    pivot: 1.0                  # skill level around which scaling is neutral
+    reward_slope: 0.20          # reward multiplier slope per skill point above pivot
+    difficulty_slope: 0.30      # difficulty multiplier slope per skill point above pivot
+    min_difficulty: 1
+    max_difficulty: 5
+  crew:
+    enforce_availability: true  # reject assigning busy roster members
+  chains:
+    gating_enabled: false       # true => hide gated chain follow-ups until prerequisite done
+
+# Crew operation skill-checks (engine/world/crew.py)
+crew:
+  skill_check:
+    base_chance: 0.20           # baseline success before crew contribution
+    level_weight: 0.06          # per role-weighted crew skill point
+    loyalty_weight: 0.20        # contribution of avg loyalty at 100
+    difficulty_weight: 0.55     # how hard per-op difficulty bites
+    min_chance: 0.05            # clamp floor (never a guaranteed loss)
+    max_chance: 0.95            # clamp ceiling (never a guaranteed win)
+    partial_band: 0.20          # miss-by-this-much => PARTIAL not FAILURE
+    partial_reward_mult: 0.45   # credit/xp scale on partial success
+
+# Equipment bonuses + consumable wear (engine/world/equipment_effects.py)
+world:
+  equipment:
+    condition_scales_bonus: true       # equipped-item bonus scales with condition
+    decrement_condition_on_use: true   # consumables lose condition on use
+    condition_loss_per_use: 0          # condition removed per use (0 = stack-decrement only)
+
+# Scheduler per-task timeout enforcement (engine/nexus/scheduler_daemon.py)
+scheduler:
+  default_timeout_seconds: 300         # daemon-wide per-task hard timeout (<=0 disables)
+  news_fetch_timeout_seconds: 120      # tighter timeout for network-bound news-fetch
+
+# LMStudio federation health backoff (engine/lmstudio/lmlink_manager.py)
+lmlink:
+  health:
+    backoff:
+      base_seconds: 0.5
+      max_seconds: 30.0
+      factor: 2.0
+      max_attempts: 3
+      jitter_ratio: 0.5
 
 comms:
   governance_enabled: true      # route CharacterAgent.reply() through interceptors
@@ -764,9 +876,106 @@ comms:
     memory_enhancer:          false   # extra RAG lookup — heavier, opt-in
     response_shaper:          true
     activity_logger:          true
+    comms_logger:             true    # v1.62.0 [2026-06-15] — CB-T2: write agent replies → GlobalCommsLog
     relationship_context:     true    # inject player-NPC relationship into system prompt
     grammar_scanner:          true    # post-call grammar/quality scanner → training signal
   stats_poll_interval_ms: 2000  # how often the browser overlay polls /api/stats/live
+  # ── v1.62.0 [2026-06-15] — GlobalCommsLog backbone ──────────────────
+  log:
+    db_path: "data/comms_log.db"  # single source of truth for all communication
+    max_rows: 50000               # prune() cap to bound growth
+  # ── v1.62.0 [2026-06-15] — CB-T3: NPC↔NPC hybrid messaging ───────────
+  npc:
+    enabled: true                 # master toggle for the NPC comms scheduler
+    tick_interval: 30             # seconds between NPC↔NPC scheduling ticks
+    max_pairs_per_tick: 2         # NPC pairs processed per tick
+    llm_chance: 0.25              # P(an "important" exchange uses a live LLM turn)
+    recent_pair_window: 6         # how many recently-messaged pairs to penalise
+    roster:                       # fallback cast when the character DB is empty
+      - lola
+      - viktor
+      - aria
+      - frankie
+      - mira
+    # ── v1.62.0 [2026-06-15] — CB-T6: pairwise relationship effects ──────
+    # Each NPC↔NPC exchange nudges the pair's relationship_level (0..1) so
+    # affinity drifts gradually over many exchanges. Deltas are intentionally
+    # SMALL; tone (warm/neutral/cool) and detected keywords combine, then the
+    # result is clamped to [min_level, max_level].
+    relationship:
+      enabled: true               # master toggle for pairwise relationship drift
+      warm_delta: 0.02            # template-tone "warm" exchange → +affinity
+      neutral_delta: 0.005        # template-tone "neutral" exchange → tiny +affinity
+      cool_delta: -0.02           # template-tone "cool" exchange → -affinity
+      keyword_positive: 0.015     # per-exchange bonus when a positive keyword is present
+      keyword_negative: -0.03     # per-exchange penalty when a negative keyword is present
+      max_step: 0.06              # absolute cap on a single exchange's net delta
+      min_level: 0.0              # clamp floor for relationship_level
+      max_level: 1.0              # clamp ceiling for relationship_level
+  # ── v1.62.0 [2026-06-15] — CB-T5: calmer + more varied user inbox ─────
+  # Tunes the USER-facing autotext path ONLY (phone autotxt ticker). The
+  # NPC↔NPC scheduler (comms.npc, above) is a separate path and is NOT
+  # affected by these knobs.
+  autotxt:
+    user_multiplier: 1.75        # global scale on user-facing autotext intervals
+                                 # (1.0 = base ranges; >1 = calmer / less spammy)
+    topic_seed_chance: 0.45      # P(an autotext is seeded with a real city topic
+                                 # drawn from recent world events / comms)
+    # Per-character override of user_multiplier, e.g. {aria: 1.2, lola: 2.5}.
+    # Omitted characters use user_multiplier. Lets clingy NPCs stay eager
+    # while chatty ones get throttled harder.
+    per_character: {}
+  # ── v1.62.0 [2026-06-15] — CB-T4: leave-a-message presence ───────────
+  presence:
+    enabled: true                              # master toggle for presence/leave-a-message
+    player_offline_when_disconnected: true     # player is "offline" when no phone client is connected
+    npc_requires_co_presence: true             # an NPC is reachable only when co-present (same location)
+
+# ──── Phone OS (v1.62.0 [2026-06-15] — PH-T1) ────
+# Derived security/capability magnitudes for engine.world.phone_os.PhoneOS.
+# These tune how base npc_phone records (security_level/firewall/installed_apps)
+# plus the player's equipped cyberdeck/ICE roll up into effective stats. PH-T2
+# adds the real software/hardware upgrade catalog on top of these knobs.
+phone:
+  os:
+    base_security: 1               # fallback base security when a record lacks one
+    base_firewall: 1               # fallback base firewall when a record lacks one
+    base_app_slots: 6              # baseline number of apps a phone can hold
+    app_slots_per_security: 1      # extra app slots granted per point of base security
+    deck_crack_to_hack: 1.0        # player cyberdeck crack_speed → hack_power multiplier
+    deck_trace_to_firewall: 1.0    # player cyberdeck trace_resist → firewall multiplier
+    hacking_bonus_to_hack: 1.0     # player equipment "hacking" bonus → hack_power multiplier
+    seed_security_spread: [1, 2, 3]  # deterministic base-security spread for seeded NPCs
+    seed_archetype_security:       # archetype/faction → seeded base security (when known)
+      netrunner: 4
+      corpo: 3
+      fixer: 2
+      civilian: 1
+  # ── v1.62.0 [2026-06-15] — PH-T3: player→NPC phone hacking ────────────
+  hack:
+    enabled: true                  # master toggle for the phone-hack skill
+    die_sides: 20                  # size of the d20 attack roll (hack_power + d20)
+    skill_weight: 2                # PlayerState "hacking" skill points → attack bonus (per level)
+    base_difficulty: 8             # flat difficulty added to NPC security+firewall
+    read_limit: 5                  # max comms entries returned/observed per intercept (moderate)
+    steal_credits_min: 40          # min credit reward on a successful steal (moderate)
+    steal_credits_max: 120         # max credit reward on a successful steal (scales with margin)
+    success_heat: 2                # heat added on a quiet successful breach
+    fail_heat: 8                   # heat added on a noisy failed breach (recoverable)
+    fail_rel_delta: -0.08          # standing hit toward the player when the NPC notices (bounded)
+    # ── v1.62.0 [2026-06-15] — PH-T4: reverse direction (NPC hacks the PLAYER) ──
+    npc:
+      enabled: true                      # master toggle for NPC→player hacking
+      die_sides: 20                      # size of the attacker's d20 roll
+      base_difficulty: 8                 # flat difficulty added to the player's defence
+      attacker_power_floor: 2            # innate attack floor for NPCs (no offensive software)
+      read_limit: 3                      # max player threads an NPC reads per breach (bounded)
+      success_heat: 3                    # capped heat a successful breach adds to the player
+      rel_delta: -0.08                   # bounded (player, attacker) standing hit (recoverable)
+      trigger_probability: 0.05          # P(roll a hack) once an NPC is hostile — keep RARE
+      hostility_standing_threshold: 0.3  # NPC→player standing at/below this counts as hostile
+      hostile_factions: []               # faction ids whose hostility can trigger a hack
+      faction_hostile_threshold: -40     # player faction standing at/below this counts as hostile
 
 # Framework settings
 framework:
@@ -883,6 +1092,29 @@ npc_scheduler:
     - "chatting with someone"
     - "lost in thought"
 
+# Penthouse scene runtime tuning (read via get_config().get("penthouse.<...>"))
+# v1.62.0 [2026-06-15] — ambient micro-behavior layer config namespace.
+penthouse:
+  # Cheap, scripted idle micro-behaviors that run BETWEEN the slow LLM agent
+  # ticks so idle characters feel alive without spamming the local model.
+  ambient:
+    enabled: true
+    tick_interval: 3.0        # seconds between cheap ambient ticks (≪ agent tick)
+    action_chance: 0.6        # P(an eligible character does a micro-action per tick)
+    max_per_tick: 2           # cap characters touched per tick (cheap fan-out)
+    llm_line_chance: 0.04     # P(a micro-action escalates to an LLM line via agent path)
+    reposition_chance: 0.15   # extra gate on the (rare) drift-to-nearby-location kind
+    player_present_boost: 1.6 # weight multiplier for player-facing glances
+    action_weights:
+      fidget: 4.0
+      glance: 3.0
+      expression: 3.0
+      reposition: 1.0
+  # Bed-game / explicit-pose consent gate (existing reads in penthouse_combat_mixin).
+  bedgame:
+    explicit_pose_level: 3
+    explicit_openness_min: 60
+
 # Automated Testing Scheduler
 testing:
   default_suite: "full"
@@ -928,4 +1160,19 @@ maintenance:
   conversation_max_count: 200        # Hard cap on active ConversationManager entries
   wal_checkpoint_on_startup: true    # Checkpoint all SQLite WAL files at scene startup
   meta_metrics_retention_days: 30    # Prune meta_metrics data older than this
+
+# ── v1.62.0 [2026-06-15] — OR-T1: Oracle omniscience (reads the comms log) ──
+# The Oracle "sees all" by reading the GlobalCommsLog and turning overheard
+# chatter (player↔NPC + NPC↔NPC) into cryptic fortunes, intel, and omens —
+# all bounded by a privacy/spoiler budget (cryptic + occasional, NOT a dump).
+oracle:
+  comms:
+    fortune_chance: 0.4        # P(a fortune weaves in real overheard comms); else stays atmospheric
+    max_refs: 2                # hard cap on comms entries referenced in a single reading (never dump everything)
+    recent_window: 30          # how many recent entries to scan for npc_dm chatter / signal sourcing
+    omen_weight: 6             # OracleCompanion weighted-action weight for the rare comms omen (small → rare)
+    signal_reward_credits: 75  # bounded credit reward granted by read_the_signal (0 disables)
+    signal_reward_item: "intel_fragment"  # small intel item granted by read_the_signal ("" disables)
+    signal_cooldown_sec: 900   # read_the_signal cooldown (also enforced by the @skill decorator)
+    respect_sensitive: true    # skip/abstract comms flagged sensitive/mature/intimate (privacy + consent)
 

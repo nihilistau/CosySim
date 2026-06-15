@@ -1,12 +1,25 @@
 /* ============================================================
-   THE OBSCURA — Neural Synthesis Lab  v1.52 Cyberpunk Overhaul
-   Accent: cyan #06b6d4 | secondary: magenta #ec4899
+   THE OBSCURA — Dark Art Gallery  v1.58 Dark Renaissance v2
+   Accent: periwinkle #818cf8 | secondary: violet #c084fc
    ============================================================
+   v1.58.0 [2026-06-11] — Cyan → periwinkle retheme. All hardcoded
+                           cyan rgba()/hex swapped to scene accent
+                           tokens (--obscura-accent-rgb-c /
+                           --cs-scene-accent). v2 layer in
+                           gallery_v2.css adds bg stack + spotlights.
    v1.52.0 [2026-03-22] — Complete rebrand: museum → neural synthesis lab.
                            Cyan/magenta palette, mono fonts, scanlines,
                            grid overlays, HUD borders, AI generation framing.
    v0.68   [2026-03-20] — Original Dark Renaissance museum aesthetic.
 */
+
+/* ── Palette tokens ──────────────────────────────────────────
+   v1.58.0 [2026-06-11] — comma-separated accent triplet for
+   legacy rgba(var(), a) composition throughout this sheet */
+:root {
+  --obscura-accent-rgb-c: 129, 140, 248;
+  --obscura-violet: #c084fc;
+}
 
 /* ── Base ─────────────────────────────────────────────────── */
 .obscura-body {
@@ -30,7 +43,7 @@
   justify-content: space-between;
   align-items: flex-end;
   padding: 1.5rem 0 1rem;
-  border-bottom: 1px solid rgba(6, 182, 212, 0.25);
+  border-bottom: 1px solid rgba(var(--obscura-accent-rgb-c), 0.25);
   margin-bottom: 1.5rem;
 }
 
@@ -39,10 +52,10 @@
   font-size: clamp(1.4rem, 3.5vw, 2rem);
   font-weight: 700;
   letter-spacing: 0.25em;
-  color: #06b6d4;
-  text-shadow: 0 0 20px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.2);
+  color: var(--cs-scene-accent, #818cf8);
+  text-shadow: 0 0 20px rgba(var(--obscura-accent-rgb-c), 0.5), 0 0 40px rgba(var(--obscura-accent-rgb-c), 0.2);
   margin: 0;
-  background: linear-gradient(135deg, #06b6d4, #ec4899);
+  background: linear-gradient(135deg, var(--cs-scene-accent, #818cf8), #ec4899);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -51,7 +64,7 @@
 .exhibit-subtitle {
   font-size: 0.7rem;
   letter-spacing: 0.2em;
-  color: rgba(6, 182, 212, 0.65);
+  color: rgba(var(--obscura-accent-rgb-c), 0.65);
   text-transform: uppercase;
   margin: 0.25rem 0 0;
 }
@@ -66,7 +79,7 @@
 
 .curator-mood-badge {
   font-size: 0.85rem;
-  color: rgba(6, 182, 212, 0.9);
+  color: rgba(var(--obscura-accent-rgb-c), 0.9);
   font-style: italic;
   transition: color 0.5s ease;
 }
@@ -78,7 +91,7 @@
   margin-bottom: 1.5rem;
   overflow: hidden;
   border-radius: 3px;
-  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.05), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--obscura-accent-rgb-c), 0.05), transparent);
 }
 
 .featured-particles {
@@ -94,7 +107,7 @@
   transform: translate(-50%, -50%);
   font-size: 0.55rem;
   letter-spacing: 0.45em;
-  color: rgba(6, 182, 212, 0.35);
+  color: rgba(var(--obscura-accent-rgb-c), 0.35);
   text-transform: uppercase;
   pointer-events: none;
   white-space: nowrap;
@@ -115,7 +128,7 @@
 }
 
 .loading-pulse {
-  color: rgba(6, 182, 212, 0.45);
+  color: rgba(var(--obscura-accent-rgb-c), 0.45);
   font-size: 0.8rem;
   letter-spacing: 0.2em;
   animation: pulse 2.2s ease-in-out infinite;
@@ -142,12 +155,12 @@
 
 .artwork-frame:hover {
   transform: translateY(-4px);
-  filter: drop-shadow(0 8px 24px rgba(6, 182, 212, 0.35));
+  filter: drop-shadow(0 8px 24px rgba(var(--obscura-accent-rgb-c), 0.35));
   z-index: 10;
 }
 .artwork-frame:hover .frame-inner {
-  border-color: rgba(6, 182, 212, 0.4);
-  box-shadow: 0 0 16px rgba(6, 182, 212, 0.15), inset 0 0 20px rgba(0,0,0,0.3);
+  border-color: rgba(var(--obscura-accent-rgb-c), 0.4);
+  box-shadow: 0 0 16px rgba(var(--obscura-accent-rgb-c), 0.15), inset 0 0 20px rgba(0,0,0,0.3);
 }
 
 .artwork-frame:hover .spotlight {
@@ -158,9 +171,9 @@
   position: relative;
   width: 100%;
   padding-top: 130%; /* ~4:5 portrait ratio */
-  border: 2px solid rgba(6, 182, 212, 0.15);
+  border: 2px solid rgba(var(--obscura-accent-rgb-c), 0.15);
   box-shadow:
-    0 0 0 1px rgba(6, 182, 212, 0.05),
+    0 0 0 1px rgba(var(--obscura-accent-rgb-c), 0.05),
     0 6px 24px rgba(0, 0, 0, 0.85),
     inset 0 0 40px rgba(0, 0, 0, 0.5);
   overflow: hidden;
@@ -195,14 +208,14 @@
 /* ── Title Card ─────────────────────────────────────────── */
 .artwork-title {
   padding: 0.45rem 0.25rem;
-  border-top: 1px solid rgba(6, 182, 212, 0.15);
+  border-top: 1px solid rgba(var(--obscura-accent-rgb-c), 0.15);
 }
 
 .title-text {
   display: block;
   font-family: 'Orbitron', 'Share Tech Mono', monospace;
   font-size: 0.65rem;
-  color: #06b6d4;
+  color: var(--cs-scene-accent, #818cf8);
   font-style: normal;
   letter-spacing: 0.08em;
   white-space: nowrap;
@@ -251,7 +264,7 @@
 .intensity-badge.disturbing {
   background: rgba(80, 30, 120, 0.88);
   color: #c8a8e8;
-  border: 1px solid rgba(6, 182, 212, 0.4);
+  border: 1px solid rgba(var(--obscura-accent-rgb-c), 0.4);
 }
 
 /* When used inline (not absolute) — detail panel tags */
@@ -293,7 +306,7 @@
   background: #050710;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-left: 1px solid rgba(6, 182, 212, 0.22);
+  border-left: 1px solid rgba(var(--obscura-accent-rgb-c), 0.22);
   box-shadow: -12px 0 48px rgba(0, 0, 0, 0.75);
   z-index: 1000;
   transition: right 0.4s cubic-bezier(.25,.8,.25,1);
@@ -311,8 +324,8 @@
   top: 1rem;
   right: 1rem;
   background: none;
-  border: 1px solid rgba(6, 182, 212, 0.3);
-  color: rgba(6, 182, 212, 0.65);
+  border: 1px solid rgba(var(--obscura-accent-rgb-c), 0.3);
+  color: rgba(var(--obscura-accent-rgb-c), 0.65);
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -326,9 +339,9 @@
 }
 
 .detail-close:hover {
-  background: rgba(6, 182, 212, 0.15);
-  color: #06b6d4;
-  border-color: rgba(6, 182, 212, 0.55);
+  background: rgba(var(--obscura-accent-rgb-c), 0.15);
+  color: var(--cs-scene-accent, #818cf8);
+  border-color: rgba(var(--obscura-accent-rgb-c), 0.55);
 }
 
 .detail-artwork-display {
@@ -364,7 +377,7 @@
   font-family: 'Orbitron', 'Share Tech Mono', monospace;
   font-size: 1.1rem;
   font-weight: 600;
-  color: #06b6d4;
+  color: var(--cs-scene-accent, #818cf8);
   letter-spacing: 0.04em;
   margin: 0 0 0.4rem;
 }
@@ -378,7 +391,7 @@
 
 .detail-medium {
   font-size: 0.72rem;
-  color: rgba(6, 182, 212, 0.5);
+  color: rgba(var(--obscura-accent-rgb-c), 0.5);
   font-style: italic;
   margin: 0 0 1rem;
 }
@@ -391,9 +404,9 @@
 }
 
 .detail-commentary {
-  border-left: 2px solid rgba(6, 182, 212, 0.4);
+  border-left: 2px solid rgba(var(--obscura-accent-rgb-c), 0.4);
   padding-left: 1rem;
-  color: rgba(6, 182, 212, 0.82);
+  color: rgba(var(--obscura-accent-rgb-c), 0.82);
   font-style: italic;
   font-size: 0.84rem;
   line-height: 1.65;
@@ -404,9 +417,9 @@
   display: none;
   width: 100%;
   padding: 0.72rem;
-  background: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.32);
-  color: #06b6d4;
+  background: rgba(var(--obscura-accent-rgb-c), 0.1);
+  border: 1px solid rgba(var(--obscura-accent-rgb-c), 0.32);
+  color: var(--cs-scene-accent, #818cf8);
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.82rem;
@@ -416,9 +429,9 @@
 }
 
 .private-viewing-btn:hover {
-  background: rgba(6, 182, 212, 0.2);
-  border-color: rgba(6, 182, 212, 0.58);
-  box-shadow: 0 0 14px rgba(6, 182, 212, 0.28);
+  background: rgba(var(--obscura-accent-rgb-c), 0.2);
+  border-color: rgba(var(--obscura-accent-rgb-c), 0.58);
+  box-shadow: 0 0 14px rgba(var(--obscura-accent-rgb-c), 0.28);
 }
 
 /* ── Commission Panel ────────────────────────────────────── */
@@ -429,7 +442,7 @@
   right: 0;
   z-index: 500;
   background: rgba(8, 8, 16, 0.96);
-  border-top: 1px solid rgba(6, 182, 212, 0.18);
+  border-top: 1px solid rgba(var(--obscura-accent-rgb-c), 0.18);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -440,7 +453,7 @@
   padding: 0.6rem 1.5rem;
   background: none;
   border: none;
-  color: rgba(6, 182, 212, 0.55);
+  color: rgba(var(--obscura-accent-rgb-c), 0.55);
   cursor: pointer;
   font-size: 0.7rem;
   letter-spacing: 0.22em;
@@ -451,7 +464,7 @@
 }
 
 .commission-toggle:hover {
-  color: #06b6d4;
+  color: var(--cs-scene-accent, #818cf8);
 }
 
 .commission-form {
@@ -465,8 +478,8 @@
 
 .commission-form textarea {
   width: 100%;
-  background: rgba(6, 182, 212, 0.05);
-  border: 1px solid rgba(6, 182, 212, 0.2);
+  background: rgba(var(--obscura-accent-rgb-c), 0.05);
+  border: 1px solid rgba(var(--obscura-accent-rgb-c), 0.2);
   color: #c0c8d8;
   padding: 0.65rem 0.75rem;
   border-radius: 4px;
@@ -479,8 +492,8 @@
 
 .commission-form textarea:focus {
   outline: none;
-  border-color: rgba(6, 182, 212, 0.5);
-  box-shadow: 0 0 8px rgba(6, 182, 212, 0.14);
+  border-color: rgba(var(--obscura-accent-rgb-c), 0.5);
+  box-shadow: 0 0 8px rgba(var(--obscura-accent-rgb-c), 0.14);
 }
 
 .commission-controls {
@@ -492,9 +505,9 @@
 .intensity-select {
   flex: 1;
   padding: 0.48rem 0.65rem;
-  background: rgba(6, 182, 212, 0.06);
-  border: 1px solid rgba(6, 182, 212, 0.2);
-  color: #06b6d4;
+  background: rgba(var(--obscura-accent-rgb-c), 0.06);
+  border: 1px solid rgba(var(--obscura-accent-rgb-c), 0.2);
+  color: var(--cs-scene-accent, #818cf8);
   border-radius: 4px;
   font-size: 0.78rem;
   font-family: inherit;
@@ -502,14 +515,14 @@
 
 .intensity-select:focus {
   outline: none;
-  border-color: rgba(6, 182, 212, 0.45);
+  border-color: rgba(var(--obscura-accent-rgb-c), 0.45);
 }
 
 .commission-submit {
   padding: 0.48rem 1.2rem;
-  background: rgba(6, 182, 212, 0.14);
-  border: 1px solid rgba(6, 182, 212, 0.38);
-  color: #06b6d4;
+  background: rgba(var(--obscura-accent-rgb-c), 0.14);
+  border: 1px solid rgba(var(--obscura-accent-rgb-c), 0.38);
+  color: var(--cs-scene-accent, #818cf8);
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.78rem;
@@ -520,13 +533,13 @@
 }
 
 .commission-submit:hover {
-  background: rgba(6, 182, 212, 0.24);
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.28);
+  background: rgba(var(--obscura-accent-rgb-c), 0.24);
+  box-shadow: 0 0 12px rgba(var(--obscura-accent-rgb-c), 0.28);
 }
 
 .commission-status {
   font-size: 0.72rem;
-  color: rgba(6, 182, 212, 0.58);
+  color: rgba(var(--obscura-accent-rgb-c), 0.58);
   margin-top: 0.45rem;
   font-style: italic;
   min-height: 1.1em;
@@ -577,16 +590,16 @@
 }
 
 .gallery-notification.granted {
-  background: rgba(6, 182, 212, 0.13);
-  border: 1px solid rgba(6, 182, 212, 0.32);
-  color: #06b6d4;
+  background: rgba(var(--obscura-accent-rgb-c), 0.13);
+  border: 1px solid rgba(var(--obscura-accent-rgb-c), 0.32);
+  color: var(--cs-scene-accent, #818cf8);
 }
 
 /* ── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar         { width: 4px; }
 ::-webkit-scrollbar-track   { background: #080810; }
-::-webkit-scrollbar-thumb   { background: rgba(6, 182, 212, 0.3); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(6, 182, 212, 0.52); }
+::-webkit-scrollbar-thumb   { background: rgba(var(--obscura-accent-rgb-c), 0.3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(var(--obscura-accent-rgb-c), 0.52); }
 
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 900px) {

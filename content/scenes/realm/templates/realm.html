@@ -6,6 +6,8 @@
 
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='realm.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 cascade layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='realm_v2.css') }}">
 {% endblock %}
 
 {% block head_style %}
@@ -32,7 +34,8 @@
       <span class="realm-header__crest">♚</span>
       <div>
         <h1 class="realm-header__title">THE SHATTERED THRONE</h1>
-        <p class="realm-header__subtitle" id="world-subtitle">v0.68 — Dark Renaissance</p>
+        {# v1.58.0 [2026-06-11] — version bump in static fallback subtitle #}
+        <p class="realm-header__subtitle" id="world-subtitle">v1.58 — Dark Renaissance</p>
       </div>
     </div>
 
@@ -53,8 +56,9 @@
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!--  MAIN LAYOUT — 3 columns                                   -->
+  <!--  v1.58.0 [2026-06-11] — anim-stagger-in entrance on panels -->
   <!-- ═══════════════════════════════════════════════════════════ -->
-  <div class="realm-layout" id="realm-main">
+  <div class="realm-layout anim-stagger-in" id="realm-main">
 
     <!-- ─── LEFT: Player Panel ─────────────────────────── -->
     <aside class="realm-panel realm-panel--left">

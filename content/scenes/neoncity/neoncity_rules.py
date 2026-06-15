@@ -209,8 +209,10 @@ def register_neoncity_rules() -> None:
         eng = get_rules_engine()
         ssm = get_scene_state_manager()
 
-        existing = eng.get_rules(SCENE_ID)
-        if existing:
+        # v1.58.0 [2026-06-11] — Idempotency guard must ignore the engine's
+        # bootstrap "*" wildcard rules; get_rules() includes them, so the old
+        # check ALWAYS early-returned and NeonCity rules never registered.
+        if any(r.scene == SCENE_ID for r in eng.get_rules(SCENE_ID)):
             return
 
         all_rules = _ZONE_RULES + _COMBAT_RULES + _HACKING_RULES + _AI_RULES
@@ -223,8 +225,12 @@ def register_neoncity_rules() -> None:
 
             effects = [RuleEffect(**e) for e in r.get("effects", [])]
 
-            eng.add_rule(SCENE_ID, RuleDefinition(
+            # v1.58.0 [2026-06-11] — add_rule takes ONE RuleDefinition; the
+            # old add_rule(SCENE_ID, ...) raised "takes 2 positional arguments
+            # but 3 were given" so NO NeonCity rules were ever registered.
+            eng.add_rule(RuleDefinition(
                 rule_id=r["id"],
+                scene=SCENE_ID,
                 label=r["label"],
                 description=r["description"],
                 rule_type=r["rule_type"],
@@ -241,8 +247,9 @@ def register_neoncity_rules() -> None:
 
             effects = [RuleEffect(**e) for e in a.get("effects", [])]
 
-            eng.add_action(SCENE_ID, ActionDefinition(
+            eng.add_action(ActionDefinition(  # v1.58.0 — same signature fix
                 action_id=a["id"],
+                scene=SCENE_ID,
                 label=a["label"],
                 description=a["description"],
                 intimacy_level=a.get("intimacy_level", 1),

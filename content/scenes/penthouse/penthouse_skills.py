@@ -242,11 +242,50 @@ def penthouse_game_action(action: str = "") -> str:
     if not scene.bed_game.active:
         return "No game in progress."
     current = scene.bed_game.current_player_name
+    current_pid = scene.bed_game.current_player_id
+    # Resolve action metadata (explicit_level / mood) so the 3D paired-pose
+    # chain can fire. Falls back to a mid-tier custom action when unmatched.
+    # v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+    # v1.62.0 [2026-06-15] — shared mood mapping via bedgame_action_pose_meta.
+    from content.scenes.penthouse.penthouse_scene import bedgame_action_pose_meta
+    _meta = bedgame_action_pose_meta(action)
+    explicit_level = _meta["explicit_level"]
+    description = _meta["description"]
+    mood_hint = _meta["mood_hint"]
+    # Target = the next distinct player in the game (the pose's receiver).
+    target_id = None
+    for pid in scene.bed_game.players:
+        if pid != current_pid:
+            target_id = pid
+            break
     scene.bed_game.history.append({
-        "player_id": scene.bed_game.current_player_id,
+        "player_id": current_pid,
         "action": action,
+        "target_id": target_id,
+        "explicit_level": explicit_level,
     })
+    involved = [current_pid] + ([target_id] if target_id else [])
+    # v1.62.0 [2026-06-15] — consent gate fail-closed default + doc.
+    # FAIL CLOSED: default ineligible so a missing gate method can never let an
+    # explicit pose through un-gated. The gate itself returns True for
+    # non-explicit (below-threshold) poses, so normal behavior is preserved.
+    pose_eligible = False
+    if hasattr(scene, "_bedgame_pose_eligible"):
+        pose_eligible = scene._bedgame_pose_eligible(involved, explicit_level)
     scene.bed_game.advance_turn()
+    scene.socketio.emit("bedgame_action", {
+        "round": scene.bed_game.round_number,
+        "player": current,
+        "player_id": current_pid,
+        "action": action,
+        "description": description,
+        "target_id": target_id,
+        "explicit_level": explicit_level,
+        "mood_hint": mood_hint,
+        "pose_eligible": pose_eligible,
+        "next_player": scene.bed_game.current_player_name,
+        "game_over": False,
+    })
     scene._broadcast_state()
     return f"Action recorded: {action} (player: {current}). Next: {scene.bed_game.current_player_name}."
 

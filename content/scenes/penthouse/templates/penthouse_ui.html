@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CosySim — Bedroom v6</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    {# v1.58.0 [2026-06-11] — r128 CDN globals → vendored r184 ES modules #}
+    {% include 'partials/three_importmap.html' %}
     <script src="/shared/js/socket.io.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bedroom.css') }}">
     <link rel="stylesheet" href="/shared/css/design_tokens.css">
@@ -528,8 +528,14 @@
     </span>
 </div>
 
-<script src="{{ url_for('static', filename='js/character_models.js') }}?v=3.0"></script>
-<script src="{{ url_for('static', filename='js/bedroom.js') }}?v=6.0"></script>
+<!-- v1.58.0 [2026-06-11] — 3D stack loads via three_boot module chain -->
+<script>
+  window.__THREE_LEGACY_SCRIPTS__ = [
+    "{{ url_for('static', filename='js/character_models.js') }}?v=3.0",
+    "{{ url_for('static', filename='js/bedroom.js') }}?v=6.0",
+  ];
+</script>
+<script type="module" src="/shared/js/three_boot.js"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
 </body>
 </html>

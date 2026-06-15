@@ -142,9 +142,12 @@ class IntelHubScene(FlaskScene):
         app = self.app
 
         # Mount the assistant blueprint (chat, voice, listen endpoints)
+        # v1.58.0 [2026-06-11] — Use the idempotent mount_assistant() helper;
+        # direct register_blueprint raised "name 'assistant' already registered"
+        # whenever the blueprint was mounted elsewhere first.
         try:
-            from engine.assistant.assistant_bp import assistant_bp
-            app.register_blueprint(assistant_bp)
+            from engine.assistant.assistant_bp import mount_assistant
+            mount_assistant(app)
         except Exception as _e:
             logger.warning("[%s] Could not register assistant blueprint (operation=lifecycle): %s", SCENE_ID, _e)
 

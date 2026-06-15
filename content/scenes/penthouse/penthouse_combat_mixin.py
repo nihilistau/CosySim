@@ -17,6 +17,83 @@ class PenthouseCombatMixin:
 
     # ── Bed Game helpers ────────────────────────────────────────────────
 
+    def _bedgame_pose_eligible(self, char_ids: List[str], explicit_level: int) -> bool:
+        """Decide whether a bed-game action may drive an explicit 3D paired pose.
+
+        Reuses the EXISTING adult/consent surface rather than inventing a new
+        flag: low-explicit actions (level < threshold) always pose, but explicit
+        actions (which strip outfits client-side) additionally require every
+        involved character to clear the same consent bar the intimacy rules use
+        (penthouse_rules ``intimate_gate``: openness >= 60 AND the
+        ``consent_given`` character flag must be truthy). A character who
+        withdrew consent (``withdraw_consent`` clears the flag) makes the
+        explicit pose ineligible even with high openness. The director (no
+        profile/stats/flags) is always treated as consenting.
+
+        v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+        v1.62.0 [2026-06-15] — consent_given gate for explicit poses.
+
+        Args:
+            char_ids: Character ids involved in this action (initiator + target).
+            explicit_level: The action's explicit_level (1-5).
+
+        Returns:
+            True if the explicit pose may play; False to suppress it.
+        """
+        try:
+            from engine.config import get_config
+            gate_level = int(get_config().get("penthouse.bedgame.explicit_pose_level", 3))
+            openness_min = float(get_config().get("penthouse.bedgame.explicit_openness_min", 60))
+        except Exception:
+            gate_level, openness_min = 3, 60.0
+        if explicit_level < gate_level:
+            return True
+        # Read the consent flag the same way penthouse_rules does: the registry
+        # stores it in the character's runtime state.flags['consent_given']
+        # (set by grant_consent / cleared by withdraw_consent).
+        try:
+            from engine.mcp.character_registry import get_character_registry
+            _registry = get_character_registry()
+        except Exception:
+            _registry = None
+        for cid in char_ids:
+            # v1.62.0 [2026-06-15] — consent gate fail-closed default + doc.
+            # Intentional skip: characters and profiles are populated atomically,
+            # so a profile-less actor here is the director (or another non-stat
+            # participant) and is treated as consenting — not a missing profile
+            # for a real, gated character.
+            if cid == "director" or cid not in self.profiles:
+                continue
+            openness = getattr(self.profiles[cid].stats, "openness", 0.0)
+            if openness < openness_min:
+                logger.info(
+                    "[penthouse] Explicit pose gated — %s openness %.0f < %.0f "
+                    "(operation=bedgame_pose_gate)",
+                    cid, openness, openness_min,
+                )
+                return False
+            consent_given = False
+            if _registry is not None:
+                try:
+                    consent_given = bool(
+                        _registry.get_state(cid).get("flags", {}).get("consent_given")
+                    )
+                except Exception:
+                    consent_given = False
+            if not consent_given:
+                logger.info(
+                    "[penthouse] Explicit pose gated — %s consent_given falsy "
+                    "(operation=bedgame_pose_gate)",
+                    cid,
+                )
+                return False
+        logger.info(
+            "[penthouse] Explicit pose cleared for %d participant(s) at level %d "
+            "(operation=bedgame_pose_gate)",
+            len(char_ids), explicit_level,
+        )
+        return True
+
     def _end_bed_game(self, reason: str = "The game ends.") -> None:
         """End the bed sex game and announce it."""
         if not self.bed_game.active:
@@ -160,11 +237,21 @@ class PenthouseCombatMixin:
         char = self.characters.get(character_id)
         char_name = char.name if char else character_id
         action_type = action.get("action", "")
-        self.nexus_store_event(
-            action_type,
-            f"{char_name}: {action.get('message', action_type)[:120]}",
-            tags=[character_id, action_type],
-        )
+        # v1.62.0 [2026-06-15] — Defense-in-depth: a failure here must never
+        # propagate into AgentLoop.tick()'s per-character try/except, which
+        # would record the action as a duplicate idle/error and break the
+        # illusion that every present character is taking its own agent turn.
+        try:
+            self.nexus_store_event(
+                action_type,
+                f"{char_name}: {action.get('message', action_type)[:120]}",
+                tags=[character_id, action_type],
+            )
+        except Exception as _nx:
+            logger.warning(
+                "[penthouse] nexus_store_event failed (operation=agent_action, character=%s): %s",
+                character_id, _nx,
+            )
 
         # ── Agent → World feedback loop ────────────────────────────────
         _SIGNIFICANT_ACTIONS = {
@@ -316,16 +403,15 @@ class PenthouseCombatMixin:
                         get_coordinator().update(pid, source="bedgame_action", scene="penthouse", **deltas)
                     except Exception:
                         pass
-            explicit_level = BED_GAME_ACTIONS.get(action_id, {}).get("explicit_level", 2) if action_id else 2
+            # v1.62.0 [2026-06-15] — shared mood mapping via bedgame_action_pose_meta.
+            #   The route owns target/description (custom-action case), but the
+            #   explicit_level→mood_hint mapping is the shared one so the two
+            #   emit paths can't drift.
+            from content.scenes.penthouse.penthouse_scene import bedgame_action_pose_meta
+            _pose_meta = bedgame_action_pose_meta(action_id)
+            explicit_level = _pose_meta["explicit_level"]
+            mood_hint = _pose_meta["mood_hint"]
             self.bed_game.record_escalation(current_pid, explicit_level)
-            if explicit_level >= 5:
-                mood_hint = "ecstasy"
-            elif explicit_level >= 4:
-                mood_hint = "moaning"
-            elif explicit_level >= 3:
-                mood_hint = "aroused"
-            else:
-                mood_hint = "flirty"
             record = {
                 "round": self.bed_game.round_number,
                 "player": current_name,
@@ -383,10 +469,27 @@ class PenthouseCombatMixin:
                     f"The dirtier you go, the more points you score.",
                     "bedgame"
                 )
-            self.socketio.emit("bedgame_action", {**record, "next_player": next_name, "game_over": game_over})
+            # v1.62.0 [2026-06-15] — gate the 3D paired-pose trigger behind the
+            #   existing adult/consent surface. The bed game itself is already a
+            #   consent opt-in (named players added via /api/bedgame/start), but
+            #   explicit poses (level >= threshold) strip outfits on the client,
+            #   so we additionally require, for EACH involved character, BOTH:
+            #     - openness >= the threshold the intimacy rules use (>= 60), AND
+            #     - a truthy `consent_given` character flag.
+            #   The director (no profile/flags) is exempt and treated as
+            #   consenting. Below the explicit threshold → no consent check.
+            #   If either condition fails → the round text still plays, but the
+            #   explicit pose is suppressed.
+            # v1.62.0 [2026-06-15] — consent gate fail-closed default + doc.
+            pose_eligible = self._bedgame_pose_eligible(involved, explicit_level)
+            self.socketio.emit("bedgame_action", {
+                **record, "next_player": next_name, "game_over": game_over,
+                "pose_eligible": pose_eligible,
+            })
             self._broadcast_state()
             return jsonify({"success": True, "record": record, "next_player": next_name,
-                            "game_over": game_over, "game": self.bed_game.to_dict()})
+                            "game_over": game_over, "pose_eligible": pose_eligible,
+                            "game": self.bed_game.to_dict()})
 
         @self.app.route("/api/bedgame/end", methods=["POST"])
         def bedgame_end():

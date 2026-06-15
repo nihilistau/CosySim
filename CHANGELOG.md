@@ -4,6 +4,404 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.62.0] — "LIVING PENTHOUSE" — 2026-06-15
+
+Five fixes that take the penthouse 3D scene from "wired but lifeless" to a room
+that feels inhabited: characters rest *on* the furniture, the Director appears
+and persists, bed-game actions drive consent-gated paired poses, every present
+character is driven by its own local agent, and idle characters move and emote
+on a cheap scripted layer between the slow LLM ticks. Verified end-to-end against
+the live scene on `:5556` with LMStudio up.
+
+### Penthouse — naturalism &amp; intimacy
+- **Anchor-aware placement** — `_locationPositions` now carries a per-location
+  anchor (`lie`/`sit`/`stand`) and surface height, and `character_bridge.js`
+  places the model group origin (feet) *on* the surface instead of sinking
+  through it; backend `scene_state["locations"]` Y values were synced to match.
+- **Director avatar renders + persists** — placement was aligned with the working
+  `spawnCharacter` path and `_onSceneState` now re-places the Director from
+  `scene_state.director_avatar`, so the avatar shows on load for every client
+  (not only after a manual "Place Avatar" click) and survives reconnects.
+- **Bed-game → paired poses (consent-gated)** — the missing UI→pose chain was
+  built: `POST /api/bedgame/action` resolves participants and emits
+  `bedgame_action` with a `pose_eligible` flag; the frontend listener maps it to
+  `CharacterBridge.startPose` → `CharModels.startSexPose`. Explicit poses
+  (`explicit_level` ≥ threshold) are gated fail-closed behind the existing adult
+  surface — every involved character must clear `openness ≥ 60` **and** a truthy
+  `consent_given` flag; the Director is exempt. Low-explicit actions always pose.
+- **Per-character agents (cap fix + nexus guard)** — every character entering the
+  scene now registers its own `CharacterAgent`, the hard 2-character cap was
+  replaced with the `SCENE_METADATA`-driven `_max_characters()`, and a runtime
+  invariant logs when `agents ≠ present characters`. Three characters now each
+  take distinct agent-driven turns per tick.
+- **Cheap config-driven ambient behavior** — new `engine/agents/ambient_behavior.py`
+  adds a fast scripted ambient layer (fidget/glance/expression/reposition,
+  mood- and presence-weighted) that reuses the existing `set_animation` /
+  `set_expression` emit path between the slow LLM ticks, with a rare config-gated
+  LLM line via the existing agent path. Tunable under `penthouse.ambient.*`;
+  guarded to never override an active pose, a busy character, or a viewerless
+  scene — so idle characters feel alive without spamming the model.
+
+### Executive Suite — a new neon OS desktop scene
+- **New `executive_suite` scene** (`:5596`) — a full-screen neon-noir corporate
+  "operating system": a draggable **window manager** (z-index focus, traffic-light
+  close, minimize/restore), a left **app dock** with badges, desktop icons, a
+  bottom **taskbar** (start, ⌘K search, pinned apps, system tray) and a layered
+  **animated skyline** behind an office bezel — ported faithfully from the
+  `ui_kits_v2/executive_suite` reference into Jinja2 + CSS-var'd vanilla JS.
+- **8 functional apps wired to real data** — Files (live inventory + item catalog +
+  sandboxed `data/` JSON), Mail (read/compose against the existing phone comms
+  threads; repoints to GlobalCommsLog in sub-project 2), Notes (autosaving JSON
+  store), Music (player + animated equalizer/queue), Code, a **sandboxed**
+  Terminal (whitelisted read-only commands — `status`/`world`/`inbox`/`scenes`…,
+  no shell exec), Browser, and Settings (theme/accent).
+- **Live AI assistant + live system tray** — the Assistant panel ("Add my Agent",
+  LIVE badge, chat feed) drives a real `CharacterAgent` (default Aria) over
+  Socket.IO, reusing the shared `VirtualAgentManager` agent pipeline; the tray
+  clock reads the live `WorldState` game clock and `heat` reads live `PlayerState`.
+  Assistant replies are run through a conservative sanitizer that strips leaked
+  model meta/instruction artifacts (`<<DOC|…>>` blocks, system/metadata markdown
+  headers, stray role prefixes) before they reach the feed.
+- **Full registration + auto-start** — added across every source-of-truth
+  (launcher `--list`, TUI, control-plane registry, port registry `:5596`, the
+  in-world hub) and enabled by default (`pillars.game.auto_start` + per-scene
+  `auto_start: true`), so it boots with the core game set.
+- **Surfaced previously-missing hub scenes** — `auction` and `cyberspace` were
+  registered but absent from the hub UI; both now appear in-world and in `--list`.
+
+### Comms backbone &amp; NPC↔NPC messaging
+- **GlobalCommsLog — single source of truth** — new `engine/world/comms_log.py`
+  backs every message (phone DMs, autotexts, NPC↔NPC) in one SQLite log
+  (`data/comms_log.db`) with `query`/`thread`/`about`/`recent` accessors,
+  `mark_observed` for later phone-hacking/Oracle reads, and a `prune` row cap.
+  All writes are defensive — a logging failure can never break a send.
+- **Comms interceptor + phone write-through** — new
+  `engine/agents/interceptors/comms_logger.py` (`CommsLoggerInterceptor`, pri 90)
+  logs every governed agent reply, while the phone scene logs explicit user
+  sends; a per-call `comms_context` aligns `thread_id`/recipients so the two
+  halves of a conversation share a thread without duplicates.
+- **NPC phones + NPC↔NPC hybrid messaging** — new `engine/world/npc_comms.py`
+  scheduler (with `npc_dm` threads + an `npc_phone` stub in `phone_db.py`) has
+  NPCs text each other on a template-dominant / occasional-LLM mix, weighted by
+  affinity and anti-spam. It runs on its **own** daemon thread and lock (the
+  `_tick_lock` fix) so NPC traffic never blocks the user-facing phone ticker, and
+  is started/stopped from the phone scene lifecycle.
+- **Leave-a-message** — new `engine/world/presence.py` plus phone changes let a
+  player message an offline NPC (and NPCs leave autotexts for an offline player):
+  messages are stored `left_unread`, delivered on (re)connect, and surfaced via a
+  "left you a message" affordance in `phone_v2.js` / `phone_ui_v2.html`.
+- **Calmer, more varied user inbox** — `phone_rules_v2.py` gains a config-driven
+  `comms.autotxt.user_multiplier` (cooldown scaling, per-character overrides),
+  topic seeds drawn from real city events, style pools, and anti-repeat, so
+  user-facing autotexts feel less spammy and less repetitive.
+- **Pairwise relationship effects** — new `engine/world/relationship_effects.py`
+  nudges each NPC pair's `character_relationships.relationship_level` (0–1) by a
+  small, tone-/keyword-derived, clamped delta per NPC↔NPC exchange, closing the
+  loop with the affinity-weighted pair selection in the scheduler.
+
+### Phone OS overhaul — NPC phones, hacking &amp; upgrades
+- **NPC phones + derived security** — new `engine/world/phone_os.py` (the
+  `PhoneOS` accessor over a full `npc_phone` table) gives every NPC a real phone
+  with archetype-/faction-seeded base stats, and derives `effective_security`,
+  `effective_firewall`, `hack_power` and `app_slots` from base levels + installed
+  software (the single source of truth being each upgrade's
+  `phone_upgrade.effects` block). The player's equipped cyberdeck `trace_resist`
+  hardens the phone on top, coupling the inventory to phone defence. All reads are
+  defensive — a missing/broken DB never crashes a phone read.
+- **Buyable / skill-installable upgrades** — `engine.world.inventory.ITEM_CATALOG`
+  gains flagged `is_phone_upgrade` software + hardware (encryption patch,
+  firewall v1/v2, comms tap, ICE, app packs, modem/CPU/OS-kernel) sold by the Grid
+  vendor; the new `install_phone_upgrade` skill gates install on owned-item →
+  credits → `skill_check` (idempotent, with before/after derived stats), and
+  `list_phone_upgrades` surfaces the catalog + current stats. Installing an upgrade
+  raises the owner's derived security/firewall/hack-power/app-slots and can light
+  up a gated UI app (e.g. Comms Tap → Intercept/Breach).
+- **Player→NPC hacking** — new `content/scenes/phone/phone_hack.py`
+  (`HackPhoneService.hack`) resolves a config-driven check (player hack-power + roll
+  vs the NPC's security + firewall) and on success performs **intercept** (reads a
+  bounded slice of the NPC's comms and marks them observed for later Oracle/UI
+  reads), **plant** (writes one spoofed message into the NPC's comms + phone
+  thread), or **steal** (a bounded, margin-scaled credit skim). Failure costs heat
+  and standing; the method never raises.
+- **NPC→player hacking (firewall-defended)** — a rare, hostility-driven reverse
+  hack (`NpcHackPlayerService`) where the attack is defended by the player's
+  `effective_security + effective_firewall + base_difficulty`, so PH-T2 firewall
+  upgrades directly raise the defence and can flip the same attacker from a
+  successful (bounded, recoverable: read + at most one leak-or-plant, capped
+  heat/standing) breach to **BLOCKED**. Emits `phone_hacked` /
+  `message_intercepted` events and persists a breach notification to the comms
+  backbone.
+- **OS-like phone UI** — new `/api/phone/*` routes and `phone_v2.js` views: a
+  **notifications center** (bell badge + breach/leak/left-message feed off the
+  persisted comms log), home-screen **search**, an installed-apps model that
+  unlocks gated apps, a **Breach** app (pick a target, see its defences, run
+  intercept/plant/steal) and an **Upgrades** app (browse + buy/install the catalog
+  with live before/after stats).
+
+### Oracle omniscience — the Oracle reads the comms log
+
+The Oracle now genuinely "sees all": it reads the GlobalCommsLog (player↔NPC +
+NPC↔NPC chatter) and turns overheard signal into cryptic fortunes, real intel,
+and rare omens — all governed by a single privacy/spoiler budget so it hints
+without ever dumping the city's private conversations.
+
+- **Privacy-budgeted comms reader** — new `engine/world/oracle_comms.py` is the
+  one shared read layer over the comms log (`select_entries` / `weave_into` /
+  `find_signal`). A HARD `oracle.comms.max_refs` cap bounds how many entries any
+  single reading may cite, a `recent_window` bounds the scan, and
+  `respect_sensitive` skips/abstracts entries flagged sensitive/mature/intimate
+  so private moments stay private. Raw message bodies are never surfaced — only
+  short, abstracted poetic hints — and every referenced entry is stamped
+  `mark_observed(id, 'oracle')`. All comms-log failures degrade gracefully to
+  plain atmospheric behaviour and never crash a reading.
+- **Comms-aware cryptic fortunes** — `content/scenes/oracle/oracle_scene.py`
+  gains `_maybe_weave_comms`: under `oracle.comms.fortune_chance` a fortune
+  OCCASIONALLY weaves 1–2 real overheard exchanges into the prophecy
+  (cryptically, capped by the budget, marking each entry observed); otherwise it
+  stays purely atmospheric. No comms / a failed roll returns the base fortune
+  unchanged.
+- **`read_the_signal` intel skill** — new `@skill(pack="oracle")` in
+  `engine/skills/builtin/oracle_skills.py` asks the Oracle to read the streams
+  and surface ONE genuine, log-sourced finding — a low-security **hack
+  opportunity**, an NPC **discussing the player**, or the closest NPC↔NPC
+  **pair** by chatter volume — then grants a small **bounded reward**
+  (`oracle.comms.signal_reward_credits` + `signal_reward_item`) gated by the
+  skill cooldown/cost. Empty streams return an in-world "silence" line with no
+  reward.
+- **Autonomous comms omens** — `engine/agents/oracle_companion.py` gains a rare,
+  config-weighted (`oracle.comms.omen_weight`) omen action: the companion pulls a
+  single budget-capped entry, renders it as a cryptic line, marks it observed,
+  and delivers it to the player's phone — so the Oracle reaches out unprompted
+  without ever leaking raw chatter.
+- **Config** — new `oracle.comms.*` block in `config/default.yaml`
+  (`fortune_chance`, `max_refs`, `recent_window`, `omen_weight`,
+  `signal_reward_credits`, `signal_reward_item`, `signal_cooldown_sec`,
+  `respect_sensitive`) keeps the entire privacy/spoiler budget in one place.
+
+---
+
+## [1.61.0] — "PUBLIC RELEASE PREP" — 2026-06-13
+
+Made the repository safe and inviting to publish: a full credential security
+audit (no live secrets in the tree), a hardened ignore policy, and a complete
+professional README + documentation pass.
+
+### Security — credentials externalized (no real secret remains in tracked source)
+- **80+ secrets removed**: 24 hardcoded Google API keys across
+  `engine/integrations/` (aistudio/drive/workspace) → `os.getenv`; 55 keys in
+  `config/nlm_rpcids.yaml` → file gitignored + redacted
+  `config/nlm_rpcids.example.yaml` shipped; the LMStudio API token and a real
+  personal email pulled out of `config/default.yaml` and source; a live
+  `FIREBASE_API_KEY` in the ARGUS sesame client; and key/email stragglers
+  redacted from `docs/ARGUS_*` reports and a heap test fixture.
+- **Secret pattern**: real values live only in a gitignored `.env` (auto-loaded
+  by `engine/config.py` via python-dotenv) or `config/secrets.yaml`; committed
+  config uses `${ENV_VAR}` placeholders resolved at read time. `.env.example`
+  documents every variable. **Local runtime is preserved** — verified config
+  loads, all scenes import, and NEON CITY launches clean.
+- **Personal identifiers** (account handles) moved to
+  `COSYSIM_DEFAULT_ACCOUNT` / `COSYSIM_KNOWN_ACCOUNTS` env vars.
+- **`.gitignore` hardened**: secrets, `config/nlm_rpcids.yaml`,
+  `data/heap_findings*`, dumps, `*.bak`, cookies/credentials, heap variants;
+  `git rm --cached` applied to the two tracked sensitive files (kept on disk).
+
+### Documentation — flagship README + assets
+- **Complete README rewrite** (drafted by an 8-agent fleet, assembled by hand):
+  hero, badges, "Start here" navigation table, quickstart, security/config guide,
+  then deep sections — Overview &amp; Architecture, NEON CITY living world, Engine
+  Internals (interceptors · stream-tag spec decoding · custom LMStudio steering ·
+  ephemeral servers · the Oracle's dual role), NLM + NEXUS frontier-from-local,
+  CONTROL (training/finetune/self-improvement), Integrations/Apps/CLI, the ARGUS
+  protocol, and the Creation pillar. Emphasizes the open, learn-from-it nature.
+- **`docs/assets/scenes/`** — 21 curated scene screenshots embedded/linked.
+- README deep-links the existing `docs/` tree (all links verified to resolve).
+
+---
+
+## [1.60.0] — "LIVING SYSTEMS" — 2026-06-13
+
+A 10-agent fleet upgrade (disjoint file ownership; shared-file hooks integrated
+centrally) that takes the gameplay + infra subsystems from "wired" to pro level.
+Builds directly on the v1.59 feedback loops.
+
+### Gameplay depth
+- **Faction standing now matters** — new `engine/world/faction_gates.py` with
+  reusable helpers scenes call: `shop_access_allowed`, `price_multiplier_for`
+  (matching faction −10%, rival +15%, graded by band), `filter_missions_by_standing`,
+  `npc_standing_note`. `FactionAI._decide()` now weights actions by the player's
+  standing (allies expand/defend near you, rivals raid/sabotage toward your
+  district), and territory-control shifts are broadcast on the EventBus
+  (`NEONCITY_FACTION_SHIFT`) — previously computed but never emitted.
+- **Mission consequences + chains** — completion/failure applies faction-control,
+  reputation, and heat deltas via the player API; new
+  `engine/world/mission_chains.py` defines gated multi-mission arcs (off by
+  default); difficulty/reward scale with player skill levels; crew availability
+  is enforced on assignment.
+- **Crew skill-checks** — operations resolve via a graded success/partial/failure
+  check derived from crew level + loyalty + op difficulty (was: always full
+  reward). Loyalty shifts on outcome; rewards scale per tier.
+- **Equipment & consumables** — new `engine/world/equipment_effects.py` maps
+  equipped cyberware/weapons to real skill/stat bonuses
+  (`get_equipment_bonuses`); consumable effects generalised to work by item
+  *category* instead of a 9-item hardcoded list; optional condition wear.
+- **Economy world-event shocks** — `Market.subscribe_to_world_events()` wires
+  world events → supply/demand shocks via `apply_event` (war→weapons,
+  festival→luxury, shortage→surge), and territory control now flows into
+  specialty-good pricing (`refresh_territory_multipliers`). Activated once at
+  LivingWorld bootstrap. Preserves v1.59 buy/sell settlement.
+
+### Agent depth
+- **Neurochemistry from dialogue** — new `StimulusDetectInterceptor` (pri 88)
+  NLP-detects compliment/insult/kiss/touch/rejection/threat/comfort in replies
+  and applies the matching neurochemistry stimulus to the speaker/addressee, so
+  characters affect each other emotionally from what they actually say (was:
+  stimuli only ever triggered manually).
+
+### Infra hardening
+- **Scheduler** — per-task timeout enforcement (a hung task no longer blocks the
+  loop); stub tasks log an honest "not implemented" instead of faking success.
+- **LMStudio federation** — exponential backoff + jitter on peer health retries;
+  `__del__`/close no longer spews logging noise during interpreter shutdown.
+- **Observability** — flood-guard and error-bucket growth are now LRU-bounded;
+  error-rate threshold alerting (throttled); structured-logging init self-check.
+- **Dead code resolved** — TaskQueue / finetune orchestrator / auto_train either
+  wired into a real path or removed cleanly with exports updated.
+
+### Integration & config
+- All knobs exposed in `config/default.yaml` (faction_gates, territory.faction_ai,
+  mission, crew.skill_check, world.equipment, economy.event_shocks,
+  neurochemistry.stimulus_detect, scheduler, observability.error_aggregator/oracle,
+  lmstudio.task_queue_v2, lmlink.health.backoff) with safe in-code defaults.
+- Each agent shipped hermetic pytest coverage; shared-file edits (interceptor
+  registration, config, activation calls) were applied centrally to avoid
+  parallel-edit conflicts.
+
+---
+
+## [1.59.0] — "CONSEQUENTIAL WORLD" — 2026-06-13
+
+Closed the open feedback loops surfaced by a full subsystem audit. The
+infrastructure was strong (MCP pipeline, agent loop, LMStudio client, Nexus
+router) but state changes flowed downstream and were discarded instead of
+feeding back into the world or agent decisions. This release makes actions
+consequential.
+
+### Added — feedback loops
+- **StatSyncInterceptor (pri 91)** — agents emit `[STAT:arousal+10]` /
+  `[STAT:trust=60]` and the deltas are now **applied to character game state**
+  via the state coordinator (with stat-name aliases: desire→horniness,
+  joy→happiness, …). Runs just before MoodSync (92) so its threshold-rule
+  auto-evaluation sees the new values. Previously these tags were parsed and
+  thrown away — the single biggest "plumbing without payoff" gap.
+- **Economy settlement** — `market.buy()`/`sell()` now move real value:
+  buy deducts credits from the player wallet, adds the good to inventory, and
+  raises **heat** on contraband; sell requires possession, removes the item,
+  and credits the wallet. Unaffordable/unheld trades are rejected and leave the
+  market untouched. Configurable under `economy:` in `config/default.yaml`
+  (`settle`, `contraband_heat_per_unit`, `sell_to_inventory`).
+- **EventCascade ↔ WorldSim** — WorldSim gained an `on_event(callback)`
+  subscriber registry fired from its single event funnel (`_log_event`);
+  `EventCascade.start()` (which already probed for `on_event`) now actually
+  connects, and the handler maps `SimEventType` → `WorldEventType` so scene
+  subscriptions match. Cross-scene ripples finally receive world events.
+
+### Changed — governance
+- **Skill cooldown + prerequisites enforced** in the AgentGovernor auto-skill
+  loop. The auto path bypassed `SkillRegistry.execute_skill` (which enforces
+  these), so auto skills could fire every turn regardless of their declared
+  `cooldown`. Registered skills are now throttled and gated on prerequisites;
+  unregistered MCP tools are unaffected. Added `CooldownTracker.was_used()`.
+
+### Audit notes (verified, no change needed)
+- Heat already gates the casino (≥80) and drives lounge NPC behaviour (≥65/85).
+- The rules engine is already auto-applied every reply (MoodSync threshold eval),
+  and action tags already bump conversation heat — the static audit understated
+  existing wiring.
+- Crew operations already complete via scene routes + the `crew_check_operations`
+  skill (request-driven); a redundant background timer was intentionally **not**
+  added to avoid double-resolution races.
+
+### Tests
+- `test_stat_sync_interceptor.py` (6), `test_market_settlement.py` (5),
+  `test_eventcascade_worldsim.py` (3) — all green; adjacent dialog/skills/scene
+  suites unaffected.
+
+---
+
+## [1.58.0] — "DARK RENAISSANCE" — 2026-06-11
+
+All-scene visual glow-up from the `artifacts/new-assets` design system, three.js
+ES-module migration with a full penthouse 3D overhaul, new NEONCITY landing page,
+and a round of launcher/TUI/runtime bug fixes.
+
+### Fixed (bugs first)
+- **TUI navigation** — ←/→ hop between target list and center panel, ↑/↓ are
+  focus-aware (services table vs target list), Enter/Space launch from either
+  panel, rows clickable/focusable; launches now run as isolated
+  `launcher.py <name>` subprocesses (Stop works for every target type)
+- **lab_break / grid never launched from TUI** — their `__init__` rejected the
+  `host=` kwarg the TUI passes; both constructors now accept it
+- **Penthouse camera presets crashed after config load** — `setCameraViews`
+  now normalizes the YAML `position` key to the runtime `pos` shape
+- **Scene rules never registered** — 2-arg `add_rule(SCENE_ID, rule)` calls in
+  neoncity/coders/command_center, nonexistent `register_action()` in
+  casino/command_center, and a wildcard-tripped idempotency guard meant NO
+  scene rules/actions had ever reached the SceneRulesEngine; rewritten to the
+  real API (neoncity 11+5, coders 8+4, casino 7, command_center 5+5)
+- **`DialogSystem.set_directive(scene_id=)`** — 5 lounge call sites fixed to
+  `scene=` (stage songs, drink rituals, secret reveals all failed silently)
+- **`MCPFramework.get_or_create()`** — asset_studio called a method that never
+  existed; now `get_scene()`; stale guidance strings in nexus_seeder and
+  generate_coder corrected
+- **NLM RPC registry corruption** — all three writers now use shared
+  `engine.utils.atomic_write_json()` (tmp + `os.replace`); corrupt files are
+  quarantined to `.corrupt` instead of erroring forever
+- **intel_hub duplicate assistant blueprint** — idempotent `mount_assistant()`
+- **launcher** — single-target launch refuses to double-bind an occupied port;
+  subprocess scene logs line-buffered; `browser_test.py --scene` accepts names
+- **Restarted a wedged Windows WMI service** that hung every Python startup at
+  `platform._wmi_query` (aiohttp import) under heavy multi-process load
+
+### three.js r128 → r184 (ES modules)
+- Vendored `three.module.min.js` + addons (OrbitControls, GLTFLoader,
+  RoomEnvironment, RoundedBoxGeometry, BufferGeometryUtils, SkeletonUtils)
+  under `content/shared/static/vendor/three/`; import-map partial at
+  `content/shared/templates/partials/three_importmap.html`
+- `content/shared/static/js/three_boot.js` — module boot exposing
+  `window.THREE` (+addons), loading the legacy chain with `async=false`
+  (parallel fetch, ordered execution)
+- Physical-light conversion (×π) across penthouse_3d.js, bedroom.js,
+  lab_3d.js, penthouse_model_import.js; `outputEncoding` removals; CDN
+  GLTFLoader bootstrap deleted
+
+### Penthouse 3D overhaul (Dark Renaissance)
+- Rose `#fb7185` / violet `#9d71ea` material re-grade, RoomEnvironment IBL,
+  transmission-glass curtain wall (south wall is now a floor-to-ceiling
+  window), instanced 64-building skyline with 320 twinkling windows, neon
+  smog bands, night-sky gradient backdrop, GPU rain curtain (600 shader
+  streaks), rose/violet emissive furniture trim, eye-tuned lighting
+- Characters rethemed to the kit identities: Mira (plum-black bob) and new
+  Rei (silver-lavender)
+- 32 FPS on RTX 2060 (headed), zero console errors, all 8 camera views
+
+### Scenes glow-up (all 24 scene keys)
+- `design_tokens_v2.css`: Orbitron display voice, Inter body, Share Tech Mono
+  terminal voice, per-scene accent-rgb fallbacks for all 24 scene keys
+- Webfonts vendored locally (`/shared/fonts/*.woff2` + `fonts.css`) —
+  offline-safe; adds Share Tech Mono + Press Start 2P
+- Shared `.cs-chat-bubble` / `.cs-chat-log` dialogue components
+- Per-scene v2 passes — kit-backed: neoncity, grid, heist, oracle, phone,
+  intel_hub, neonos, hub, asset_studio; extrapolated: tavern, lounge, casino,
+  arena, realm, gallery, lab_break chrome, auction, cyberspace, coders,
+  games, command_center, service UIs
+
+### Landing page
+- Hub `/` now serves the NEONCITY Dark Renaissance landing (skyline, rain,
+  neon title, live footer stats); THE TERMINAL catalogue moved to `/terminal`;
+  navbar/footer hub links point at the catalogue
+
+---
+
 ## [1.57.2] — "RPC SYSTEM OVERHAUL + UNIFIED CLI + MULTI-PROTOCOL PROXY + PRIME PE RESEARCH" — 2026-03-27
 
 Complete NLM rpcid system rebuild, unified CLI framework with 15 standalone apps,

@@ -26,10 +26,22 @@ def backup_dir(tmp_path) -> Path:
     return d
 
 
+# v1.62.0 [2026-06-15] — Mock get_config per-key: returning the backup_dir
+# string for *every* key (incl. the int "nexus.backup_max_per_db" added in
+# v1.51.0) made the count-based prune slice fail with a non-int index. Honor
+# each key's own default instead of a blanket return value.
+def _cfg_get(backup_dir):
+    def _get(key, default=None):
+        if key == "nexus.backup_dir":
+            return str(backup_dir)
+        return default
+    return _get
+
+
 @pytest.fixture
 def mgr(backup_dir) -> BackupManager:
     with patch("engine.nexus.backup_manager.get_config") as mock_cfg:
-        mock_cfg.return_value.get.return_value = str(backup_dir)
+        mock_cfg.return_value.get.side_effect = _cfg_get(backup_dir)
         return BackupManager(backup_dir=backup_dir, retention_days=14, full_backup_days=7)
 
 

@@ -1,0 +1,218 @@
+/*
+ * THE OBSCURA — Dark Renaissance v2 Layer
+ * ========================================
+ * Loaded AFTER gallery.css so it wins the cascade. Extrapolated from
+ * docs/DESIGN_SYSTEM_V2.md (no ui_kits_v2 kit for gallery): 4-layer
+ * background stack, Orbitron display voice, museum framed-image focus,
+ * spotlight gradients, roving gallery spotlight "wow".
+ *
+ * Accent: #818cf8 periwinkle · Secondary: #c084fc violet
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial Dark Renaissance layer: bg stack,
+ *                           museum frames + picture lights, roving
+ *                           spotlight wow, deep-glass detail panel.
+ */
+
+/* ──── 1 · 4-Layer Background Stack ───────────────────────────────────
+   black #02030a → 80px drift grid → radial periwinkle glow → scanlines.
+   CONNECTS: neon_base.html .neon-grid-bg / .neon-scanlines layers     */
+body[data-scene="gallery"] {
+  background: #02030a;
+}
+
+/* Layer 3 — gallery ambience: periwinkle wash from above (track
+   lighting), faint violet pooling at the floor */
+body[data-scene="gallery"] .neon-grid-bg {
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 90% 50% at 50% 100%, rgb(192 132 252 / 0.06) 0%, transparent 60%),
+    #02030a;
+}
+
+/* Layer 2 — 80px drift grid */
+body[data-scene="gallery"] .neon-grid-bg::before {
+  background-image:
+    repeating-linear-gradient(90deg, rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.04) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.04) 0 1px, transparent 1px 80px);
+  animation: obscura-grid-drift 30s linear infinite;
+}
+@keyframes obscura-grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 80px, 0 80px; }
+}
+
+/* Layer 4 — CRT scanlines */
+body[data-scene="gallery"] .neon-scanlines {
+  opacity: 0.5;
+}
+
+/* ──── 2 · Typography — periwinkle→violet wordmark ────────────────── */
+.exhibit-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  background: linear-gradient(120deg, #c7d2fe 0%, var(--cs-scene-accent, #818cf8) 45%, var(--obscura-violet, #c084fc) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 16px rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.45));
+}
+
+.exhibit-subtitle,
+.curator-label {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+
+/* ──── 3 · Roving gallery spotlight (signature wow) ───────────────────
+   v1.58.0 [2026-06-11] — a soft cone of light slowly pans across the
+   gallery floor, like a curator's torch after closing time. */
+.obscura-wrapper {
+  position: relative;
+  /* v1.58.0 [2026-06-11] — FIX: as a flex item of column-flex .neon-main,
+     `margin: 0 auto` absorbed the cross-axis space and shrank the wrapper
+     to one ~450px column. Explicit width restores the full gallery floor. */
+  width: 100%;
+}
+.obscura-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background:
+    radial-gradient(ellipse 50% 45% at 50% 30%, rgb(255 255 255 / 0.05) 0%, rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.04) 40%, transparent 70%)
+    no-repeat;
+  background-size: 44% 60%;
+  animation: obscura-spot-pan 16s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+@keyframes obscura-spot-pan {
+  0%   { background-position: -10% 12%; }
+  50%  { background-position: 55% 40%; }
+  100% { background-position: 115% 18%; }
+}
+
+/* ──── 4 · Framed-image focus — proper museum frames ──────────────── */
+/* v1.58.0 [2026-06-11] — double mat + gilt edge + picture light      */
+.frame-inner {
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.28);
+  border-radius: 2px;
+  background: #07071a;
+  box-shadow:
+    0 0 0 4px #0a0a18,                                                  /* inner mat */
+    0 0 0 5px rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.22),      /* gilt edge */
+    0 10px 32px rgba(0, 0, 0, 0.9),
+    inset 0 0 40px rgba(0, 0, 0, 0.5);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.artwork-frame:hover .frame-inner {
+  border-color: rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.6);
+  box-shadow:
+    0 0 0 4px #0a0a18,
+    0 0 0 5px rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.5),
+    0 14px 40px rgba(0, 0, 0, 0.9),
+    0 0 28px rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.22),
+    inset 0 0 30px rgba(0, 0, 0, 0.4);
+}
+.artwork-frame:hover {
+  transform: translateY(-6px);
+  filter: drop-shadow(0 10px 28px rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.3));
+}
+
+/* Spotlight cone — always faintly lit, blooms on hover */
+.spotlight {
+  background: radial-gradient(
+    ellipse 70% 50% at 50% -4%,
+    rgb(255 255 255 / 0.13) 0%,
+    rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.05) 45%,
+    transparent 72%
+  );
+  opacity: 0.55;
+}
+.artwork-frame:hover .spotlight {
+  opacity: 1;
+}
+
+/* Picture light — thin glowing bar above each frame on hover */
+.artwork-frame::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 22%;
+  right: 22%;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.55);
+  box-shadow: 0 0 12px rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.7);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.artwork-frame:hover::before {
+  opacity: 1;
+}
+
+/* Placard — engraved museum label */
+.title-text {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+}
+.title-artist {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+  letter-spacing: 0.08em;
+}
+
+/* ──── 5 · Featured strip + detail panel — deep glass ─────────────── */
+.featured-container {
+  border: 1px solid rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.14);
+  background:
+    linear-gradient(90deg, transparent, rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.06), transparent);
+}
+.featured-label {
+  font-family: var(--cs-font-terminal, 'Share Tech Mono', monospace);
+}
+
+.detail-panel {
+  background: rgb(5 5 16 / 0.88);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border-left: 1px solid rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.3);
+  box-shadow:
+    -16px 0 56px rgba(0, 0, 0, 0.8),
+    -1px 0 18px rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.12);
+}
+.detail-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+}
+/* Spotlight wash over the detail artwork hero */
+.detail-artwork-display::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 75% 60% at 50% 0%,
+    rgb(255 255 255 / 0.1) 0%,
+    transparent 65%
+  );
+  pointer-events: none;
+}
+
+/* Commission console — glass footer */
+.commission-panel {
+  background: rgb(5 5 16 / 0.92);
+  border-top: 1px solid rgb(var(--cs-scene-accent-rgb, 129 140 248) / 0.25);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+}
+.commission-toggle {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+}
+
+/* ──── 6 · Reduced motion ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  body[data-scene="gallery"] .neon-grid-bg::before,
+  .obscura-wrapper::after {
+    animation: none !important;
+  }
+}

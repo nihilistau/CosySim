@@ -11,8 +11,12 @@
   Uses casino_kit.js (CasinoScene) + casino_ext.js (game logic).
   Original template archived as casino_original.html.
 
-  Version: v1.50.0 [2026-03-22]
+  Version: v1.58.0 [2026-06-11]
   Change Log:
+    v1.58.0 [2026-06-11] — Dark Renaissance v2 glow-up: casino_v2.css
+                             layer (Orbitron marquee, gold chip shimmer
+                             on credits/pot, felt rim-light, 4-layer bg,
+                             token-driven palette); stagger-in on ledger.
     v1.50.0 [2026-03-22] — Kit rebuild. CasinoScene class,
                              casino_ext.js extensions, new layout.
                              Full blackjack UI, NPC speech, win/loss effects.
@@ -21,6 +25,8 @@
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/casino_kit.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/casino.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/casino_v2.css') }}">
 {% endblock %}
 
 {% block scene_content %}
@@ -88,7 +94,8 @@
       <div class="ck-glass-panel">
         <div class="ck-glass-title">LEDGER</div>
         <div class="ck-glass-body">
-          <ul class="cn-transaction-list" id="tx-list">
+          {# v1.58.0 [2026-06-11] — shared stagger-in entrance on ledger rows #}
+          <ul class="cn-transaction-list anim-stagger-in" id="tx-list">
             <li class="cn-tx cn-tx--empty">No transactions yet</li>
           </ul>
         </div>

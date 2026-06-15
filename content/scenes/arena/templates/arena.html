@@ -11,8 +11,10 @@
   Uses arena_kit.js (ArenaScene) + arena_ext.js (game logic).
   Original template archived as arena_original.html.
 
-  Version: v1.50.0 [2026-03-22]
+  Version: v1.58.0 [2026-06-11]
   Change Log:
+    v1.58.0 [2026-06-11] — Dark Renaissance v2: arena_v2.css layer,
+                             LIVE broadcast tag, stagger-in columns.
     v1.50.0 [2026-03-22] — Kit rebuild. ArenaScene class,
                              arena_ext.js extensions, new layout.
 #}
@@ -20,6 +22,8 @@
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='arena_kit.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='arena.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 cascade layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='arena_v2.css') }}">
 {% endblock %}
 
 {% block scene_content %}
@@ -44,8 +48,9 @@
   <!-- ══════════════════════════════════════════════════════════════
        MAIN 3-COLUMN LAYOUT — Fighter A | Arena Floor | Fighter B
        v1.50.0 [2026-03-22] — Kit column_layout (3 cols, 16px gap)
+       v1.58.0 [2026-06-11] — anim-stagger-in entrance on columns
   ══════════════════════════════════════════════════════════════ -->
-  <div class="ck-columns" data-cols="3">
+  <div class="ck-columns anim-stagger-in" data-cols="3">
 
     <!-- ─── COLUMN 1: Fighter A ─────────────────────────────── -->
     <div class="ck-col">
@@ -102,9 +107,11 @@
     <div class="ck-col">
 
       <!-- Arena Floor — 3-D perspective grid with blood-red glow -->
+      <!-- v1.58.0 [2026-06-11] — LIVE broadcast tag (styled in arena_v2.css) -->
       <div class="arena-floor" id="arena-floor">
         <div class="arena-floor__particles" id="arena-particles"></div>
         <div class="arena-floor__grid"></div>
+        <div class="arena-live-tag" aria-hidden="true"><span class="arena-rec-dot"></span>LIVE</div>
         <div class="arena-vs-badge" id="arena-vs">VS</div>
         <div class="arena-clash-flash" id="arena-clash-flash"></div>
       </div>

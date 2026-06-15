@@ -212,6 +212,19 @@ class MetaMetrics:
             self._local.conn.execute("PRAGMA synchronous=NORMAL")
         return self._local.conn
 
+    def close(self) -> None:
+        # v1.62.0 [2026-06-15] — Release the thread-local SQLite handle so the
+        # backing file (and WAL sidecars) can be deleted promptly. Without this,
+        # the connection lingered until GC, breaking Windows tmp-dir teardown
+        # (rmtree -> WinError 32) during test runs.
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            self._local.conn = None
+
     @contextmanager
     def _cursor(self) -> Generator[sqlite3.Cursor, None, None]:
         """Yield a cursor inside a commit/rollback transaction."""

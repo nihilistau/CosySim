@@ -4,9 +4,16 @@
  * Modular app system with home screen, dock, lock screen, and 10+ apps.
  * Each app is a self-contained module registered via CosyPhone.registerApp().
  *
- * Version: v1.51.1 [2026-03-25]
+ * Version: v1.62.0 [2026-06-15]
  *
  * Change Log:
+ *   v1.62.0 [2026-06-15] — PH-T5: OS-like polish — notifications centre (bell +
+ *                          pull-down, live breach/intercept/left-message + system
+ *                          events), global search over apps + contacts/threads,
+ *                          installed-apps model (home grid reflects phone_os
+ *                          installed_apps; locked apps), app recents/minimize,
+ *                          Breach app (player→NPC hacking), Upgrades app
+ *                          (list/install phone-OS upgrades + current stats).
  *   v1.51.1 [2026-03-25] — Desktop mode: tab bar system + Email, Files, Music apps
  */
 
@@ -81,6 +88,11 @@
     contacts: [],
     settings: { theme: 'dark', wallpaper: 0, notifications: true, sounds: true, autoReply: true, messaging: true },
     socket: null,
+    // v1.62.0 [2026-06-15] — PH-T5: OS-level state.
+    notifications: [],        // notification feed (newest-first)
+    _installed: [],           // raw installed_apps ids from phone_os
+    _unlocked: [],            // UI app ids unlocked by installed software
+    recents: [],              // recently-opened app ids (most-recent first)
 
     /* ── Boot ─────────────────────────────────────────── */
     init() {
@@ -89,8 +101,10 @@
       this._initSocket();
       this._initClock();
       this._initLock();
-      this._buildHomeScreen();
+      this._initStatusActions();   // v1.62.0 — bell + search affordances
+      this._loadInstalled().then(() => this._buildHomeScreen());
       this._loadContacts();
+      this._loadNotifications();
     },
 
     _loadSettings() {
@@ -125,6 +139,15 @@
       this.socket.on('mood_update', d => { if (this.apps.mood_ring) this.apps.mood_ring.onMoodUpdate(d); });
       this.socket.on('admin_wipe', () => { toast('All data wiped'); if (this.apps.messages) this.apps.messages.onWipe(); });
       this.socket.on('news_updated', d => { if (this.apps.news) { this.apps.news._loadFeed(); toast('📰 New articles available'); } });
+      // v1.62.0 [2026-06-15] — PH-T5: live notification events.
+      this.socket.on('phone_hacked', d => this._onNotificationEvent('breach', d));
+      this.socket.on('message_intercepted', d => this._onNotificationEvent('intercept', d));
+      this.socket.on('message_new', d => {
+        // A delivered left-message surfaces as a notification too.
+        const m = d && d.message;
+        const left = !!(d && d.left_unread || (m && m.metadata && m.metadata.left_unread));
+        if (left) this._onNotificationEvent('left_message', { message: m, sender_id: m && m.sender_id });
+      });
     },
 
     _initClock() {
@@ -170,7 +193,12 @@
 
       gridApps.forEach(id => {
         const app = this.apps[id];
-        grid.appendChild(this._makeIcon(id, app));
+        // v1.62.0 [2026-06-15] — PH-T5: gated apps (those marked
+        // app.requiresInstall) only appear once the matching phone_os upgrade is
+        // installed; until then they render LOCKED so the player knows they
+        // exist and how to unlock them.
+        const locked = !!app.requiresInstall && !this._unlocked.includes(id);
+        grid.appendChild(this._makeIcon(id, app, locked));
       });
 
       dockApps.forEach(id => {
@@ -190,20 +218,25 @@
       dock.appendChild(deskIcon);
     },
 
-    _makeIcon(id, app) {
-      const icon = el('div', 'app-icon');
+    _makeIcon(id, app, locked) {
+      const icon = el('div', 'app-icon' + (locked ? ' app-locked' : ''));
       icon.dataset.appId = id;
       const box = el('div', 'icon-box');
       box.style.background = app.color || '#333';
       box.innerHTML = app.icon || '📱';
-      if (app.badge && app.badge() > 0) {
+      if (locked) {
+        // v1.62.0 [2026-06-15] — PH-T5: lock overlay for not-yet-installed apps.
+        box.appendChild(el('div', 'icon-lock', '🔒'));
+      } else if (app.badge && app.badge() > 0) {
         const b = el('div', 'notif-badge');
         b.textContent = app.badge();
         box.appendChild(b);
       }
       icon.appendChild(box);
       icon.appendChild(el('span', 'app-name', app.name || id));
-      icon.onclick = () => this.openApp(id);
+      icon.onclick = locked
+        ? () => { toast('🔒 ' + (app.name || id) + ' — install its upgrade in Upgrades'); this.openApp('upgrades'); }
+        : () => this.openApp(id);
       return icon;
     },
 
@@ -226,6 +259,7 @@
       const app = this.apps[id];
       if (!app) return;
       this.activeApp = id;
+      this._pushRecent(id);    // v1.62.0 [2026-06-15] — PH-T5: track recents
       this.desktopMode = false; // v1.51.1 — ensure desktop mode is off when opening single app
       qs('#app-tabbar').style.display = 'none';
       qs('#home-screen').classList.add('hidden');
@@ -265,6 +299,230 @@
     },
 
     getContact(id) { return this.contacts.find(c => c.id === id); },
+
+    /* ══════════════════════════════════════════════════════
+       PH-T5 — OS-level: installed apps, recents/minimize,
+       notifications centre, global search.
+       v1.62.0 [2026-06-15]
+    ══════════════════════════════════════════════════════ */
+
+    /* ── Installed-apps model ───────────────────────────── */
+    async _loadInstalled() {
+      try {
+        const data = await api('GET', '/api/phone/installed');
+        this._installed = data.installed_apps || [];
+        this._unlocked = data.unlocked || [];
+        this._stats = data.stats || null;
+      } catch (e) { console.warn('installed load failed', e); }
+    },
+
+    /* ── Recents / minimize ─────────────────────────────── */
+    _pushRecent(id) {
+      if (id === 'recents' || id === 'search' || id === 'notifications') return;
+      this.recents = [id, ...this.recents.filter(r => r !== id)].slice(0, 8);
+    },
+
+    minimizeApp() {
+      // Keep recents, return to home without firing onClose's hard teardown twice.
+      this.closeApp();
+    },
+
+    showRecents() {
+      const list = this.recents.filter(id => this.apps[id]);
+      if (!list.length) { toast('No recent apps'); return; }
+      let panel = qs('#recents-panel');
+      if (panel) panel.remove();
+      panel = el('div', { id: 'recents-panel', className: 'os-sheet' });
+      panel.innerHTML = '<div class="os-sheet-head"><span>Recent Apps</span><button class="os-x" id="recents-x">✕</button></div><div class="recents-row" id="recents-row"></div>';
+      document.querySelector('#phone').appendChild(panel);
+      qs('#recents-x').onclick = () => panel.remove();
+      const row = qs('#recents-row');
+      list.forEach(id => {
+        const app = this.apps[id];
+        const card = el('div', 'recent-card');
+        card.innerHTML = `<div class="recent-ic" style="background:${app.color || '#333'}">${app.icon || '📱'}</div><div class="recent-nm">${esc(app.name || id)}</div>`;
+        card.onclick = () => { panel.remove(); this.openApp(id); };
+        row.appendChild(card);
+      });
+      requestAnimationFrame(() => panel.classList.add('open'));
+    },
+
+    /* ── Status-bar actions (bell + search) ─────────────── */
+    _initStatusActions() {
+      const icons = qs('#status-bar .icons');
+      if (!icons) return;
+      const search = el('span', { className: 'status-act', id: 'status-search', title: 'Search' });
+      search.textContent = '🔍';
+      search.onclick = () => this.openSearch();
+      const bell = el('span', { className: 'status-act', id: 'status-bell', title: 'Notifications' });
+      bell.innerHTML = '🔔<span class="status-bell-badge" id="status-bell-badge" style="display:none"></span>';
+      bell.onclick = () => this.toggleNotifications();
+      icons.insertBefore(bell, icons.firstChild);
+      icons.insertBefore(search, icons.firstChild);
+    },
+
+    /* ── Notifications centre ───────────────────────────── */
+    async _loadNotifications() {
+      try {
+        const data = await api('GET', '/api/phone/notifications');
+        this.notifications = data.notifications || [];
+      } catch (e) { this.notifications = []; }
+      this._updateBellBadge();
+      this._renderNotifications();
+    },
+
+    _onNotificationEvent(type, d) {
+      d = d || {};
+      const note = {
+        id: 'live_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        type,
+        sender_id: d.attacker || d.sender_id || '',
+        ts: new Date().toISOString(),
+        blocked: !!d.blocked,
+        success: !!d.success,
+        action: d.action || '',
+        count: d.count,
+        _live: true,
+      };
+      note.content = this._notifText(note, d);
+      this.notifications.unshift(note);
+      this.notifications = this.notifications.slice(0, 60);
+      this._updateBellBadge();
+      this._renderNotifications();
+      if (this.settings.notifications) toast(this._notifIcon(type) + ' ' + note.content);
+    },
+
+    _notifText(note, d) {
+      const who = note.sender_id || 'someone';
+      if (note.type === 'breach') {
+        return note.blocked
+          ? `Breach attempt by ${who} BLOCKED by your firewall`
+          : `Phone breached by ${who} (${note.action || 'observe'})`;
+      }
+      if (note.type === 'intercept') return `${who} intercepted ${note.count || 'your'} message(s)`;
+      if (note.type === 'left_message') return `${who} left you a message`;
+      return d.content || 'System event';
+    },
+
+    _notifIcon(type) {
+      return { breach: '🛡️', intercept: '📡', left_message: '📩', system: '⚙️' }[type] || '🔔';
+    },
+
+    _updateBellBadge() {
+      const badge = qs('#status-bell-badge');
+      if (!badge) return;
+      const n = this.notifications.length;
+      if (n > 0) { badge.textContent = n > 99 ? '99+' : n; badge.style.display = ''; }
+      else badge.style.display = 'none';
+    },
+
+    toggleNotifications() {
+      const existing = qs('#notif-center');
+      if (existing) { existing.remove(); return; }
+      this._loadNotifications();
+      const center = el('div', { id: 'notif-center', className: 'os-sheet notif-center' });
+      center.innerHTML = `
+        <div class="os-sheet-head">
+          <span>🔔 Notifications</span>
+          <div style="display:flex;gap:8px">
+            <button class="os-x" id="notif-refresh" title="Refresh">↻</button>
+            <button class="os-x" id="notif-x">✕</button>
+          </div>
+        </div>
+        <div class="notif-list" id="notif-list"></div>`;
+      document.querySelector('#phone').appendChild(center);
+      qs('#notif-x').onclick = () => center.remove();
+      qs('#notif-refresh').onclick = () => this._loadNotifications();
+      this._renderNotifications();
+      requestAnimationFrame(() => center.classList.add('open'));
+    },
+
+    _renderNotifications() {
+      const list = qs('#notif-list');
+      if (!list) return;
+      if (!this.notifications.length) {
+        list.innerHTML = '<div class="empty-state"><div class="es-icon">🔔</div><h3>All clear</h3><p>No notifications yet</p></div>';
+        return;
+      }
+      list.innerHTML = this.notifications.map(n => {
+        const cls = n.type === 'breach' ? (n.blocked ? 'notif-blocked' : 'notif-breach') : ('notif-' + n.type);
+        return `<div class="notif-item ${cls}">
+          <div class="notif-ic">${this._notifIcon(n.type)}</div>
+          <div class="notif-body">
+            <div class="notif-text">${esc(n.content || '')}</div>
+            <div class="notif-meta">${esc(n.type)}${n.success ? ' · success' : ''}${n.blocked ? ' · blocked' : ''} · ${fmtTime(n.ts)}</div>
+          </div>
+        </div>`;
+      }).join('');
+    },
+
+    /* ── Global search ──────────────────────────────────── */
+    openSearch() {
+      if (qs('#search-overlay')) return;
+      const ov = el('div', { id: 'search-overlay', className: 'search-overlay' });
+      ov.innerHTML = `
+        <div class="search-bar-row">
+          <input id="search-input" class="search-input" type="text" placeholder="Search apps, contacts, threads…" autocomplete="off">
+          <button class="pill-btn pill-secondary" id="search-cancel">Cancel</button>
+        </div>
+        <div class="search-results" id="search-results"></div>`;
+      document.querySelector('#phone').appendChild(ov);
+      qs('#search-cancel').onclick = () => ov.remove();
+      const input = qs('#search-input');
+      input.oninput = () => this._runSearch(input.value);
+      input.onkeydown = e => { if (e.key === 'Escape') ov.remove(); };
+      setTimeout(() => input.focus(), 50);
+      this._runSearch('');
+    },
+
+    _runSearch(q) {
+      const res = qs('#search-results');
+      if (!res) return;
+      q = (q || '').trim().toLowerCase();
+      const groups = [];
+      // Apps (skip locked/gated unless unlocked)
+      const apps = Object.keys(this.apps)
+        .filter(id => !this.apps[id].requiresInstall || this._unlocked.includes(id))
+        .map(id => ({ id, name: this.apps[id].name || id, icon: this.apps[id].icon }))
+        .filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
+      if (apps.length) groups.push({ title: 'Apps', items: apps.map(a => ({
+        icon: a.icon, label: a.name, onClick: () => this.openApp(a.id),
+      })) });
+      // Contacts
+      const contacts = (this.contacts || [])
+        .filter(c => !q || (c.name || '').toLowerCase().includes(q))
+        .slice(0, 12);
+      if (contacts.length) groups.push({ title: 'Contacts', items: contacts.map(c => ({
+        icon: '👤', label: c.name || c.id,
+        onClick: () => { this.apps.messages._openDM(c.id, c.name); this.openApp('messages'); },
+      })) });
+      // Threads
+      const threads = ((this.apps.messages && this.apps.messages.threads) || [])
+        .filter(t => { const n = (t.name || t.char_name || ''); return !q || n.toLowerCase().includes(q) || (t.last_message || '').toLowerCase().includes(q); })
+        .slice(0, 12);
+      if (threads.length) groups.push({ title: 'Threads', items: threads.map(t => ({
+        icon: '💬', label: (t.name || t.char_name || 'Chat'), sub: t.last_message || '',
+        onClick: () => { this.openApp('messages'); setTimeout(() => this.apps.messages.openThread(t), 50); },
+      })) });
+
+      if (!groups.length) { res.innerHTML = '<div class="empty-state"><div class="es-icon">🔍</div><h3>No results</h3></div>'; return; }
+      res.innerHTML = '';
+      groups.forEach(g => {
+        res.appendChild(el('div', 'section-sub', g.title));
+        const grp = el('div', 'list-group');
+        g.items.forEach(it => {
+          const row = el('div', 'list-row');
+          row.innerHTML = `<span class="list-icon">${it.icon || '•'}</span><span class="list-label">${esc(it.label)}${it.sub ? `<div style="font-size:12px;color:var(--label3);font-weight:400">${esc(it.sub)}</div>` : ''}</span><span class="list-chevron">›</span>`;
+          row.onclick = () => { qs('#search-overlay')?.remove(); it.onClick(); };
+          grp.appendChild(row);
+        });
+        res.appendChild(grp);
+      });
+    },
+
+    refreshInstalled() {
+      return this._loadInstalled().then(() => this._buildHomeScreen());
+    },
   };
 
   /* ══════════════════════════════════════════════════════════
@@ -375,11 +633,14 @@
         const name = t.name || t.char_name || 'Chat';
         const av = t.char_avatar || '';
         const item = el('div', 'thread-item anim-fadeIn');
+        // v1.62.0 [2026-06-15] \u2014 CB-T4: "left you a message" badge + label.
+        const hasLeft = (t.left_unread || 0) > 0;
+        const leftBadge = hasLeft ? '<span class="left-msg-badge" title="Left you a message">\ud83d\udce9</span>' : '';
         item.innerHTML = `
           ${avatarHtml(name, av)}
           <div class="thread-info">
-            <div class="thread-name">${esc(name)}</div>
-            <div class="thread-preview">${esc(t.last_message || '\u00a0')}</div>
+            <div class="thread-name">${esc(name)}${leftBadge}</div>
+            <div class="thread-preview">${hasLeft ? '<span class="left-msg-tag">left you a message \u00b7 </span>' : ''}${esc(t.last_message || '\u00a0')}</div>
           </div>
           <div class="thread-meta">
             <div class="thread-time">${fmtTime(t.updated_at)}</div>
@@ -444,7 +705,13 @@
         const file = msg.media_path.split('/').pop().split('\\').pop();
         bubbleHtml = `<div class="bubble media-bubble"><video controls preload="metadata" src="/media/video/${file}"></video></div>`;
       } else {
-        bubbleHtml = `<div class="bubble">${esc(content)}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
+        // v1.62.0 [2026-06-15] — CB-T4: "left you a message" affordance for
+        // messages flagged left_unread in metadata.
+        const left = !!(msg.metadata && msg.metadata.left_unread);
+        const leftNote = left
+          ? `<span class="left-msg-note">📩 left ${isOut ? 'a message' : 'you a message'}</span>`
+          : '';
+        bubbleHtml = `<div class="bubble${left ? ' left-msg' : ''}">${leftNote}${esc(content)}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
       }
       row.innerHTML += bubbleHtml;
       box.appendChild(row);
@@ -513,8 +780,15 @@
 
     onMessageNew(data) {
       const { thread_id, message } = data;
+      // v1.62.0 [2026-06-15] — CB-T4: a delivered "left message" carries
+      // left_unread (on the payload and/or the message metadata).
+      const left = !!(data.left_unread || (message && message.metadata && message.metadata.left_unread));
       const idx = this.threads.findIndex(t => t.id === thread_id);
-      if (idx !== -1) { this.threads[idx].last_message = message.content || '[media]'; this.threads[idx].updated_at = message.created_at; }
+      if (idx !== -1) {
+        this.threads[idx].last_message = message.content || '[media]';
+        this.threads[idx].updated_at = message.created_at;
+        if (left) this.threads[idx].left_unread = (this.threads[idx].left_unread || 0) + 1;
+      }
       if (this.activeThread && this.activeThread.id === thread_id) { this._appendMsg(message); }
       else if (idx !== -1) { this.threads[idx].unread = (this.threads[idx].unread || 0) + 1; }
       else { this.loadThreads(); return; }
@@ -2547,6 +2821,198 @@
     _stop() {
       var self = this;
       fetch('/api/music/stop', { method: 'POST' }).then(function() { self._updateNowPlaying(); });
+    },
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     APP: Breach — player→NPC phone hacking (PH-T3 surface)
+     v1.62.0 [2026-06-15] — PH-T5
+     CONNECTS: /api/phone/hack/targets, /api/phone/hack
+     GATED: requires phone_comms_tap (unlocks 'breach')
+  ══════════════════════════════════════════════════════════ */
+
+  CosyPhone.registerApp('breach', {
+    name: 'Breach', icon: '🛰️', color: 'linear-gradient(135deg, #10b981, #06b6d4)',
+    requiresInstall: true,
+    _targets: [], _hackPower: 0, _target: null, _action: 'intercept',
+
+    render(body) {
+      body.classList.add('breach-app');
+      body.innerHTML = `
+        <div class="section-header" style="color:var(--accent)">⛓ BREACH</div>
+        <div class="section-sub">Crack an NPC phone — intercept · plant · steal</div>
+        <div class="breach-power" id="breach-power">HACK POWER: …</div>
+        <div class="breach-actions" id="breach-actions">
+          <button class="breach-act active" data-act="intercept" onclick="CosyPhone.apps.breach._setAction('intercept',this)">📡 Intercept</button>
+          <button class="breach-act" data-act="plant" onclick="CosyPhone.apps.breach._setAction('plant',this)">💉 Plant</button>
+          <button class="breach-act" data-act="steal" onclick="CosyPhone.apps.breach._setAction('steal',this)">💰 Steal</button>
+        </div>
+        <div class="section-sub">Targets</div>
+        <div id="breach-targets" style="padding:0 16px"><div class="news-loading"><div class="spinner"></div>Scanning grid…</div></div>
+        <div id="breach-result" style="padding:0 16px 24px"></div>`;
+      this._load();
+    },
+
+    _setAction(act, btn) {
+      this._action = act;
+      qsa('.breach-act').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+    },
+
+    async _load() {
+      try {
+        const data = await api('GET', '/api/phone/hack/targets');
+        this._targets = data.targets || [];
+        this._hackPower = data.hack_power || 0;
+        const pw = qs('#breach-power');
+        if (pw) pw.textContent = `HACK POWER: ${this._hackPower}`;
+        const list = qs('#breach-targets');
+        if (!list) return;
+        if (!this._targets.length) { list.innerHTML = '<div style="color:var(--label2)">No targets on the grid</div>'; return; }
+        list.innerHTML = this._targets.map(t => `
+          <div class="breach-target" onclick="CosyPhone.apps.breach._run('${esc(t.id)}')">
+            <div class="breach-avatar">${esc((t.name || '?')[0] || '?').toUpperCase()}</div>
+            <div style="flex:1;min-width:0">
+              <div class="breach-name">${esc(t.name || t.id)}</div>
+              <div class="breach-def">🛡 SEC ${t.security} · 🔥 FW ${t.firewall}</div>
+            </div>
+            <div class="breach-go">RUN →</div>
+          </div>`).join('');
+      } catch (e) {
+        qs('#breach-targets').innerHTML = `<div style="color:var(--red)">Grid scan failed: ${esc(e.message)}</div>`;
+      }
+    },
+
+    async _run(targetId) {
+      this._target = targetId;
+      const res = qs('#breach-result');
+      res.innerHTML = '<div class="news-loading"><div class="spinner"></div>Running exploit…</div>';
+      try {
+        const r = await api('POST', '/api/phone/hack', { target_id: targetId, action: this._action });
+        res.innerHTML = this._renderResult(r);
+      } catch (e) {
+        res.innerHTML = `<div style="color:var(--red)">Hack failed: ${esc(e.message)}</div>`;
+      }
+    },
+
+    _renderResult(r) {
+      const ok = r.success;
+      const head = ok
+        ? `<div class="breach-verdict win">✓ BREACH SUCCESSFUL</div>`
+        : `<div class="breach-verdict fail">✗ BREACH FAILED</div>`;
+      const meta = `<div class="breach-roll">atk ${r.attack} vs def ${r.defence} · margin ${r.margin >= 0 ? '+' : ''}${r.margin} · heat +${r.heat_delta || 0}</div>`;
+      let detail = `<div class="breach-msg">${esc(r.message || '')}</div>`;
+      if (ok && r.action === 'intercept' && (r.read || []).length) {
+        detail += '<div class="section-sub" style="padding-left:0">Intercepted threads</div>';
+        detail += (r.read || []).map(e => `<div class="breach-read"><span class="breach-read-from">${esc(e.sender_id || '?')}</span> ${esc((e.content || '').slice(0, 140))}</div>`).join('');
+      } else if (ok && r.action === 'plant' && r.planted) {
+        detail += `<div class="breach-read">📥 Planted: ${esc(r.planted.content || '')}</div>`;
+      } else if (ok && r.action === 'steal' && r.stolen) {
+        detail += `<div class="breach-read">💰 Skimmed ${r.stolen.credits}cr (balance ${r.stolen.balance ?? '—'})</div>`;
+      }
+      return `<div class="breach-result-card">${head}${meta}${detail}</div>`;
+    },
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     APP: Vault — secure store unlocked by Secure Apps Pack
+     v1.62.0 [2026-06-15] — PH-T5 (gated; minimal surface)
+  ══════════════════════════════════════════════════════════ */
+
+  CosyPhone.registerApp('vault', {
+    name: 'Vault', icon: '🔐', color: 'linear-gradient(135deg, #a855f7, #06b6d4)',
+    requiresInstall: true,
+    render(body) {
+      body.innerHTML = `
+        <div class="section-header">Vault</div>
+        <div class="section-sub">Encrypted store — Secure Apps Pack</div>
+        <div class="list-group">
+          <div class="list-row" style="cursor:default"><span class="list-icon">🔐</span><span class="list-label">Encrypted credentials</span><span class="list-value">secured</span></div>
+          <div class="list-row" style="cursor:default"><span class="list-icon">🗝️</span><span class="list-label">Cyberdeck keys</span><span class="list-value">secured</span></div>
+        </div>`;
+    },
+  });
+
+  /* ══════════════════════════════════════════════════════════
+     APP: Upgrades — phone-OS market (PH-T2 surface)
+     v1.62.0 [2026-06-15] — PH-T5
+     CONNECTS: /api/phone/upgrades, /api/phone/upgrades/install
+  ══════════════════════════════════════════════════════════ */
+
+  CosyPhone.registerApp('upgrades', {
+    name: 'Upgrades', icon: '🧬', color: 'linear-gradient(135deg, #f59e0b, #ec4899)',
+    _data: null,
+
+    render(body) {
+      body.innerHTML = `
+        <div class="section-header">Upgrades</div>
+        <div class="section-sub">Phone-OS market · firewall · hack power · slots</div>
+        <div id="upg-stats" class="upg-stats"></div>
+        <div id="upg-list" style="padding:0 16px 24px"><div class="news-loading"><div class="spinner"></div>Loading catalog…</div></div>`;
+      this._load();
+    },
+
+    async _load() {
+      try {
+        const data = await api('GET', '/api/phone/upgrades');
+        this._data = data;
+        this._renderStats(data.stats || {});
+        this._renderList(data.upgrades || []);
+      } catch (e) {
+        qs('#upg-list').innerHTML = `<div style="color:var(--red)">Catalog unavailable: ${esc(e.message)}</div>`;
+      }
+    },
+
+    _renderStats(s) {
+      const box = qs('#upg-stats');
+      if (!box) return;
+      const cell = (lbl, val) => `<div class="upg-stat"><div class="upg-num">${val ?? '—'}</div><div class="upg-lbl">${lbl}</div></div>`;
+      box.innerHTML =
+        cell('Security', s.effective_security) +
+        cell('Firewall', s.effective_firewall) +
+        cell('Hack Pwr', s.hack_power) +
+        cell('App Slots', s.app_slots);
+    },
+
+    _renderList(ups) {
+      const list = qs('#upg-list');
+      if (!list) return;
+      if (!ups.length) { list.innerHTML = '<div style="color:var(--label2)">No upgrades available</div>'; return; }
+      list.innerHTML = ups.map(u => {
+        const fx = Object.entries(u.effects || {}).map(([k, v]) => `<span class="upg-fx">${k} +${v}</span>`).join('');
+        const addApp = u.add_app ? `<span class="upg-fx upg-app">unlocks ${esc(u.add_app)}</span>` : '';
+        const status = u.installed
+          ? '<span class="upg-installed">✓ Installed</span>'
+          : `<button class="pill-btn pill-primary" style="font-size:12px" onclick="CosyPhone.apps.upgrades._install('${esc(u.item_id)}',this)">${u.owned ? 'Install' : 'Buy ₵' + u.price}</button>`;
+        return `<div class="upg-card${u.installed ? ' done' : ''}">
+          <div class="upg-row1">
+            <span class="upg-name">${esc(u.name)}</span>
+            ${status}
+          </div>
+          <div class="upg-desc">${esc(u.desc || '')}</div>
+          <div class="upg-fxrow">${fx}${addApp}</div>
+        </div>`;
+      }).join('');
+    },
+
+    async _install(itemId, btn) {
+      if (btn) { btn.disabled = true; btn.textContent = '…'; }
+      try {
+        const r = await api('POST', '/api/phone/upgrades/install', { item_id: itemId });
+        if (r.success) {
+          if (r.already_installed) toast('Already installed');
+          else toast('✓ Installed ' + (r.name || itemId));
+          // Refresh installed-apps model so a newly-unlocked app lights up.
+          await CosyPhone.refreshInstalled();
+          this._load();
+        } else {
+          toast(r.error || 'Install failed');
+          if (btn) { btn.disabled = false; this._load(); }
+        }
+      } catch (e) {
+        toast('Install failed: ' + e.message);
+        if (btn) { btn.disabled = false; }
+      }
     },
   });
 

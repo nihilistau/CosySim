@@ -113,7 +113,7 @@ All backend API authorization flows through Firebase Authentication with Google 
 | Property | Value |
 |----------|-------|
 | Project | `sesame-ai-demo` |
-| API Key | `AIzaSyDtC7Uwb5pGAsdmrH2T4Gqdk5Mga07jYPM` |
+| API Key | `AIza_REDACTED` |
 | Sign-in provider | `google.com` (Google OAuth2) |
 | JWT algorithm | **RS256** |
 | JWT issuer | `https://securetoken.google.com/sesame-ai-demo` |

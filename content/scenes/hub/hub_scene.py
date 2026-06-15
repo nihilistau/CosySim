@@ -14,6 +14,8 @@ Version: v1.52.0 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — Surfaced missing hub scenes (auction, cyberspace) and
+                            added Executive Suite (ES-T1)
     v1.52.0 [2026-03-25] — Added structured module header
 """
 
@@ -250,6 +252,15 @@ def _build_scene_categories() -> Dict[str, Dict[str, Any]]:
                     "Tactical arena combat with betting and AI fighters",
                     "#059669",
                 ),
+                # v1.62.0 [2026-06-15] — Executive Suite neon OS desktop (ES-T1)
+                _scene_entry(
+                    "Executive Suite",
+                    "💼",
+                    "executive_suite",
+                    "executive_suite",
+                    "A full neon OS desktop — mail, files, your live AI assistant",
+                    "#ffd700",
+                ),
             ],
         },
         "showcase": {
@@ -286,6 +297,23 @@ def _build_scene_categories() -> Dict[str, Dict[str, Any]]:
                     "tavern",
                     "Fantasy tavern — 4 NPCs, quests, dice gambling, reputation, atmosphere, MCP showcase",
                     "#d4a344",
+                ),
+                # v1.62.0 [2026-06-15] — Surface scenes missing from the hub UI
+                _scene_entry(
+                    "The Auction House",
+                    "🔨",
+                    "auction",
+                    "auction",
+                    "Underground black-market auctions — bid against AI buyers for rare contraband",
+                    "#c026d3",
+                ),
+                _scene_entry(
+                    "Cyberspace",
+                    "🕸️",
+                    "cyberspace",
+                    "cyberspace",
+                    "Hacking minigame — breach nodes, dodge ICE, jack into the grid",
+                    "#22d3ee",
                 ),
             ],
         },

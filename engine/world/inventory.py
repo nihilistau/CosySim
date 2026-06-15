@@ -16,6 +16,28 @@ Usage::
     inv.add_item("neural_jack", quantity=1)
     inv.equip("neural_jack", slot="cyberware_1")
     snapshot = inv.to_dict()
+
+    # v1.60.0 — equipped gear now grants real mechanical bonuses, and any
+    # drug/stim/medkit/food item is consumable (no hardcoded per-item list):
+    bonuses = inv.get_equipment_bonuses()      # {"combat": 2, "hacking": 1, ...}
+    result  = inv.use_consumable("stim_pack", player_state)
+
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.62.0 [2026-06-15] — PH-T2: phone-OS upgrade catalog. Added a coherent set
+        of buyable software/hardware items flagged ``phone_upgrade`` in
+        ITEM_CATALOG. Each carries a ``phone_upgrade`` block (the SINGLE source
+        of truth for its phone-record effect) consumed by
+        :mod:`engine.world.phone_os` and the ``install_phone_upgrade`` skill.
+        Added :func:`get_phone_upgrades` / :func:`get_phone_upgrade` helpers and
+        an ``is_phone_upgrade`` flag in catalog entries.
+    v1.60.0 [2026-06-13] — Equipment bonuses & generalized consumable effects.
+        Added InventoryManager.get_equipment_bonuses(),
+        InventoryManager.use_consumable(), and InventoryManager.is_consumable()
+        delegating to engine.world.equipment_effects. Closes the v1.59 audit
+        gap (equipped gear gave +0 bonus; consumables hardcoded for 9 items).
 """
 from __future__ import annotations
 
@@ -98,7 +120,117 @@ ITEM_CATALOG: Dict[str, Dict[str, Any]] = {
     "encrypted_file":    {"name": "Encrypted File",     "category": "data",      "rarity": "uncommon",  "slot": None,          "desc": "Contents unknown.",                 "price": 500,   "sell_price": 250},
     "corp_keycard":      {"name": "Corp Keycard",       "category": "key",       "rarity": "uncommon",  "slot": None,          "desc": "Access to OmniCorp service elevators","price": 700,   "sell_price": 350},
     "ghost_net_token":   {"name": "Ghost Net Token",    "category": "data",      "rarity": "rare",      "slot": None,          "desc": "Darknet access credential",         "price": 1200,  "sell_price": 600},
+
+    # ── Phone-OS upgrades (v1.62.0 [2026-06-15] — PH-T2) ──────────────────────
+    # Buyable software/hardware that installs onto the player's phone record via
+    # the `install_phone_upgrade` skill. The ``phone_upgrade`` block is the
+    # SINGLE source of truth for each item's phone-record effect — both
+    # engine.world.phone_os (derived-stat bonuses) and the install skill read it
+    # from here. ``is_phone_upgrade`` lets skills/vendors filter the catalog.
+    #   effects keys:
+    #     security / firewall / hack_power / app_slots  → integer stat deltas
+    #         (security/firewall/hack_power/app_slots are summed by phone_os from
+    #          the installed-app id; app_slots adds capacity).
+    #     add_app   → an app id added to installed_apps (enables a phone app)
+    #     os_version → sets the phone os_version string (kernel upgrades)
+    #   skill_check (optional): {"skill": <name>, "level": <int>} — a self-mod
+    #     variant the player can install for free by passing a skill check
+    #     instead of owning/paying for the item.
+    "phone_encryption_patch": {
+        "name": "Encryption Patch", "category": "software", "rarity": "common", "slot": None,
+        "desc": "+2 phone security", "price": 300, "sell_price": 120,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {"effects": {"security": 2}},
+    },
+    "phone_firewall_v1": {
+        "name": "Firewall v1", "category": "software", "rarity": "common", "slot": None,
+        "desc": "+2 phone firewall", "price": 350, "sell_price": 140,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {"effects": {"firewall": 2}},
+    },
+    "phone_firewall_v2": {
+        "name": "Firewall v2", "category": "software", "rarity": "uncommon", "slot": None,
+        "desc": "+4 firewall, +1 security", "price": 900, "sell_price": 360,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {"effects": {"firewall": 4, "security": 1}},
+    },
+    "phone_comms_tap": {
+        "name": "Comms Tap", "category": "software", "rarity": "uncommon", "slot": None,
+        "desc": "Enables the Intercept app; +1 hack power", "price": 1200, "sell_price": 480,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {"effects": {"hack_power": 1}, "add_app": "intercept"},
+    },
+    "phone_ice_v1": {
+        "name": "ICE v1 (offensive)", "category": "software", "rarity": "uncommon", "slot": None,
+        "desc": "+2 hack power", "price": 1000, "sell_price": 400,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {"effects": {"hack_power": 2}},
+        # Self-mod path: a skilled netrunner can roll their own ICE for free.
+        "skill_check": {"skill": "hacking", "level": 4},
+    },
+    "phone_app_pack_secure": {
+        "name": "Secure Apps Pack", "category": "software", "rarity": "common", "slot": None,
+        "desc": "Adds the Vault app; +1 security", "price": 450, "sell_price": 180,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {"effects": {"security": 1}, "add_app": "vault"},
+    },
+    "phone_modem_v2": {
+        "name": "Modem v2", "category": "tool", "rarity": "uncommon", "slot": None,
+        "desc": "+3 hack power (hardware)", "price": 1600, "sell_price": 640,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {"effects": {"hack_power": 3}},
+    },
+    "phone_cpu_v2": {
+        "name": "CPU v2", "category": "tool", "rarity": "uncommon", "slot": None,
+        "desc": "+3 app slots (hardware)", "price": 1400, "sell_price": 560,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {"effects": {"app_slots": 3}},
+    },
+    "phone_os_kernel_v2": {
+        "name": "OS Kernel v2", "category": "tool", "rarity": "rare", "slot": None,
+        "desc": "NeonOS 2.0 — +1 security, +1 firewall, +1 app slot", "price": 2500, "sell_price": 1000,
+        "is_phone_upgrade": True,
+        "phone_upgrade": {
+            "effects": {"security": 1, "firewall": 1, "app_slots": 1},
+            "os_version": "NeonOS 2.0",
+        },
+    },
 }
+
+
+# ──── Phone-OS upgrade helpers (v1.62.0 [2026-06-15] — PH-T2) ──────────────────
+# SINGLE source of truth: phone-upgrade effects live in ITEM_CATALOG entries
+# flagged ``is_phone_upgrade``. These helpers expose them so phone_os and the
+# install skill never re-declare the numbers.
+
+
+def get_phone_upgrades() -> Dict[str, Dict[str, Any]]:
+    """Return every phone-OS upgrade item keyed by item id.
+
+    Returns:
+        Mapping of ``item_id`` → catalog metadata dict, restricted to entries
+        flagged ``is_phone_upgrade``.
+    """
+    return {
+        iid: meta
+        for iid, meta in ITEM_CATALOG.items()
+        if meta.get("is_phone_upgrade")
+    }
+
+
+def get_phone_upgrade(item_id: str) -> Optional[Dict[str, Any]]:
+    """Return the catalog metadata for a single phone upgrade, or ``None``.
+
+    Args:
+        item_id: The catalog item id to look up.
+
+    Returns:
+        The catalog metadata dict if *item_id* is a phone upgrade, else ``None``.
+    """
+    meta = ITEM_CATALOG.get(item_id)
+    if meta and meta.get("is_phone_upgrade"):
+        return meta
+    return None
 
 
 # ──── Data structures ───────────────────────────────────────────────────────────
@@ -348,6 +480,72 @@ class InventoryManager:
         """Return number of unique item types in inventory."""
         with self._item_lock:
             return len(self._items)
+
+    # ── Equipment bonuses & consumables (v1.60.0) ──────────────────────────────
+    # CONNECTS: engine.world.equipment_effects, engine.world.player_state
+    # CALLED BY: scenes / skill-checks (e.g. neoncity api_inventory_use)
+    # Delegated to equipment_effects to keep the bonus/effect tables in one
+    # place while giving callers a single ergonomic entry point on the inventory.
+
+    def get_equipment_bonuses(self) -> Dict[str, int]:
+        """Aggregate skill/stat bonuses from every currently-equipped item.
+
+        Returns:
+            Dict of skill/stat key → integer delta (every known key present,
+            zeros included). E.g. an equipped Reflex Booster yields
+            ``{"combat": 2, ...}``. See
+            :func:`engine.world.equipment_effects.get_equipment_bonuses`.
+        """
+        # v1.60.0 [2026-06-13] — Equipped gear → mechanical bonuses
+        from engine.world.equipment_effects import get_equipment_bonuses
+
+        return get_equipment_bonuses(self)
+
+    def is_consumable(self, item_id: str) -> bool:
+        """Return True if *item_id* can be consumed (explicit or by category)."""
+        # v1.60.0 [2026-06-13] — Category-driven consumable detection
+        from engine.world.equipment_effects import is_consumable
+
+        return is_consumable(item_id)
+
+    def use_consumable(
+        self,
+        item_id: str,
+        player_state: Any,
+        consume_stack: bool = True,
+    ) -> Dict[str, Any]:
+        """Apply *item_id*'s consumable effect to *player_state* and consume it.
+
+        Works for ANY drug/stim/medkit/food item (category-driven) — not just a
+        hardcoded list. Removes one unit from the stack when *consume_stack*.
+
+        Args:
+            item_id: Inventory item identifier (must be owned).
+            player_state: PlayerState-like object to mutate.
+            consume_stack: If True, decrement the stack by one on success.
+
+        Returns:
+            Result dict from
+            :func:`engine.world.equipment_effects.apply_consumable`, plus an
+            ``error`` key when the item is not owned.
+        """
+        # v1.60.0 [2026-06-13] — Generalized consumable use loop
+        from engine.world.equipment_effects import apply_consumable
+
+        if not self.has_item(item_id):
+            return {
+                "success": False,
+                "error": f"Not in inventory: {item_id}",
+                "message": f"You don't have {item_id}.",
+                "changes": {},
+                "consumed": False,
+            }
+        return apply_consumable(
+            item_id,
+            player_state,
+            inventory=self,
+            consume_stack=consume_stack,
+        )
 
     # ── Serialization ─────────────────────────────────────────────────────────
 

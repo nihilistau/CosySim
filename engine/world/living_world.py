@@ -285,6 +285,15 @@ class LivingWorld:
         except Exception as exc:
             logger.warning("LivingWorld: faction AI init failed: %s", exc)
 
+        # v1.60.0 [2026-06-13] — Activate the world-event → market shock loop.
+        # Idempotent + EventBus-gated; without this, world events never reach
+        # Market.apply_event (the v1.60 economy-depth upgrade).
+        try:
+            _get_market().subscribe_to_world_events()
+            logger.info("[living_world] market subscribed to world events (operation=init)")
+        except Exception as exc:
+            logger.warning("[living_world] market event subscription failed (operation=init): %s", exc)
+
         self._initialized = True
 
     def _run_loop(self) -> None:
@@ -338,6 +347,15 @@ class LivingWorld:
         if self._tick_count % 5 == 0:
             try:
                 ai = _get_faction_ai()
+                # v1.60.0 [2026-06-13] — feed live player standing + district so
+                # allies expand / rivals raid near the player (faction_ai upgrade).
+                try:
+                    from engine.world.player_state import get_player_state
+                    ps = get_player_state()
+                    district = getattr(ps, "active_location", "") or ""
+                    ai.set_player_context(standings=None, district=district)
+                except Exception:
+                    logger.debug("Suppressed exception", exc_info=True)
                 ai_result = ai.tick()
                 result.faction_decisions = len(ai_result.get("decisions", []))
                 result.wars_active = len(ai.get_active_wars())

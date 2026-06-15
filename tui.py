@@ -12,8 +12,10 @@ Usage:
     python tui.py --no-autostart    # open TUI without auto-launching
 
 Keyboard shortcuts:
-    Space / Enter  — launch selected target
-    S              — stop selected target  (kills thread; port goes down)
+    ↑ / ↓          — navigate target list (or services table when focused)
+    ← / →          — move focus: target list ⇄ center panel
+    Space / Enter  — launch selected target (works in list AND services table)
+    S              — stop selected target  (terminates subprocess; port goes down)
     A              — launch all auto-start targets
     O              — open selected in browser
     C              — open Nexus Canvas in browser
@@ -23,10 +25,17 @@ Keyboard shortcuts:
     L              — show log panel
     Q / Ctrl+C     — quit (stops launched subprocesses)
 
-Version: v1.52.0 [2026-03-25]
+Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.58.0 [2026-06-11] — Arrow-key navigation overhaul: ←/→ panel focus,
+                            focus-aware ↑/↓, Enter/Space launch from services
+                            table, clickable+focusable TargetRows. Launch path
+                            switched from in-process daemon threads to
+                            launcher.py subprocesses (isolated, stoppable —
+                            fixes GridScene/LabBreakScene host= crash and makes
+                            S work for every target type).
     v1.52.0 [2026-03-25] — Version stamp sync with audit remediation
     v1.49.1 [2026-03-22] — Version stamp sync, HAR_REAL_ROOT via env var
     v1.42.1 [2026-03-21] — External type handler in _start_one, priority-sorted
@@ -36,7 +45,6 @@ Change Log:
 """
 from __future__ import annotations
 
-import importlib
 import json as _json_mod
 import os
 import socket
@@ -57,7 +65,11 @@ for _s in (sys.stdout, sys.stderr):
     except (AttributeError, OSError):
         pass
 
-from launcher import SERVICES, SCENES, ALL_TARGETS, VERSION, _port_up  # noqa: E402
+# v1.58.0 [2026-06-11] — PYTHON + _kill_port imported so TUI launches use the
+# same venv interpreter + zombie-port cleanup as the CLI launcher.
+from launcher import (  # noqa: E402
+    SERVICES, SCENES, ALL_TARGETS, VERSION, PYTHON, _kill_port, _port_up,
+)
 from engine.control_plane_registry import PILLAR_IDS  # noqa: E402
 from engine.port_registry import TUI_EXTERNAL_TARGETS, build_target_listing  # noqa: E402
 
@@ -150,6 +162,13 @@ TargetRow:hover {
     background: #0f1724;
 }
 
+/* v1.58.0 [2026-06-11] — Focused row gets a visible neon edge so keyboard
+   users can see where ←/↑/↓ focus currently sits. */
+TargetRow:focus {
+    background: #102036;
+    border-left: thick #06b6d4;
+}
+
 TargetRow.-selected {
     background: #0c1a2e;
     color: #06b6d4;
@@ -238,7 +257,13 @@ DataTable > .datatable--cursor {
 # ──── Target Row Widget ───────────────────────────────────────────────────
 
 class TargetRow(Static):
-    """One row per scene/service in the left panel."""
+    """One row per scene/service in the left panel.
+
+    v1.58.0 [2026-06-11] — Rows are now focusable + clickable so arrow keys
+    and the mouse both drive selection (CONNECTS: CosySimTUI._select).
+    """
+
+    can_focus = True  # v1.58.0 — keyboard focus lands directly on rows
 
     COMPONENT_CLASSES: ClassVar[set[str]] = {
         "selected", "running", "stopped", "autostart",
@@ -251,6 +276,15 @@ class TargetRow(Static):
         self.group = group
         self._is_up = False
         self._selected = False
+
+    # v1.58.0 [2026-06-11] — Mouse + focus drive app-level selection
+    # CALLED BY: Textual event dispatch · CONNECTS: CosySimTUI._select_row
+    def on_click(self) -> None:
+        self.app._select_row(self)  # type: ignore[attr-defined]
+        self.focus()
+
+    def on_focus(self) -> None:
+        self.app._select_row(self)  # type: ignore[attr-defined]
 
     def render_row(self) -> str:
         # v1.52.0 — Enhanced status indicators with color hints
@@ -306,8 +340,12 @@ class CosySimTUI(App[None]):
         Binding("v",       "launch_services",   "Services",     show=False, priority=True),
         Binding("k",       "launch_creation",   "Creation",     show=False, priority=True),
         Binding("i",       "import_har",        "Import HAR",   show=False, priority=True),
+        # v1.58.0 [2026-06-11] — Arrow-key panel navigation: ↑/↓ are focus-aware
+        # (target list vs services table) and ←/→ hop between panels.
         Binding("up",      "cursor_up",         "Up",           show=False, priority=True),
         Binding("down",    "cursor_down",       "Down",         show=False, priority=True),
+        Binding("left",    "focus_targets",     "Targets",      show=False, priority=True),
+        Binding("right",   "focus_center",      "Panel",        show=False, priority=True),
         Binding("q",       "quit",              "Quit",         show=True,  priority=True),
     ]
 
@@ -318,7 +356,7 @@ class CosySimTUI(App[None]):
         self._autostart = autostart
         self._pillar_filter = pillar_filter  # v1.50.0 — optional pillar filter
         self._rows: List[TargetRow] = []
-        self._launched_threads: Dict[str, threading.Thread] = {}
+        # v1.58.0 [2026-06-11] — All launches are subprocesses now (no threads)
         self._launched_procs: Dict[str, subprocess.Popen] = {}
         self._refresh_timer: Optional[Timer] = None
         self._log_lines: List[str] = []
@@ -537,7 +575,8 @@ class CosySimTUI(App[None]):
             f"[dim]{scenes} scenes · {svcs} services · {total} targets[/]"
         )
         self._log(
-            "[dim]Keys:[/] [bold]↑↓[/]=nav  [bold]Space[/]=launch  "
+            "[dim]Keys:[/] [bold]↑↓[/]=nav  [bold]←→[/]=panel  "
+            "[bold]Space/Enter[/]=launch  "
             "[bold]A[/]=autostart  [bold]S[/]=stop  [bold]O[/]=open  "
             "[bold]C[/]=canvas  [bold]H[/]=health  [bold]R[/]=refresh  "
             "[bold]I[/]=HAR  [bold]Q[/]=quit"
@@ -729,11 +768,65 @@ class CosySimTUI(App[None]):
             f" [dim]http://localhost:{info['port']}[/]"
         )
 
+    # v1.58.0 [2026-06-11] — Focus-aware arrow navigation
+    # CONNECTS: TargetRow, DataTable(#svc-table) · CALLED BY: ↑/↓/←/→ bindings
+
+    def _select_row(self, row: TargetRow) -> None:
+        """Select a row object directly (mouse click / focus event)."""
+        try:
+            self._select(self._rows.index(row))
+        except ValueError:
+            pass
+
+    def _focused_svc_table(self) -> Optional[DataTable]:
+        """Return the services DataTable iff it currently has focus."""
+        focused = self.focused
+        if isinstance(focused, DataTable) and focused.id == "svc-table":
+            return focused
+        return None
+
     def action_cursor_up(self) -> None:
+        table = self._focused_svc_table()
+        if table is not None:
+            table.action_cursor_up()
+            return
         self._select(self.selected_index - 1)
+        self._focus_selected_row()
 
     def action_cursor_down(self) -> None:
+        table = self._focused_svc_table()
+        if table is not None:
+            table.action_cursor_down()
+            return
         self._select(self.selected_index + 1)
+        self._focus_selected_row()
+
+    def _focus_selected_row(self) -> None:
+        """Keep keyboard focus glued to the selected TargetRow (if any)."""
+        if self._rows:
+            try:
+                self._rows[self.selected_index].focus()
+            except Exception:
+                pass  # row may not be mounted yet during startup
+
+    def action_focus_targets(self) -> None:
+        """← — move focus back to the left target list at the current selection."""
+        self._focus_selected_row()
+
+    def action_focus_center(self) -> None:
+        """→ — move focus to the center panel (active tab's content)."""
+        try:
+            tc = self.query_one(TabbedContent)
+        except NoMatches:
+            return
+        # Focus the services table when its tab is active, else the tab content
+        if tc.active == "tab-services":
+            try:
+                self.query_one("#svc-table", DataTable).focus()
+                return
+            except NoMatches:
+                pass
+        tc.focus()
 
     def action_show_log(self) -> None:
         """Switch the center panel to the Log tab."""
@@ -779,11 +872,29 @@ class CosySimTUI(App[None]):
 
     # ── Launch / Stop ─────────────────────────────────────────────────────
 
-    def action_launch_selected(self) -> None:
+    # v1.58.0 [2026-06-11] — Resolve the launch/stop target from whichever
+    # panel has focus: services DataTable cursor row, else the selected row.
+    def _current_target(self) -> Optional[tuple[str, Dict[str, Any]]]:
+        table = self._focused_svc_table()
+        if table is not None and table.row_count:
+            try:
+                name = str(table.get_row_at(table.cursor_row)[0])
+                info = ALL_TARGETS.get(name)
+                if info:
+                    return name, info
+            except Exception:
+                pass  # fall through to list selection
         if not self._rows:
-            return
+            return None
         row = self._rows[self.selected_index]
-        self._launch_target(row.target_name, row.info)
+        return row.target_name, row.info
+
+    def action_launch_selected(self) -> None:
+        target = self._current_target()
+        if target is None:
+            return
+        name, info = target
+        self._launch_target(name, info)
 
     def action_launch_autostart(self) -> None:
         """Trigger auto-start in a background thread (never blocks the event loop)."""
@@ -904,70 +1015,30 @@ class CosySimTUI(App[None]):
         self.call_from_thread(self._refresh_all_status)
 
     def _start_one(self, name: str, info: Dict[str, Any]) -> None:
-        """Start a single target (called from background thread)."""
-        t = info["type"]
-        if t == "flask":
-            mod, cls_name = info["cls"].rsplit(".", 1)
-            scene_cls = getattr(importlib.import_module(mod), cls_name)
-            instance = scene_cls(host=info.get("host", "0.0.0.0"))
-            _log_path = str(PROJECT_ROOT / "tui_autostart.log")
+        """Start a single target as an isolated subprocess.
 
-            def _flask_target() -> None:
-                # Textual owns the real stdout/stderr; redirect this thread's
-                # stdio to a per-service log so Werkzeug startup output doesn't
-                # crash with Bad file descriptor.
-                import sys as _sys, os as _os
-                _svc_log = open(PROJECT_ROOT / "logs" / f"{name}.log", "a", buffering=1)
-                _sys.stdout = _svc_log
-                _sys.stderr = _svc_log
-                try:
-                    instance.start()
-                except Exception as _exc:
-                    import traceback as _tb2
-                    with open(_log_path, "a", buffering=1) as _f:
-                        _f.write(f"[thread] {name} CRASHED: {_exc}\n{_tb2.format_exc()}\n")
+        v1.58.0 [2026-06-11] — All target types now delegate to
+        ``launcher.py <name>`` in a child process (mirrors launcher.py's
+        v1.51.4 subprocess isolation). This fixes the in-process thread
+        launch path that crashed on scenes whose ``__init__`` doesn't accept
+        ``host=`` (GridScene, LabBreakScene — the "lab break does not load"
+        bug), keeps 17+ Flask apps out of the TUI's address space, and makes
+        every target stoppable via ``proc.terminate()``.
 
-            thread = threading.Thread(target=_flask_target, daemon=True, name=f"cosysim-{name}")
-            thread.start()
-            self._launched_threads[name] = thread
-        elif t == "streamlit":
-            script = PROJECT_ROOT / info["script"]
-            proc = subprocess.Popen(
-                [sys.executable, "-m", "streamlit", "run", str(script),
-                 f"--server.port={info['port']}", "--server.headless=true",
-                 f"--server.address={info.get('host', '0.0.0.0')}", "--browser.gatherUsageStats=false",
-                 "--logger.level=warning"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            self._launched_procs[name] = proc
-        elif t == "fastapi":
-            import uvicorn  # type: ignore
-            mod2, fn = info["factory"].rsplit(".", 1)
-            factory = getattr(importlib.import_module(mod2), fn)
-            thread = threading.Thread(
-                target=uvicorn.run,
-                args=(factory(),),
-                kwargs={"host": info.get("host", "0.0.0.0"), "port": info["port"], "log_level": "warning"},
-                daemon=True, name=f"cosysim-{name}",
-            )
-            thread.start()
-            self._launched_threads[name] = thread
-        elif t == "node":
-            script_dir = PROJECT_ROOT / info["script"]
-            proc = subprocess.Popen(
-                "npm run dev", cwd=str(script_dir), shell=True,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            self._launched_procs[name] = proc
-        elif t == "external":  # v1.42.1 [2026-03-21] — external type handler for managed services
-            cwd = info.get("cwd", ".")
-            cmd = info.get("cmd", [])
-            if cmd and Path(cwd).is_dir():
-                proc = subprocess.Popen(
-                    cmd, cwd=cwd,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
-                self._launched_procs[name] = proc
+        CONNECTS: launcher._run_single · CALLED BY: _launch_target,
+        _autostart_worker, _pillar_worker · EMITS: data/scene_<name>.log
+        """
+        # stderr → data/scene_<name>.log (same convention as launcher.py),
+        # line-buffered so crashes are visible immediately.
+        log_path = PROJECT_ROOT / "data" / f"scene_{name}.log"
+        log_file = open(log_path, "w", encoding="utf-8", buffering=1)
+        proc = subprocess.Popen(
+            [PYTHON, str(PROJECT_ROOT / "launcher.py"), name],
+            stdout=subprocess.DEVNULL,
+            stderr=log_file,
+            cwd=str(PROJECT_ROOT),
+        )
+        self._launched_procs[name] = proc
 
     def _log_ts(self, msg: str) -> None:
         """Thread-safe log helper (can be called from any thread)."""
@@ -1004,25 +1075,32 @@ class CosySimTUI(App[None]):
         self.call_from_thread(self._refresh_all_status)
 
     def action_stop_selected(self) -> None:
-        if not self._rows:
+        # v1.58.0 [2026-06-11] — Stop works for every target now: terminate our
+        # tracked subprocess, else kill whatever owns the port (externally
+        # launched). Safe because scenes no longer live inside the TUI process.
+        target = self._current_target()
+        if target is None:
             return
-        row = self._rows[self.selected_index]
-        name = row.target_name
-        info = row.info
+        name, info = target
 
         stopped = False
-        if name in self._launched_procs:
+        proc = self._launched_procs.pop(name, None)
+        if proc is not None:
             try:
-                self._launched_procs[name].terminate()
-                del self._launched_procs[name]
+                proc.terminate()
                 stopped = True
-            except Exception:
-                pass
+            except Exception as exc:
+                self._log(f"[red]✗[/] terminate {info['label']}: {exc}")
+
+        if not stopped and _port_up(info["port"]):
+            self._log(f"[yellow]…[/] {info['label']} not launched by TUI — killing port :{info['port']}")
+            _kill_port(info["port"])
+            stopped = True
 
         if stopped:
             self._log(f"[red]◼[/] Stopped [bold]{info['label']}[/]")
         else:
-            self._log(f"[yellow]⚠[/] Cannot stop [bold]{info['label']}[/] — not a subprocess target")
+            self._log(f"[yellow]⚠[/] [bold]{info['label']}[/] is not running")
 
         self._refresh_all_status()
 
@@ -1051,6 +1129,18 @@ class CosySimTUI(App[None]):
 
     def key_space(self) -> None:
         self.action_launch_selected()
+
+    # v1.58.0 [2026-06-11] — Enter on a services-table row launches that target
+    # CALLED BY: Textual DataTable RowSelected event
+    @on(DataTable.RowSelected, "#svc-table")
+    def _on_svc_row_selected(self, event: DataTable.RowSelected) -> None:
+        try:
+            name = str(event.data_table.get_row(event.row_key)[0])
+        except Exception:
+            return
+        info = ALL_TARGETS.get(name)
+        if info:
+            self._launch_target(name, info)
 
     # ── Browser ───────────────────────────────────────────────────────────
 
@@ -1197,9 +1287,10 @@ class CosySimTUI(App[None]):
                 proc.terminate()
             except Exception:
                 pass
-        # Force exit — daemon threads (Flask/SocketIO servers) won't release
-        import os
-        os._exit(0)
+        # v1.58.0 [2026-06-11] — os._exit(0) moved to main(): force-exiting
+        # inside on_unmount killed any process embedding the app (pytest /
+        # Pilot run_test died mid-teardown). main() still guarantees exit for
+        # CLI usage after app.run() returns.
 
 
 # ──── Entry Point ─────────────────────────────────────────────────────────
@@ -1232,6 +1323,11 @@ def main(pillar: str | None = None) -> None:
 
     app = CosySimTUI(autostart=args.autostart, pillar_filter=args.pillar)
     app.run()
+    # v1.58.0 [2026-06-11] — Force exit AFTER the app loop ends so lingering
+    # world-daemon threads can't keep the terminal hostage (was in on_unmount,
+    # which also killed pytest's Pilot harness).
+    import os
+    os._exit(0)
 
 
 if __name__ == "__main__":

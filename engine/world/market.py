@@ -4,6 +4,24 @@ Models supply-and-demand economics across NeonCity's districts.  Each
 district hosts shops with dynamically priced goods; prices shift in
 response to territory control, world events, and player activity.
 
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.60.0 [2026-06-13] — "Living Systems" economy depth. Closed the
+        world-event → market feedback loop: ``apply_event`` is now reachable
+        from the EventBus via the new public :meth:`Market.subscribe_to_world_events`
+        (world events drive supply/demand shocks — war→weapons up, festival→
+        luxury up, shortage→category surge). Added public
+        :meth:`Market.refresh_territory_multipliers` which pulls the live
+        territory-control map and feeds it through ``update_territory_multipliers``
+        so faction control flows into specialty-good pricing. World-event
+        vocabulary (gang_war/corp_raid/hacker_event/…) is mapped onto the
+        canonical ``apply_event`` types, and shock magnitudes are configurable
+        (``economy.event_shocks.*``). Existing v1.59 _settle_buy/_settle_sell
+        logic is preserved untouched.
+    v1.59.0 [2026-06-13] — Buy/sell settlement against wallet + inventory + heat.
+
 Goods are divided into 6 categories:
 
 * **weapons** — firearms, melee, explosives
@@ -274,6 +292,45 @@ FACTION_SPECIALTIES: Dict[str, List[str]] = {
     "DeepState": ["intel", "contraband"],
 }
 
+# ──── World-event → market-event vocabulary mapping (v1.60.0) ────
+#
+# The world simulator (engine.world.world_sim / neon_city_events) publishes
+# rich world events on the EventBus whose ``event_type`` strings use a *scene*
+# vocabulary (gang_war, corp_raid, hacker_event, …). The market's
+# :meth:`Market.apply_event` understands a *canonical* economic vocabulary
+# (war, crackdown, festival, hack, shortage, surplus, crash). This table
+# translates the former into the latter so a single world event ripples into
+# the right supply/demand shock. Unmapped event types are simply ignored.
+#
+# CONNECTS: world_sim._fire_world_event payloads, neon_city_events templates
+# CALLED BY: Market._on_world_event
+WORLD_EVENT_MARKET_MAP: Dict[str, str] = {
+    # Conflict → weapons/consumables demand spike
+    "gang_war": "war",
+    "war": "war",
+    "faction_expansion": "war",
+    "fight_night": "war",
+    # Law-enforcement pressure → contraband/weapon supply choke
+    "corp_raid": "crackdown",
+    "corp_tax": "crackdown",
+    "crackdown": "crackdown",
+    # Celebration / commerce → luxury & consumables demand
+    "festival": "festival",
+    "underground_auction": "festival",
+    "corp_event": "festival",
+    # Cyber events → tech & intel demand
+    "hacker_event": "hack",
+    "hack": "hack",
+    # Market booms → broad supply surplus (prices ease)
+    "market_surge": "surplus",
+    "surplus": "surplus",
+    # Market busts / infrastructure failure → demand collapse / shortage
+    "market_crash": "crash",
+    "crash": "crash",
+    "blackout": "shortage",
+    "shortage": "shortage",
+}
+
 
 # ──── Market Engine ────
 
@@ -296,6 +353,8 @@ class Market:
         self._history: List[TradeRecord] = []
         self._tick_count: int = 0
         self._territory_multipliers: Dict[str, Dict[str, float]] = {}
+        # v1.60.0 [2026-06-13] — EventBus subscription ids for world-event wiring
+        self._event_sub_ids: List[str] = []
         self._load_or_seed()
         logger.info("Market initialized with %d goods, %d shops",
                      len(self._goods), len(self._shops))
@@ -489,6 +548,14 @@ class Market:
             unit_price = max(1, int(good.current_price * shop.price_modifier * terr_mult))
             total = unit_price * quantity
 
+            # v1.59.0 [2026-06-13] — Settle the purchase against the player's
+            # wallet + inventory + heat BEFORE mutating supply/demand, so an
+            # unaffordable buy leaves the market untouched. Closes the
+            # inventory↔market↔heat loop (was: returned a cost but moved nothing).
+            settlement = self._settle_buy(good, good_id, quantity, total)
+            if settlement is not None and settlement.get("status") == "error":
+                return settlement
+
             # Demand increases on purchase
             good.demand = min(100.0, good.demand + quantity * 0.5)
             good.supply = max(0.0, good.supply - quantity * 0.3)
@@ -513,7 +580,7 @@ class Market:
             "total": total, "district": district,
         })
 
-        return {
+        result = {
             "status": "ok",
             "action": "buy",
             "good_id": good_id,
@@ -525,6 +592,9 @@ class Market:
             "district": district,
             "illegal": good.illegal,
         }
+        if settlement:
+            result.update(settlement)
+        return result
 
     def sell(
         self,
@@ -562,6 +632,12 @@ class Market:
             unit_price = max(1, int(good.current_price * shop.price_modifier * terr_mult * sell_rate))
             total = unit_price * quantity
 
+            # v1.59.0 [2026-06-13] — Verify possession + credit the wallet
+            # before mutating the market (can't sell what you don't hold).
+            settlement = self._settle_sell(good_id, quantity, total)
+            if settlement is not None and settlement.get("status") == "error":
+                return settlement
+
             good.supply = min(100.0, good.supply + quantity * 0.3)
             good.demand = max(0.0, good.demand - quantity * 0.2)
 
@@ -585,7 +661,7 @@ class Market:
             "total": total, "district": district,
         })
 
-        return {
+        result = {
             "status": "ok",
             "action": "sell",
             "good_id": good_id,
@@ -595,6 +671,86 @@ class Market:
             "total": total,
             "district": district,
         }
+        if settlement:
+            result.update(settlement)
+        return result
+
+    # ──── Settlement (v1.59.0) ──────────────────────────────────────────────
+    # CONNECTS: PlayerState (credits/heat), InventoryManager
+    # CALLED BY: buy(), sell()
+
+    @staticmethod
+    def _economy_cfg() -> Dict[str, Any]:
+        """Read economy settlement config (cached-free; cheap dict access)."""
+        try:
+            from engine.config import get_config
+            cfg = get_config()
+            return {
+                "settle": bool(cfg.get("economy.settle", True)),
+                "heat_per_unit": int(cfg.get("economy.contraband_heat_per_unit", 4)),
+                "sell_to_inventory": bool(cfg.get("economy.sell_to_inventory", True)),
+            }
+        except Exception:
+            return {"settle": True, "heat_per_unit": 4, "sell_to_inventory": True}
+
+    def _settle_buy(self, good: Any, good_id: str, quantity: int,
+                    total: int) -> Optional[Dict[str, Any]]:
+        """Deduct credits, add to inventory, raise heat on contraband.
+
+        Returns a dict merged into the buy() result (balance/heat), an error
+        dict if unaffordable, or None if settlement is disabled.
+        """
+        cfg = self._economy_cfg()
+        if not cfg["settle"]:
+            return None
+        try:
+            from engine.world.player_state import get_player_state
+            from engine.world.inventory import get_inventory
+            ps = get_player_state()
+            new_balance = ps.spend_credits(total, reason=f"market_buy:{good_id}")
+            if new_balance is None:
+                return {"status": "error", "reason": "insufficient_credits",
+                        "needed": total, "balance": ps.credits}
+            try:
+                get_inventory().add_item(good_id, quantity)
+            except Exception as exc:
+                logger.debug("[market] inventory add failed (operation=buy_settle): %s", exc)
+            out = {"balance": new_balance}
+            if getattr(good, "illegal", False) and cfg["heat_per_unit"] > 0:
+                out["heat"] = ps.add_heat(cfg["heat_per_unit"] * quantity,
+                                          reason=f"contraband:{good_id}")
+            return out
+        except Exception as exc:
+            logger.warning("[market] buy settlement failed (operation=buy_settle, good=%s): %s",
+                           good_id, exc)
+            return None
+
+    def _settle_sell(self, good_id: str, quantity: int,
+                     total: int) -> Optional[Dict[str, Any]]:
+        """Verify possession, remove from inventory, credit the wallet.
+
+        Returns a dict merged into sell() result, an error if not held, or
+        None if settlement disabled.
+        """
+        cfg = self._economy_cfg()
+        if not cfg["settle"]:
+            return None
+        try:
+            from engine.world.player_state import get_player_state
+            from engine.world.inventory import get_inventory
+            ps = get_player_state()
+            if cfg["sell_to_inventory"]:
+                inv = get_inventory()
+                if not inv.has_item(good_id, quantity):
+                    return {"status": "error", "reason": "not_in_inventory",
+                            "good_id": good_id, "needed": quantity}
+                inv.remove_item(good_id, quantity)
+            new_balance = ps.earn_credits(total, reason=f"market_sell:{good_id}")
+            return {"balance": new_balance}
+        except Exception as exc:
+            logger.warning("[market] sell settlement failed (operation=sell_settle, good=%s): %s",
+                           good_id, exc)
+            return None
 
     # ──── Simulation ────
 
@@ -651,7 +807,7 @@ class Market:
             "notable_changes": [c for c in changes if abs(c["change_pct"]) > 5.0],
         }
 
-    def apply_event(self, event_type: str, magnitude: float = 1.0) -> None:
+    def apply_event(self, event_type: str, magnitude: float = 1.0) -> Dict[str, Any]:
         """Apply a world event's effect on supply/demand.
 
         Predefined event types cause shifts in specific categories:
@@ -663,10 +819,25 @@ class Market:
         - ``surplus`` → random category supply up
         - ``crash`` → all demand down
 
+        The configured global shock scale (``economy.event_shocks.scale``,
+        default 1.0) multiplies *magnitude* so operators can tune how violently
+        world events move prices without touching code.
+
         Args:
-            event_type: The kind of event.
+            event_type: The kind of event (canonical vocabulary). Scene-level
+                event types (``gang_war`` etc.) are normalised first.
             magnitude: Multiplier on effect size (default 1.0).
+
+        Returns:
+            Summary dict ``{"status", "event_type", "applied", "categories",
+            "magnitude"}`` describing what was applied (``applied=False`` when
+            the event type is unknown).
         """
+        # v1.60.0 [2026-06-13] — normalise scene-vocabulary event types and
+        # apply the configurable global shock scale.
+        canonical = WORLD_EVENT_MARKET_MAP.get(event_type, event_type)
+        scale = self._event_shock_scale()
+        magnitude = magnitude * scale
         effects: Dict[str, List[Tuple[str, str, float]]] = {
             "war": [
                 ("weapons", "demand", 15),
@@ -705,10 +876,14 @@ class Market:
             ],
         }
 
-        event_effects = effects.get(event_type)
+        event_effects = effects.get(canonical)
         if not event_effects:
-            return
+            logger.debug("[market] Unknown world event ignored (operation=apply_event, event=%s)",
+                         event_type)
+            return {"status": "ignored", "event_type": event_type,
+                    "applied": False, "categories": [], "magnitude": magnitude}
 
+        touched: List[str] = []
         with self._lock:
             for cat, attr, delta in event_effects:
                 scaled = delta * magnitude
@@ -718,7 +893,20 @@ class Market:
                             g.supply = max(0.0, min(100.0, g.supply + scaled))
                         else:
                             g.demand = max(0.0, min(100.0, g.demand + scaled))
+                if cat not in touched:
+                    touched.append(cat)
             self._save()
+
+        logger.info("[market] World event applied (operation=apply_event, event=%s→%s, mag=%.2f): %d categories",
+                    event_type, canonical, magnitude, len(touched))
+        self._emit("market_event_applied", {
+            "event_type": event_type,
+            "canonical": canonical,
+            "magnitude": round(magnitude, 3),
+            "categories": touched,
+        })
+        return {"status": "ok", "event_type": canonical, "applied": True,
+                "categories": touched, "magnitude": magnitude}
 
     def update_territory_multipliers(
         self, district_control: Dict[str, Dict[str, float]]
@@ -757,6 +945,180 @@ class Market:
         mults = self._territory_multipliers.get(district, {})
         return mults.get(category, 1.0)
 
+    def refresh_territory_multipliers(
+        self, district_control: Optional[Dict[str, Dict[str, float]]] = None
+    ) -> Dict[str, Dict[str, float]]:
+        """Pull the live territory-control map and feed it into pricing.
+
+        This is the public, callable entry point that closes the
+        *faction-control → specialty-good pricing* loop. When *district_control*
+        is omitted it is fetched from the live
+        :class:`~engine.world.territory.TerritoryManager`
+        (``get_all_control()``). The result is passed through
+        :meth:`update_territory_multipliers`, so the dominant faction in each
+        district makes its specialty goods cheaper and rival specialties
+        dearer.
+
+        Safe to call from any scene/tick loop; failures to reach the territory
+        manager are logged and leave existing multipliers untouched.
+
+        Args:
+            district_control: Optional explicit ``{district: {faction: pct}}``
+                map. Omit to fetch the live map automatically.
+
+        Returns:
+            The active per-district multiplier table after the refresh.
+
+        CONNECTS: engine.world.territory.TerritoryManager
+        CALLED BY: scenes / world tick loops / faction-shift events
+        """
+        if district_control is None:
+            try:
+                from engine.world.territory import get_territory_manager
+                district_control = get_territory_manager().get_all_control()
+            except Exception as exc:
+                logger.warning(
+                    "[market] Territory fetch failed (operation=refresh_territory): %s", exc
+                )
+                with self._lock:
+                    return {d: dict(m) for d, m in self._territory_multipliers.items()}
+
+        self.update_territory_multipliers(district_control)
+        with self._lock:
+            active = {d: dict(m) for d, m in self._territory_multipliers.items()}
+        logger.info(
+            "[market] Territory multipliers refreshed (operation=refresh_territory): %d districts",
+            len(active),
+        )
+        return active
+
+    # ──── World-event wiring (v1.60.0) ──────────────────────────────────────
+    # CONNECTS: engine.events.event_bus.EventBus, world_sim world events,
+    #           engine.world.territory.TerritoryManager
+    # CALLED BY: scenes / LivingWorld bootstrap (one-time subscription)
+    # EMITS: market_event_applied (via apply_event)
+
+    def subscribe_to_world_events(self) -> List[str]:
+        """Subscribe the market to world & economy events on the EventBus.
+
+        After this call, world events published by the simulator drive real
+        supply/demand shocks through :meth:`apply_event`, and faction-shift
+        events trigger a territory-pricing refresh. This is the public method
+        scenes/the world bootstrap call to *activate* the economy feedback
+        loop (the audit gap: ``apply_event``/``update_territory_multipliers``
+        existed but were never invoked from the event path).
+
+        Idempotent — repeated calls do not create duplicate subscriptions.
+        Does **not** edit ``world_sim.py``; it only listens on the bus.
+
+        Returns:
+            The list of active EventBus subscription ids (empty if the bus is
+            unavailable or wiring is disabled via config).
+        """
+        if not self._world_events_enabled():
+            logger.info("[market] World-event wiring disabled (operation=subscribe): config off")
+            return []
+        if self._event_sub_ids:
+            return list(self._event_sub_ids)
+        if not _HAS_BUS:
+            logger.debug("[market] EventBus unavailable; world-event wiring skipped (operation=subscribe)")
+            return []
+        try:
+            bus = _get_event_bus()
+            if not bus:
+                return []
+            # World events that carry an `event_type` we can map to a shock.
+            for et in ("world.major_event", "world.economy_tick",
+                       "neoncity.world_event", "world.event"):
+                sid = bus.subscribe(et, self._on_world_event, "market")
+                self._event_sub_ids.append(sid)
+            # Faction shifts re-derive specialty pricing from live control.
+            for et in ("neoncity.faction_shift", "world.faction_shift"):
+                sid = bus.subscribe(et, self._on_faction_shift, "market")
+                self._event_sub_ids.append(sid)
+            logger.info(
+                "[market] Subscribed to world events (operation=subscribe): %d topics",
+                len(self._event_sub_ids),
+            )
+        except Exception as exc:
+            logger.warning("[market] World-event subscribe failed (operation=subscribe): %s", exc)
+        return list(self._event_sub_ids)
+
+    def unsubscribe_from_world_events(self) -> None:
+        """Tear down all EventBus subscriptions created by
+        :meth:`subscribe_to_world_events` (test teardown / shutdown)."""
+        if not _HAS_BUS or not self._event_sub_ids:
+            self._event_sub_ids = []
+            return
+        try:
+            bus = _get_event_bus()
+            if bus:
+                for sid in self._event_sub_ids:
+                    bus.unsubscribe(sid)
+        except Exception as exc:
+            logger.debug("[market] World-event unsubscribe failed (operation=unsubscribe): %s", exc)
+        finally:
+            self._event_sub_ids = []
+
+    def _on_world_event(self, event: Dict[str, Any]) -> None:
+        """EventBus handler: translate a world event into a market shock.
+
+        Reads the ``event_type`` from the event payload, maps it onto the
+        canonical :meth:`apply_event` vocabulary, and scales the shock by the
+        event's intensity (when present). Errors are swallowed/logged so a bad
+        event never disrupts the publisher's thread.
+
+        Args:
+            event: Full EventBus event dict (``{"payload": {...}, ...}``).
+        """
+        try:
+            payload = event.get("payload", {}) or {}
+            raw_type = (
+                payload.get("event_type")
+                or payload.get("world_event_type")
+                or ""
+            )
+            if not raw_type:
+                return
+            # Intensity (1–~3) modulates the shock; default 1.0.
+            intensity = payload.get("intensity")
+            try:
+                magnitude = max(0.1, float(intensity)) if intensity else 1.0
+            except (TypeError, ValueError):
+                magnitude = 1.0
+            self.apply_event(raw_type, magnitude=magnitude)
+        except Exception as exc:
+            logger.warning(
+                "[market] World-event handler failed (operation=on_world_event): %s", exc
+            )
+
+    def _on_faction_shift(self, event: Dict[str, Any]) -> None:
+        """EventBus handler: refresh territory pricing on a faction shift."""
+        try:
+            self.refresh_territory_multipliers()
+        except Exception as exc:
+            logger.warning(
+                "[market] Faction-shift handler failed (operation=on_faction_shift): %s", exc
+            )
+
+    @staticmethod
+    def _world_events_enabled() -> bool:
+        """Whether world-event → market wiring is enabled (config-gated)."""
+        try:
+            from engine.config import get_config
+            return bool(get_config().get("economy.event_shocks.enabled", True))
+        except Exception:
+            return True
+
+    @staticmethod
+    def _event_shock_scale() -> float:
+        """Global multiplier applied to every world-event shock (config-gated)."""
+        try:
+            from engine.config import get_config
+            return float(get_config().get("economy.event_shocks.scale", 1.0))
+        except Exception:
+            return 1.0
+
     # ──── Stats ────
 
     def get_stats(self) -> Dict[str, Any]:
@@ -788,6 +1150,9 @@ class Market:
 
     def reset(self) -> None:
         """Reset market to initial state."""
+        # v1.60.0 [2026-06-13] — drop world-event subscriptions before reseed
+        # so a reset market does not leave dangling EventBus handlers.
+        self.unsubscribe_from_world_events()
         with self._lock:
             self._goods.clear()
             self._shops.clear()

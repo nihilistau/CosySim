@@ -5,16 +5,23 @@
 {%- set scene_accent_rgb = "251 191 36" -%}
 
 {#
-  THE AUCTION HOUSE — v1.50.0 [2026-03-22]
+  THE AUCTION HOUSE — v1.58.0 [2026-06-11]
   Full auction UI: live bidding, NPC panel, lot display, session history.
 
   Change Log:
+    v1.58.0 [2026-06-11] — Dark Renaissance v2 glow-up: auction_v2.css
+                            layer (gold-foil Orbitron marquee, ₵ mono gold
+                            credits, 4-layer bg, gavel scan-sweep, podium
+                            pulse); glass-deep lot panel, stagger-in lists,
+                            pulse-glow start CTA.
     v1.50.0 [2026-03-22] — Complete auction UI with real-time bidding
     v1.0.0  [2026-03-22] — Initial scaffold via Creation Kit
 #}
 
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='auction.css') }}">
+  {# v1.58.0 [2026-06-11] — Dark Renaissance v2 cascade layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='auction_v2.css') }}">
 {% endblock %}
 
 {% block scene_content %}
@@ -39,7 +46,8 @@
   </header>
 
   <!-- ── Gavel Narration Bar ───────────────────────────────────── -->
-  <div class="gavel-bar" id="gavel-bar">
+  <!-- v1.58.0 [2026-06-11] — anim-scan-sweep base: gavel-highlight (JS) fires the light band -->
+  <div class="gavel-bar anim-scan-sweep" id="gavel-bar">
     <div class="gavel-icon">&#x2696;</div>
     <div class="gavel-text" id="gavel-text">The Gavel awaits...</div>
   </div>
@@ -48,13 +56,15 @@
   <main class="auction-main">
 
     <!-- ── Left: Current Lot ─────────────────────────────────────── -->
-    <section class="lot-panel cs-glass-panel" id="lot-panel">
+    {# v1.58.0 [2026-06-11] — glass-deep podium tier (shared utility) #}
+    <section class="lot-panel cs-glass-panel glass-deep" id="lot-panel">
       <!-- Idle state — shown when no auction is active -->
       <div class="lot-idle" id="lot-idle">
         <div class="idle-icon">&#x1f3db;</div>
         <h2>No Active Auction</h2>
         <p>The house is quiet. Start a session to begin bidding.</p>
-        <button class="btn-start-auction" id="btn-start-auction">
+        {# v1.58.0 [2026-06-11] — shared pulse-glow on the primary CTA #}
+        <button class="btn-start-auction cs-anim-pulse-glow" id="btn-start-auction">
           START AUCTION SESSION
         </button>
       </div>
@@ -114,12 +124,13 @@
     </section>
 
     <!-- ── Right Column ──────────────────────────────────────────── -->
-    <div class="right-column">
+    {# v1.58.0 [2026-06-11] — shared stagger-in entrance on side panels + bidder roster #}
+    <div class="right-column anim-stagger-in">
 
       <!-- ── NPC Bidders Panel ──────────────────────────────────── -->
       <section class="npc-panel cs-glass-panel">
         <h3 class="panel-title">BIDDERS</h3>
-        <div class="npc-list" id="npc-list">
+        <div class="npc-list anim-stagger-in" id="npc-list">
           <div class="npc-card" data-npc="cipher">
             <span class="npc-name">Cipher</span>
             <span class="npc-personality">Aggressive</span>

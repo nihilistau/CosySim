@@ -18,6 +18,8 @@ Version: v1.42.1 [2026-03-21]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — executive_suite port (5596) + hub catalogue: surface
+                            auction, cyberspace, executive_suite
     v1.42.1 [2026-03-21] — Added module header, section dividers, version stamps
     v1.42.0 [2026-03-21] — Three-pillar architecture, managed Nexus KMS
     v1.41.0 [2026-03-20] — ARGUS deep polish, extended rpcids
@@ -63,6 +65,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "creation_kit": 5592,  # v1.47.0 — Creation Kit visual editor
     "oracle": 5572,        # v1.52.0 — THE ORACLE (Claude's signature scene)
     "neonos": 5593,        # v1.51.0 — NEON OS virtual desktop shell
+    "executive_suite": 5596,  # v1.62.0 — Executive Suite neon OS desktop (ES-T1)
     "intel_hub": 5580,
     # ── Launcher-managed services (8500–8800) ──
     "hub": 8500,
@@ -111,6 +114,7 @@ SERVICE_GROUPS: Dict[str, List[str]] = {
         "arena", "realm", "neoncity", "coders", "heist",
         "command_center", "games", "asset_studio", "grid",
         "lab_break",
+        "executive_suite",
         "intel_hub", "nexus_panel", "system_control",
     ],
     # v1.49.2 [2026-03-22] — dashboard migrated from Streamlit to Flask
@@ -184,6 +188,10 @@ HUB_CATALOGUE_TARGETS: Tuple[str, ...] = (
     "oracle",          # v1.51.1 — AI consciousness terminal
     "neonos",          # v1.51.1 — Virtual desktop shell
     "creation_kit",    # v1.51.1 — Visual scene editor + character wizard
+    # v1.62.0 [2026-06-15] — Surface previously-missing scenes + new Executive Suite
+    "auction",         # v1.62.0 — Underground black market auctions
+    "cyberspace",      # v1.62.0 — Hacking minigame
+    "executive_suite", # v1.62.0 — Executive Suite neon OS desktop (ES-T1)
 )
 
 HUB_HEALTH_TARGETS: Tuple[str, ...] = (

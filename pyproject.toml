@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cosysim"
-version = "1.52.0"
+# v1.61.0 [2026-06-13] — Public Release Prep: credential security audit (all
+# secrets externalized to gitignored .env / examples), hardened .gitignore,
+# and a complete professional README + docs pass. Built on v1.60 Living Systems.
+version = "1.61.0"
 description = "CosySim - AI Virtual Companion Simulation System with voice/video calls and interactive scenes"
 readme = "README.md"
 requires-python = ">=3.10"
