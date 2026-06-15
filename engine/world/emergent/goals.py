@@ -77,6 +77,7 @@ _DEFAULTS: Dict[str, float] = {
     "lay_low_boost": 0.50,   # added ON TOP of the current max so it sorts first
     "success_decay": 0.30,   # subtracted from a satisfied goal's priority
     "failure_bump": 0.30,    # added to a thwarted goal's priority
+    "success_floor": 0.05,   # a satisfied goal never decays below this (liveliness)
 }
 
 
@@ -285,15 +286,23 @@ def reprioritize(goals: List[Goal], outcome: Dict[str, Any]) -> List[Goal]:
     target = str(outcome.get("target", "") or "")
     success = bool(outcome.get("success"))
     delta = -_cfg("success_decay") if success else _cfg("failure_bump")
+    # v1.63.0 [2026-06-15] — A6 liveliness fix: a satisfied goal decays but never
+    # below success_floor, so always-on drives (e.g. WEALTH) cannot decay to 0 and
+    # silence an NPC forever. Without a floor the live world went permanently
+    # quiet after a few ticks (every goal decayed past min_utility).
+    floor = _cfg("success_floor")
 
     out: List[Goal] = []
     for g in goals:
         if g.type == goal_type and g.target == target:
+            new_priority = round(g.priority + delta, 6)
+            if success and new_priority < floor:
+                new_priority = floor
             out.append(
                 Goal(
                     type=g.type,
                     target=g.target,
-                    priority=round(g.priority + delta, 6),
+                    priority=new_priority,
                     progress=g.progress,
                 )
             )

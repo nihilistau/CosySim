@@ -119,7 +119,15 @@ A running ledger of the systems that make the city feel alive, newest release fi
 
 <!-- FEATURES: add new release subsections here, newest first. Each release = a `###` heading + one table (System · What it does · Lives in). Keep one-line descriptions; link the primary implementing file/scene. Detailed notes go in CHANGELOG.md, not here. -->
 
-### v1.62 — "Living City" (latest)
+### v1.63 — "Emergent Living World" (latest)
+
+The v1.63 line gives the city's NPCs minds of their own: each character runs a goal → plan → verb loop on the existing world tick and acts through the systems that already exist — no second daemon, no new managers. Sub-project A (the agency layer) ships here; player-facing scenes (B/C/D) are forthcoming.
+
+| System | What it does | Lives in |
+|---|---|---|
+| **Emergent NPC agency** | Per-NPC goal → plan → verb loop on the existing `living_world_tick`: NPCs pursue wealth/revenge/romance/faction goals and act through Market (trade nudge), Territory (contest), Crew, relationship_effects, npc_comms and phone_hack — with persistent goals/feed and the LLM kept rare so the model stays calm. | `engine/world/emergent/`, wired in `content/scenes/neoncity/neoncity_scene.py` |
+
+### v1.62 — "Living City"
 
 The v1.62 line turns NEON CITY from a world you talk *at* into one that talks *to itself*: NPCs phone each other, the Oracle overhears the chatter, phones can be hacked, and a full neon desktop OS surfaces it all.
 
