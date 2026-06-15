@@ -1192,4 +1192,19 @@ oracle:
 emergent:
   store:
     db_path: "data/emergent.db"  # persistent sim store for the emergent engine
+  # ── v1.63.0 [2026-06-15] — A3: per-NPC goal generation tuning ──
+  # All weights/thresholds for the PURE goal generator + re-prioritiser. Tune
+  # NPC drives here without code changes; engine/world/emergent/goals.py reads
+  # these via get_config().get("emergent.goals.*", default).
+  goals:
+    rel_negative: -0.4       # relationship <= this is hostile -> revenge goal
+    rel_positive: 0.6        # relationship >= this is close   -> romance goal
+    base_wealth: 0.30        # baseline priority of the always-on wealth goal
+    revenge_weight: 0.80     # multiplies |relationship| for revenge priority
+    romance_weight: 0.70     # multiplies relationship for romance priority
+    rank_priority: 0.45      # priority of a faction RANK goal
+    territory_priority: 0.40  # priority of a faction TERRITORY goal
+    lay_low_boost: 0.50      # added on top of the current max so LAY_LOW sorts first
+    success_decay: 0.30      # subtracted from a satisfied goal's priority
+    failure_bump: 0.30       # added to a thwarted goal's priority
 
