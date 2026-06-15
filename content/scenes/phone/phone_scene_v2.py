@@ -60,6 +60,10 @@ from content.scenes.phone.phone_rules_v2 import (
     register_phone_rules,
     autotxt_cooldown,
     autotxt_prompt,
+    pick_style,
+    pick_topic_seed,
+    seed_prompt,
+    topic_seed_chance,
     get_truth, get_dare,
     SCENE_ID,
 )
@@ -512,7 +516,10 @@ class PhoneSceneV2(FlaskScene):
             affection = float((char or {}).get("affection", 30))
         except Exception:
             trust = affection = 30.0
-        cooldown = autotxt_cooldown(trust, affection) + extra_delay
+        # v1.62.0 [2026-06-15] — CB-T5: pass char_id so a per-character
+        # ``comms.autotxt.user_multiplier`` override (if any) applies; the
+        # multiplier itself calms the overall user-facing cadence.
+        cooldown = autotxt_cooldown(trust, affection, char_id=char_id) + extra_delay
         with self._autotxt_lock:
             self._autotxt_deadlines[char_id] = time.time() + cooldown
 
@@ -567,7 +574,20 @@ class PhoneSceneV2(FlaskScene):
                 except Exception:
                     pass
 
-                prompt = autotxt_prompt(conv_mode)
+                # v1.62.0 [2026-06-15] — CB-T5: vary the opener style per
+                # character (anti-repeat) and occasionally seed it with a real
+                # city event / recent comms topic so messages aren't generic
+                # check-ins. The conversation-variety interceptor still rotates
+                # tone on top of this; we only pick the structural opener here.
+                style_label, base_prompt = pick_style(conv_mode, char_id)
+                topic = None
+                if random.random() < topic_seed_chance():
+                    topic = pick_topic_seed(char_id)
+                prompt = seed_prompt(base_prompt, topic)
+                logger.info(
+                    "[%s] autotxt opener (operation=autotxt, agent=%s, mode=%s, style=%s, seeded=%s)",
+                    SCENE_ID, char_id, conv_mode, style_label, bool(topic),
+                )
                 # v1.62.0 [2026-06-15] — CB-T2: pass thread_id so the autotext
                 # reply is logged against the DM thread by the interceptor.
                 reply  = self._generate_reply(char_id, prompt, thread_id=thread_id,

@@ -897,6 +897,19 @@ comms:
       - aria
       - frankie
       - mira
+  # ── v1.62.0 [2026-06-15] — CB-T5: calmer + more varied user inbox ─────
+  # Tunes the USER-facing autotext path ONLY (phone autotxt ticker). The
+  # NPC↔NPC scheduler (comms.npc, above) is a separate path and is NOT
+  # affected by these knobs.
+  autotxt:
+    user_multiplier: 1.75        # global scale on user-facing autotext intervals
+                                 # (1.0 = base ranges; >1 = calmer / less spammy)
+    topic_seed_chance: 0.45      # P(an autotext is seeded with a real city topic
+                                 # drawn from recent world events / comms)
+    # Per-character override of user_multiplier, e.g. {aria: 1.2, lola: 2.5}.
+    # Omitted characters use user_multiplier. Lets clingy NPCs stay eager
+    # while chatty ones get throttled harder.
+    per_character: {}
   # ── v1.62.0 [2026-06-15] — CB-T4: leave-a-message presence ───────────
   presence:
     enabled: true                              # master toggle for presence/leave-a-message
