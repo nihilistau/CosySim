@@ -1,6 +1,9 @@
 /**
  * executive_suite.js — NeonOS OS core (window manager + app registry).
  * ===================================================================
+ * v1.62.0 [2026-06-15] — ES-T4 live system tray: polls /api/state (~10s) so the
+ * taskbar clock + WorldState heat advance live; the in-game clock drives both
+ * the taskbar time and date lines.
  * v1.62.0 [2026-06-15] — OS desktop shell (ES-T2). The OS core for the
  * Executive Suite scene: Socket.IO connection, a draggable/focusable window
  * manager, dock + taskbar wiring, desktop-icon drag-drop, a live clock, the
@@ -574,6 +577,9 @@
   // ════════════════════════════════════════════════════════════
   function pad(n) { return String(n).padStart(2, '0'); }
   function updateClock() {
+    // v1.62.0 [2026-06-15] — ES-T4: once the live game clock is driving the tray,
+    // don't overwrite it with the wall clock.
+    if (gameClockActive) return;
     const d = new Date();
     const t = document.getElementById('es-clock-time');
     const dt = document.getElementById('es-clock-date');
@@ -590,12 +596,32 @@
     const batt = document.getElementById('es-tray-battery-val');
     if (heat && tray.heat != null) heat.textContent = tray.heat + '%';
     if (batt && tray.battery != null) batt.textContent = tray.battery + '%';
-    // In-game clock display (if provided) overrides the wall clock label.
-    if (state.clock && state.clock.display) {
-      const dt = document.getElementById('es-clock-date');
-      if (dt) dt.textContent = state.clock.display;
+    // v1.62.0 [2026-06-15] — ES-T4 live tray: the in-game clock drives BOTH the
+    // taskbar time and date lines so the tray reflects real WorldState time
+    // (not the wall clock). Falls back to the wall clock when no game clock.
+    const clk = state.clock || {};
+    const tEl = document.getElementById('es-clock-time');
+    const dEl = document.getElementById('es-clock-date');
+    if (clk.display) {
+      gameClockActive = true;
+      // display looks like "Monday, 00:00 (Night)" — pull HH:MM for the big line.
+      const m = /(\d{1,2}:\d{2})/.exec(clk.display);
+      if (tEl && m) tEl.textContent = m[1];
+      else if (tEl && clk.game_hour != null) tEl.textContent = pad(clk.game_hour) + ':00';
+      if (dEl) dEl.textContent = clk.display;
     }
     emit('state', state);
+  }
+
+  // v1.62.0 [2026-06-15] — ES-T4: poll /api/state so the tray (game clock +
+  // live WorldState heat) keeps advancing even without socket pushes. Stops
+  // the wall-clock from clobbering the game clock once real state arrives.
+  let gameClockActive = false;
+  function pollState() {
+    fetch('/api/state')
+      .then((r) => r.json())
+      .then(applyState)
+      .catch(() => { /* offline — keep last known tray */ });
   }
 
   // ════════════════════════════════════════════════════════════
@@ -660,6 +686,9 @@
     updateClock();
     setInterval(updateClock, 30000);
     ES.socket = connectSocket();
+    // v1.62.0 [2026-06-15] — ES-T4 live tray: prime + poll real state (~10s).
+    pollState();
+    setInterval(pollState, 10000);
     // User profile click → assistant
     const user = document.getElementById('es-user');
     if (user) user.addEventListener('click', () => openApp('assistant'));

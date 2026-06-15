@@ -22,6 +22,12 @@ Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — Live AI assistant + live system tray (ES-T4): adds the
+                            assistant dispatch (socket ``assistant_message`` →
+                            ``assistant_reply``/``assistant_typing`` + REST
+                            ``POST /api/assistant/send`` + ``/api/assistant/agents``)
+                            reusing the engine CharacterAgent/VirtualAgentManager
+                            pipeline; tray ``heat`` now reads live PlayerState.
     v1.62.0 [2026-06-15] — Functional OS app backends (ES-T3): /api/files/*,
                             /api/mail/*, /api/notes, /api/console. Read real
                             data (inventory/catalog, phone comms, notes JSON);
@@ -61,6 +67,13 @@ _SAFE_FILE_ROOTS = {"inventory", "catalog", "data"}
 # exec, NO arbitrary code — each maps to a small read-only handler.
 _CONSOLE_COMMANDS = ("help", "status", "whoami", "scenes", "world", "inbox", "clear")
 
+# v1.62.0 [2026-06-15] — Assistant (ES-T4) constants. Seeded companions the
+# "Add my Agent" picker may drive the live AI assistant with; default is aria.
+_ASSISTANT_AGENTS = ("aria", "lola", "mira", "frankie", "viktor")
+_ASSISTANT_DEFAULT_AGENT = "aria"
+# Friendly fallback line when the LLM (LMStudio) is unreachable — never a 500.
+_ASSISTANT_FALLBACK = "(comms link to my agent is down — try me again in a moment.)"
+
 
 # ──── Scene Implementation ────────────────────────────────────
 
@@ -92,6 +105,12 @@ class ExecutiveSuiteScene(FlaskScene):
                  host: str = "0.0.0.0") -> None:
         super().__init__(host=host, port=self.SCENE_METADATA["port"])
         self.config = config or {}
+
+        # v1.62.0 [2026-06-15] — Assistant (ES-T4): per-agent CharacterAgent cache
+        # (reuses the existing engine agent pipeline) + per-agent chat history so
+        # the live companion keeps short-term context between messages.
+        self._assistant_agents: Dict[str, Any] = {}
+        self._assistant_history: Dict[str, List[Dict[str, str]]] = {}
 
         # Scene-specific secret key
         self.app.config["SECRET_KEY"] = "executive-suite-scene"
@@ -197,6 +216,31 @@ class ExecutiveSuiteScene(FlaskScene):
                 logger.error("[%s] console failed (operation=terminal, cmd=%s): %s",
                              SCENE_ID, cmd, exc)
                 return jsonify({"ok": False, "lines": ["error: command failed"]}), 200
+
+        # ── assistant (ES-T4) — live in-world AI companion ─────────────
+        # v1.62.0 [2026-06-15] — REST fallback for the Assistant app. The primary
+        # path is the Socket.IO ``assistant_message`` handler; this mirrors it so
+        # the panel still works when the socket is unavailable. Reuses the engine
+        # CharacterAgent pipeline (never calls LMStudio raw); degrades to a
+        # friendly fallback line (never a 500) when the LLM is unreachable.
+        @app.route("/api/assistant/agents")
+        def assistant_agents():
+            return jsonify(self._assistant_roster())
+
+        @app.route("/api/assistant/send", methods=["POST"])
+        def assistant_send():
+            body = request.get_json(silent=True) or {}
+            text = str(body.get("text", "")).strip()
+            agent_id = str(body.get("agent_id", "") or _ASSISTANT_DEFAULT_AGENT).strip()
+            try:
+                return jsonify(self._assistant_reply(agent_id, text))
+            except Exception as exc:
+                logger.error("[%s] assistant send failed (operation=assistant, agent=%s): %s",
+                             SCENE_ID, agent_id, exc)
+                return jsonify({
+                    "text": _ASSISTANT_FALLBACK, "agent_id": agent_id,
+                    "fallback": True, "error": "assistant unavailable",
+                }), 200
 
     # ── App backend helpers (ES-T3) ─────────────────────────────────────
     # v1.62.0 [2026-06-15]
@@ -498,6 +542,137 @@ class ExecutiveSuiteScene(FlaskScene):
         logger.info("[%s] console ran (operation=terminal, cmd=%s)", SCENE_ID, word)
         return {"ok": True, "lines": lines}
 
+    # ── Assistant helpers (ES-T4) ───────────────────────────────────────
+    # v1.62.0 [2026-06-15] — Live in-world AI companion. Reuses the EXISTING
+    # engine agent pipeline (CharacterAgent → VirtualAgentManager), mirroring how
+    # the phone scene drives characters. NEVER calls LMStudio raw; handles the
+    # LLM being down with a friendly fallback line (no 500s).
+
+    def _assistant_roster(self) -> Dict[str, Any]:
+        """Return the seeded companions the 'Add my Agent' picker can choose."""
+        from content.simulation.database.db import Database  # noqa: PLC0415
+        db = Database()
+        agents = []
+        for cid in _ASSISTANT_AGENTS:
+            row = db.get_character(cid)
+            if not row:
+                continue
+            meta = row.get("metadata") or {}
+            agents.append({
+                "id": cid,
+                "name": row.get("name", cid),
+                "tagline": (meta.get("backstory") or "")[:80],
+            })
+        logger.info("[%s] assistant roster served (operation=assistant, agents=%d)",
+                    SCENE_ID, len(agents))
+        return {"agents": agents, "default": _ASSISTANT_DEFAULT_AGENT}
+
+    def _get_assistant_agent(self, agent_id: str):
+        """Get (or lazily build + cache) the CharacterAgent for a companion.
+
+        Reuses the engine agent pipeline exactly as the other scenes do
+        (Character → CharacterAgent), so the assistant inherits persona, RAG
+        memory and the shared VirtualAgentManager. Returns ``None`` if the
+        character can't be loaded.
+        """
+        if agent_id in self._assistant_agents:
+            return self._assistant_agents[agent_id]
+        try:
+            from content.simulation.character_system.character import Character  # noqa: PLC0415
+            from content.simulation.database.db import Database  # noqa: PLC0415
+            from engine.agents.character_agent import CharacterAgent  # noqa: PLC0415
+            db = Database()
+            char = Character(agent_id, db=db)
+            agent = CharacterAgent(char, db=db, scene=SCENE_ID)
+            self._assistant_agents[agent_id] = agent
+            return agent
+        except Exception as exc:
+            logger.warning("[%s] assistant agent build failed (operation=assistant, agent=%s): %s",
+                           SCENE_ID, agent_id, exc)
+            return None
+
+    def _assistant_reply(self, agent_id: str, text: str) -> Dict[str, Any]:
+        """Run one user turn through the companion agent and return its reply.
+
+        Mirrors the phone scene's proven path: drive the character through the
+        shared :class:`VirtualAgentManager` with a plain message list (no raw
+        integrations, which LMStudio rejects). Keeps short per-agent history for
+        context. On any LLM error returns ``fallback=True`` with a friendly line.
+        """
+        if agent_id not in _ASSISTANT_AGENTS:
+            agent_id = _ASSISTANT_DEFAULT_AGENT
+        if not text:
+            return {"text": "(say something and I'll reply.)", "agent_id": agent_id,
+                    "fallback": False, "empty": True}
+
+        agent = self._get_assistant_agent(agent_id)
+        name = agent_id.title()
+        try:
+            from content.simulation.database.db import Database  # noqa: PLC0415
+            row = Database().get_character(agent_id) or {}
+            name = row.get("name", name)
+            persona = (row.get("metadata") or {}).get("backstory", "")
+        except Exception:
+            persona = ""
+
+        hist = self._assistant_history.setdefault(agent_id, [])
+
+        # System prompt: in-world AI assistant framing on the executive desktop.
+        system = (
+            "You are %s, the operator's live in-world AI assistant inside the "
+            "NEONOS executive suite — a neon-noir cyberpunk corporate OS. %s\n"
+            "Reply in-character, concise and conversational (1-3 sentences). "
+            "Be helpful, a little flirty and street-smart. Never break character "
+            "or mention being a language model." % (name, persona)
+        )
+
+        reply_text = ""
+        fallback = False
+        try:
+            from engine.agents.virtual_agent_manager import get_virtual_agent_manager  # noqa: PLC0415
+            from engine.agents.virtual_agent import InferenceRequest  # noqa: PLC0415
+            from engine.agents.stream_processor import strip_token_artifacts  # noqa: PLC0415
+
+            msgs: List[Dict[str, str]] = [{"role": "system", "content": system}]
+            msgs.extend(hist[-12:])  # short rolling window for context
+            msgs.append({"role": "user", "content": text})
+
+            mgr = get_virtual_agent_manager()
+            req = InferenceRequest(
+                agent_id=agent_id,
+                messages=msgs,
+                temperature=0.9,
+                max_output_tokens=400,
+                conversation_id="executive_suite_%s" % agent_id,
+                store=True,
+                metadata={"scene": SCENE_ID, "character_name": name},
+            )
+            response = mgr.infer_processed(req)
+            reply_text = strip_token_artifacts((response.clean_text or "").strip())
+            # Keep the cached agent warm for parity with the engine pipeline.
+            _ = agent
+        except Exception as exc:
+            logger.error("[%s] assistant inference failed (operation=assistant, agent=%s): %s",
+                         SCENE_ID, agent_id, exc)
+            reply_text = ""
+
+        if not reply_text:
+            reply_text = _ASSISTANT_FALLBACK
+            fallback = True
+        else:
+            # Persist the turn into the rolling history (only real replies).
+            hist.append({"role": "user", "content": text})
+            hist.append({"role": "assistant", "content": reply_text})
+            del hist[:-24]  # cap memory growth
+
+        logger.info("[%s] assistant reply (operation=assistant, agent=%s, fallback=%s, chars=%d)",
+                    SCENE_ID, agent_id, fallback, len(reply_text))
+        return {
+            "text": reply_text, "agent_id": agent_id, "name": name,
+            "fallback": fallback,
+            "time": datetime.now(timezone.utc).isoformat(),
+        }
+
     def _setup_socketio_handlers(self) -> None:
         """Register Socket.IO event handlers."""
         sio = self.socketio
@@ -510,6 +685,24 @@ class ExecutiveSuiteScene(FlaskScene):
         @sio.on("request_state")
         def on_request_state():
             emit("state_update", self._get_scene_state())
+
+        # v1.62.0 [2026-06-15] — Assistant (ES-T4): live companion chat over the
+        # socket. Emits a typing indicator, runs the message through the engine
+        # agent pipeline, then emits the reply. Mirrored by POST /api/assistant/send.
+        @sio.on("assistant_message")
+        def on_assistant_message(data):
+            data = data or {}
+            text = str(data.get("text", "")).strip()
+            agent_id = str(data.get("agent_id", "") or _ASSISTANT_DEFAULT_AGENT).strip()
+            emit("assistant_typing", {"agent_id": agent_id, "typing": True})
+            try:
+                result = self._assistant_reply(agent_id, text)
+            except Exception as exc:
+                logger.error("[%s] assistant socket failed (operation=assistant, agent=%s): %s",
+                             SCENE_ID, agent_id, exc)
+                result = {"text": _ASSISTANT_FALLBACK, "agent_id": agent_id, "fallback": True}
+            emit("assistant_typing", {"agent_id": agent_id, "typing": False})
+            emit("assistant_reply", result)
 
     # ── State ──────────────────────────────────────────────────────
 
@@ -555,7 +748,14 @@ class ExecutiveSuiteScene(FlaskScene):
             }
 
     def _read_tray(self) -> Dict[str, Any]:
-        """Return system-tray readouts from config (no hardcoded values)."""
+        """Return system-tray readouts.
+
+        v1.62.0 [2026-06-15] — ES-T4: ``heat`` is now LIVE — read from the real
+        :class:`PlayerState` so the tray reflects the player's in-world heat
+        (reuses ``get_player_state().heat`` as the city HUD does). Battery /
+        network / volume stay config-driven / cosmetic (no hardcoded values).
+        All lookups degrade gracefully so the tray never blocks the shell.
+        """
         try:
             from engine.config import get_config  # noqa: PLC0415
             cfg = get_config()
@@ -570,8 +770,16 @@ class ExecutiveSuiteScene(FlaskScene):
             except Exception:
                 return default
 
+        # LIVE heat from the real WorldState/PlayerState (fall back to config).
+        heat = _cfg("executive_suite.tray.heat", 14)
+        try:
+            from engine.world.player_state import get_player_state  # noqa: PLC0415
+            heat = int(get_player_state().heat)
+        except Exception as exc:  # world optional — never block the tray
+            logger.debug("[%s] live heat unavailable (operation=state): %s", SCENE_ID, exc)
+
         return {
-            "heat": _cfg("executive_suite.tray.heat", 14),
+            "heat": heat,
             "battery": _cfg("executive_suite.tray.battery", 87),
             "network": _cfg("executive_suite.tray.network", "nexus"),
             "volume": _cfg("executive_suite.tray.volume", 60),
