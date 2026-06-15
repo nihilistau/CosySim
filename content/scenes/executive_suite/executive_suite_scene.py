@@ -196,6 +196,33 @@ def _sanitize_assistant_reply(text: str) -> str:
     return cleaned.strip()
 
 
+# ──── Markets (D-T2 "The Exchange") helpers ───────────────────
+# v1.63.0 [2026-06-16] — The Executive Suite Markets app trades the ONE engine
+# economy (engine.world.market.get_market) — the SAME Market The Grid surfaces
+# in D-T1. No parallel market. Player id matches the Grid ("player1") so trade
+# records, wallet and inventory line up across both surfaces.
+_MARKETS_PLAYER_ID = "player1"
+# Last-seen good_id -> shop_price per district, used to derive the ▲/▼/▬ trend
+# on the next /api/markets/state read so prices visibly move as the economy ticks.
+_MARKETS_LAST_PRICES: Dict[str, Dict[str, int]] = {}
+
+
+def _markets_district() -> str:
+    """Return the engine-Market district the Markets app trades (config-driven).
+
+    Reads ``executive_suite.market_district`` (default ``"DOWNTOWN"`` — the same
+    default the Grid uses, so the two surfaces show parity prices). Never raises.
+
+    Returns:
+        The configured district id, or ``"DOWNTOWN"`` on any config failure.
+    """
+    try:
+        from engine.config import get_config  # noqa: PLC0415
+        return str(get_config().get("executive_suite.market_district", "DOWNTOWN")) or "DOWNTOWN"
+    except Exception:
+        return "DOWNTOWN"
+
+
 # ──── Scene Implementation ────────────────────────────────────
 
 # v1.62.0 [2026-06-15] — OS desktop shell on FlaskScene base
@@ -396,6 +423,42 @@ class ExecutiveSuiteScene(FlaskScene):
                     "text": "The streams writhe and refuse me. Return when the static settles.",
                     "ok": False,
                 }), 200
+
+        # ── markets (D-T2 "The Exchange") — the ONE engine economy ─────────
+        # v1.63.0 [2026-06-16] — Markets app surfaces the SAME live engine
+        # Market (engine.world.market.get_market) The Grid trades (D-T1), for
+        # the configured executive_suite.market_district (default DOWNTOWN — the
+        # Grid's default, so prices/trades match across both surfaces). Buy/sell
+        # route straight through get_market().buy/sell so credits, inventory and
+        # heat settle via the one economy. Defensive throughout — never 500.
+        @app.route("/api/markets/state")
+        def markets_state():
+            try:
+                return jsonify(self._markets_state())
+            except Exception as exc:
+                logger.error("[%s] markets state failed (operation=markets): %s", SCENE_ID, exc)
+                return jsonify({
+                    "district": _markets_district(), "goods": [], "inventory": [],
+                    "credits": 0, "stats": {}, "error": "markets offline",
+                }), 200
+
+        @app.route("/api/markets/buy", methods=["POST"])
+        def markets_buy():
+            body = request.get_json(silent=True) or {}
+            try:
+                return jsonify(self._markets_trade("buy", body))
+            except Exception as exc:
+                logger.error("[%s] markets buy failed (operation=markets): %s", SCENE_ID, exc)
+                return jsonify({"success": False, "error": "trade failed"}), 200
+
+        @app.route("/api/markets/sell", methods=["POST"])
+        def markets_sell():
+            body = request.get_json(silent=True) or {}
+            try:
+                return jsonify(self._markets_trade("sell", body))
+            except Exception as exc:
+                logger.error("[%s] markets sell failed (operation=markets): %s", SCENE_ID, exc)
+                return jsonify({"success": False, "error": "trade failed"}), 200
 
     # ── App backend helpers (ES-T3) ─────────────────────────────────────
     # v1.62.0 [2026-06-15]
@@ -1098,6 +1161,220 @@ class ExecutiveSuiteScene(FlaskScene):
                 result = {"text": _ASSISTANT_FALLBACK, "agent_id": agent_id, "fallback": True}
             emit("assistant_typing", {"agent_id": agent_id, "typing": False})
             emit("assistant_reply", result)
+
+    # ── Markets app backend (D-T2 "The Exchange") ───────────────────────
+    # v1.63.0 [2026-06-16]
+    # CONNECTS: engine.world.market.get_market (the ONE economy — same Market
+    #           The Grid surfaces in D-T1), engine.world.player_state,
+    #           engine.world.inventory
+    # CALLED BY: /api/markets/state, /api/markets/buy, /api/markets/sell
+
+    @staticmethod
+    def _markets_get_market() -> Any:
+        """Return the live singleton engine Market, or ``None`` if unavailable.
+
+        The Markets app trades the *one* NPC-driven economy — the exact same
+        :class:`~engine.world.market.Market` The Grid surfaces (D-T1). Degrades
+        to ``None`` (never raises) so the app shows an offline state, not a 500.
+        """
+        try:
+            from engine.world.market import get_market  # noqa: PLC0415
+            return get_market()
+        except Exception as exc:
+            logger.warning("[%s] engine Market unavailable (operation=markets): %s", SCENE_ID, exc)
+            return None
+
+    @staticmethod
+    def _markets_trend(district: str, good_id: str, price: int) -> str:
+        """Return the ▲/▼/▬ trend glyph vs. the last /api/markets/state read.
+
+        Args:
+            district: District the price belongs to.
+            good_id: Engine good id.
+            price: Current shop price.
+
+        Returns:
+            ``"▲"`` (rising), ``"▼"`` (falling) or ``"▬"`` (stable / first read).
+        """
+        prev = _MARKETS_LAST_PRICES.get(district, {}).get(good_id)
+        if prev is None or price == prev:
+            return "▬"
+        return "▲" if price > prev else "▼"
+
+    def _markets_state(self) -> Dict[str, Any]:
+        """Build the Markets app live state from the engine Market.
+
+        Reads ``get_market().get_prices(district)`` for the configured district
+        (the same call/district the Grid uses, so prices MATCH across both
+        surfaces), one row per good (cheapest shop wins, mirroring buy()). Adds a
+        ▲/▼/▬ trend vs. the previous read, the player's positions (inventory
+        holdings that are tradable here), live credits, and market stats.
+
+        Returns:
+            ``{district, goods:[...], inventory:[...], credits, stats}``. Every
+            sub-lookup degrades gracefully — never raises (the route never 500s).
+        """
+        district = _markets_district()
+        market = self._markets_get_market()
+        goods: List[Dict[str, Any]] = []
+        good_ids: set = set()
+        if market is not None:
+            try:
+                prices = market.get_prices(district)
+            except Exception as exc:
+                logger.warning("[%s] price fetch failed (operation=markets, district=%s): %s",
+                               SCENE_ID, district, exc)
+                prices = []
+            snapshot: Dict[str, int] = {}
+            seen: set = set()
+            for row in prices:
+                try:
+                    gid = row["good_id"]
+                    if gid in seen:  # one row per good (cheapest shop wins on buy)
+                        continue
+                    seen.add(gid)
+                    good_ids.add(gid)
+                    price = int(row.get("shop_price", row.get("current_price", 0)))
+                    snapshot[gid] = price
+                    goods.append({
+                        "good_id": gid,
+                        "name": row.get("name", gid),
+                        "category": str(row.get("category", "")),
+                        "price": price,
+                        "trend": self._markets_trend(district, gid, price),
+                        "illegal": bool(row.get("illegal", False)),
+                        "rarity": int(row.get("rarity", 1) or 1),
+                        "supply": row.get("supply"),
+                        "demand": row.get("demand"),
+                        "shop_name": row.get("shop_name", ""),
+                    })
+                except Exception as exc:  # one bad row never sinks the table
+                    logger.debug("[%s] skipped malformed market row (operation=markets): %s",
+                                 SCENE_ID, exc)
+                    continue
+            _MARKETS_LAST_PRICES[district] = snapshot
+
+        # Player positions — inventory holdings that are tradable in this market,
+        # priced at the current market price for a live P/L feel.
+        inventory: List[Dict[str, Any]] = []
+        price_by_id = {g["good_id"]: g["price"] for g in goods}
+        try:
+            from engine.world.inventory import get_inventory  # noqa: PLC0415
+            snap = get_inventory().to_dict()
+            for it in snap.get("items", []):
+                iid = it.get("item_id", "")
+                if iid not in good_ids:
+                    continue  # only show positions the player can trade here
+                qty = int(it.get("quantity", 0) or 0)
+                unit = int(price_by_id.get(iid, 0) or 0)
+                inventory.append({
+                    "good_id": iid,
+                    "name": it.get("name", iid),
+                    "quantity": qty,
+                    "price": unit,
+                    "value": unit * qty,
+                    "category": it.get("category", ""),
+                })
+        except Exception as exc:
+            logger.debug("[%s] inventory read failed (operation=markets): %s", SCENE_ID, exc)
+
+        # Live credits from the one PlayerState wallet (same the Grid spends).
+        credits = 0
+        try:
+            from engine.world.player_state import get_player_state  # noqa: PLC0415
+            credits = int(get_player_state().credits)
+        except Exception as exc:
+            logger.debug("[%s] credits read failed (operation=markets): %s", SCENE_ID, exc)
+
+        stats: Dict[str, Any] = {}
+        if market is not None:
+            try:
+                stats = market.get_stats()
+            except Exception as exc:
+                logger.debug("[%s] stats read failed (operation=markets): %s", SCENE_ID, exc)
+
+        return {
+            "district": district,
+            "goods": goods,
+            "inventory": inventory,
+            "credits": credits,
+            "stats": stats,
+        }
+
+    def _markets_trade(self, action: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a buy/sell through the engine Market and return result + state.
+
+        Routes straight through ``get_market().buy/sell(...)`` with the Grid's
+        player id, so credits, inventory and heat settle via the ONE economy. The
+        engine result is merged with a fresh :meth:`_markets_state` snapshot so
+        the UI can refresh in one round-trip. Defensive — never raises.
+
+        Args:
+            action: ``"buy"`` or ``"sell"``.
+            body: Request JSON with ``good_id`` and optional ``quantity``.
+
+        Returns:
+            ``{success, ...engine result..., state}`` (``success=False`` with an
+            ``error`` string on any failure — the route never 500s).
+        """
+        good_id = str(body.get("good_id", "")).strip()
+        try:
+            quantity = max(1, int(body.get("quantity", 1) or 1))
+        except (TypeError, ValueError):
+            quantity = 1
+        if not good_id:
+            return {"success": False, "error": "good_id required", "state": self._markets_state()}
+
+        market = self._markets_get_market()
+        if market is None:
+            return {"success": False, "error": "Market offline.", "state": self._markets_state()}
+
+        district = _markets_district()
+        try:
+            if action == "sell":
+                res = market.sell(district, good_id, quantity=quantity,
+                                  player_id=_MARKETS_PLAYER_ID)
+            else:
+                res = market.buy(district, good_id, quantity=quantity,
+                                 player_id=_MARKETS_PLAYER_ID)
+        except Exception as exc:
+            logger.warning("[%s] %s failed (operation=markets, good=%s): %s",
+                           SCENE_ID, action, good_id, exc)
+            return {"success": False, "error": "Trade failed.", "state": self._markets_state()}
+
+        ok = res.get("status") == "ok"
+        if ok:
+            logger.info("[%s] %s settled (operation=markets, good=%s, qty=%d, total=%s)",
+                        SCENE_ID, action, good_id, quantity, res.get("total"))
+        out: Dict[str, Any] = {
+            "success": ok,
+            "action": action,
+            "good_id": good_id,
+            "quantity": res.get("quantity", quantity),
+            "good_name": res.get("good_name", good_id),
+            "unit_price": res.get("unit_price", 0),
+            "total": res.get("total", 0),
+            "balance": res.get("balance"),
+            "heat": res.get("heat"),
+            "shop": res.get("shop", ""),
+            "illegal": res.get("illegal", False),
+        }
+        if not ok:
+            out["error"] = self._markets_reason(res)
+        out["state"] = self._markets_state()
+        return out
+
+    @staticmethod
+    def _markets_reason(res: Dict[str, Any]) -> str:
+        """Map an engine Market error result onto a player-facing message."""
+        reason = str(res.get("reason", "") or "")
+        table = {
+            "insufficient_credits": "Insufficient credits.",
+            "not_in_inventory": "You don't hold enough to sell.",
+        }
+        if reason in table:
+            return table[reason]
+        return reason or "Trade rejected."
 
     # ── State ──────────────────────────────────────────────────────
 
