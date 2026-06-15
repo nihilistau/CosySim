@@ -931,6 +931,27 @@ comms:
     player_offline_when_disconnected: true     # player is "offline" when no phone client is connected
     npc_requires_co_presence: true             # an NPC is reachable only when co-present (same location)
 
+# ──── Phone OS (v1.62.0 [2026-06-15] — PH-T1) ────
+# Derived security/capability magnitudes for engine.world.phone_os.PhoneOS.
+# These tune how base npc_phone records (security_level/firewall/installed_apps)
+# plus the player's equipped cyberdeck/ICE roll up into effective stats. PH-T2
+# adds the real software/hardware upgrade catalog on top of these knobs.
+phone:
+  os:
+    base_security: 1               # fallback base security when a record lacks one
+    base_firewall: 1               # fallback base firewall when a record lacks one
+    base_app_slots: 6              # baseline number of apps a phone can hold
+    app_slots_per_security: 1      # extra app slots granted per point of base security
+    deck_crack_to_hack: 1.0        # player cyberdeck crack_speed → hack_power multiplier
+    deck_trace_to_firewall: 1.0    # player cyberdeck trace_resist → firewall multiplier
+    hacking_bonus_to_hack: 1.0     # player equipment "hacking" bonus → hack_power multiplier
+    seed_security_spread: [1, 2, 3]  # deterministic base-security spread for seeded NPCs
+    seed_archetype_security:       # archetype/faction → seeded base security (when known)
+      netrunner: 4
+      corpo: 3
+      fixer: 2
+      civilian: 1
+
 # Framework settings
 framework:
   state_persistence: true         # auto-save/load MCPFramework state

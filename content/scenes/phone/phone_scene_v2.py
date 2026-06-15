@@ -426,12 +426,14 @@ class PhoneSceneV2(FlaskScene):
         """
         try:
             chars = self.db.get_all_characters()
+            seeded_ids: List[str] = []
             for row in chars:
                 char_id = str(row.get("id") or row.get("character_id") or "")
                 if not char_id:
                     continue
                 self.phone_db.get_or_create_dm(char_id)
                 self._agents[char_id] = _PhoneCharacterAgent(char_id, self)
+                seeded_ids.append(char_id)
                 try:
                     fw = get_framework()
                     fw.get_character(char_id).enter_scene(SCENE_ID)
@@ -439,6 +441,20 @@ class PhoneSceneV2(FlaskScene):
                     pass
                 self._schedule_autotxt(char_id)
             logger.info("[%s] Seeded %d characters (operation=seed)", SCENE_ID, len(chars))
+            # v1.62.0 [2026-06-15] — PH-T1: give every seeded NPC (and the
+            # player) a full phone record with archetype-varied base security.
+            # Defensive: phone-OS seeding must never block character seeding.
+            try:
+                from engine.world.phone_os import get_phone_os, PLAYER_ID
+                pos = get_phone_os()
+                pos.ensure_phone(PLAYER_ID)
+                if seeded_ids:
+                    pos.seed_npc_phones(seeded_ids)
+            except Exception as exc:
+                logger.warning(
+                    "[%s] Phone-OS seeding skipped (operation=seed_phones): %s",
+                    SCENE_ID, exc,
+                )
         except Exception as exc:
             logger.warning("[%s] Character seeding failed (operation=seed): %s", SCENE_ID, exc)
 

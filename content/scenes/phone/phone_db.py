@@ -5,6 +5,14 @@ Manages phone-specific tables: threads, messages, read receipts.
 Keeps character data in the main DB; only phone-conversation state lives here.
 
 Change Log:
+    v1.62.0 [2026-06-15] — PH-T1: full ``npc_phone`` records. Extended the
+        CB-T3 stub table to the full phone-OS shape (os_version, installed_apps,
+        security_level, firewall, last_hacked, created_at) via migration-safe
+        ``ALTER`` (existing stub rows are preserved, never dropped). Added phone
+        record CRUD: ``get_phone`` (creates a default row when missing),
+        ``set_phone_fields``, ``add_installed_app`` / ``remove_installed_app``,
+        ``set_last_hacked`` and ``list_phones``. These back
+        :mod:`engine.world.phone_os`, which derives effective security stats.
     v1.62.0 [2026-06-15] — CB-T4: leave-a-message helpers. Added
         ``add_left_message`` (stores a message for an offline recipient with
         ``metadata.left_unread=True`` + ``delivered=False``),
@@ -173,18 +181,43 @@ class PhoneDB:
                     ON phone_news_items(is_deleted);
             """)
 
-        # ── NPC phone stub (v1.62.0 [2026-06-15] — CB-T3) ─────────────────
-        # Minimal "this NPC has a phone" marker. Kept intentionally small and
-        # forward-compatible: sub-project 3 extends this with os_version,
-        # security posture, etc. Only ``char_id`` is load-bearing today.
+        # ── NPC phone records (v1.62.0 [2026-06-15] — CB-T3 stub → PH-T1) ──
+        # CB-T3 introduced a minimal "this NPC has a phone" marker
+        # (char_id/enabled/created_at). PH-T1 extends it to the full phone-OS
+        # shape used by engine.world.phone_os to derive security stats. The
+        # player gets a row too (char_id='user'). On fresh DBs the full table
+        # is created directly; on existing DBs the new columns are added via
+        # migration-safe ALTERs below so stub rows are preserved.
         with self.conn() as c:
             c.executescript("""
                 CREATE TABLE IF NOT EXISTS npc_phone (
-                    char_id    TEXT PRIMARY KEY,
-                    enabled    INTEGER NOT NULL DEFAULT 1,
-                    created_at TEXT NOT NULL
+                    char_id        TEXT PRIMARY KEY,
+                    enabled        INTEGER NOT NULL DEFAULT 1,
+                    os_version     TEXT NOT NULL DEFAULT 'NeonOS 1.0',
+                    installed_apps TEXT NOT NULL DEFAULT '[]',
+                    security_level INTEGER NOT NULL DEFAULT 1,
+                    firewall       INTEGER NOT NULL DEFAULT 1,
+                    last_hacked    TEXT,
+                    created_at     TEXT NOT NULL
                 );
             """)
+
+        # ── Migration: upgrade CB-T3 stub rows to the PH-T1 shape ──────────
+        # Add columns if the table pre-dates PH-T1. Each ALTER is best-effort:
+        # SQLite raises if the column already exists, which we swallow. No data
+        # is dropped — existing char_id/enabled/created_at values are retained.
+        with self.conn() as c:
+            for ddl in (
+                "ALTER TABLE npc_phone ADD COLUMN os_version TEXT NOT NULL DEFAULT 'NeonOS 1.0'",
+                "ALTER TABLE npc_phone ADD COLUMN installed_apps TEXT NOT NULL DEFAULT '[]'",
+                "ALTER TABLE npc_phone ADD COLUMN security_level INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE npc_phone ADD COLUMN firewall INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE npc_phone ADD COLUMN last_hacked TEXT",
+            ):
+                try:
+                    c.execute(ddl)
+                except Exception:
+                    pass  # Column already exists
 
     # ─── thread helpers ──────────────────────────────────────────────
 
@@ -294,6 +327,175 @@ class PhoneDB:
                 "SELECT enabled FROM npc_phone WHERE char_id=?", (char_id,)
             ).fetchone()
         return bool(row and row["enabled"])
+
+    # ─── full phone records (v1.62.0 [2026-06-15] — PH-T1) ───────────────
+
+    # Default field values for a freshly-created phone record. Mirrors the
+    # ``npc_phone`` column defaults so ``get_phone`` can synthesise a row
+    # without a DB round-trip if needed.
+    _PHONE_DEFAULTS: Dict[str, Any] = {
+        "enabled": 1,
+        "os_version": "NeonOS 1.0",
+        "installed_apps": [],
+        "security_level": 1,
+        "firewall": 1,
+        "last_hacked": None,
+    }
+
+    @staticmethod
+    def _row_to_phone(row: Any) -> Dict[str, Any]:
+        """Convert a ``npc_phone`` row into a plain dict with parsed JSON.
+
+        Args:
+            row: A ``sqlite3.Row`` from the ``npc_phone`` table.
+
+        Returns:
+            A dict with ``installed_apps`` parsed from JSON into a list and
+            ``enabled`` coerced to ``bool``.
+        """
+        d = dict(row)
+        try:
+            d["installed_apps"] = json.loads(d.get("installed_apps") or "[]")
+        except Exception:
+            d["installed_apps"] = []
+        if not isinstance(d["installed_apps"], list):
+            d["installed_apps"] = []
+        d["enabled"] = bool(d.get("enabled", 1))
+        return d
+
+    def get_phone(self, char_id: str) -> Dict[str, Any]:
+        """Return the full phone record for *char_id*, creating a default if missing.
+
+        Args:
+            char_id: The character id (``'user'`` for the player).
+
+        Returns:
+            The phone record dict with keys ``char_id``, ``enabled``,
+            ``os_version``, ``installed_apps`` (list), ``security_level``,
+            ``firewall``, ``last_hacked`` and ``created_at``.
+        """
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT * FROM npc_phone WHERE char_id=?", (char_id,)
+            ).fetchone()
+            if row is not None:
+                return self._row_to_phone(row)
+            now = datetime.now(timezone.utc).isoformat()
+            c.execute(
+                """INSERT INTO npc_phone
+                   (char_id, enabled, os_version, installed_apps,
+                    security_level, firewall, last_hacked, created_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (
+                    char_id,
+                    self._PHONE_DEFAULTS["enabled"],
+                    self._PHONE_DEFAULTS["os_version"],
+                    json.dumps(self._PHONE_DEFAULTS["installed_apps"]),
+                    self._PHONE_DEFAULTS["security_level"],
+                    self._PHONE_DEFAULTS["firewall"],
+                    self._PHONE_DEFAULTS["last_hacked"],
+                    now,
+                ),
+            )
+            row = c.execute(
+                "SELECT * FROM npc_phone WHERE char_id=?", (char_id,)
+            ).fetchone()
+        return self._row_to_phone(row)
+
+    def set_phone_fields(self, char_id: str, **fields: Any) -> Dict[str, Any]:
+        """Update one or more phone-record fields for *char_id*.
+
+        Creates the record first (via :meth:`get_phone`) when it does not yet
+        exist. Unknown field names are ignored. ``installed_apps`` may be passed
+        as a list and is JSON-encoded transparently.
+
+        Args:
+            char_id: The character id.
+            **fields: Column/value pairs to update. Allowed columns:
+                ``enabled``, ``os_version``, ``installed_apps``,
+                ``security_level``, ``firewall``, ``last_hacked``.
+
+        Returns:
+            The updated phone record dict.
+        """
+        allowed = {
+            "enabled", "os_version", "installed_apps",
+            "security_level", "firewall", "last_hacked",
+        }
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        self.get_phone(char_id)  # ensure row exists
+        if not updates:
+            return self.get_phone(char_id)
+        cols, vals = [], []
+        for k, v in updates.items():
+            if k == "installed_apps" and isinstance(v, list):
+                v = json.dumps(v)
+            elif k == "enabled":
+                v = 1 if v else 0
+            cols.append(f"{k}=?")
+            vals.append(v)
+        vals.append(char_id)
+        with self.conn() as c:
+            c.execute(
+                f"UPDATE npc_phone SET {', '.join(cols)} WHERE char_id=?",
+                tuple(vals),
+            )
+        return self.get_phone(char_id)
+
+    def add_installed_app(self, char_id: str, app: str) -> Dict[str, Any]:
+        """Add *app* to *char_id*'s installed-apps list (no-op if already present).
+
+        Args:
+            char_id: The character id.
+            app: The app/software identifier to install.
+
+        Returns:
+            The updated phone record dict.
+        """
+        rec = self.get_phone(char_id)
+        apps = list(rec["installed_apps"])
+        if app not in apps:
+            apps.append(app)
+        return self.set_phone_fields(char_id, installed_apps=apps)
+
+    def remove_installed_app(self, char_id: str, app: str) -> Dict[str, Any]:
+        """Remove *app* from *char_id*'s installed-apps list (no-op if absent).
+
+        Args:
+            char_id: The character id.
+            app: The app/software identifier to remove.
+
+        Returns:
+            The updated phone record dict.
+        """
+        rec = self.get_phone(char_id)
+        apps = [a for a in rec["installed_apps"] if a != app]
+        return self.set_phone_fields(char_id, installed_apps=apps)
+
+    def set_last_hacked(self, char_id: str, ts: Optional[str] = None) -> Dict[str, Any]:
+        """Stamp *char_id*'s phone as last-hacked at *ts* (UTC now if omitted).
+
+        Args:
+            char_id: The character id.
+            ts: ISO-8601 timestamp; defaults to the current UTC time.
+
+        Returns:
+            The updated phone record dict.
+        """
+        ts = ts or datetime.now(timezone.utc).isoformat()
+        return self.set_phone_fields(char_id, last_hacked=ts)
+
+    def list_phones(self) -> List[Dict[str, Any]]:
+        """Return every phone record, oldest-first.
+
+        Returns:
+            A list of phone record dicts (see :meth:`get_phone`).
+        """
+        with self.conn() as c:
+            rows = c.execute(
+                "SELECT * FROM npc_phone ORDER BY created_at ASC"
+            ).fetchall()
+        return [self._row_to_phone(r) for r in rows]
 
     def get_or_create_npc_dm(self, char_a: str, char_b: str) -> str:
         """Return the ``npc_dm`` thread for an NPC pair, creating it if needed.
