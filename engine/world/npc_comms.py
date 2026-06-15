@@ -42,6 +42,11 @@ Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — CB-T4: leave-a-message. When the recipient NPC is
+        "offline" (not co-present with the sender) the exchange is stored as a
+        left message (``metadata.left_unread=True``, phone row via
+        ``add_left_message``) and logged to GlobalCommsLog with
+        ``kind='left_message'`` instead of being delivered live.
     v1.62.0 [2026-06-15] — Initial NPC↔NPC hybrid messaging scheduler (CB-T3):
         NPC-owned phones, weighted pair selection, template/LLM hybrid routing,
         write-through to GlobalCommsLog + npc_dm phone threads, own-thread/own-
@@ -594,7 +599,8 @@ class NPCCommsScheduler:
 
         The result is written to the comms log (channel ``npc_dm``) and the
         pair's ``npc_dm`` phone thread, and a Socket.IO event is emitted
-        best-effort.
+        best-effort. When the recipient is "offline" (not co-present) the
+        exchange is stored as a left message (CB-T4) rather than delivered live.
 
         Args:
             a: Sender NPC id.
@@ -603,7 +609,7 @@ class NPCCommsScheduler:
         Returns:
             A dict describing the exchange: ``sender``, ``recipient``,
             ``thread_id``, ``generated`` (``'template'``/``'llm'``),
-            ``content``, ``comms_id``.
+            ``content``, ``comms_id``, ``left_message`` (bool).
         """
         important = self._is_important(a, b)
         use_llm = important and random.random() < self._llm_chance
@@ -625,18 +631,37 @@ class NPCCommsScheduler:
 
         thread_id = self._get_phone_db().npc_pair_thread_id(a, b)
 
+        # v1.62.0 [2026-06-15] — CB-T4: if the recipient NPC is "offline" (not
+        # co-present with the sender) the exchange is *left* for them rather
+        # than dropped — stored flagged and recorded in the comms log as a
+        # left_message. The phone-scene delivery path surfaces it later.
+        leaving = not self._recipient_online(a, b)
+        phone_meta = {"generated": generated, "channel": "npc_dm"}
+        comms_meta = {"generated": generated, "important": important}
+        if leaving:
+            phone_meta["left_unread"] = True
+            comms_meta["left_unread"] = True
+
         # Persist into a real, readable npc_dm phone thread.
         try:
             pdb = self._get_phone_db()
             pdb.mark_npc_phone(a)
             pdb.mark_npc_phone(b)
             pdb.get_or_create_npc_dm(a, b)
-            pdb.save_message(
-                thread_id=thread_id,
-                sender_id=a,
-                content=content,
-                metadata={"generated": generated, "channel": "npc_dm"},
-            )
+            if leaving and hasattr(pdb, "add_left_message"):
+                pdb.add_left_message(
+                    thread_id=thread_id,
+                    sender_id=a,
+                    content=content,
+                    metadata=phone_meta,
+                )
+            else:
+                pdb.save_message(
+                    thread_id=thread_id,
+                    sender_id=a,
+                    content=content,
+                    metadata=phone_meta,
+                )
         except Exception as exc:
             logger.error(
                 "[npc_comms] phone persist failed (operation=run_exchange, pair=%s/%s): %s",
@@ -650,8 +675,8 @@ class NPCCommsScheduler:
             [b],
             content,
             thread_id=thread_id,
-            kind="message",
-            metadata={"generated": generated, "important": important},
+            kind="left_message" if leaving else "message",
+            metadata=comms_meta,
         )
 
         self._remember_pair(a, b)
@@ -668,7 +693,43 @@ class NPCCommsScheduler:
             "generated": generated,
             "content": content,
             "comms_id": comms_id,
+            "left_message": leaving,
         }
+
+    def _recipient_online(self, sender: str, recipient: str) -> bool:
+        """Return whether ``recipient`` is reachable by ``sender`` right now.
+
+        Reuses the shared :class:`~engine.world.presence.PresenceTracker`: an
+        NPC recipient is online when co-present with the sender. Fails open
+        (returns ``True``) when presence cannot be determined, so the exchange
+        behaves exactly as before this feature when presence is unavailable.
+
+        Args:
+            sender: The sending NPC id (used as the co-presence reference).
+            recipient: The receiving NPC id.
+
+        Returns:
+            ``True`` if the recipient should receive the message immediately.
+        """
+        try:
+            from engine.world.presence import get_presence_tracker
+            from engine.world.city_map import get_city_map
+            cm = get_city_map()
+            sloc = cm.get_npc_location(sender)
+            rloc = cm.get_npc_location(recipient)
+            # Unknown locations → fail open (treat as reachable).
+            if not sloc or not rloc:
+                return True
+            # Honour the master/co-presence toggles via the tracker.
+            tracker = get_presence_tracker()
+            if not getattr(tracker, "_enabled", True) or not getattr(
+                tracker, "_npc_requires_co_presence", True
+            ):
+                return True
+            return sloc == rloc
+        except Exception as exc:
+            logger.debug("[npc_comms] recipient presence check failed: %s", exc)
+            return True
 
     def _emit_event(
         self, a: str, b: str, thread_id: str, content: str, generated: str

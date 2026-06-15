@@ -19,6 +19,14 @@ Version: v1.51.1 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — CB-T4: leave-a-message. Player sends to an offline
+                            (not co-present) NPC are stored via add_left_message
+                            + logged kind='left_message' (reply worker skipped);
+                            NPC autotexts to an offline player are left, not
+                            dropped, and flushed on (re)connect via
+                            _deliver_left_messages; socket connect/disconnect
+                            drives PresenceTracker. UI shows a left-message
+                            affordance.
     v1.62.0 [2026-06-15] — CB-T2: GlobalCommsLog write-through — explicit USER
                             sends (DM + group) logged here; NPC replies logged
                             by the CommsLoggerInterceptor (no double-logging).
@@ -574,13 +582,43 @@ class PhoneSceneV2(FlaskScene):
                 if reply.get("image_requests"):
                     metadata["image_requests"] = reply["image_requests"]
 
-                msg = self.phone_db.save_message(
+                # v1.62.0 [2026-06-15] — CB-T4: if the player is offline (phone
+                # closed / no socket client), the NPC *leaves a message* instead
+                # of dropping it. It is stored flagged and surfaced when the
+                # player next connects (see _deliver_left_messages).
+                pres = self._presence()
+                leaving = bool(pres is not None and not pres.is_player_online())
+                if leaving:
+                    msg = self.phone_db.add_left_message(
+                        thread_id=thread_id,
+                        sender_id=char_id,
+                        content=text,
+                        msg_type="text",
+                        metadata=metadata if metadata else None,
+                    )
+                else:
+                    msg = self.phone_db.save_message(
+                        thread_id=thread_id,
+                        sender_id=char_id,
+                        content=text,
+                        msg_type="text",
+                        metadata=metadata if metadata else None,
+                    )
+
+                # Single source of truth: log the autotext to GlobalCommsLog,
+                # marked as a left_message when the player was offline.
+                self._log_user_comms(
+                    channel="phone_dm",
                     thread_id=thread_id,
-                    sender_id=char_id,
+                    recipient_ids=["user"],
                     content=text,
-                    msg_type="text",
-                    metadata=metadata if metadata else None,
+                    sender_id=char_id,
+                    kind="left_message" if leaving else "autotext",
+                    metadata=(
+                        {**metadata, "left_unread": True} if leaving else (metadata or None)
+                    ),
                 )
+
                 try:
                     get_framework().emit_event("message_sent", {
                         "scene_id": SCENE_ID, "char_id": char_id,
@@ -588,12 +626,15 @@ class PhoneSceneV2(FlaskScene):
                     }, source=SCENE_ID)
                 except Exception:
                     pass
-                self._emit("message_new", {
-                    "thread_id": thread_id,
-                    "message":   msg,
-                    "char_name": char_name,
-                }, room=f"thread_{thread_id}")
-                self._emit("thread_updated", {"thread_id": thread_id}, room=f"thread_{thread_id}")
+                # Only push live when the player is online; left messages are
+                # flushed on (re)connect so they aren't lost OR shown to nobody.
+                if not leaving:
+                    self._emit("message_new", {
+                        "thread_id": thread_id,
+                        "message":   msg,
+                        "char_name": char_name,
+                    }, room=f"thread_{thread_id}")
+                    self._emit("thread_updated", {"thread_id": thread_id}, room=f"thread_{thread_id}")
             except Exception as exc:
                 logger.warning("[%s] autotxt fire failed (operation=autotxt, agent=%s): %s", SCENE_ID, char_id, exc)
             finally:
@@ -881,6 +922,82 @@ class PhoneSceneV2(FlaskScene):
                 channel, sender_id, thread_id, exc,
             )
 
+    # ── leave-a-message presence (v1.62.0 [2026-06-15] — CB-T4) ──────────────
+
+    def _presence(self):
+        """Return the shared :class:`PresenceTracker` (best-effort).
+
+        Returns:
+            The process-wide presence tracker, or ``None`` if it cannot be
+            constructed (in which case callers treat recipients as online).
+        """
+        try:
+            from engine.world.presence import get_presence_tracker
+            return get_presence_tracker()
+        except Exception as exc:
+            logger.debug("[%s] presence unavailable (operation=presence): %s", SCENE_ID, exc)
+            return None
+
+    def _is_leave_message(self, recipients: List[str]) -> bool:
+        """Decide whether a player send is a "left message" (all NPCs offline).
+
+        The player is *leaving a message* when there is at least one NPC
+        recipient and every NPC recipient is offline (not co-present). If
+        presence cannot be determined the recipients are treated as online, so
+        this returns ``False`` (pre-feature behaviour).
+
+        Args:
+            recipients: NPC character ids addressed by the send.
+
+        Returns:
+            ``True`` if the message should be stored as a left message.
+        """
+        npc_ids = [r for r in recipients if r != "user"]
+        if not npc_ids:
+            return False
+        pres = self._presence()
+        if pres is None:
+            return False
+        return all(not pres.is_npc_online(cid) for cid in npc_ids)
+
+    def _deliver_left_messages(self) -> int:
+        """Deliver pending left messages to the player on (re)connect.
+
+        Flips each pending left message addressed to the player from
+        ``delivered=False`` to ``delivered=True`` (retaining ``left_unread`` so
+        the UI still shows the "left you a message" affordance) and emits a
+        ``message_new`` event carrying that metadata so it renders live.
+
+        Returns:
+            The number of left messages delivered.
+        """
+        delivered = 0
+        try:
+            pending = self.phone_db.get_pending_left_messages(recipient_id="user")
+        except Exception as exc:
+            logger.debug("[%s] left-message scan failed (operation=deliver_left): %s", SCENE_ID, exc)
+            return 0
+        for msg in pending:
+            try:
+                self.phone_db.mark_message_delivered(msg["id"])
+                msg.setdefault("metadata", {})
+                msg["metadata"]["delivered"] = True
+                self._emit("message_new", {
+                    "thread_id": msg["thread_id"],
+                    "message": msg,
+                    "left_unread": True,
+                }, room=f"thread_{msg['thread_id']}")
+                self._emit("thread_updated", {"thread_id": msg["thread_id"]})
+                delivered += 1
+            except Exception as exc:
+                logger.debug("[%s] left-message deliver failed (id=%s): %s", SCENE_ID, msg.get("id"), exc)
+        if delivered:
+            logger.info(
+                "[%s] delivered %d left message(s) on connect (operation=deliver_left)",
+                SCENE_ID, delivered,
+            )
+        return delivered
+
     # ── Socket.IO ────────────────────────────────────────────────────────────
 
     # v1.52.0 [2026-03-22] — Room-targeted Socket.IO emission
@@ -1130,6 +1247,29 @@ class PhoneSceneV2(FlaskScene):
 
     def _register_socketio(self) -> None:
         sio = self.socketio
+
+        # v1.62.0 [2026-06-15] — CB-T4: socket-driven player presence. While a
+        # phone client is connected the player is "online"; on (re)connect we
+        # flush any messages NPCs left while the player was away.
+        @sio.on("connect")
+        def _on_connect():
+            try:
+                from engine.world.presence import get_presence_tracker
+                get_presence_tracker().connect(request.sid)
+            except Exception as exc:
+                logger.debug("[%s] presence connect failed: %s", SCENE_ID, exc)
+            try:
+                self._deliver_left_messages()
+            except Exception as exc:
+                logger.debug("[%s] left-message delivery on connect failed: %s", SCENE_ID, exc)
+
+        @sio.on("disconnect")
+        def _on_disconnect():
+            try:
+                from engine.world.presence import get_presence_tracker
+                get_presence_tracker().disconnect(request.sid)
+            except Exception as exc:
+                logger.debug("[%s] presence disconnect failed: %s", SCENE_ID, exc)
 
         @sio.on("join_thread")
         def _join(data):
@@ -1714,35 +1854,60 @@ class PhoneSceneV2(FlaskScene):
             if not content and msg_type == "text":
                 return jsonify({"ok": False, "error": "content required"}), 400
 
-            # Save player message
+            # Determine which characters are in this thread
             try:
-                user_msg = self.phone_db.save_message(
-                    thread_id=thread_id,
-                    sender_id="user",
-                    content=content,
-                    msg_type=msg_type,
-                )
+                members = self.phone_db.get_thread_members(thread_id)
+            except Exception:
+                members = []
+            char_recipients = [m for m in members if m != "user"] or ["user"]
+
+            # v1.62.0 [2026-06-15] — CB-T4: if EVERY NPC in the thread is
+            # "offline"/away (not co-present with the player), the player is
+            # *leaving a message* rather than chatting live. Store it flagged
+            # so the NPC sees "left you a message" later, log it as a
+            # left_message, and skip the immediate reply worker (the NPC isn't
+            # there to answer yet).
+            leaving = self._is_leave_message(char_recipients)
+
+            # Save player message (flagged when leaving a message)
+            try:
+                if leaving:
+                    user_msg = self.phone_db.add_left_message(
+                        thread_id=thread_id,
+                        sender_id="user",
+                        content=content,
+                        msg_type=msg_type,
+                    )
+                else:
+                    user_msg = self.phone_db.save_message(
+                        thread_id=thread_id,
+                        sender_id="user",
+                        content=content,
+                        msg_type=msg_type,
+                    )
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
             # v1.52.0 — Target thread room
             self._emit("message_new", {"thread_id": thread_id, "message": user_msg}, room=f"thread_{thread_id}")
 
-            # Determine which characters are in this thread
-            try:
-                members = self.phone_db.get_thread_members(thread_id)
-            except Exception:
-                members = []
-
-            # v1.62.0 [2026-06-15] — CB-T2: log the explicit USER send.
-            char_recipients = [m for m in members if m != "user"] or ["user"]
+            # v1.62.0 [2026-06-15] — CB-T2/T4: log the explicit USER send.
             self._log_user_comms(
                 channel="phone_dm",
                 thread_id=thread_id,
                 recipient_ids=char_recipients,
                 content=content,
-                metadata={"msg_type": msg_type},
+                kind="left_message" if leaving else "message",
+                metadata=(
+                    {"msg_type": msg_type, "left_unread": True}
+                    if leaving else {"msg_type": msg_type}
+                ),
             )
+
+            # When leaving a message, the recipient is offline — don't fire a
+            # live reply worker; the NPC will respond when they next come online.
+            if leaving:
+                return jsonify({"ok": True, "message": user_msg, "left_message": True})
 
             # Generate AI replies (off-thread to return fast)
             def _reply_worker():
