@@ -444,6 +444,92 @@
     .ghost-send-btn:active{opacity:.85}
     .world-alert-banner{position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(-100%);z-index:8999;background:rgba(255,69,58,.92);color:#fff;padding:10px 20px;border-radius:0 0 14px 14px;font-size:13px;font-weight:600;max-width:430px;width:100%;text-align:center;transition:transform .35s cubic-bezier(.4,0,.2,1)}
     .world-alert-banner.show{transform:translateX(-50%) translateY(0)}
+
+    /* ══════════════════════════════════════════════════════════
+       PH-T5 — OS-LIKE: notifications centre, search, recents,
+       installed-apps lock, Breach + Upgrades apps
+       v1.62.0 [2026-06-15]
+    ══════════════════════════════════════════════════════════ */
+    /* Status-bar actions (search + bell) */
+    .status-act{cursor:pointer;position:relative;font-size:13px;line-height:1;transition:transform .12s}
+    .status-act:active{transform:scale(.85)}
+    .status-bell-badge{position:absolute;top:-6px;right:-7px;background:var(--red);color:#fff;font-size:9px;font-weight:700;min-width:14px;height:14px;padding:0 3px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid var(--bg)}
+
+    /* Installed-apps lock overlay */
+    .app-icon.app-locked .icon-box{filter:grayscale(.7) brightness(.55)}
+    .icon-box .icon-lock{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(0,0,0,.35);border-radius:4px}
+    .app-icon.app-locked .app-name{color:var(--label3)}
+
+    /* OS pull-down sheet (notifications + recents) */
+    .os-sheet{position:absolute;left:0;right:0;top:0;z-index:300;background:rgba(8,14,20,.97);backdrop-filter:blur(14px);border-bottom:1px solid var(--sep);box-shadow:0 8px 32px rgba(0,0,0,.5);max-height:70%;display:flex;flex-direction:column;transform:translateY(-110%);transition:transform .28s cubic-bezier(.4,0,.2,1)}
+    .os-sheet.open{transform:translateY(0)}
+    .os-sheet-head{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--status-h) - 12px) 16px 12px;font-size:15px;font-weight:700;color:var(--accent);letter-spacing:.5px;border-bottom:1px solid var(--sep);flex-shrink:0}
+    .os-x{font-size:16px;color:var(--label2);width:28px;height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center}
+    .os-x:active{background:var(--bg3)}
+
+    /* Notifications centre */
+    .notif-center .notif-list{overflow-y:auto;padding:8px 0}
+    .notif-item{display:flex;gap:12px;padding:12px 16px;border-bottom:.5px solid var(--sep);align-items:flex-start;animation:fadeIn .25s ease;border-left:3px solid transparent}
+    .notif-item.notif-breach{border-left-color:var(--red);background:rgba(239,68,68,.06)}
+    .notif-item.notif-blocked{border-left-color:var(--green);background:rgba(34,197,94,.05)}
+    .notif-item.notif-intercept{border-left-color:var(--teal);background:rgba(6,182,212,.05)}
+    .notif-item.notif-left_message{border-left-color:var(--yellow);background:rgba(245,158,11,.05)}
+    .notif-item.notif-system{border-left-color:var(--purple)}
+    .notif-ic{font-size:20px;flex-shrink:0;width:26px;text-align:center}
+    .notif-body{flex:1;min-width:0}
+    .notif-text{font-size:13px;color:var(--label);line-height:1.4}
+    .notif-meta{font-size:10px;color:var(--label3);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+
+    /* Global search */
+    .search-overlay{position:absolute;inset:0;z-index:320;background:var(--bg);display:flex;flex-direction:column;padding-top:var(--status-h)}
+    .search-bar-row{display:flex;gap:8px;align-items:center;padding:12px 12px 8px;border-bottom:1px solid var(--sep)}
+    .search-input{flex:1;background:var(--bg3);border:1px solid var(--sep);border-radius:6px;padding:10px 14px;font-size:15px;color:var(--label);outline:none}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(16,185,129,.12)}
+    .search-results{flex:1;overflow-y:auto;padding-top:8px}
+
+    /* Recents */
+    .recents-row{display:flex;gap:12px;overflow-x:auto;padding:16px}
+    .recent-card{flex-shrink:0;width:84px;cursor:pointer;text-align:center}
+    .recent-ic{width:60px;height:60px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 6px;border:1px solid rgba(255,255,255,.08)}
+    .recent-nm{font-size:11px;color:var(--label2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .recent-card:active .recent-ic{transform:scale(.9)}
+
+    /* Breach app */
+    .breach-power{margin:0 16px 12px;padding:8px 14px;background:rgba(16,185,129,.08);border:1px solid var(--sep);border-radius:4px;font-size:12px;font-weight:700;letter-spacing:1px;color:var(--accent)}
+    .breach-actions{display:flex;gap:8px;padding:0 16px 12px}
+    .breach-act{flex:1;padding:8px 4px;background:var(--bg2);border:1px solid var(--sep);border-radius:4px;font-size:12px;font-weight:600;color:var(--label2);transition:all .15s}
+    .breach-act.active{background:rgba(16,185,129,.15);color:var(--accent);border-color:rgba(16,185,129,.4)}
+    .breach-target{display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg2);border:1px solid var(--sep);border-radius:4px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+    .breach-target:hover{border-color:rgba(16,185,129,.4)}
+    .breach-avatar{width:40px;height:40px;border-radius:4px;background:rgba(16,185,129,.1);border:1px solid var(--sep);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);flex-shrink:0}
+    .breach-name{font-size:15px;font-weight:600}
+    .breach-def{font-size:11px;color:var(--label2);margin-top:2px;letter-spacing:.5px}
+    .breach-go{color:var(--accent);font-size:12px;font-weight:700}
+    .breach-result-card{margin-top:12px;background:var(--bg2);border:1px solid var(--sep);border-radius:4px;padding:14px;animation:fadeIn .25s ease}
+    .breach-verdict{font-size:15px;font-weight:800;letter-spacing:1px}
+    .breach-verdict.win{color:var(--green)}
+    .breach-verdict.fail{color:var(--red)}
+    .breach-roll{font-size:11px;color:var(--label3);margin:4px 0 8px;font-family:var(--font);letter-spacing:.5px}
+    .breach-msg{font-size:13px;color:var(--label);line-height:1.5;margin-bottom:8px}
+    .breach-read{font-size:12px;color:var(--label2);padding:6px 8px;background:var(--bg3);border-radius:3px;margin-bottom:4px;line-height:1.4}
+    .breach-read-from{color:var(--accent);font-weight:700}
+
+    /* Upgrades app */
+    .upg-stats{display:flex;gap:8px;padding:0 16px 16px}
+    .upg-stat{flex:1;background:var(--bg2);border:1px solid var(--sep);border-radius:4px;padding:10px 4px;text-align:center}
+    .upg-num{font-size:22px;font-weight:800;color:var(--accent)}
+    .upg-lbl{font-size:10px;color:var(--label3);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+    .upg-card{background:var(--bg2);border:1px solid var(--sep);border-radius:4px;padding:12px 14px;margin-bottom:10px}
+    .upg-card.done{opacity:.7}
+    .upg-row1{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .upg-name{font-size:15px;font-weight:700}
+    .upg-desc{font-size:12px;color:var(--label2);margin:4px 0 6px;line-height:1.4}
+    .upg-fxrow{display:flex;flex-wrap:wrap;gap:6px}
+    .upg-fx{font-size:10px;font-weight:600;background:rgba(16,185,129,.12);color:var(--accent);border-radius:8px;padding:2px 8px;text-transform:uppercase;letter-spacing:.5px}
+    .upg-fx.upg-app{background:rgba(168,85,247,.15);color:var(--purple)}
+    .upg-installed{font-size:12px;color:var(--green);font-weight:700}
+    .app-recents{font-size:18px;color:var(--accent);padding:0 8px;height:34px;display:flex;align-items:center;flex-shrink:0}
+    .app-recents:active{opacity:.6}
   </style>
     <link rel="stylesheet" href="/shared/css/design_tokens.css">
     <script src="/shared/js/cosysim-core.js"></script>
@@ -482,6 +568,8 @@
       <button class="app-back" id="app-back-btn" onclick="CosyPhone.closeApp()"><span>‹</span>Home</button>
       <div class="app-title" id="app-title-bar">App</div>
       <div class="app-header-right" id="app-header-right"></div>
+      <!-- v1.62.0 [2026-06-15] — PH-T5: recent-apps switcher -->
+      <button class="app-recents" id="app-recents-btn" title="Recent apps" onclick="CosyPhone.showRecents()">▤</button>
     </div>
     <!-- v1.51.1 [2026-03-25] — Desktop mode tab bar -->
     <div id="app-tabbar" class="app-tabbar" style="display:none">
@@ -505,7 +593,7 @@
 </div>
 
 <script src="/shared/js/socket.io.min.js"></script>
-<script src="/static/js/phone_v2.js?v=3.3.0"></script>
+<script src="/static/js/phone_v2.js?v=3.4.0"></script>
 <script src="/shared/js/cosysim-voice.js"></script>
 <script>
 /* ── World / Ghost Integration ─────────────────────────────────── */
