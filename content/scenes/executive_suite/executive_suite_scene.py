@@ -22,6 +22,13 @@ Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — Final polish (ES-T5): module-level
+                            ``_sanitize_assistant_reply`` strips leaked model
+                            meta/instruction artifacts (``<<DOC|...>>`` blocks,
+                            leading system/metadata markdown headers, stray role
+                            prefixes) from the agent reply BEFORE it is stored /
+                            emitted / returned; assistant system prompt tightened
+                            to discourage markdown/meta/stage-direction leakage.
     v1.62.0 [2026-06-15] — Live AI assistant + live system tray (ES-T4): adds the
                             assistant dispatch (socket ``assistant_message`` →
                             ``assistant_reply``/``assistant_typing`` + REST
@@ -46,6 +53,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -73,6 +81,92 @@ _ASSISTANT_AGENTS = ("aria", "lola", "mira", "frankie", "viktor")
 _ASSISTANT_DEFAULT_AGENT = "aria"
 # Friendly fallback line when the LLM (LMStudio) is unreachable — never a 500.
 _ASSISTANT_FALLBACK = "(comms link to my agent is down — try me again in a moment.)"
+
+# v1.62.0 [2026-06-15] — Assistant reply sanitizer (ES-T5 polish). The local
+# LMStudio model occasionally leaks instruction/meta artifacts into in-character
+# replies (``<<DOC|...>>`` / ``<<...>>`` blocks, leading ``### System Metadata``
+# markdown headers, role-leak prefixes). These patterns strip that noise while
+# being conservative about normal prose / emoji.
+# Markdown header lines that look like leaked system/meta sections.
+_RE_META_HEADER = re.compile(
+    r"^\s{0,3}#{1,6}\s*(system\s*metadata|metadata|instructions?|doc|document|"
+    r"system\s*prompt|context|notes?\s*to\s*self)\b.*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+# A leading role-leak prefix at the very start ("assistant:", "Aria:", etc.).
+_RE_ROLE_PREFIX = re.compile(
+    r"^\s*(assistant|system|user|ai|bot|[A-Z][\w'’-]{1,24})\s*:\s+",
+)
+# A single leading markdown list-bullet marker ("- ", "* ", "• ") on the reply.
+_RE_LEADING_BULLET = re.compile(r"^\s*[-*•]\s+")
+# Three or more blank lines collapse to a single blank line.
+_RE_EXCESS_BLANKS = re.compile(r"\n{3,}")
+# Trailing whitespace on each line.
+_RE_TRAILING_WS = re.compile(r"[ \t]+$", re.MULTILINE)
+
+
+def _sanitize_assistant_reply(text: str) -> str:
+    """Strip leaked model meta/instruction artifacts from an assistant reply.
+
+    The local LMStudio model sometimes contaminates in-character replies with
+    leaked scaffolding — ``<<DOC|...>>`` / ``<<...>>`` blocks, leading markdown
+    metadata/system headers (``### System Metadata``, ``# Instructions`` …) and
+    stray role prefixes (``assistant:`` / ``Aria:`` at the very start). This
+    helper removes that noise while staying conservative: it does NOT touch
+    normal prose, mid-sentence punctuation, ordinary ``#hashtags`` or emoji.
+
+    Steps (in order):
+      1. drop ``<<...>>`` / ``<<DOC...>>`` style blocks,
+      2. remove leading markdown meta/system header lines (only while they sit
+         at the very top of the reply — never headers buried in real prose),
+      3. trim a single leading role-leak prefix (``assistant:`` / ``Name:``)
+         and a single leading markdown list-bullet on an otherwise-single-line
+         reply,
+      4. collapse excess whitespace / blank lines and strip.
+
+    Version: v1.62.0 [2026-06-15]
+    """
+    if not text:
+        return text
+
+    # 1) Bracketed meta/doc blocks anywhere in the text. Absorb a single space on
+    # each side so removing an inline block doesn't leave a double space.
+    cleaned = re.sub(r" ?<<[^>]*?>> ?", " ", text, flags=re.DOTALL)
+
+    # 2) Strip leading meta/system markdown headers — only consume them while
+    # they remain at the top, so we never delete a ``#`` line inside real prose.
+    lines = cleaned.split("\n")
+    while lines:
+        head = lines[0]
+        if not head.strip():
+            lines.pop(0)
+            continue
+        if _RE_META_HEADER.match(head):
+            lines.pop(0)
+            # Also drop an immediately-following indented/bullet meta body until
+            # the next blank line, so the header's content goes with it.
+            while lines and lines[0].strip() and (
+                lines[0].lstrip().startswith(("-", "*", ">", "|"))
+                or lines[0][:1] in (" ", "\t")
+            ):
+                lines.pop(0)
+            continue
+        break
+    cleaned = "\n".join(lines)
+
+    # 3) Trim a single stray role-leak prefix at the very start.
+    cleaned = _RE_ROLE_PREFIX.sub("", cleaned, count=1)
+
+    # 3b) Drop a single leading markdown list-bullet, but ONLY when the reply is
+    # a single bullet (not a genuine multi-item list) — conversational replies
+    # should never start with "- "/"* "/"• ".
+    if "\n" not in cleaned.strip():
+        cleaned = _RE_LEADING_BULLET.sub("", cleaned, count=1)
+
+    # 4) Collapse excess whitespace.
+    cleaned = _RE_TRAILING_WS.sub("", cleaned)
+    cleaned = _RE_EXCESS_BLANKS.sub("\n\n", cleaned)
+    return cleaned.strip()
 
 
 # ──── Scene Implementation ────────────────────────────────────
@@ -618,12 +712,17 @@ class ExecutiveSuiteScene(FlaskScene):
         hist = self._assistant_history.setdefault(agent_id, [])
 
         # System prompt: in-world AI assistant framing on the executive desktop.
+        # v1.62.0 [2026-06-15] — ES-T5: tightened to discourage the local model's
+        # meta/markdown leakage (headers, <<DOC>> blocks, stage directions).
         system = (
             "You are %s, the operator's live in-world AI assistant inside the "
             "NEONOS executive suite — a neon-noir cyberpunk corporate OS. %s\n"
-            "Reply in-character, concise and conversational (1-3 sentences). "
-            "Be helpful, a little flirty and street-smart. Never break character "
-            "or mention being a language model." % (name, persona)
+            "Reply in-character as %s, plain conversational text only — no "
+            "markdown headers, no meta, no system/instruction notes, no "
+            "<<...>> blocks, and no stage directions in brackets unless emotive. "
+            "Keep it concise (1-3 sentences), helpful, a little flirty and "
+            "street-smart. Never break character or mention being a language "
+            "model." % (name, persona, name)
         )
 
         reply_text = ""
@@ -649,6 +748,10 @@ class ExecutiveSuiteScene(FlaskScene):
             )
             response = mgr.infer_processed(req)
             reply_text = strip_token_artifacts((response.clean_text or "").strip())
+            # v1.62.0 [2026-06-15] — ES-T5: strip leaked meta/instruction
+            # artifacts (<<DOC>> blocks, system headers, role prefixes) BEFORE
+            # the reply is stored in history / emitted / returned.
+            reply_text = _sanitize_assistant_reply(reply_text)
             # Keep the cached agent warm for parity with the engine pipeline.
             _ = agent
         except Exception as exc:

@@ -42,6 +42,33 @@ the live scene on `:5556` with LMStudio up.
   guarded to never override an active pose, a busy character, or a viewerless
   scene — so idle characters feel alive without spamming the model.
 
+### Executive Suite — a new neon OS desktop scene
+- **New `executive_suite` scene** (`:5596`) — a full-screen neon-noir corporate
+  "operating system": a draggable **window manager** (z-index focus, traffic-light
+  close, minimize/restore), a left **app dock** with badges, desktop icons, a
+  bottom **taskbar** (start, ⌘K search, pinned apps, system tray) and a layered
+  **animated skyline** behind an office bezel — ported faithfully from the
+  `ui_kits_v2/executive_suite` reference into Jinja2 + CSS-var'd vanilla JS.
+- **8 functional apps wired to real data** — Files (live inventory + item catalog +
+  sandboxed `data/` JSON), Mail (read/compose against the existing phone comms
+  threads; repoints to GlobalCommsLog in sub-project 2), Notes (autosaving JSON
+  store), Music (player + animated equalizer/queue), Code, a **sandboxed**
+  Terminal (whitelisted read-only commands — `status`/`world`/`inbox`/`scenes`…,
+  no shell exec), Browser, and Settings (theme/accent).
+- **Live AI assistant + live system tray** — the Assistant panel ("Add my Agent",
+  LIVE badge, chat feed) drives a real `CharacterAgent` (default Aria) over
+  Socket.IO, reusing the shared `VirtualAgentManager` agent pipeline; the tray
+  clock reads the live `WorldState` game clock and `heat` reads live `PlayerState`.
+  Assistant replies are run through a conservative sanitizer that strips leaked
+  model meta/instruction artifacts (`<<DOC|…>>` blocks, system/metadata markdown
+  headers, stray role prefixes) before they reach the feed.
+- **Full registration + auto-start** — added across every source-of-truth
+  (launcher `--list`, TUI, control-plane registry, port registry `:5596`, the
+  in-world hub) and enabled by default (`pillars.game.auto_start` + per-scene
+  `auto_start: true`), so it boots with the core game set.
+- **Surfaced previously-missing hub scenes** — `auction` and `cyberspace` were
+  registered but absent from the hub UI; both now appear in-world and in `--list`.
+
 ---
 
 ## [1.61.0] — "PUBLIC RELEASE PREP" — 2026-06-13
