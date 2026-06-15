@@ -6,6 +6,9 @@
  * + vignette) in the executive_suite/landing aesthetic, an SVG district map
  * shaded by dominant faction, NPC tokens, a faction leaderboard and a live City
  * Pulse feed, plus a top HUD strip. Reuses the CosySim neon palette.
+ * v1.63.0 [2026-06-16] — Player agency (B-T4): the PLAYER avatar glyph ("YOU"
+ * pulsing double-ring), the neon intervene/travel action menu, and result
+ * toasts. Same neon design-system tokens (--sprawl-* / --fac-*).
  */
 
 :root {
@@ -434,6 +437,128 @@ html, body {
   inset: 0;
   display: grid;
   place-items: center;
+}
+
+/* ─── Player avatar (B-T4) ──────────────────────────────────── */
+/* v1.63.0 [2026-06-16] — The PLAYER marker: a pulsing double-ring "YOU" glyph. */
+.sprawl-avatar { pointer-events: none; }
+.sprawl-avatar__halo {
+  filter: drop-shadow(0 0 6px var(--sprawl-accent));
+  animation: sprawl-avatar-pulse 1.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.sprawl-avatar__core {
+  filter: drop-shadow(0 0 8px var(--sprawl-accent));
+}
+@keyframes sprawl-avatar-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+.sprawl-avatar__label {
+  font-family: "Orbitron", sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  fill: var(--sprawl-accent);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.sprawl-avatar__note {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  fill: rgba(215, 255, 224, 0.7);
+}
+
+/* ─── Intervene / travel action menu (B-T4) ─────────────────── */
+.sprawl-menu {
+  position: absolute;
+  z-index: 6;
+  min-width: 152px;
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid var(--sprawl-border);
+  background: rgba(4, 8, 7, 0.97);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(57, 255, 20, 0.06);
+  backdrop-filter: blur(8px);
+  animation: sprawl-menu-in 0.12s ease;
+}
+@keyframes sprawl-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.sprawl-menu__head {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sprawl-accent);
+  padding: 0.35rem 0.5rem 0.45rem;
+  border-bottom: 1px solid var(--sprawl-border);
+  margin-bottom: 0.25rem;
+}
+.sprawl-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.42rem 0.55rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sprawl-ink);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.sprawl-menu__item:hover:not(.is-disabled) {
+  background: rgba(57, 255, 20, 0.12);
+  color: var(--sprawl-accent);
+}
+.sprawl-menu__item--travel {
+  color: var(--sprawl-accent);
+  border: 1px dashed var(--sprawl-border);
+  margin-bottom: 0.25rem;
+}
+.sprawl-menu__item.is-disabled {
+  color: var(--sprawl-dim);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ─── Result toasts (B-T4) ──────────────────────────────────── */
+.sprawl-toasts {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: center;
+  pointer-events: none;
+}
+.sprawl-toast {
+  max-width: 460px;
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--sprawl-border);
+  background: rgba(4, 8, 7, 0.96);
+  color: var(--sprawl-ink);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.74rem;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+  animation: sprawl-toast-in 0.2s ease;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.sprawl-toast.is-ok { border-color: rgba(57, 255, 20, 0.45); }
+.sprawl-toast.is-bad { border-color: rgba(239, 68, 68, 0.5); color: #ffd9d9; }
+.sprawl-toast.is-out { opacity: 0; transform: translateY(6px); }
+@keyframes sprawl-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Responsive: stack side panel under the map on narrow viewports. */

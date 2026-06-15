@@ -1192,6 +1192,10 @@ oracle:
 emergent:
   store:
     db_path: "data/emergent.db"  # persistent sim store for the emergent engine
+  # v1.63.0 [2026-06-16] — B-T4: the player's faction allegiance (The Sprawl
+  # "contest" intervention + the War Room sub-project read this). Empty = no
+  # allegiance yet, so contesting a district is gracefully refused.
+  player_faction: ""
   # ── v1.63.0 [2026-06-15] — A3: per-NPC goal generation tuning ──
   # All weights/thresholds for the PURE goal generator + re-prioritiser. Tune
   # NPC drives here without code changes; engine/world/emergent/goals.py reads
@@ -1255,4 +1259,15 @@ emergent:
 char_gen:
   population_count: 15   # default target population for seed_generated_population
   faction_count: 10      # default factioned count for seed_generated_population
+
+# ── v1.63.0 [2026-06-16] — B-T4: THE SPRAWL player-agency knobs ──
+# content/scenes/the_sprawl/the_sprawl_scene.py reads these via
+# get_config().get("the_sprawl.*", default). All have built-in code defaults;
+# this block just makes them tunable without a redeploy.
+the_sprawl:
+  travel_energy_cost: 5          # energy spent moving the avatar between districts
+  talk_relationship_delta: 3.0   # player↔NPC relationship bump from a friendly talk
+  deal_quote_limit: 5            # goods returned by a market price-scan ("deal")
+  contest_delta: 1.0             # control % a single contest shifts (clamped to CONTROL_SHIFT_RANGE)
+  player_faction: ""             # optional override of emergent.player_faction (empty = none)
 

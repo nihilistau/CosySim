@@ -165,12 +165,18 @@
             <line x1="0" y1="0" x2="0" y2="14" stroke="#ffffff" stroke-width="2" stroke-opacity="0.18"/>
           </pattern>
         </defs>
-        {# District zones + NPC tokens are injected here by the_sprawl.js. #}
+        {# District zones, NPC tokens + the PLAYER avatar are injected by the_sprawl.js. #}
         <g id="sprawl-districts"></g>
         <g id="sprawl-npcs"></g>
+        {# v1.63.0 [2026-06-16] — B-T4: player avatar marker (rendered above tokens). #}
+        <g id="sprawl-avatar"></g>
       </svg>
       <!-- Floating tooltip for NPC tokens -->
       <div class="sprawl-tip" id="sprawl-tip" hidden></div>
+      <!-- v1.63.0 [2026-06-16] — B-T4: neon intervene / travel action menu -->
+      <div class="sprawl-menu" id="sprawl-menu" hidden></div>
+      <!-- v1.63.0 [2026-06-16] — B-T4: transient result toasts -->
+      <div class="sprawl-toasts" id="sprawl-toasts" aria-live="polite"></div>
       <!-- Empty state -->
       <div class="sprawl-empty" id="sprawl-map-empty" hidden>awaiting city feed…</div>
     </section>
