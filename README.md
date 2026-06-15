@@ -121,12 +121,13 @@ A running ledger of the systems that make the city feel alive, newest release fi
 
 ### v1.63 — "Emergent Living World" (latest)
 
-The v1.63 line gives the city's NPCs minds of their own: each character runs a goal → plan → verb loop on the existing world tick and acts through the systems that already exist — no second daemon, no new managers. Sub-project A (the agency layer) and B (The Sprawl city map) ship here; the remaining player-facing scenes (C/D) are forthcoming.
+The v1.63 line gives the city's NPCs minds of their own: each character runs a goal → plan → verb loop on the existing world tick and acts through the systems that already exist — no second daemon, no new managers. Sub-projects A (the agency layer), B (The Sprawl city map) and C (The War Room command center) ship here; sub-project D is forthcoming.
 
 | System | What it does | Lives in |
 |---|---|---|
 | **Emergent NPC agency** | Per-NPC goal → plan → verb loop on the existing `living_world_tick`: NPCs pursue wealth/revenge/romance/faction goals and act through Market (trade nudge), Territory (contest), Crew, relationship_effects, npc_comms and phone_hack — with persistent goals/feed and the LLM kept rare so the model stays calm. | `engine/world/emergent/`, wired in `content/scenes/neoncity/neoncity_scene.py` |
 | **The Sprawl — living city map** | A real-time SVG map of NEONCITY (`:5597`) composed from the existing managers: six districts shaded by dominant faction with live control% + contested hatch, faction-coloured NPC tokens, a power leaderboard and a streaming City Pulse feed. The player's avatar walks the city and intervenes (talk / hack / deal / recruit / contest) through the existing verbs; territory shifts render live. | `content/scenes/the_sprawl/` |
+| **The War Room — faction command center** | Pick an allegiance, then command the city from a live faction dashboard (`:5598`). Persisted `PlayerState.allegiance`, a power/territory/rank/crew/wars dashboard, and a command bar — contest, ops (with success preview), recruit, build/upgrade HQ, diplomacy (ally/war/neutral) — all routed to the existing Territory / Crew / Faction / FactionAI managers. Setting an allegiance closes the Sprawl's contest gate. | `content/scenes/war_room/` |
 
 ### v1.62 — "Living City"
 
