@@ -71,6 +71,38 @@ forthcoming.
   faction allegiance). Successful interventions write to the City Pulse feed and
   flash the map.
 
+### The War Room — pick a faction, command the city (sub-project C)
+- **A new faction command-center scene** (`content/scenes/war_room/`, port 5598) —
+  pick an allegiance, then run the metagame from a live faction dashboard. The
+  scene only orchestrates; every effect routes to the EXISTING managers
+  (`TerritoryManager` / `CrewManager` / `FactionManager` / `FactionAI` /
+  `PlayerState`) — no new world state.
+- **Player allegiance (persisted)** — `PlayerState.allegiance` is a new persisted
+  field set via `POST /api/warroom/allegiance` and saved through the existing
+  debounced auto-save. Choosing a faction refreshes FactionAI's player context so
+  rivals react.
+- **Live faction dashboard** — `GET /api/warroom/{factions,allegiance,state}`
+  assemble the picker + command center from territory control (power, dominant
+  districts, `get_faction_total_control` → rank), crew roster, active wars, recent
+  FactionAI decisions and player standings. A throttled `warroom_update` socket
+  push is wired to the `living_world_tick` / `territory_shift` / `faction_decision`
+  EventBus events. Every source sits behind a defensive seam — the endpoints never
+  500.
+- **The command bar → existing managers** — `POST /api/warroom/command {cmd, ...}`
+  dispatches **contest** (`shift_control`), **assign_op** (`CrewManager`
+  start_operation, with a `GET /api/warroom/op_preview` success-chance preview),
+  **recruit** (honours the `can_recruit` trust gate), **build_hq** / **upgrade_room**
+  (`establish_hq` / `build_room` / `upgrade_room`) and **diplomacy**
+  (ally / war / neutral — writes the authoritative `PlayerState` standing, mirrors
+  into `FactionManager`, and registers/stands-down an active war so FactionAI and
+  the map react). Each command is defensively wrapped — a manager failure becomes a
+  clean gated result, never a 500.
+- **Closes the Sprawl contest gate** — with `PlayerState.allegiance` set, the
+  Sprawl's `_player_faction()` resolves it, so the city-map **contest** verb
+  (sub-project B) is now unlocked end-to-end. Verified live: choose Ghost_Net →
+  contest raises control in a district → declare war flips a rival to war
+  (standing −80) → rank reflects total control, with 0 console errors.
+
 ---
 
 ## [1.62.1] — "LIVING CITY — LOOP COMPLETIONS" — 2026-06-15
