@@ -791,6 +791,13 @@ economy:
     enabled: true               # gates Market.subscribe_to_world_events() world-event→price loop
     scale: 1.0                  # global multiplier on every world-event supply/demand shock
 
+# v1.63.0 [2026-06-16] — D-T2 "The Exchange": the Executive Suite Markets app
+# trades the ONE engine economy (engine.world.market) for this district — the
+# SAME Market The Grid surfaces (D-T1). Default DOWNTOWN matches the Grid's
+# scenes.grid.market_district default so prices/trades line up across surfaces.
+executive_suite:
+  market_district: "DOWNTOWN"
+
 # ════════════════════════════════════════════════════════════════════════
 # v1.60.0 [2026-06-13] — "Living Systems" — feedback-loop tunables. Every key
 # below has a safe in-code default; these expose the knobs for retuning.
