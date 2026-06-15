@@ -375,11 +375,14 @@
         const name = t.name || t.char_name || 'Chat';
         const av = t.char_avatar || '';
         const item = el('div', 'thread-item anim-fadeIn');
+        // v1.62.0 [2026-06-15] \u2014 CB-T4: "left you a message" badge + label.
+        const hasLeft = (t.left_unread || 0) > 0;
+        const leftBadge = hasLeft ? '<span class="left-msg-badge" title="Left you a message">\ud83d\udce9</span>' : '';
         item.innerHTML = `
           ${avatarHtml(name, av)}
           <div class="thread-info">
-            <div class="thread-name">${esc(name)}</div>
-            <div class="thread-preview">${esc(t.last_message || '\u00a0')}</div>
+            <div class="thread-name">${esc(name)}${leftBadge}</div>
+            <div class="thread-preview">${hasLeft ? '<span class="left-msg-tag">left you a message \u00b7 </span>' : ''}${esc(t.last_message || '\u00a0')}</div>
           </div>
           <div class="thread-meta">
             <div class="thread-time">${fmtTime(t.updated_at)}</div>
@@ -444,7 +447,13 @@
         const file = msg.media_path.split('/').pop().split('\\').pop();
         bubbleHtml = `<div class="bubble media-bubble"><video controls preload="metadata" src="/media/video/${file}"></video></div>`;
       } else {
-        bubbleHtml = `<div class="bubble">${esc(content)}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
+        // v1.62.0 [2026-06-15] — CB-T4: "left you a message" affordance for
+        // messages flagged left_unread in metadata.
+        const left = !!(msg.metadata && msg.metadata.left_unread);
+        const leftNote = left
+          ? `<span class="left-msg-note">📩 left ${isOut ? 'a message' : 'you a message'}</span>`
+          : '';
+        bubbleHtml = `<div class="bubble${left ? ' left-msg' : ''}">${leftNote}${esc(content)}<span class="bubble-time">${fmtTime(msg.created_at)}</span></div>`;
       }
       row.innerHTML += bubbleHtml;
       box.appendChild(row);
@@ -513,8 +522,15 @@
 
     onMessageNew(data) {
       const { thread_id, message } = data;
+      // v1.62.0 [2026-06-15] — CB-T4: a delivered "left message" carries
+      // left_unread (on the payload and/or the message metadata).
+      const left = !!(data.left_unread || (message && message.metadata && message.metadata.left_unread));
       const idx = this.threads.findIndex(t => t.id === thread_id);
-      if (idx !== -1) { this.threads[idx].last_message = message.content || '[media]'; this.threads[idx].updated_at = message.created_at; }
+      if (idx !== -1) {
+        this.threads[idx].last_message = message.content || '[media]';
+        this.threads[idx].updated_at = message.created_at;
+        if (left) this.threads[idx].left_unread = (this.threads[idx].left_unread || 0) + 1;
+      }
       if (this.activeThread && this.activeThread.id === thread_id) { this._appendMsg(message); }
       else if (idx !== -1) { this.threads[idx].unread = (this.threads[idx].unread || 0) + 1; }
       else { this.loadThreads(); return; }

@@ -897,6 +897,11 @@ comms:
       - aria
       - frankie
       - mira
+  # ── v1.62.0 [2026-06-15] — CB-T4: leave-a-message presence ───────────
+  presence:
+    enabled: true                              # master toggle for presence/leave-a-message
+    player_offline_when_disconnected: true     # player is "offline" when no phone client is connected
+    npc_requires_co_presence: true             # an NPC is reachable only when co-present (same location)
 
 # Framework settings
 framework:

@@ -5,6 +5,13 @@ Manages phone-specific tables: threads, messages, read receipts.
 Keeps character data in the main DB; only phone-conversation state lives here.
 
 Change Log:
+    v1.62.0 [2026-06-15] — CB-T4: leave-a-message helpers. Added
+        ``add_left_message`` (stores a message for an offline recipient with
+        ``metadata.left_unread=True`` + ``delivered=False``),
+        ``mark_message_delivered`` / ``clear_left_unread`` to flip those flags,
+        and ``get_pending_left_messages`` to find undelivered left messages for
+        a recipient. The existing ``phone_messages.metadata`` column carries the
+        flags — no schema change needed.
     v1.62.0 [2026-06-15] — CB-T3: NPC-owned threads + minimal npc_phone stub.
         Added thread types ``npc_dm`` / ``npc_group`` (owned by NPCs, not the
         player), a stable get-or-create helper for an ordered NPC pair, and a
@@ -355,6 +362,13 @@ class PhoneDB:
                     "SELECT COUNT(*) as n FROM phone_messages WHERE thread_id=? AND sender_id!='user'",
                     (tid,),
                 ).fetchone()["n"]
+                # v1.62.0 [2026-06-15] — CB-T4: surface whether the thread has
+                # any "left you a message" entries so the UI can badge it.
+                left_unread = c.execute(
+                    "SELECT COUNT(*) AS n FROM phone_messages "
+                    "WHERE thread_id=? AND metadata LIKE '%\"left_unread\": true%'",
+                    (tid,),
+                ).fetchone()["n"]
                 result.append({
                     "id": tid,
                     "type": t["type"],
@@ -367,6 +381,7 @@ class PhoneDB:
                         last_msg["content"] if last_msg else None
                     ),
                     "unread": unread,
+                    "left_unread": int(left_unread),
                     "updated_at": t["updated_at"],
                 })
             return result
@@ -410,6 +425,152 @@ class PhoneDB:
                 "content": content, "msg_type": msg_type, "media_path": media_path,
                 "status": "sent", "created_at": now, "metadata": metadata or {},
                 "response_id": response_id, "conversation_id": conversation_id}
+
+    # ─── left messages (v1.62.0 [2026-06-15] — CB-T4) ────────────────────
+
+    def add_left_message(
+        self, thread_id: str, sender_id: str, content: str,
+        msg_type: str = "text", media_path: Optional[str] = None,
+        metadata: Optional[Dict] = None,
+        response_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+    ) -> Dict:
+        """Persist a message left for an *offline* recipient ("left you a message").
+
+        Identical to :meth:`save_message` except the message is flagged in its
+        metadata as ``left_unread=True`` and ``delivered=False`` so the UI can
+        surface a "left you a message" affordance and so :meth:`get_pending_left_messages`
+        can find it when the recipient next comes online.
+
+        Args:
+            thread_id: The thread the message belongs to.
+            sender_id: The character id (or ``'user'``) that left the message.
+            content: The message body.
+            msg_type: Message type (``'text'`` by default).
+            media_path: Optional media path for non-text messages.
+            metadata: Optional extra metadata; merged with the left-message flags
+                (the flags always win).
+            response_id: Optional LLM response id for stateful resumption.
+            conversation_id: Optional conversation id.
+
+        Returns:
+            The saved message dict (with the left-message flags in ``metadata``).
+        """
+        meta = dict(metadata or {})
+        meta["left_unread"] = True
+        meta["delivered"] = False
+        return self.save_message(
+            thread_id=thread_id,
+            sender_id=sender_id,
+            content=content,
+            msg_type=msg_type,
+            media_path=media_path,
+            metadata=meta,
+            response_id=response_id,
+            conversation_id=conversation_id,
+        )
+
+    def mark_message_delivered(self, msg_id: str) -> bool:
+        """Flip a left message to delivered (``delivered=True``).
+
+        Clears the pending state while *retaining* ``left_unread=True`` so the
+        UI can still show that this message was *left* (not sent live). Use
+        :meth:`clear_left_unread` once the recipient has actually viewed it.
+
+        Args:
+            msg_id: The phone message id.
+
+        Returns:
+            ``True`` if the message existed and was updated, ``False`` otherwise.
+        """
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT metadata FROM phone_messages WHERE id=?", (msg_id,)
+            ).fetchone()
+            if not row:
+                return False
+            try:
+                meta = json.loads(row["metadata"] or "{}")
+            except Exception:
+                meta = {}
+            meta["delivered"] = True
+            c.execute(
+                "UPDATE phone_messages SET metadata=? WHERE id=?",
+                (json.dumps(meta), msg_id),
+            )
+        return True
+
+    def clear_left_unread(self, msg_id: str) -> bool:
+        """Clear the ``left_unread`` flag once the recipient has viewed a message.
+
+        Args:
+            msg_id: The phone message id.
+
+        Returns:
+            ``True`` if the message existed and was updated, ``False`` otherwise.
+        """
+        with self.conn() as c:
+            row = c.execute(
+                "SELECT metadata FROM phone_messages WHERE id=?", (msg_id,)
+            ).fetchone()
+            if not row:
+                return False
+            try:
+                meta = json.loads(row["metadata"] or "{}")
+            except Exception:
+                meta = {}
+            meta["left_unread"] = False
+            c.execute(
+                "UPDATE phone_messages SET metadata=? WHERE id=?",
+                (json.dumps(meta), msg_id),
+            )
+        return True
+
+    def get_pending_left_messages(
+        self, recipient_id: str = "user", thread_id: Optional[str] = None
+    ) -> List[Dict]:
+        """Return undelivered left messages addressed to *recipient_id*.
+
+        A message is "pending" for a recipient when it carries
+        ``metadata.left_unread`` truthy, ``metadata.delivered`` falsy, and was
+        NOT sent by that recipient (you don't get delivered your own left
+        message). Results are oldest-first so they can be delivered in order.
+
+        Args:
+            recipient_id: The character id the messages were left for
+                (``'user'`` for the player). NPC recipients are matched by
+                thread membership via ``thread_id``.
+            thread_id: Optional thread filter. When ``None`` all threads are
+                scanned.
+
+        Returns:
+            A list of pending left-message dicts (with parsed ``metadata``),
+            oldest-first.
+        """
+        with self.conn() as c:
+            if thread_id is not None:
+                rows = c.execute(
+                    """SELECT * FROM phone_messages WHERE thread_id=? AND sender_id!=?
+                       ORDER BY created_at ASC""",
+                    (thread_id, recipient_id),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    """SELECT * FROM phone_messages WHERE sender_id!=?
+                       ORDER BY created_at ASC""",
+                    (recipient_id,),
+                ).fetchall()
+        pending: List[Dict] = []
+        for r in rows:
+            m = dict(r)
+            try:
+                m["metadata"] = json.loads(m.get("metadata") or "{}")
+            except Exception:
+                m["metadata"] = {}
+            meta = m["metadata"]
+            if meta.get("left_unread") and not meta.get("delivered"):
+                pending.append(m)
+        return pending
 
     def get_messages(
         self, thread_id: str, limit: int = 50, before: Optional[str] = None
