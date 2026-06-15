@@ -1271,3 +1271,17 @@ the_sprawl:
   contest_delta: 1.0             # control % a single contest shifts (clamped to CONTROL_SHIFT_RANGE)
   player_faction: ""             # optional override of emergent.player_faction (empty = none)
 
+# ── v1.63.0 [2026-06-16] — C-T2: THE WAR ROOM live dashboard knobs ──
+# content/scenes/war_room/war_room_scene.py reads these via
+# get_config().get("war_room.*", default). All have built-in code defaults.
+war_room:
+  push_throttle_secs: 2.0        # min seconds between warroom_update socket pushes
+  # Rank ladder mapped from a faction's total control (get_faction_total_control).
+  # Ascending: the highest band whose `min` is <= power wins. Tunable per-deploy.
+  rank_thresholds:
+    - {min: 0,   rank: "Unknown"}
+    - {min: 60,  rank: "Street Crew"}
+    - {min: 120, rank: "Contender"}
+    - {min: 200, rank: "Power Player"}
+    - {min: 320, rank: "Kingpin"}
+
