@@ -1185,16 +1185,11 @@ oracle:
     respect_sensitive: true    # skip/abstract comms flagged sensitive/mature/intimate (privacy + consent)
 
 # ── v1.63.0 [2026-06-15] — Emergent Engine (A1: persistent sim store) ──
-# The emergent engine persists living-world state (factions, territory, NPC
-# goals, world events) across restarts in a single SQLite store.
+# The emergent engine persists the genuinely-new living-world state (NPC goals,
+# world events) across restarts in a single SQLite store. Faction/territory
+# state is owned by engine.world.territory.TerritoryManager — not duplicated
+# here (reuse-first slim retired the emergent FactionRegistry).
 emergent:
   store:
     db_path: "data/emergent.db"  # persistent sim store for the emergent engine
-  # v1.63.0 [2026-06-15] — A2: faction model tunables (power/treasury/territory).
-  faction:
-    start_power: 50          # starting power for every seeded faction (0..100)
-    start_treasury: 1000     # starting treasury (credits) for every faction
-    flip_power_delta: 5      # power moved on a territory flip (loser −, winner +)
-    recovery_floor: 15       # factions below this power get a recovery nudge
-    recovery_rate: 2         # power restored per recovery_tick to weak factions
 

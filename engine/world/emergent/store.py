@@ -1,17 +1,20 @@
 """EmergentStore — the persistent sim store for the v1.63 Emergent Engine.
 
-This module is the foundation for the whole emergent engine: a single SQLite
-database that persists the living-world state across restarts. It holds four
-slices of state, each in its own table:
+This module is the foundation for the emergent engine: a single SQLite database
+that persists the genuinely-new living-world state across restarts. After the
+reuse-first slim it holds two slices of state, each in its own table:
 
-* ``faction_state`` — per-faction power, treasury, and a JSON ``data`` blob
-  (territory set, relations, goals, …),
-* ``territory``     — which faction controls each district and whether it is
-  contested,
 * ``npc_goal``      — durable, prioritised NPC goals (replaced atomically per
   NPC),
 * ``world_event``   — an append-only, timestamped feed of things that happened
   in the world (wars, deals, betrayals, …).
+
+Faction/territory state is NOT owned here. District control, faction power,
+treasuries, wars, and HQs live in :mod:`engine.world.territory`
+(:class:`~engine.world.territory.TerritoryManager`) — see that module for the
+faction/territory model. The emergent layer deliberately owns only the new
+state (per-NPC goals + the agency event feed) and delegates everything else to
+``TerritoryManager`` to avoid duplicating it.
 
 Design notes
 ------------
@@ -20,8 +23,8 @@ Design notes
   to ``engine.paths.ROOT`` — never a hardcoded absolute path. A config error
   falls back to the default.
 * WAL mode + a single process-level :class:`threading.Lock` make concurrent
-  writes safe: the faction AI, NPC scheduler, and event cascade will all write
-  from different threads.
+  writes safe: the NPC scheduler and event cascade will all write from
+  different threads.
 * A store failure must NEVER break a caller. Every DB operation is wrapped:
   errors are surfaced via ``logger.error`` in the Oracle log format
   (``[emergent] ... (operation=...)``) but do not propagate — each op returns a
@@ -35,8 +38,7 @@ Usage::
     from engine.world.emergent.store import get_emergent_store
 
     s = get_emergent_store()
-    s.upsert_faction("arasaka", power=10.0, treasury=500)
-    s.set_territory("watson", "arasaka", contested=True)
+    s.set_goals("npc-1", [{"goal_type": "earn", "target": "credits"}])
     eid = s.log_event("war", "arasaka", "Arasaka moves on Watson")
     feed = s.recent_events(20)
 
@@ -47,6 +49,12 @@ Change Log:
     v1.63.0 [2026-06-15] — Initial persistent sim store (A1): SQLite WAL,
                             singleton accessor, faction/territory/goal/event
                             CRUD, concurrency-safe writes, reset() for tests.
+    v1.63.0 [2026-06-15] — Reuse-first slim: REMOVED the duplicate
+                            ``faction_state`` and ``territory`` tables (and
+                            their CRUD). Factions/territory now belong to
+                            engine.world.territory.TerritoryManager; the
+                            emergent store keeps only the genuinely-new
+                            ``npc_goal`` + ``world_event`` state.
 """
 from __future__ import annotations
 
@@ -66,19 +74,9 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_DB_REL = "data/emergent.db"   # relative to project root (config default)
 
+# NOTE: faction/territory tables intentionally removed in the reuse-first slim;
+# that state is owned by engine.world.territory.TerritoryManager.
 _SCHEMA = """
-CREATE TABLE IF NOT EXISTS faction_state (
-    faction_id TEXT PRIMARY KEY,
-    power      REAL,
-    treasury   INTEGER,
-    data       TEXT
-);
-CREATE TABLE IF NOT EXISTS territory (
-    district_id TEXT PRIMARY KEY,
-    faction_id  TEXT,
-    contested   INTEGER DEFAULT 0,
-    data        TEXT
-);
 CREATE TABLE IF NOT EXISTS npc_goal (
     npc_id    TEXT,
     goal_type TEXT,
@@ -100,8 +98,6 @@ CREATE TABLE IF NOT EXISTS world_event (
 CREATE INDEX IF NOT EXISTS idx_world_event_ts ON world_event(ts);
 """
 
-_FACTION_COLUMNS = ("faction_id", "power", "treasury", "data")
-_TERRITORY_COLUMNS = ("district_id", "faction_id", "contested", "data")
 _GOAL_COLUMNS = ("npc_id", "goal_type", "target", "priority", "progress", "data")
 _EVENT_COLUMNS = ("id", "ts", "kind", "actor", "summary", "payload", "persistent")
 
@@ -114,9 +110,11 @@ _EVENT_COLUMNS = ("id", "ts", "kind", "actor", "summary", "payload", "persistent
 class EmergentStore:
     """Persistent SQLite store for the emergent world simulation.
 
-    Holds faction, territory, NPC-goal, and world-event state. Writes are
-    thread-safe (WAL + a process-level lock); every DB error is logged in
-    Oracle format and swallowed so a store failure can never break a caller.
+    Holds the genuinely-new NPC-goal and world-event state. Faction/territory
+    state lives in :class:`engine.world.territory.TerritoryManager` and is not
+    duplicated here. Writes are thread-safe (WAL + a process-level lock); every
+    DB error is logged in Oracle format and swallowed so a store failure can
+    never break a caller.
 
     Attributes:
         path: Absolute filesystem path to the SQLite database.
@@ -187,188 +185,6 @@ class EmergentStore:
                 conn.executescript(_SCHEMA)
         except sqlite3.Error as exc:
             logger.error("[emergent] schema init failed (operation=init_db): %s", exc)
-
-    # ── factions ──────────────────────────────────────────────────────
-
-    def upsert_faction(
-        self,
-        faction_id: str,
-        *,
-        power: Optional[float] = None,
-        treasury: Optional[int] = None,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        """Insert or partially update a faction's state.
-
-        Only the fields explicitly provided (non-``None``) are overwritten on
-        an existing row; omitted fields are preserved. For a brand-new faction,
-        omitted fields default to ``None`` (``data`` to ``{}``).
-
-        Args:
-            faction_id: Unique faction identifier (primary key).
-            power: Optional power score to set.
-            treasury: Optional treasury (credits) to set.
-            data: Optional JSON-serializable dict (territory set, relations,
-                goals, …) to set.
-
-        Returns:
-            ``True`` on success, ``False`` on failure (never raises).
-        """
-        try:
-            with self._lock, self._connect() as conn:
-                existing = conn.execute(
-                    "SELECT power, treasury, data FROM faction_state WHERE faction_id = ?",
-                    (faction_id,),
-                ).fetchone()
-                if existing is None:
-                    conn.execute(
-                        "INSERT INTO faction_state (faction_id, power, treasury, data) "
-                        "VALUES (?, ?, ?, ?)",
-                        (
-                            faction_id,
-                            power,
-                            treasury,
-                            json.dumps(data if data is not None else {}),
-                        ),
-                    )
-                else:
-                    new_power = existing["power"] if power is None else power
-                    new_treasury = (
-                        existing["treasury"] if treasury is None else treasury
-                    )
-                    new_data = (
-                        existing["data"] if data is None else json.dumps(data)
-                    )
-                    conn.execute(
-                        "UPDATE faction_state SET power = ?, treasury = ?, data = ? "
-                        "WHERE faction_id = ?",
-                        (new_power, new_treasury, new_data, faction_id),
-                    )
-                return True
-        except sqlite3.Error as exc:
-            logger.error(
-                "[emergent] faction upsert failed (operation=upsert_faction, faction=%s): %s",
-                faction_id, exc,
-            )
-            return False
-
-    def get_faction(self, faction_id: str) -> Optional[Dict[str, Any]]:
-        """Return a single faction's state, or ``None`` if unknown.
-
-        Args:
-            faction_id: The faction identifier.
-
-        Returns:
-            A dict with ``faction_id``, ``power``, ``treasury``, and the
-            deserialized ``data`` dict; ``None`` if not found or on failure.
-        """
-        try:
-            with self._lock, self._connect() as conn:
-                row = conn.execute(
-                    "SELECT * FROM faction_state WHERE faction_id = ?",
-                    (faction_id,),
-                ).fetchone()
-                return self._faction_row(row) if row is not None else None
-        except sqlite3.Error as exc:
-            logger.error(
-                "[emergent] get_faction failed (operation=get_faction, faction=%s): %s",
-                faction_id, exc,
-            )
-            return None
-
-    def all_factions(self) -> List[Dict[str, Any]]:
-        """Return every faction's state.
-
-        Returns:
-            A list of faction dicts; empty on failure.
-        """
-        try:
-            with self._lock, self._connect() as conn:
-                rows = conn.execute("SELECT * FROM faction_state").fetchall()
-                return [self._faction_row(r) for r in rows]
-        except sqlite3.Error as exc:
-            logger.error("[emergent] all_factions failed (operation=all_factions): %s", exc)
-            return []
-
-    # ── territory ─────────────────────────────────────────────────────
-
-    def set_territory(
-        self,
-        district_id: str,
-        faction_id: str,
-        *,
-        contested: bool = False,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        """Set (insert or replace) which faction controls a district.
-
-        Args:
-            district_id: District identifier (primary key).
-            faction_id: Controlling faction identifier.
-            contested: Whether control is currently contested.
-            data: Optional JSON-serializable dict of extra district state.
-
-        Returns:
-            ``True`` on success, ``False`` on failure (never raises).
-        """
-        try:
-            with self._lock, self._connect() as conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO territory "
-                    "(district_id, faction_id, contested, data) VALUES (?, ?, ?, ?)",
-                    (
-                        district_id,
-                        faction_id,
-                        1 if contested else 0,
-                        json.dumps(data if data is not None else {}),
-                    ),
-                )
-                return True
-        except sqlite3.Error as exc:
-            logger.error(
-                "[emergent] set_territory failed (operation=set_territory, district=%s): %s",
-                district_id, exc,
-            )
-            return False
-
-    def get_territory(self, district_id: str) -> Optional[Dict[str, Any]]:
-        """Return a single district's control state, or ``None`` if unknown.
-
-        Args:
-            district_id: The district identifier.
-
-        Returns:
-            A dict with ``district_id``, ``faction_id``, ``contested`` (bool),
-            and the deserialized ``data`` dict; ``None`` if not found or on
-            failure.
-        """
-        try:
-            with self._lock, self._connect() as conn:
-                row = conn.execute(
-                    "SELECT * FROM territory WHERE district_id = ?",
-                    (district_id,),
-                ).fetchone()
-                return self._territory_row(row) if row is not None else None
-        except sqlite3.Error as exc:
-            logger.error(
-                "[emergent] get_territory failed (operation=get_territory, district=%s): %s",
-                district_id, exc,
-            )
-            return None
-
-    def all_territory(self) -> List[Dict[str, Any]]:
-        """Return control state for every district.
-
-        Returns:
-            A list of territory dicts; empty on failure.
-        """
-        try:
-            with self._lock, self._connect() as conn:
-                rows = conn.execute("SELECT * FROM territory").fetchall()
-                return [self._territory_row(r) for r in rows]
-        except sqlite3.Error as exc:
-            logger.error("[emergent] all_territory failed (operation=all_territory): %s", exc)
-            return []
 
     # ── goals ─────────────────────────────────────────────────────────
 
@@ -528,7 +344,7 @@ class EmergentStore:
     # ── maintenance ───────────────────────────────────────────────────
 
     def reset(self) -> bool:
-        """Wipe all tables (factions, territory, goals, events).
+        """Wipe all tables (goals, events).
 
         Intended for tests and full-world resets. Idempotent.
 
@@ -537,8 +353,6 @@ class EmergentStore:
         """
         try:
             with self._lock, self._connect() as conn:
-                conn.execute("DELETE FROM faction_state")
-                conn.execute("DELETE FROM territory")
                 conn.execute("DELETE FROM npc_goal")
                 conn.execute("DELETE FROM world_event")
                 return True
@@ -547,35 +361,6 @@ class EmergentStore:
             return False
 
     # ── row deserializers ─────────────────────────────────────────────
-
-    @staticmethod
-    def _faction_row(row: sqlite3.Row) -> Dict[str, Any]:
-        """Deserialize a ``faction_state`` row into a plain dict.
-
-        Args:
-            row: A :class:`sqlite3.Row` from ``faction_state``.
-
-        Returns:
-            A dict with the ``data`` field parsed from JSON.
-        """
-        d = {k: row[k] for k in _FACTION_COLUMNS}
-        d["data"] = _json_loads(d.get("data"), default={})
-        return d
-
-    @staticmethod
-    def _territory_row(row: sqlite3.Row) -> Dict[str, Any]:
-        """Deserialize a ``territory`` row into a plain dict.
-
-        Args:
-            row: A :class:`sqlite3.Row` from ``territory``.
-
-        Returns:
-            A dict with ``contested`` as a bool and ``data`` parsed from JSON.
-        """
-        d = {k: row[k] for k in _TERRITORY_COLUMNS}
-        d["contested"] = bool(d.get("contested"))
-        d["data"] = _json_loads(d.get("data"), default={})
-        return d
 
     @staticmethod
     def _goal_row(row: sqlite3.Row) -> Dict[str, Any]:
