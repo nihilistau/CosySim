@@ -12,13 +12,25 @@
  *     ladder / territory + crew counts), a territory panel (your districts,
  *     contested flagged), a crew roster, a rivals panel (power bars + relation
  *     badges) and a live intel feed (recent FactionAI decisions, newest-first,
- *     capped). The command bar is an inert placeholder (commands ship in C-T4).
+ *     capped). The command bar is live (C-T4): see the command section below.
+ *
+ * v1.63.0 [2026-06-16] — C-T4: wired the command bar. Each button opens a neon
+ *     modal (pick target / select crew / preview odds), confirms, POSTs to
+ *     /api/warroom/command, toasts the result, and the dashboard re-renders on
+ *     the broadcast warroom_update. Buttons grey out when ineligible.
  *
  * Data sources:
  *   - GET  /api/warroom/state            → full dashboard state (seeds the view)
  *   - POST /api/warroom/allegiance {faction} → set allegiance, returns new state
+ *   - POST /api/warroom/command {cmd, ...}   → C-T4: faction commands
+ *   - GET  /api/warroom/op_preview?op_type=&crew=  → C-T4: strike odds preview
  *   - Socket.IO: `warroom_update` (full state → re-render everything; on connect)
  *                `state_update`  (scene identity / clock for the HUD)
+ *
+ * C-T4 — Command bar: Claim Territory / Order Strike / Recruit Crew / Negotiate
+ * each open a small neon modal (pick target → confirm → POST → result toast),
+ * and the dashboard re-renders on the broadcast warroom_update. Buttons grey out
+ * when ineligible (e.g. Order Strike with no crew).
  *
  * Defensive throughout: missing/empty data degrades to graceful empty states and
  * never throws — the goal is 0 uncaught console errors.
@@ -38,6 +50,21 @@
   };
 
   var INTEL_CAP = 60;
+
+  // C-T4 — command vocab (mirrors engine constants; server validates anyway).
+  var DISTRICTS = [
+    'DOWNTOWN', 'COMBAT_ZONE', 'HIGHRISE', 'UNDERWORLD', 'TECH_DISTRICT', 'OUTSKIRTS'
+  ];
+  // op_type → { label, minCrew } (mirrors crew.OPERATION_TYPES min_crew).
+  var OP_TYPES = [
+    { key: 'recon', label: 'Recon', min: 1 },
+    { key: 'deal', label: 'Deal', min: 1 },
+    { key: 'hack', label: 'Hack', min: 1 },
+    { key: 'extraction', label: 'Extraction', min: 2 },
+    { key: 'hit', label: 'Hit', min: 2 },
+    { key: 'heist', label: 'Heist', min: 3 }
+  ];
+  var CREW_ROLES = ['fixer', 'hacker', 'muscle', 'medic', 'driver', 'tech', 'lookout', 'face', 'supplier'];
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -564,6 +591,7 @@
       // Picker view.
       pendingFaction = null;
       renderPicker(state.factions || []);
+      refreshCommandBar(state);
       showView('picker');
       return;
     }
@@ -575,6 +603,7 @@
     renderCrew((state.my && state.my.crews) || []);
     renderRivals(state.rivals || []);
     renderIntel(state.recent_decisions || []);
+    refreshCommandBar(state);
     showView('dash');
   }
 
@@ -644,6 +673,317 @@
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  //  C-T4 · Command bar + neon modal
+  // ════════════════════════════════════════════════════════════════════════
+
+  var cmdBusy = false;        // one command in flight at a time
+  var confirmHandler = null;  // active modal's confirm callback
+
+  function openModal(title, buildBody, onConfirm, confirmLabel) {
+    var modal = $('war-modal');
+    if (!modal) return;
+    setText('war-modal-title', title);
+    var body = $('war-modal-body');
+    clearChildren(body);
+    if (typeof buildBody === 'function') {
+      try { buildBody(body); } catch (e) { console.warn('[war_room] modal build failed', e); }
+    }
+    var confirm = $('war-modal-confirm');
+    if (confirm) {
+      confirm.textContent = confirmLabel || 'Confirm';
+      confirm.disabled = false;
+    }
+    confirmHandler = onConfirm || null;
+    modal.hidden = false;
+  }
+
+  function closeModal() {
+    var modal = $('war-modal');
+    if (modal) modal.hidden = true;
+    confirmHandler = null;
+  }
+
+  function setConfirmEnabled(on) {
+    var confirm = $('war-modal-confirm');
+    if (confirm) confirm.disabled = !on;
+  }
+
+  /** A labelled <select> built from [{value,label}] (or plain strings). */
+  function buildSelect(id, label, options) {
+    var wrap = document.createElement('label');
+    wrap.className = 'war-field';
+    var span = document.createElement('span');
+    span.className = 'war-field__label';
+    span.textContent = label;
+    var sel = document.createElement('select');
+    sel.className = 'war-field__input';
+    sel.id = id;
+    (options || []).forEach(function (o) {
+      var opt = document.createElement('option');
+      if (typeof o === 'string') { opt.value = o; opt.textContent = facLabel(o); }
+      else { opt.value = o.value; opt.textContent = o.label; }
+      sel.appendChild(opt);
+    });
+    wrap.appendChild(span);
+    wrap.appendChild(sel);
+    return wrap;
+  }
+
+  function buildTextField(id, label, placeholder) {
+    var wrap = document.createElement('label');
+    wrap.className = 'war-field';
+    var span = document.createElement('span');
+    span.className = 'war-field__label';
+    span.textContent = label;
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'war-field__input';
+    input.id = id;
+    input.placeholder = placeholder || '';
+    wrap.appendChild(span);
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function modalNote(text) {
+    var p = document.createElement('p');
+    p.className = 'war-modal__note';
+    p.textContent = text;
+    return p;
+  }
+
+  // ── Command dispatch (POST /api/warroom/command) ──────────────────────────
+  function runCommand(payload) {
+    if (cmdBusy) return Promise.resolve(null);
+    cmdBusy = true;
+    setConfirmEnabled(false);
+    return postJson('/api/warroom/command', payload)
+      .then(function (res) {
+        res = res || {};
+        if (res.ok) {
+          toast(res.message || 'Command executed', true);
+          if (res.state) applyState(res.state); // warroom_update also re-paints
+          closeModal();
+        } else {
+          var msg = res.reason === 'no allegiance'
+            ? 'Pledge an allegiance first'
+            : (res.error || 'Command failed');
+          toast(msg, false);
+          setConfirmEnabled(true);
+        }
+        return res;
+      })
+      .catch(function (err) {
+        console.warn('[war_room] command POST failed', err);
+        toast('Command failed', false);
+        setConfirmEnabled(true);
+        return null;
+      })
+      .finally(function () { cmdBusy = false; });
+  }
+
+  // ── Claim Territory (contest) ─────────────────────────────────────────────
+  function cmdContest() {
+    var my = (lastState && lastState.my) || {};
+    var held = Array.isArray(my.territory) ? my.territory : [];
+    // Offer your held districts first, then the rest.
+    var ordered = held.concat(DISTRICTS.filter(function (d) { return held.indexOf(d) < 0; }));
+    openModal('Claim Territory', function (body) {
+      body.appendChild(modalNote('Press ' + (facLabel(my.faction) || 'your faction')
+        + ' into a district. Control shifts in your favour.'));
+      body.appendChild(buildSelect('cmd-contest-district', 'District', ordered));
+    }, function () {
+      var sel = $('cmd-contest-district');
+      var district = sel ? sel.value : '';
+      if (!district) { toast('Pick a district', false); return; }
+      runCommand({ cmd: 'contest', district: district });
+    }, '⚑ Press attack');
+  }
+
+  // ── Order Strike (assign_op) ──────────────────────────────────────────────
+  function cmdOrderStrike() {
+    var my = (lastState && lastState.my) || {};
+    var crews = Array.isArray(my.crews) ? my.crews : [];
+    if (!crews.length) { toast('No crew to deploy — recruit first', false); return; }
+
+    var selected = {}; // character_id → true
+
+    openModal('Order Strike', function (body) {
+      body.appendChild(modalNote('Choose an operation and assign crew. The preview '
+        + 'shows the success chance for the current selection.'));
+      body.appendChild(buildSelect('cmd-op-type', 'Operation', OP_TYPES.map(function (o) {
+        return { value: o.key, label: o.label + ' (min ' + o.min + ')' };
+      })));
+
+      var roster = document.createElement('div');
+      roster.className = 'war-roster';
+      crews.forEach(function (c) {
+        var cid = c.character_id || c.id || c.name;
+        if (!cid) return;
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'war-rosterchip';
+        chip.setAttribute('data-cid', cid);
+        chip.textContent = (c.name || cid) + (c.role ? ' · ' + c.role : '');
+        chip.addEventListener('click', function () {
+          if (selected[cid]) { delete selected[cid]; chip.classList.remove('is-on'); }
+          else { selected[cid] = true; chip.classList.add('is-on'); }
+          refreshPreview();
+        });
+        roster.appendChild(chip);
+      });
+      var rl = document.createElement('div');
+      rl.className = 'war-field__label';
+      rl.textContent = 'Crew';
+      body.appendChild(rl);
+      body.appendChild(roster);
+
+      var preview = document.createElement('div');
+      preview.className = 'war-preview';
+      preview.id = 'cmd-op-preview';
+      preview.textContent = 'select crew for odds…';
+      body.appendChild(preview);
+
+      var typeSel = $('cmd-op-type');
+      if (typeSel) typeSel.addEventListener('change', refreshPreview);
+      refreshPreview();
+
+      function refreshPreview() {
+        var typeEl = $('cmd-op-type');
+        var opType = typeEl ? typeEl.value : '';
+        var crew = Object.keys(selected);
+        var pv = $('cmd-op-preview');
+        if (!crew.length) {
+          if (pv) { pv.textContent = 'select crew for odds…'; pv.className = 'war-preview'; }
+          setConfirmEnabled(false);
+          return;
+        }
+        fetch('/api/warroom/op_preview?op_type=' + encodeURIComponent(opType)
+          + '&crew=' + encodeURIComponent(crew.join(',')))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            data = data || {};
+            var pvEl = $('cmd-op-preview');
+            if (!pvEl) return;
+            if (data.ok) {
+              var enough = data.enough_crew;
+              pvEl.textContent = 'Success chance: ' + data.percent + '%'
+                + (enough ? '' : '  ·  need ≥' + data.min_crew + ' crew');
+              pvEl.className = 'war-preview ' + (enough ? 'is-ok' : 'is-bad');
+              setConfirmEnabled(!!enough);
+            } else {
+              pvEl.textContent = data.error || 'preview unavailable';
+              pvEl.className = 'war-preview is-bad';
+              setConfirmEnabled(false);
+            }
+          })
+          .catch(function () {
+            var pvEl = $('cmd-op-preview');
+            if (pvEl) { pvEl.textContent = 'preview unavailable'; pvEl.className = 'war-preview is-bad'; }
+          });
+      }
+    }, function () {
+      var typeEl = $('cmd-op-type');
+      var opType = typeEl ? typeEl.value : '';
+      var crew = Object.keys(selected);
+      if (!opType || !crew.length) { toast('Pick an operation and crew', false); return; }
+      runCommand({ cmd: 'assign_op', op_type: opType, crew: crew });
+    }, '⚔ Launch');
+  }
+
+  // ── Recruit Crew (recruit) ────────────────────────────────────────────────
+  function cmdRecruit() {
+    openModal('Recruit Crew', function (body) {
+      body.appendChild(modalNote('Recruit a contact into your crew. They must trust '
+        + 'you enough (the engine enforces the gate).'));
+      body.appendChild(buildTextField('cmd-recruit-id', 'Candidate ID', 'e.g. lola'));
+      body.appendChild(buildSelect('cmd-recruit-role', 'Role', CREW_ROLES));
+    }, function () {
+      var idEl = $('cmd-recruit-id');
+      var roleEl = $('cmd-recruit-role');
+      var cid = idEl ? String(idEl.value).trim() : '';
+      if (!cid) { toast('Enter a candidate ID', false); return; }
+      runCommand({ cmd: 'recruit', character_id: cid, role: roleEl ? roleEl.value : 'unknown' });
+    }, '🜲 Recruit');
+  }
+
+  // ── Negotiate (diplomacy) ─────────────────────────────────────────────────
+  function cmdNegotiate() {
+    var rivals = (lastState && lastState.rivals) || [];
+    if (!rivals.length) { toast('No rival data available', false); return; }
+    openModal('Negotiate', function (body) {
+      body.appendChild(modalNote('Set your relations with a rival faction.'));
+      body.appendChild(buildSelect('cmd-diplo-target', 'Faction',
+        rivals.map(function (r) { return { value: r.faction, label: facLabel(r.faction) }; })));
+      body.appendChild(buildSelect('cmd-diplo-kind', 'Stance', [
+        { value: 'ally', label: 'Ally' },
+        { value: 'neutral', label: 'Neutral' },
+        { value: 'war', label: 'Declare War' }
+      ]));
+    }, function () {
+      var tEl = $('cmd-diplo-target');
+      var kEl = $('cmd-diplo-kind');
+      var target = tEl ? tEl.value : '';
+      var kind = kEl ? kEl.value : '';
+      if (!target || !kind) { toast('Pick a faction and stance', false); return; }
+      runCommand({ cmd: 'diplomacy', target_faction: target, kind: kind });
+    }, '⚐ Set relations');
+  }
+
+  /** Enable/disable command buttons based on the current dashboard state. */
+  function refreshCommandBar(state) {
+    var hasAllegiance = !!(state && state.allegiance);
+    var hasCrew = !!(state && state.my && Array.isArray(state.my.crews) && state.my.crews.length);
+    var btns = {
+      'cmd-contest': hasAllegiance,
+      'cmd-op': hasAllegiance && hasCrew,
+      'cmd-recruit': hasAllegiance,
+      'cmd-diplomacy': hasAllegiance
+    };
+    Object.keys(btns).forEach(function (id) {
+      var el = $(id);
+      if (!el) return;
+      el.disabled = !btns[id];
+      el.classList.toggle('is-disabled', !btns[id]);
+    });
+    var op = $('cmd-op');
+    if (op && hasAllegiance && !hasCrew) op.title = 'Recruit crew before ordering a strike';
+    else if (op) op.title = 'Deploy crew on an operation';
+  }
+
+  function wireCommandBar() {
+    var map = {
+      'cmd-contest': cmdContest,
+      'cmd-op': cmdOrderStrike,
+      'cmd-recruit': cmdRecruit,
+      'cmd-diplomacy': cmdNegotiate
+    };
+    Object.keys(map).forEach(function (id) {
+      var el = $(id);
+      if (el) el.addEventListener('click', function () {
+        if (el.disabled) return;
+        map[id]();
+      });
+    });
+    var close = $('war-modal-close');
+    var cancel = $('war-modal-cancel');
+    var backdrop = $('war-modal-backdrop');
+    if (close) close.addEventListener('click', closeModal);
+    if (cancel) cancel.addEventListener('click', closeModal);
+    if (backdrop) backdrop.addEventListener('click', closeModal);
+    var confirm = $('war-modal-confirm');
+    if (confirm) confirm.addEventListener('click', function () {
+      if (typeof confirmHandler === 'function') confirmHandler();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        var modal = $('war-modal');
+        if (modal && !modal.hidden) closeModal();
+      }
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   //  Boot
   // ════════════════════════════════════════════════════════════════════════
 
@@ -659,6 +999,8 @@
   function init() {
     var change = $('war-change');
     if (change) change.addEventListener('click', onChangeAllegiance);
+
+    wireCommandBar(); // C-T4: live command bar + modal
 
     if (typeof io !== 'function') {
       console.warn('[war_room] Socket.IO client unavailable');

@@ -25,6 +25,16 @@ Change Log:
                             throttled ``warroom_update`` socket push wired to the
                             EventBus (living_world_tick / territory_shift /
                             faction_decision).
+    v1.63.0 [2026-06-16] — C-T4: live faction commands. ``POST
+                            /api/warroom/command {cmd, ...}`` dispatches
+                            contest / assign_op / recruit / build_hq /
+                            upgrade_room / diplomacy to the existing
+                            TerritoryManager / CrewManager / FactionManager /
+                            FactionAI managers (the scene only orchestrates).
+                            Adds ``GET /api/warroom/op_preview`` for the strike
+                            success-chance preview. Each successful command
+                            re-broadcasts a fresh ``warroom_update``. Every
+                            handler is defensively wrapped — never 500s.
 
 CONNECTS: FlaskScene, SocketIO, get_config, EventBus, PlayerState,
           TerritoryManager, FactionAI, CrewManager, FactionManager
@@ -208,10 +218,13 @@ class WarRoomScene(FlaskScene):
             return 0.0
 
     def _faction_relation(self, faction: str) -> int:
-        """Return the player's standing with *faction* via FactionManager.
+        """Return the player's standing with *faction*.
 
-        Falls back to 0 (neutral) when the faction is unregistered or the
-        manager is unavailable. Read-only.
+        Prefers :class:`PlayerState.faction_standings` — the single source of
+        truth that carries all 6 canonical factions and is what the diplomacy
+        command writes to (so a declared war / alliance flips here immediately).
+        Falls back to :class:`FactionManager` (scene factions) and finally 0
+        (neutral). Read-only, never raises.
 
         Args:
             faction: Canonical faction name.
@@ -219,6 +232,15 @@ class WarRoomScene(FlaskScene):
         Returns:
             Player standing (-100..100), or 0.
         """
+        # v1.63.0 [2026-06-16] — C-T4: PlayerState standings are authoritative for
+        # the 6 canonical factions and reflect diplomacy commands directly.
+        try:
+            standings = self._player().faction_standings
+            if faction in standings:
+                return int(standings.get(faction, 0) or 0)
+        except Exception as exc:
+            logger.debug("[%s] player standings lookup failed (operation=relation, faction=%s): %s",
+                         SCENE_ID, faction, exc)
         try:
             entry = self._faction_mgr().get(faction)
             if entry is not None:
@@ -447,6 +469,20 @@ class WarRoomScene(FlaskScene):
         def warroom_allegiance():
             return jsonify(self._set_allegiance_from_request())
 
+        # v1.63.0 [2026-06-16] — C-T4: the live command endpoint. One POST,
+        # ``{cmd, ...}``, dispatched to the existing managers. Never 500s.
+        @app.route("/api/warroom/command", methods=["POST"])
+        def warroom_command():
+            return jsonify(self._dispatch_command_from_request())
+
+        # v1.63.0 [2026-06-16] — C-T4: success-chance preview for Order Strike.
+        @app.route("/api/warroom/op_preview")
+        def warroom_op_preview():
+            op_type = request.args.get("op_type", "")
+            crew_raw = request.args.get("crew", "")
+            crew = [c for c in crew_raw.split(",") if c]
+            return jsonify(self._op_preview(op_type, crew))
+
     def _set_allegiance_from_request(self) -> Dict[str, Any]:
         """Validate + persist a posted allegiance, then return the new state.
 
@@ -506,6 +542,434 @@ class WarRoomScene(FlaskScene):
             return str(self._player().active_location or "")
         except Exception:
             return ""
+
+    # ──── C-T4 · Faction commands (dispatch → existing managers) ─────
+    # v1.63.0 [2026-06-16] — The War Room commands. Each handler reuses an
+    # existing engine manager (TerritoryManager / CrewManager / FactionManager /
+    # FactionAI) — the scene only orchestrates. Every command is wrapped so a
+    # manager failure becomes a clean ``{ok: False, error}`` payload, never a 500.
+
+    def _player_faction(self) -> Optional[str]:
+        """Return the player's faction (= allegiance), or None.
+
+        The faction every command acts on. ``None`` means the player hasn't
+        pledged yet — commands short-circuit with ``{ok: False, reason}``.
+        """
+        return self._safe_allegiance()
+
+    def _dispatch_command_from_request(self) -> Dict[str, Any]:
+        """Read a ``{cmd, ...}`` body and dispatch to the matching handler.
+
+        Validates the player has an allegiance (the faction every command acts
+        for), routes ``cmd`` to its handler, and on success attaches a freshly
+        assembled state and broadcasts a ``warroom_update``. Fully defensive —
+        any handler exception degrades to ``{ok: False, error}``.
+
+        Returns:
+            The command result dict (always carries an ``ok`` flag).
+        """
+        try:
+            body = request.get_json(silent=True) or {}
+        except Exception:
+            body = {}
+        cmd = str(body.get("cmd", "")).strip()
+
+        faction = self._player_faction()
+        if not faction:
+            logger.info("[%s] command %r blocked — no allegiance (operation=command)", SCENE_ID, cmd)
+            return {"ok": False, "reason": "no allegiance", "cmd": cmd}
+
+        handlers = {
+            "contest": self._cmd_contest,
+            "assign_op": self._cmd_assign_op,
+            "recruit": self._cmd_recruit,
+            "build_hq": self._cmd_build_hq,
+            "upgrade_room": self._cmd_upgrade_room,
+            "diplomacy": self._cmd_diplomacy,
+        }
+        handler = handlers.get(cmd)
+        if handler is None:
+            return {"ok": False, "error": f"unknown command '{cmd}'", "cmd": cmd}
+
+        try:
+            result = handler(faction, body)
+        except Exception as exc:  # never 500 — defensive shell around every handler
+            logger.warning("[%s] command %s failed (operation=command): %s", SCENE_ID, cmd, exc)
+            return {"ok": False, "error": "command failed", "cmd": cmd}
+
+        result.setdefault("cmd", cmd)
+        if result.get("ok"):
+            # Push fresh state + log the world-mutating success.
+            result["state"] = self._assemble_state()
+            self._broadcast_update()
+            logger.info("[%s] command %s ok (operation=command, faction=%s)",
+                        SCENE_ID, cmd, faction)
+        return result
+
+    def _cmd_contest(self, faction: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Claim/contest a district — shift control toward the player's faction.
+
+        Reuses :meth:`TerritoryManager.shift_control` with a config-driven delta
+        clamped to ``CONTROL_SHIFT_RANGE``, attributing the move to the player's
+        faction (``source_faction=faction`` so it pulls from the dominant rival's
+        share is handled by the manager).
+
+        Args:
+            faction: The player's faction (gains control).
+            body: Command body; expects ``{district}``.
+
+        Returns:
+            ``{ok, district, control, delta}`` or ``{ok: False, error}``.
+        """
+        from engine.world.territory import CONTROL_SHIFT_RANGE, DISTRICT_NAMES  # noqa: PLC0415
+
+        district = str(body.get("district", "")).strip().upper()
+        if district not in DISTRICT_NAMES:
+            return {"ok": False, "error": "invalid district", "valid": DISTRICT_NAMES}
+
+        lo, hi = CONTROL_SHIFT_RANGE
+        delta = float(self._cfg("contest_delta", 5.0))
+        delta = max(lo, min(hi, delta))
+
+        terr = self._territory()
+        event = terr.shift_control(district, faction, delta, reason="war_room", source_faction=None)
+        control = terr.get_district_control(district)
+        applied = getattr(event, "delta", delta)
+        logger.info("[%s] contest %s for %s %+.1f (operation=command)",
+                    SCENE_ID, district, faction, applied)
+        return {
+            "ok": True,
+            "district": district,
+            "delta": round(float(applied), 2),
+            "control": control,
+            "your_control": round(float(control.get(faction, 0.0)), 2),
+            "message": f"{faction} pressed into {district} ({applied:+.1f}%).",
+        }
+
+    def _op_preview(self, op_type: str, crew: List[str]) -> Dict[str, Any]:
+        """Return the success-chance preview for an op_type + crew (no side effects).
+
+        Args:
+            op_type: Operation type key (see crew.OPERATION_TYPES).
+            crew: character_ids assigned.
+
+        Returns:
+            ``{ok, op_type, crew, chance, percent}`` (defensive defaults on fail).
+        """
+        from engine.world.crew import OPERATION_TYPES  # noqa: PLC0415
+
+        if op_type not in OPERATION_TYPES:
+            return {"ok": False, "error": "invalid op_type",
+                    "valid": sorted(OPERATION_TYPES.keys())}
+        try:
+            mgr = self._crew()
+            chance = mgr.preview_success_chance(op_type, crew)
+        except Exception as exc:
+            logger.debug("[%s] op preview failed (operation=op_preview): %s", SCENE_ID, exc)
+            return {"ok": False, "error": "preview unavailable", "op_type": op_type}
+        min_crew = int(OPERATION_TYPES[op_type].get("min_crew", 1))
+        return {
+            "ok": True,
+            "op_type": op_type,
+            "crew": list(crew),
+            "chance": round(float(chance), 4),
+            "percent": round(float(chance) * 100, 1),
+            "min_crew": min_crew,
+            "enough_crew": len(crew) >= min_crew,
+        }
+
+    def _cmd_assign_op(self, faction: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Order a crew operation (Order Strike).
+
+        Computes the success-chance preview via
+        :meth:`CrewManager.compute_success_chance`, then launches the op through
+        :meth:`CrewManager.start_operation` (which honours min-crew + availability
+        gates and records the odds). Rewards/duration come from config.
+
+        Args:
+            faction: The player's faction (unused by CrewManager but logged).
+            body: ``{op_type, crew:[ids], label?}``.
+
+        Returns:
+            ``{ok, started, message, preview, ...}`` or a clean gated failure.
+        """
+        from engine.world.crew import OPERATION_TYPES  # noqa: PLC0415
+
+        op_type = str(body.get("op_type", "")).strip()
+        crew = body.get("crew") or []
+        if not isinstance(crew, list):
+            crew = [crew]
+        crew = [str(c) for c in crew if c]
+
+        if op_type not in OPERATION_TYPES:
+            return {"ok": False, "error": "invalid op_type",
+                    "valid": sorted(OPERATION_TYPES.keys())}
+
+        mgr = self._crew()
+        preview = self._op_preview(op_type, crew)
+
+        started, message = mgr.start_operation(
+            op_type,
+            crew,
+            label=str(body.get("label", "")) or "",
+            duration_secs=float(self._cfg("op_duration_secs", 1800)),
+            reward_credits=int(self._cfg("op_reward_credits", 1500)),
+            reward_xp=int(self._cfg("op_reward_xp", 40)),
+        )
+        if not started:
+            # Gated (too few crew / unavailable) — clean message, not an error 500.
+            return {"ok": False, "error": message, "op_type": op_type, "preview": preview}
+
+        logger.info("[%s] assign_op %s crew=%d (operation=command, faction=%s)",
+                    SCENE_ID, op_type, len(crew), faction)
+        return {
+            "ok": True,
+            "started": True,
+            "op_type": op_type,
+            "crew": crew,
+            "preview": preview,
+            "message": message,
+        }
+
+    def _cmd_recruit(self, faction: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Recruit a candidate into the crew (honours the can_recruit gate).
+
+        Args:
+            faction: The player's faction (logged).
+            body: ``{character_id, role?}``.
+
+        Returns:
+            ``{ok, message, character_id}`` or a clean gated failure.
+        """
+        character_id = str(body.get("character_id", "")).strip()
+        if not character_id:
+            return {"ok": False, "error": "character_id required"}
+        role = str(body.get("role", "")).strip() or "unknown"
+
+        mgr = self._crew()
+        ok, message = mgr.recruit(character_id, role=role)
+        logger.info("[%s] recruit %s as %s → %s (operation=command, faction=%s)",
+                    SCENE_ID, character_id, role, ok, faction)
+        return {
+            "ok": bool(ok),
+            "character_id": character_id,
+            "role": role,
+            "message": message,
+            **({} if ok else {"error": message}),
+        }
+
+    def _crew_id_for(self, faction: str, body: Dict[str, Any]) -> str:
+        """Resolve the crew_id for HQ commands (body override → first crew → faction).
+
+        Crews/HQs are keyed by an id in TerritoryManager. We prefer an explicit
+        ``crew_id`` in the body, else the first crew member's id, else fall back
+        to the faction name so the player always has a valid HQ owner.
+        """
+        explicit = str(body.get("crew_id", "")).strip()
+        if explicit:
+            return explicit
+        try:
+            members = self._crew().get_all_members()
+            for m in members or []:
+                cid = getattr(m, "character_id", None)
+                if cid:
+                    return str(cid)
+        except Exception as exc:
+            logger.debug("[%s] crew_id resolve failed (operation=command): %s", SCENE_ID, exc)
+        return faction
+
+    def _cmd_build_hq(self, faction: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Establish a crew HQ in a district.
+
+        Reuses :meth:`TerritoryManager.establish_hq`. The HQ owner (crew_id)
+        defaults to the player's first crew member, falling back to the faction.
+
+        Args:
+            faction: The player's faction (HQ owner fallback).
+            body: ``{district, crew_id?}``.
+
+        Returns:
+            ``{ok, hq, district, crew_id}`` or ``{ok: False, error}``.
+        """
+        from engine.world.territory import DISTRICT_NAMES  # noqa: PLC0415
+
+        district = str(body.get("district", "")).strip().upper()
+        if district not in DISTRICT_NAMES:
+            return {"ok": False, "error": "invalid district", "valid": DISTRICT_NAMES}
+
+        crew_id = self._crew_id_for(faction, body)
+        hq = self._territory().establish_hq(district, crew_id)
+        hq_dict = hq.to_dict() if hasattr(hq, "to_dict") else hq
+        logger.info("[%s] build_hq %s for %s (operation=command, faction=%s)",
+                    SCENE_ID, district, crew_id, faction)
+        return {
+            "ok": True,
+            "district": district,
+            "crew_id": crew_id,
+            "hq": hq_dict,
+            "message": f"HQ established in {district}.",
+        }
+
+    def _cmd_upgrade_room(self, faction: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Build or upgrade an HQ room.
+
+        Reuses :meth:`TerritoryManager.build_room` (first build) /
+        :meth:`upgrade_room` (subsequent levels). Tries build first; if the room
+        already exists, falls through to an upgrade.
+
+        Args:
+            faction: The player's faction (HQ owner fallback).
+            body: ``{room_type, crew_id?}``.
+
+        Returns:
+            ``{ok, action, room_type, hq}`` or a clean gated failure.
+        """
+        from engine.world.territory import HQ_ROOM_TYPES  # noqa: PLC0415
+
+        room_type = str(body.get("room_type", "")).strip().lower()
+        if room_type not in HQ_ROOM_TYPES:
+            return {"ok": False, "error": "invalid room_type",
+                    "valid": sorted(HQ_ROOM_TYPES.keys())}
+
+        crew_id = self._crew_id_for(faction, body)
+        terr = self._territory()
+        if terr.get_hq(crew_id) is None:
+            return {"ok": False, "error": "no HQ — build one first", "crew_id": crew_id}
+
+        built = terr.build_room(crew_id, room_type)
+        action = "built"
+        if not built:
+            upgraded = terr.upgrade_room(crew_id, room_type)
+            if not upgraded:
+                return {"ok": False, "error": "room maxed or unavailable",
+                        "room_type": room_type, "crew_id": crew_id}
+            action = "upgraded"
+
+        hq = terr.get_hq(crew_id)
+        hq_dict = hq.to_dict() if (hq and hasattr(hq, "to_dict")) else None
+        logger.info("[%s] %s room %s for %s (operation=command, faction=%s)",
+                    SCENE_ID, action, room_type, crew_id, faction)
+        return {
+            "ok": True,
+            "action": action,
+            "room_type": room_type,
+            "crew_id": crew_id,
+            "hq": hq_dict,
+            "message": f"{room_type.title()} {action}.",
+        }
+
+    # Map canonical faction names → faction_politics scene ids (where they exist).
+    # v1.63.0 [2026-06-16] — C-T4: the neoncity scene registers 3 of the 6.
+    _FACTION_MGR_IDS: Dict[str, str] = {
+        "OmniCorp": "omnicorp",
+        "Ghost_Net": "ghost_net",
+        "SynthSec": "synthsec",
+    }
+
+    def _cmd_diplomacy(self, faction: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Set the player's relation with a rival faction (ally / war / neutral).
+
+        Writes the new standing to :class:`PlayerState` (the authoritative source
+        for all 6 canonical factions, and what the dashboard's rival relation +
+        ``standings`` read) and best-effort mirrors it into
+        :meth:`FactionManager.modify_standing` (scene factions, with cascade) so
+        the wider political sim reacts. Refreshes FactionAI's player context so
+        rivals respond on later ticks.
+
+        Args:
+            faction: The player's faction (the actor).
+            body: ``{target_faction, kind}`` where kind ∈ {ally, war, neutral}.
+
+        Returns:
+            ``{ok, target_faction, kind, relation, standing}`` or an error.
+        """
+        target = str(body.get("target_faction", "")).strip()
+        kind = str(body.get("kind", "")).strip().lower()
+        if target not in CANONICAL_FACTIONS:
+            return {"ok": False, "error": "invalid target_faction", "valid": CANONICAL_FACTIONS}
+        if target == faction:
+            return {"ok": False, "error": "cannot set diplomacy with your own faction"}
+        if kind not in ("ally", "war", "neutral"):
+            return {"ok": False, "error": "kind must be ally|war|neutral"}
+
+        cfg_key = {"ally": "ally_standing", "war": "war_standing",
+                   "neutral": "neutral_standing"}[kind]
+        cfg_default = {"ally": 60, "war": -80, "neutral": 0}[kind]
+        target_standing = int(self._cfg("diplomacy." + cfg_key, cfg_default))
+        cascade = bool(self._cfg("diplomacy.cascade", True))
+
+        # 1) Authoritative: set PlayerState standing absolutely to the target.
+        ps = self._player()
+        try:
+            current = int(ps.faction_standings.get(target, 0))
+        except Exception:
+            current = 0
+        new_standing = current
+        try:
+            new_standing = ps.update_faction_standing(target, target_standing - current)
+        except Exception as exc:
+            logger.warning("[%s] diplomacy standing write failed (operation=command): %s",
+                           SCENE_ID, exc)
+            return {"ok": False, "error": "standing write failed", "target_faction": target}
+
+        # 2) Best-effort: mirror into FactionManager (scene faction sim, cascades).
+        mgr_id = self._FACTION_MGR_IDS.get(target)
+        if mgr_id:
+            try:
+                self._faction_mgr().modify_standing(mgr_id, target_standing - current, cascade=cascade)
+            except Exception as exc:
+                logger.debug("[%s] FactionManager mirror failed (operation=command): %s", SCENE_ID, exc)
+
+        # 3) Declaring war → register an active war so FactionAI / the map react.
+        if kind == "war":
+            try:
+                district = self._first_held_or_default(faction)
+                fai = self._faction_ai()
+                war_map = getattr(fai, "_war_active", None)
+                if isinstance(war_map, dict):
+                    war_map[district] = {"attacker": faction, "defender": target}
+            except Exception as exc:
+                logger.debug("[%s] war registration failed (operation=command): %s", SCENE_ID, exc)
+        elif kind in ("ally", "neutral"):
+            # Stand down any war the player is running in their own districts.
+            try:
+                fai = self._faction_ai()
+                war_map = getattr(fai, "_war_active", {})
+                for d in [k for k, v in dict(war_map).items()
+                          if isinstance(v, dict) and v.get("defender") == target]:
+                    fai.end_war(d)
+            except Exception as exc:
+                logger.debug("[%s] war stand-down failed (operation=command): %s", SCENE_ID, exc)
+
+        # 4) Refresh FactionAI player context so rivals react on later ticks.
+        try:
+            self._faction_ai().set_player_context(self._player_standings(), self._safe_active_location())
+        except Exception as exc:
+            logger.debug("[%s] set_player_context failed (operation=command): %s", SCENE_ID, exc)
+
+        relation_label = "ally" if new_standing >= 25 else "war" if new_standing <= -25 else "neutral"
+        logger.info("[%s] diplomacy %s → %s (kind=%s, standing=%d) (operation=command, faction=%s)",
+                    SCENE_ID, target, relation_label, kind, new_standing, faction)
+        return {
+            "ok": True,
+            "target_faction": target,
+            "kind": kind,
+            "relation": relation_label,
+            "standing": int(new_standing),
+            "message": f"{faction} now {relation_label} with {target}.",
+        }
+
+    def _first_held_or_default(self, faction: str) -> str:
+        """Return a district the faction dominates, else the first canonical one.
+
+        Used to anchor a declared war to a concrete district (FactionAI tracks
+        wars per district). Never raises.
+        """
+        from engine.world.territory import DISTRICT_NAMES  # noqa: PLC0415
+        held = self._dominant_districts(faction)
+        if held:
+            return held[0]
+        return DISTRICT_NAMES[0]
 
     def _setup_socketio_handlers(self) -> None:
         """Register Socket.IO event handlers."""

@@ -9,6 +9,11 @@
  * rank ladder, territory panel, crew roster, rivals power bars, live intel
  * feed, inert command bar). Reuses the shared neon palette + the Sprawl's
  * faction→color map (--fac-*).
+ *
+ * v1.63.0 [2026-06-16] — C-T4: live command bar + neon command modal. The
+ * command buttons get .is-live / .is-disabled states; a centered modal
+ * (.war-modal) hosts the per-command forms (.war-field, crew roster chips
+ * .war-rosterchip, success-chance preview .war-preview).
  */
 
 :root {
@@ -732,7 +737,7 @@ html, body {
   text-align: center;
 }
 
-/* ── Command bar (inert placeholder) ── */
+/* ── Command bar (live — C-T4) ── */
 .war-cmdbar {
   display: flex;
   align-items: center;
@@ -761,6 +766,31 @@ html, body {
   letter-spacing: 0.04em;
   cursor: not-allowed;
 }
+/* Live (eligible) command buttons. */
+.war-cmd.is-live {
+  color: var(--war-ink);
+  border-color: color-mix(in srgb, var(--war-accent) 40%, transparent);
+  background: rgba(239, 68, 68, 0.08);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+.war-cmd.is-live:hover {
+  background: rgba(239, 68, 68, 0.18);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.35);
+  transform: translateY(-1px);
+}
+.war-cmd.is-live:active { transform: translateY(0); }
+/* Ineligible (e.g. Order Strike with no crew). */
+.war-cmd.is-disabled,
+.war-cmd:disabled {
+  color: var(--war-dim);
+  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--war-border);
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.55;
+  transform: none;
+}
 .war-cmdbar__soon {
   margin-left: auto;
   font-family: "JetBrains Mono", monospace;
@@ -769,6 +799,178 @@ html, body {
   color: var(--war-dim);
   opacity: 0.7;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   COMMAND MODAL (C-T4)
+   ════════════════════════════════════════════════════════════════ */
+.war-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+.war-modal[hidden] { display: none; }
+.war-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 2, 3, 0.72);
+  backdrop-filter: blur(3px);
+}
+.war-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(480px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--war-accent) 45%, transparent);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20, 9, 12, 0.98), rgba(12, 6, 8, 0.98));
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(239, 68, 68, 0.18);
+  animation: war-modal-in 0.18s ease;
+}
+@keyframes war-modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.war-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--war-border);
+}
+.war-modal__title {
+  margin: 0;
+  font-family: "Orbitron", sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  font-size: 1rem;
+  color: var(--war-accent);
+  text-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
+.war-modal__close {
+  border: 1px solid var(--war-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--war-dim);
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.war-modal__close:hover { color: var(--war-accent); border-color: var(--war-accent); }
+.war-modal__body {
+  padding: 1rem 1.1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.war-modal__note {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(255, 224, 224, 0.72);
+}
+.war-modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 0.8rem 1.1rem;
+  border-top: 1px solid var(--war-border);
+}
+.war-modal__btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--war-border);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+.war-modal__btn--ghost {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--war-dim);
+}
+.war-modal__btn--ghost:hover { color: var(--war-ink); }
+.war-modal__btn--go {
+  background: rgba(239, 68, 68, 0.16);
+  color: var(--war-ink);
+  border-color: color-mix(in srgb, var(--war-accent) 55%, transparent);
+}
+.war-modal__btn--go:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.28);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.4);
+}
+.war-modal__btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
+/* Modal form fields. */
+.war-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.war-field__label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--war-dim);
+}
+.war-field__input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--war-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--war-ink);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+}
+.war-field__input:focus {
+  outline: none;
+  border-color: var(--war-accent);
+  box-shadow: 0 0 0 1px var(--war-accent);
+}
+select.war-field__input option { background: #140a0c; color: var(--war-ink); }
+
+/* Crew roster chips (Order Strike selection). */
+.war-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.war-rosterchip {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--war-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--war-ink);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.war-rosterchip:hover { border-color: var(--war-accent); }
+.war-rosterchip.is-on {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: var(--war-accent);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
+}
+
+/* Success-chance preview line. */
+.war-preview {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.76rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px dashed var(--war-border);
+  color: var(--war-dim);
+  background: rgba(255, 255, 255, 0.02);
+}
+.war-preview.is-ok { color: var(--war-ally); border-color: rgba(57, 255, 20, 0.4); }
+.war-preview.is-bad { color: #ffb4b4; border-color: rgba(239, 68, 68, 0.5); }
 
 /* ════════════════════════════════════════════════════════════════
    Toasts

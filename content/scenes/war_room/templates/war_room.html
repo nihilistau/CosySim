@@ -12,7 +12,10 @@
       contested flagged), a crew roster, a rivals panel (power bars + relation
       badges), and a live Intel feed (recent FactionAI decisions, newest-first).
     • HUD strip: in-game clock + a "change allegiance" affordance + live link.
-    • An inert command-bar placeholder (the live commands ship in C-T4).
+    • A live command bar (C-T4): Claim Territory / Order Strike / Recruit Crew /
+      Negotiate open a neon modal → POST /api/warroom/command {cmd, ...} →
+      toast + warroom_update re-render. Actions grey out when ineligible
+      (e.g. Order Strike with no crew).
   Fed by GET /api/warroom/{state,factions} + POST /api/warroom/allegiance and
   live Socket.IO `warroom_update` (full state → re-render everything).
 
@@ -173,17 +176,40 @@
 
     </div>
 
-    <!-- ── Command bar (inert placeholder — live commands ship in C-T4) ── -->
-    <footer class="war-cmdbar" id="war-cmdbar" aria-label="Command bar (coming soon)">
+    <!-- ── Command bar (live — C-T4) ── -->
+    <footer class="war-cmdbar" id="war-cmdbar" aria-label="Faction command bar">
       <span class="war-cmdbar__hint">COMMAND</span>
-      <button type="button" class="war-cmd" disabled title="Available in a later update">⚑ Claim Territory</button>
-      <button type="button" class="war-cmd" disabled title="Available in a later update">⚔ Order Strike</button>
-      <button type="button" class="war-cmd" disabled title="Available in a later update">🜲 Recruit Crew</button>
-      <button type="button" class="war-cmd" disabled title="Available in a later update">⚐ Negotiate</button>
-      <span class="war-cmdbar__soon">commands online soon</span>
+      <button type="button" class="war-cmd is-live" id="cmd-contest"
+              data-cmd="contest" title="Press your faction into a district">⚑ Claim Territory</button>
+      <button type="button" class="war-cmd is-live" id="cmd-op"
+              data-cmd="assign_op" title="Deploy crew on an operation">⚔ Order Strike</button>
+      <button type="button" class="war-cmd is-live" id="cmd-recruit"
+              data-cmd="recruit" title="Recruit a new crew member">🜲 Recruit Crew</button>
+      <button type="button" class="war-cmd is-live" id="cmd-diplomacy"
+              data-cmd="diplomacy" title="Set relations with a rival faction">⚐ Negotiate</button>
+      <span class="war-cmdbar__soon" id="war-cmdbar-status">commands online</span>
     </footer>
 
   </main>
+
+  <!-- ═══ COMMAND MODAL (neon) — populated by war_room.js ═══ -->
+  <div class="war-modal" id="war-modal" hidden aria-modal="true" role="dialog">
+    <div class="war-modal__backdrop" id="war-modal-backdrop"></div>
+    <div class="war-modal__panel" id="war-modal-panel" role="document">
+      <header class="war-modal__head">
+        <h2 class="war-modal__title" id="war-modal-title">Command</h2>
+        <button type="button" class="war-modal__close" id="war-modal-close"
+                title="Close">✕</button>
+      </header>
+      <div class="war-modal__body" id="war-modal-body"></div>
+      <footer class="war-modal__foot" id="war-modal-foot">
+        <button type="button" class="war-modal__btn war-modal__btn--ghost"
+                id="war-modal-cancel">Cancel</button>
+        <button type="button" class="war-modal__btn war-modal__btn--go"
+                id="war-modal-confirm">Confirm</button>
+      </footer>
+    </div>
+  </div>
 
   <!-- transient toasts (allegiance result / errors) -->
   <div class="war-toasts" id="war-toasts" aria-live="polite"></div>
