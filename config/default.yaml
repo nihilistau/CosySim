@@ -1221,4 +1221,15 @@ emergent:
     llm_chance: 0.05         # P(use_llm) for a PIVOTAL action (kept rare)
     trade_default_qty: 1     # default quantity for a trade dispatch
     contest_delta: 3.0       # control delta for a contest (clamped to CONTROL_SHIFT_RANGE)
+  # ── v1.63.0 [2026-06-15] — A5: agency driver (on the LivingWorld tick) ──
+  # The agency subscribes to the EXISTING living_world_tick EventBus event (no
+  # second daemon) and, each tick, runs a bounded goals→plan→execute pass over a
+  # handful of NPCs. engine/world/emergent/agency.py reads these via
+  # get_config().get("emergent.agency.*", default). Caps keep the world calm:
+  # only active_npcs_per_tick act per hour, and pivotal/LLM beats stay rare.
+  agency:
+    enabled: true                # master switch; start() is a no-op when false
+    active_npcs_per_tick: 3       # NPCs that act per LivingWorld tick (calm cap)
+    pivotal_per_tick: 1          # max NPCs flagged pivotal in one tick (rare)
+    pivotal_chance: 0.05         # P(an acting NPC is considered for pivotal)
 
