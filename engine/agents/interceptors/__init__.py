@@ -11,6 +11,8 @@ Version: v1.54.0 [2026-03-26]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — Registered CommsLoggerInterceptor (CB-T2): every
+                            governed agent reply flows into GlobalCommsLog
     v1.54.0 [2026-03-26] — Registered 6 missing interceptors, sorted registry by priority
     v1.51.1 [2026-03-25] — Added FactionContext + HeatAwareness interceptors
     v1.51.0 [2026-03-25] — Added SpectatorBroadcast + NarrativeMod interceptors
@@ -40,6 +42,8 @@ from engine.agents.interceptors.policy_enforcer import PolicyEnforcerInterceptor
 from engine.agents.interceptors.memory_enhancer import MemoryEnhancerInterceptor
 from engine.agents.interceptors.response_shaper import ResponseShaperInterceptor
 from engine.agents.interceptors.activity_logger import ActivityLoggerInterceptor
+# v1.62.0 [2026-06-15] — CB-T2: write every governed agent reply into GlobalCommsLog
+from engine.agents.interceptors.comms_logger import CommsLoggerInterceptor
 from engine.agents.interceptors.penthouse_scene import PenthouseSceneInterceptor
 from engine.agents.interceptors.phone_scene import PhoneSceneInterceptor
 from engine.agents.interceptors.lounge_scene import LoungeSceneInterceptor
@@ -113,6 +117,7 @@ _REGISTRY: list[Type] = [
     TTSStyleInterceptor,            # pri 85 — TTS voice style tags
     StimulusDetectInterceptor,      # pri 88 — NLP stimulus detection → neurochemistry
     ActivityLoggerInterceptor,      # pri 90 — EventChain + training logging
+    CommsLoggerInterceptor,         # pri 90 — write agent reply → GlobalCommsLog (CB-T2)
     StatSyncInterceptor,            # pri 91 — apply [STAT:x±y] tags to game state
     MoodSyncInterceptor,            # pri 92 — mood sync to CharacterRegistry
     SpectatorBroadcastInterceptor,  # pri 92 — danmaku spectator broadcast
@@ -180,6 +185,7 @@ __all__ = [
     "TTSStyleInterceptor",
     "StimulusDetectInterceptor",
     "ActivityLoggerInterceptor",
+    "CommsLoggerInterceptor",
     "MoodSyncInterceptor",
     "SpectatorBroadcastInterceptor",
     "RelationshipEventInterceptor",

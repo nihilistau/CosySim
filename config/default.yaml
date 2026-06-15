@@ -876,6 +876,7 @@ comms:
     memory_enhancer:          false   # extra RAG lookup — heavier, opt-in
     response_shaper:          true
     activity_logger:          true
+    comms_logger:             true    # v1.62.0 [2026-06-15] — CB-T2: write agent replies → GlobalCommsLog
     relationship_context:     true    # inject player-NPC relationship into system prompt
     grammar_scanner:          true    # post-call grammar/quality scanner → training signal
   stats_poll_interval_ms: 2000  # how often the browser overlay polls /api/stats/live
