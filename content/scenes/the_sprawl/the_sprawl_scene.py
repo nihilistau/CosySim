@@ -40,6 +40,11 @@ Change Log:
                             GET /api/sprawl/events?since=; EventBus subscription
                             pushing sprawl_update (throttled) + sprawl_event;
                             per-source defensive (never 500).
+    v1.63.0 [2026-06-16] — Faction-coloured NPC tokens (B-T5): on_before_serve now
+                            idempotently ensures the factioned population (same
+                            seed_cast_factions + seed_generated_population neoncity
+                            uses) so a standalone process surfaces metadata.faction
+                            for NPC token tinting (B-T3 null was an empty-DB artifact).
     v1.63.0 [2026-06-16] — Player agency (B-T4): POST /api/sprawl/travel (avatar
                             moves + small energy cost), POST /api/sprawl/intervene
                             (talk/hack/deal/recruit/contest dispatched to EXISTING
@@ -122,6 +127,14 @@ class TheSprawlScene(FlaskScene):
         self._last_push_ts: float = 0.0
         # Cached scene→district reverse map (built lazily, defensively).
         self._scene_to_district: Optional[Dict[str, str]] = None
+        # v1.63.0 [2026-06-16] — Cross-process territory freshness (B-T5): last
+        # seen mtime of data/territory.json. A STANDALONE the_sprawl process holds
+        # its own TerritoryManager singleton whose _control is read into memory
+        # once at boot, so it would otherwise FREEZE on its boot snapshot while
+        # the running stack's agency keeps shifting territory on disk. We re-read
+        # the persisted state (read-only) into the singleton when the file's mtime
+        # advances so the live map reflects the canonical world's territory shifts.
+        self._territory_mtime: float = 0.0
 
         # Scene-specific route registrations
         self.register_bench_route(self.app, self.socketio)
@@ -263,9 +276,49 @@ class TheSprawlScene(FlaskScene):
     # source degrades to a safe default and tests can monkeypatch it.
 
     def _territory(self):
-        """Return the singleton TerritoryManager (read-only world territory)."""
+        """Return the singleton TerritoryManager (read-only world territory).
+
+        v1.63.0 [2026-06-16] — Before returning, refresh the manager's in-memory
+        ``_control``/event history from the persisted ``data/territory.json`` when
+        that file has changed on disk (B-T5 cross-process live freshness). This is
+        read-only (it never writes) and fully defensive: a missing/locked file or
+        an unexpected manager shape simply leaves the cached state untouched.
+        """
         from engine.world.territory import get_territory_manager  # noqa: PLC0415
-        return get_territory_manager()
+        mgr = get_territory_manager()
+        self._refresh_territory_from_disk(mgr)
+        return mgr
+
+    def _refresh_territory_from_disk(self, mgr: Any) -> None:
+        """Re-read persisted territory into *mgr* when the save file changed.
+
+        Reuses the manager's own load path by importing its save-file location
+        (``territory._SAVE_DIR / _SAVE_FILE``) and replaying it through the
+        manager's private ``_load`` when the on-disk mtime advances. Guarded so a
+        running-stack process (where the manager is the live writer) and any
+        failure both degrade to a no-op — the manager keeps its current state.
+        """
+        try:
+            from engine.world import territory as _terr  # noqa: PLC0415
+            path = _terr._SAVE_DIR / _terr._SAVE_FILE
+            if not path.exists():
+                return
+            mtime = path.stat().st_mtime
+            if mtime <= self._territory_mtime:
+                return
+            self._territory_mtime = mtime
+            # Replay the persisted snapshot into the singleton (read-only here).
+            # _load appends event history, so clear it first to avoid duplicates.
+            if hasattr(mgr, "_load"):
+                if hasattr(mgr, "_event_history"):
+                    try:
+                        mgr._event_history.clear()
+                    except Exception:
+                        pass
+                mgr._load()
+        except Exception as exc:
+            logger.debug("[%s] territory refresh skipped (operation=build_state): %s",
+                         SCENE_ID, exc)
 
     def _routine(self):
         """Return the singleton RoutineManager (read-only NPC locations)."""
@@ -1081,6 +1134,19 @@ class TheSprawlScene(FlaskScene):
 
     def on_before_serve(self) -> None:
         """Subscribe to the EventBus for live push (read-only, defensive)."""
+        # v1.63.0 [2026-06-16] — Faction-coloured NPC tokens (B-T5 reconcile).
+        # NPC faction tinting reads the canonical metadata.faction persisted in
+        # the SHARED data/simulation.db (Database() resolves DB_SIMULATION in
+        # every process). The B-T3 "faction came back null" report was a
+        # transient/empty-DB artifact: a STANDALONE the_sprawl process can boot
+        # before (or without) neoncity's on_before_serve having seeded that DB,
+        # so its NPC rows carried no faction yet. The minimal, reuse-first fix is
+        # for any world-bearing scene to ensure the population itself — calling
+        # the SAME idempotent seeders neoncity uses (cast factions are never
+        # overwritten; the generated population only tops up to the target count,
+        # so this never duplicates NPCs when neoncity already ran). A once-guard +
+        # full defensiveness keep boot fast and unblockable.
+        self._ensure_population_seeded()
         try:
             from engine.events.event_bus import get_event_bus  # noqa: PLC0415
             bus = get_event_bus()
@@ -1093,6 +1159,36 @@ class TheSprawlScene(FlaskScene):
             # The scene still serves REST even if the bus is unavailable.
             logger.error("[%s] EventBus subscription failed (operation=lifecycle): %s",
                          SCENE_ID, exc)
+
+    def _ensure_population_seeded(self) -> None:
+        """Idempotently ensure the factioned NPC population exists (B-T5).
+
+        Mirrors ``neoncity_scene.on_before_serve``'s A7 seeding so a STANDALONE
+        the_sprawl process surfaces faction-coloured NPC tokens even when it
+        boots before/without neoncity. Both seeders are idempotent — cast
+        factions are never overwritten and the generated population only tops up
+        to the configured target — so when neoncity already seeded the shared DB
+        this call creates nothing. Guarded once-per-scene and fully defensive
+        (a failure never blocks serving).
+        """
+        if getattr(self, "_population_seeded", False):
+            return
+        try:
+            from engine.world import character_gen  # noqa: PLC0415
+            count = character_gen.get_config().get("emergent.population.count", 15)
+            faction_count = character_gen.get_config().get(
+                "emergent.population.faction_count", 10)
+            cast = character_gen.seed_cast_factions()
+            pop = character_gen.seed_generated_population(
+                count=int(count), faction_count=int(faction_count))
+            self._population_seeded = True
+            logger.info(
+                "[%s] population ensured (operation=lifecycle, cast=%d, created=%d, "
+                "factioned=%d, total=%d)", SCENE_ID, len(cast), pop.get("created", 0),
+                pop.get("factioned", 0), pop.get("total", 0))
+        except Exception as exc:
+            logger.warning("[%s] population seeding skipped (operation=lifecycle): %s",
+                           SCENE_ID, exc)
 
     def on_shutdown(self) -> None:
         """Unsubscribe from the EventBus and clean up (defensive)."""
