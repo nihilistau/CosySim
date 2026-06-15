@@ -177,6 +177,11 @@ scenes:
     host: "localhost"
     port: 5569
     debug: false
+    # v1.63.0 [2026-06-16] — D-T1 "The Exchange": which engine-Market district
+    # THE GRID's market surfaces. The Grid trades the live, NPC-driven economy
+    # (engine.world.market) for this district. PH-T2 phone-upgrade vendor items
+    # are layered on top as Grid specials.
+    market_district: "DOWNTOWN"
 
   lab_break:
     host: "localhost"
