@@ -99,6 +99,45 @@ the live scene on `:5556` with LMStudio up.
   small, tone-/keyword-derived, clamped delta per NPC↔NPC exchange, closing the
   loop with the affinity-weighted pair selection in the scheduler.
 
+### Phone OS overhaul — NPC phones, hacking &amp; upgrades
+- **NPC phones + derived security** — new `engine/world/phone_os.py` (the
+  `PhoneOS` accessor over a full `npc_phone` table) gives every NPC a real phone
+  with archetype-/faction-seeded base stats, and derives `effective_security`,
+  `effective_firewall`, `hack_power` and `app_slots` from base levels + installed
+  software (the single source of truth being each upgrade's
+  `phone_upgrade.effects` block). The player's equipped cyberdeck `trace_resist`
+  hardens the phone on top, coupling the inventory to phone defence. All reads are
+  defensive — a missing/broken DB never crashes a phone read.
+- **Buyable / skill-installable upgrades** — `engine.world.inventory.ITEM_CATALOG`
+  gains flagged `is_phone_upgrade` software + hardware (encryption patch,
+  firewall v1/v2, comms tap, ICE, app packs, modem/CPU/OS-kernel) sold by the Grid
+  vendor; the new `install_phone_upgrade` skill gates install on owned-item →
+  credits → `skill_check` (idempotent, with before/after derived stats), and
+  `list_phone_upgrades` surfaces the catalog + current stats. Installing an upgrade
+  raises the owner's derived security/firewall/hack-power/app-slots and can light
+  up a gated UI app (e.g. Comms Tap → Intercept/Breach).
+- **Player→NPC hacking** — new `content/scenes/phone/phone_hack.py`
+  (`HackPhoneService.hack`) resolves a config-driven check (player hack-power + roll
+  vs the NPC's security + firewall) and on success performs **intercept** (reads a
+  bounded slice of the NPC's comms and marks them observed for later Oracle/UI
+  reads), **plant** (writes one spoofed message into the NPC's comms + phone
+  thread), or **steal** (a bounded, margin-scaled credit skim). Failure costs heat
+  and standing; the method never raises.
+- **NPC→player hacking (firewall-defended)** — a rare, hostility-driven reverse
+  hack (`NpcHackPlayerService`) where the attack is defended by the player's
+  `effective_security + effective_firewall + base_difficulty`, so PH-T2 firewall
+  upgrades directly raise the defence and can flip the same attacker from a
+  successful (bounded, recoverable: read + at most one leak-or-plant, capped
+  heat/standing) breach to **BLOCKED**. Emits `phone_hacked` /
+  `message_intercepted` events and persists a breach notification to the comms
+  backbone.
+- **OS-like phone UI** — new `/api/phone/*` routes and `phone_v2.js` views: a
+  **notifications center** (bell badge + breach/leak/left-message feed off the
+  persisted comms log), home-screen **search**, an installed-apps model that
+  unlocks gated apps, a **Breach** app (pick a target, see its defences, run
+  intercept/plant/steal) and an **Upgrades** app (browse + buy/install the catalog
+  with live before/after stats).
+
 ---
 
 ## [1.61.0] — "PUBLIC RELEASE PREP" — 2026-06-13
