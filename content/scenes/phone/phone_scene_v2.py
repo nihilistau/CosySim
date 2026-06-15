@@ -1357,6 +1357,211 @@ class PhoneSceneV2(FlaskScene):
             if tid:
                 emit("group_typing", data, to=f"thread_{tid}", include_self=False)
 
+    # ── PH-T5: phone-OS REST surfaces ─────────────────────────────────────────
+    # v1.62.0 [2026-06-15] — PH-T5: surface the PH-T2/PH-T3/PH-T4 backends to the
+    # OS-like phone UI. Reuses the existing skill/service code — no new game
+    # logic lives here, only thin, defensive HTTP wrappers.
+    # CONNECTS: content.scenes.phone.phone_upgrade_skills (list/install),
+    #           content.scenes.phone.phone_hack (HackPhoneService),
+    #           engine.world.phone_os (derived stats),
+    #           engine.world.comms_log (persisted breach/notification entries).
+    # CALLED BY: phone_v2.js — notifications centre, installed-apps grid, Breach
+    #            app, Upgrades app.
+
+    # Map of installed-app id → the phone UI app it unlocks. Installing an
+    # upgrade whose ``add_app`` matches a key here lights up that app in the home
+    # grid. ``intercept`` enables the Breach capability; ``vault`` the Vault app.
+    _PHONE_APP_UNLOCKS = {
+        "intercept": "breach",
+        "vault": "vault",
+    }
+
+    def _phone_installed_state(self, target: str = "user") -> Dict[str, Any]:
+        """Return *target*'s installed apps + which UI apps that unlocks.
+
+        Args:
+            target: The phone owner. Defaults to ``'user'`` (the player).
+
+        Returns:
+            Dict with ``installed_apps`` (raw ids), ``unlocked`` (UI app ids the
+            installed software lights up), ``stats`` (derived) and ``os_version``.
+        """
+        from engine.world.phone_os import get_phone_os
+        pos = get_phone_os()
+        rec = pos.get_phone(target)
+        installed = list(rec.get("installed_apps") or [])
+        unlocked = sorted({
+            self._PHONE_APP_UNLOCKS[a] for a in installed
+            if a in self._PHONE_APP_UNLOCKS
+        })
+        return {
+            "installed_apps": installed,
+            "unlocked": unlocked,
+            "stats": pos.stats(target),
+            "os_version": rec.get("os_version"),
+        }
+
+    def _register_phone_os_routes(self, app) -> None:
+        """Register the PH-T5 phone-OS REST routes on *app*.
+
+        Args:
+            app: The Flask application to attach the routes to.
+        """
+
+        @app.route("/api/phone/installed")
+        def phone_installed():
+            """Return the player's installed apps + unlocked UI apps + stats."""
+            target = request.args.get("target", "user")
+            try:
+                return jsonify({"ok": True, **self._phone_installed_state(target)})
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_installed failed (operation=phone_installed): %s",
+                    SCENE_ID, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/upgrades")
+        def phone_upgrades():
+            """List the phone-OS upgrade catalog + current derived stats (PH-T2)."""
+            target = request.args.get("target", "user")
+            try:
+                import json as _json
+                from content.scenes.phone.phone_upgrade_skills import (
+                    list_phone_upgrades,
+                )
+                data = _json.loads(list_phone_upgrades(target=target))
+                data.setdefault("ok", True)
+                return jsonify(data)
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_upgrades failed (operation=phone_upgrades): %s",
+                    SCENE_ID, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/upgrades/install", methods=["POST"])
+        def phone_upgrades_install():
+            """Install/buy a phone-OS upgrade (PH-T2 install skill)."""
+            data = request.get_json(silent=True) or {}
+            item_id = str(data.get("item_id", "")).strip()
+            target = str(data.get("target", "user")).strip() or "user"
+            if not item_id:
+                return jsonify({"ok": False, "error": "item_id required"}), 400
+            try:
+                import json as _json
+                from content.scenes.phone.phone_upgrade_skills import (
+                    install_phone_upgrade,
+                )
+                result = _json.loads(install_phone_upgrade(item_id=item_id, target=target))
+                result["ok"] = bool(result.get("success"))
+                # Surface the (possibly) newly-unlocked apps so the grid refreshes.
+                if result.get("success"):
+                    result["unlocked"] = self._phone_installed_state(target)["unlocked"]
+                return jsonify(result)
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_upgrades_install failed "
+                    "(operation=phone_install, item_id=%s): %s",
+                    SCENE_ID, item_id, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/hack/targets")
+        def phone_hack_targets():
+            """List hackable NPCs with their phone defence stats (PH-T3 surface)."""
+            try:
+                from engine.world.phone_os import get_phone_os
+                pos = get_phone_os()
+                targets = []
+                for row in (self.db.get_all_characters() or []):
+                    cid = str(row.get("id") or row.get("character_id") or "")
+                    if not cid:
+                        continue
+                    targets.append({
+                        "id": cid,
+                        "name": row.get("name", cid),
+                        "avatar": row.get("avatar_url") or row.get("image_url") or "",
+                        "security": pos.effective_security(cid),
+                        "firewall": pos.effective_firewall(cid),
+                    })
+                return jsonify({"ok": True, "targets": targets,
+                                "hack_power": pos.hack_power("user")})
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_hack_targets failed (operation=hack_targets): %s",
+                    SCENE_ID, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/hack", methods=["POST"])
+        def phone_hack():
+            """Run a player→NPC phone hack (PH-T3 ``hack_phone``)."""
+            data = request.get_json(silent=True) or {}
+            target_id = str(data.get("target_id", "")).strip()
+            action = str(data.get("action", "intercept")).strip() or "intercept"
+            if not target_id:
+                return jsonify({"ok": False, "error": "target_id required"}), 400
+            try:
+                from content.scenes.phone.phone_hack import HackPhoneService
+                result = HackPhoneService().hack(target_id, action=action)
+                result["ok"] = True
+                return jsonify(result)
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_hack failed (operation=phone_hack, target=%s): %s",
+                    SCENE_ID, target_id, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/notifications")
+        def phone_notifications():
+            """Return the player's notification feed (PH-T4 persisted entries).
+
+            Reads the GlobalCommsLog for entries addressed to the player that
+            represent notifications: ``kind='notification'`` breach alerts,
+            ``message_intercepted`` markers, leave-a-message ``left_unread``
+            entries, and ``system`` notices. Shaped for the notifications centre.
+            """
+            limit = request.args.get("limit", 40, type=int)
+            try:
+                from engine.world.comms_log import get_comms_log
+                cl = get_comms_log()
+                entries = cl.query(participants=["user"], limit=max(1, min(limit, 100)))
+                notes = []
+                for e in entries:
+                    meta = e.get("metadata") or {}
+                    kind = e.get("kind") or ""
+                    notif = meta.get("notification")
+                    if kind == "notification" or notif == "phone_hacked":
+                        ntype = "breach"
+                    elif meta.get("left_unread"):
+                        ntype = "left_message"
+                    elif meta.get("leaked"):
+                        ntype = "intercept"
+                    elif kind == "system":
+                        ntype = "system"
+                    else:
+                        continue
+                    notes.append({
+                        "id": e.get("id"),
+                        "type": ntype,
+                        "content": e.get("content", ""),
+                        "sender_id": e.get("sender_id", ""),
+                        "ts": e.get("ts", ""),
+                        "blocked": bool(meta.get("blocked")),
+                        "success": bool(meta.get("success")),
+                        "action": meta.get("action", ""),
+                    })
+                return jsonify({"ok": True, "notifications": notes,
+                                "count": len(notes)})
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_notifications failed (operation=notifications): %s",
+                    SCENE_ID, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
     # ── HTTP routes ──────────────────────────────────────────────────────────
 
     def _register_routes(self) -> None:
@@ -2896,7 +3101,17 @@ class PhoneSceneV2(FlaskScene):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
-        # ── Research (NotebookLM) routes ─────────────────────────────────────
+        # ── PH-T5: Phone-OS surfaces (notifications, installed apps, upgrades,
+        #          player→NPC Breach) ──────────────────────────────────────────
+        # v1.62.0 [2026-06-15] — PH-T5: thin REST wrappers over the already-built
+        # PH-T2 (phone_os/upgrade skills), PH-T3 (hack_phone) and the
+        # GlobalCommsLog notifications the PH-T4 breach flow persists. These feed
+        # the OS-like phone UI (notifications centre, installed-apps grid, Breach
+        # app, Upgrades surface). All read-side and defensive — a failure returns
+        # a shaped JSON error, never an exception.
+        self._register_phone_os_routes(app)
+
+        # ── Research (NotebookLM) routes ─────────────────────────────────────
         from engine.skills.builtin.notebooklm_skills import (
             notebooklm_ask,
             notebooklm_add_source,
