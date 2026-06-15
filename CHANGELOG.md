@@ -138,6 +138,46 @@ the live scene on `:5556` with LMStudio up.
   intercept/plant/steal) and an **Upgrades** app (browse + buy/install the catalog
   with live before/after stats).
 
+### Oracle omniscience — the Oracle reads the comms log
+
+The Oracle now genuinely "sees all": it reads the GlobalCommsLog (player↔NPC +
+NPC↔NPC chatter) and turns overheard signal into cryptic fortunes, real intel,
+and rare omens — all governed by a single privacy/spoiler budget so it hints
+without ever dumping the city's private conversations.
+
+- **Privacy-budgeted comms reader** — new `engine/world/oracle_comms.py` is the
+  one shared read layer over the comms log (`select_entries` / `weave_into` /
+  `find_signal`). A HARD `oracle.comms.max_refs` cap bounds how many entries any
+  single reading may cite, a `recent_window` bounds the scan, and
+  `respect_sensitive` skips/abstracts entries flagged sensitive/mature/intimate
+  so private moments stay private. Raw message bodies are never surfaced — only
+  short, abstracted poetic hints — and every referenced entry is stamped
+  `mark_observed(id, 'oracle')`. All comms-log failures degrade gracefully to
+  plain atmospheric behaviour and never crash a reading.
+- **Comms-aware cryptic fortunes** — `content/scenes/oracle/oracle_scene.py`
+  gains `_maybe_weave_comms`: under `oracle.comms.fortune_chance` a fortune
+  OCCASIONALLY weaves 1–2 real overheard exchanges into the prophecy
+  (cryptically, capped by the budget, marking each entry observed); otherwise it
+  stays purely atmospheric. No comms / a failed roll returns the base fortune
+  unchanged.
+- **`read_the_signal` intel skill** — new `@skill(pack="oracle")` in
+  `engine/skills/builtin/oracle_skills.py` asks the Oracle to read the streams
+  and surface ONE genuine, log-sourced finding — a low-security **hack
+  opportunity**, an NPC **discussing the player**, or the closest NPC↔NPC
+  **pair** by chatter volume — then grants a small **bounded reward**
+  (`oracle.comms.signal_reward_credits` + `signal_reward_item`) gated by the
+  skill cooldown/cost. Empty streams return an in-world "silence" line with no
+  reward.
+- **Autonomous comms omens** — `engine/agents/oracle_companion.py` gains a rare,
+  config-weighted (`oracle.comms.omen_weight`) omen action: the companion pulls a
+  single budget-capped entry, renders it as a cryptic line, marks it observed,
+  and delivers it to the player's phone — so the Oracle reaches out unprompted
+  without ever leaking raw chatter.
+- **Config** — new `oracle.comms.*` block in `config/default.yaml`
+  (`fortune_chance`, `max_refs`, `recent_window`, `omen_weight`,
+  `signal_reward_credits`, `signal_reward_item`, `signal_cooldown_sec`,
+  `respect_sensitive`) keeps the entire privacy/spoiler budget in one place.
+
 ---
 
 ## [1.61.0] — "PUBLIC RELEASE PREP" — 2026-06-13
