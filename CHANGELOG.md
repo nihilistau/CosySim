@@ -4,17 +4,20 @@ All notable changes to CosySim are documented here.
 
 ---
 
-## [1.63.0] — "EMERGENT LIVING WORLD" — 2026-06-15
+## [1.63.0] — "EMERGENT LIVING WORLD" — 2026-06-16
 
-Sub-project A of v1.63: a per-NPC **emergent agency** layer that gives the city's
-characters genuine, self-directed behaviour — each runs a goal → plan → verb loop
-every world tick and acts on the world through the systems that already exist. No
-second daemon, no new managers: the agency rides the existing `living_world_tick`
-EventBus event and dispatches to Territory, Market, Crew, FactionAI,
-relationship_effects, npc_comms and phone_hack. Verified live against the running
-LivingWorld with the model staying calm (rule-based actions; LLM use ≈
-`emergent.planner.llm_chance`). Sub-projects B/C/D (player-facing scenes) are
-forthcoming.
+v1.63 ships **all four sub-projects (A–D)**: a per-NPC **emergent agency** engine
+(A) gives the city's characters genuine, self-directed behaviour — each runs a
+goal → plan → verb loop every world tick and acts on the world through the systems
+that already exist — and three player-facing surfaces open onto that living world:
+**The Sprawl** (B), the real-time city map; **The War Room** (C), the faction
+command center; and **The Exchange** (D), the one NPC-driven economy surfaced live
+in both The Grid and a new Executive Suite Markets app. No second daemon, no new
+managers: the agency rides the existing `living_world_tick` EventBus event and
+dispatches to Territory, Market, Crew, FactionAI, relationship_effects, npc_comms
+and phone_hack, and every scene only orchestrates the EXISTING managers. Verified
+live against the running LivingWorld with the model staying calm (rule-based
+actions; LLM use ≈ `emergent.planner.llm_chance`).
 
 ### Emergent agency — per-NPC goal → verb on the LivingWorld loop
 - **Agency driver wired into the live boot** — `get_emergent_agency().start()` now
@@ -102,6 +105,31 @@ forthcoming.
   (sub-project B) is now unlocked end-to-end. Verified live: choose Ghost_Net →
   contest raises control in a district → declare war flips a rival to war
   (standing −80) → rank reflects total control, with 0 console errors.
+
+### The Exchange — one economy, two surfaces (sub-project D)
+- **The Grid surfaces the live engine Market** — `THE GRID` now trades the
+  *existing* `engine/world/market.py` economy (`get_market()`) instead of a
+  parallel price book: `GET /api/grid/market` reads `Market.get_prices()`, and
+  `/api/grid/buy` · `/api/grid/sell` route through `Market.buy/sell` so credits,
+  inventory and heat settle on the shared `PlayerState` wallet. Prices carry a
+  live ▲/▼ trend derived from successive reads; the PH-T2 phone-upgrade specials
+  are layered on top of the live goods, and a Market outage degrades gracefully
+  (the Grid still renders, never 500s).
+- **A new Executive Suite Markets app** — the NeonOS desktop gains a **Markets**
+  app (`/api/markets/state` · `/api/markets/buy` · `/api/markets/sell`) that opens
+  onto the *same* `get_market()` economy and the *same* district (DOWNTOWN), with
+  the Grid's player id, so the two surfaces are two windows on one market. The app
+  shows live prices with a ▲/▼/▬ trend, the player's tradable positions priced at
+  the live market, the shared wallet balance and market stats — every sub-lookup
+  behind a defensive seam (the route never 500s).
+- **One economy, proven in sync** — NPC wealth-trades and world events move
+  supply/demand on the single Market, so a price moves identically in BOTH UIs;
+  a player buy in one surface and a sell in the other settle the same wallet and
+  `InventoryManager`. Verified live (district DOWNTOWN, both scenes booted
+  standalone alongside the running stack): Grid price == Markets-app price ==
+  `get_market().get_prices()` across 19 shared goods; one `tick()` moved the same
+  good in both surfaces; a Grid buy then a Markets-app sell debited/credited the
+  one PlayerState wallet, with the Markets app reading that same live balance.
 
 ---
 
