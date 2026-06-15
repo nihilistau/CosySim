@@ -160,10 +160,13 @@ def test_hypothesis_unknown(tuner):
     assert "error" in result
 
 
+# v1.62.0 [2026-06-15] — _test_speculative was implemented in v1.44.0; with no
+# draft_model configured (mock config returns "") it now skips rather than
+# reporting the old "not_implemented" placeholder status.
 def test_hypothesis_speculative(tuner):
-    """Speculative hypothesis returns not_implemented status."""
+    """Speculative hypothesis skips cleanly when no draft model is configured."""
     result = tuner.test_hypothesis("speculative")
-    assert result["status"] == "not_implemented"
+    assert result["status"] == "skipped"
 
 
 def test_hypothesis_cpu_overflow(tuner):
@@ -197,26 +200,30 @@ def test_hypothesis_context_reduction(tuner):
 
 
 # ── AutoTuner.store_results ────────────────────────────────────────────
+#
+# v1.62.0 [2026-06-15] — store_results now uses NexusClient.add_entry()
+# (v1.44.0 refactor), not raw requests.post. Patch the client factory.
 
-@patch("engine.lmstudio.auto_tuner.requests.post")
-def test_store_results_sends_to_nexus(mock_post, tuner):
-    """store_results sends tuning results to Nexus."""
-    mock_response = MagicMock()
-    mock_response.ok = True
-    mock_response.json.return_value = {"id": "tune-123"}
-    mock_post.return_value = mock_response
+@patch("engine.nexus.client.get_nexus_client")
+def test_store_results_sends_to_nexus(mock_get_client, tuner):
+    """store_results sends tuning results to Nexus via NexusClient."""
+    nexus = MagicMock()
+    nexus.add_entry.return_value = "tune-123"
+    mock_get_client.return_value = nexus
 
     result = TuningResult(model="test", task_type="chat", best_tps=25.0)
     entry_id = tuner.store_results(result)
 
     assert entry_id == "tune-123"
-    mock_post.assert_called_once()
+    nexus.add_entry.assert_called_once()
 
 
-@patch("engine.lmstudio.auto_tuner.requests.post")
-def test_store_results_handles_nexus_failure(mock_post, tuner):
+@patch("engine.nexus.client.get_nexus_client")
+def test_store_results_handles_nexus_failure(mock_get_client, tuner):
     """store_results returns None when Nexus is unavailable."""
-    mock_post.side_effect = Exception("connection refused")
+    nexus = MagicMock()
+    nexus.add_entry.side_effect = Exception("connection refused")
+    mock_get_client.return_value = nexus
 
     result = TuningResult(model="test", task_type="chat")
     entry_id = tuner.store_results(result)
