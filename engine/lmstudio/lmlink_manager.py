@@ -1,5 +1,6 @@
 """
 LMLinkManager — Multi-instance LMStudio federation
+===================================================
 
 LMLink connects multiple LMStudio instances (local + remote via Tailscale)
 so CosySim can route requests to the best available peer based on model
@@ -16,17 +17,97 @@ Usage::
         peer = mgr.resolve_peer("qwen3-0.6b")
         models = mgr.list_remote_models()
         status = mgr.get_status()
+
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.60.0 [2026-06-13] — Federation health checks now retry transient
+        failures with exponential backoff + jitter (configurable base/max/
+        factor/attempts/jitter) instead of failing over immediately. A
+        single unreachable poll no longer flips a peer unhealthy when the
+        failure is transient. New ``BackoffPolicy`` helper computes the
+        capped, jittered delay schedule.
 """
 from __future__ import annotations
 
 import fnmatch
 import logging
+import random
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+# ── Backoff policy ─────────────────────────────────────────────────────
+# v1.60.0 [2026-06-13] — Exponential backoff + jitter for transient health failures
+# CONNECTS: LMLinkManager.check_peer_health, _health_loop
+# CALLED BY: health-monitor thread, manual health probes
+# EMITS: nothing (pure computation) — caller sleeps on the returned delay
+
+@dataclass(frozen=True)
+class BackoffPolicy:
+    """Computes exponential-backoff-with-jitter delays for retry loops.
+
+    The delay for retry attempt ``n`` (0-indexed) is::
+
+        raw   = base_seconds * (factor ** n)
+        capped = min(raw, max_seconds)
+        delay  = capped * (1 - jitter_ratio + random()*jitter_ratio)
+
+    ``jitter_ratio`` of ``0.0`` disables jitter (deterministic). The default
+    applies "equal jitter" style randomness so a fleet of peers does not
+    retry in lockstep (thundering herd).
+
+    Attributes:
+        base_seconds: Delay before the first retry (attempt 0).
+        max_seconds: Upper bound on any single delay after exponential growth.
+        factor: Multiplier applied per attempt (``2.0`` doubles each time).
+        max_attempts: Number of retries to attempt before giving up.
+        jitter_ratio: Fraction of the delay [0..1] that is randomised.
+    """
+
+    base_seconds: float = 0.5
+    max_seconds: float = 30.0
+    factor: float = 2.0
+    max_attempts: int = 3
+    jitter_ratio: float = 0.5
+
+    def delay_for(self, attempt: int) -> float:
+        """Return the (jittered) delay in seconds for a 0-indexed attempt."""
+        if attempt < 0:
+            attempt = 0
+        raw = self.base_seconds * (self.factor ** attempt)
+        capped = min(raw, self.max_seconds)
+        if capped < 0:
+            capped = 0.0
+        ratio = max(0.0, min(1.0, self.jitter_ratio))
+        if ratio <= 0.0:
+            return capped
+        # Equal-jitter: keep (1-ratio) of the delay fixed, randomise the rest.
+        fixed = capped * (1.0 - ratio)
+        jittered = capped * ratio * random.random()
+        return fixed + jittered
+
+    @classmethod
+    def from_config(cls, config: Any) -> "BackoffPolicy":
+        """Build a policy from ``lmlink.health.backoff.*`` config keys."""
+        def _get(key: str, default: Any) -> Any:
+            try:
+                return config.get(key, default)
+            except Exception:
+                return default
+
+        return cls(
+            base_seconds=float(_get("lmlink.health.backoff.base_seconds", 0.5)),
+            max_seconds=float(_get("lmlink.health.backoff.max_seconds", 30.0)),
+            factor=float(_get("lmlink.health.backoff.factor", 2.0)),
+            max_attempts=int(_get("lmlink.health.backoff.max_attempts", 3)),
+            jitter_ratio=float(_get("lmlink.health.backoff.jitter_ratio", 0.5)),
+        )
 
 
 # ── Peer descriptor ────────────────────────────────────────────────────
@@ -196,6 +277,12 @@ class LMLinkManager:
         self._max_reconnect: int = int(
             config.get("lmlink.health.max_reconnect_attempts", 3)
         )
+
+        # v1.60.0 [2026-06-13] — Exponential backoff + jitter for transient
+        # health-check failures. A single failed poll no longer flips a peer
+        # unhealthy; we retry up to backoff.max_attempts with growing,
+        # jittered sleeps before accepting the failure.
+        self._backoff: BackoffPolicy = BackoffPolicy.from_config(config)
 
         # Background health thread
         self._health_thread: Optional[threading.Thread] = None
@@ -490,28 +577,98 @@ class LMLinkManager:
 
     # ── Health monitoring ────────────────────────────────────────────
 
-    def check_peer_health(self, peer: LMLinkPeer) -> bool:
-        """
-        Check if a peer is reachable.
+    # v1.60.0 [2026-06-13] — Single probe split out so the retry loop can
+    # wrap it with backoff, and so tests can mock the HTTP boundary cleanly.
+    def _probe_peer_once(self, peer: LMLinkPeer) -> bool:
+        """Perform a single lightweight reachability probe against a peer.
 
-        Uses a lightweight GET /api/v1/models request.
+        Returns True iff the peer answered ``GET /api/v1/models`` with HTTP
+        200. Raises the underlying transport exception on connection errors
+        so the caller's backoff loop can distinguish transient failures.
         """
         import httpx
 
         url = f"{peer.api_base}/api/v1/models"
         timeout = self._health_timeout_ms / 1000
+        resp = httpx.get(url, headers=self._peer_headers(peer), timeout=timeout)
+        return resp.status_code == 200
 
-        try:
-            resp = httpx.get(url, headers=self._peer_headers(peer), timeout=timeout)
-            peer.reachable = resp.status_code == 200
-            peer.last_check = time.time()
-            peer.consecutive_failures = 0 if peer.reachable else peer.consecutive_failures
-            return peer.reachable
-        except Exception:
-            peer.reachable = False
-            peer.last_check = time.time()
-            peer.consecutive_failures += 1
-            return False
+    def check_peer_health(
+        self,
+        peer: LMLinkPeer,
+        *,
+        retry: bool = True,
+    ) -> bool:
+        """
+        Check if a peer is reachable, retrying transient failures.
+
+        Uses a lightweight ``GET /api/v1/models`` request. When ``retry`` is
+        True (default) and the first probe fails, the check retries up to
+        ``backoff.max_attempts`` additional times with exponential backoff
+        and jitter (see :class:`BackoffPolicy`). A peer is only marked
+        ``reachable = False`` / ``consecutive_failures += 1`` after every
+        attempt has failed — a single transient blip no longer triggers
+        failover.
+
+        Parameters
+        ----------
+        peer : LMLinkPeer
+            The peer to probe.
+        retry : bool
+            If False, perform exactly one probe (no backoff) — useful for
+            callers that drive their own scheduling.
+
+        Returns
+        -------
+        bool
+            True if the peer is reachable.
+        """
+        attempts = 1 + max(0, self._backoff.max_attempts) if retry else 1
+        last_exc: Optional[Exception] = None
+
+        for attempt in range(attempts):
+            try:
+                if self._probe_peer_once(peer):
+                    peer.reachable = True
+                    peer.last_check = time.time()
+                    peer.consecutive_failures = 0
+                    if attempt > 0:
+                        logger.info(
+                            "[LMLinkManager] Peer recovered on retry "
+                            "(operation=health_check, peer=%s, attempt=%d)",
+                            peer.name, attempt + 1,
+                        )
+                    return True
+                # Non-200 (e.g. 503 while a model loads) is treated as a
+                # transient failure worth retrying.
+                last_exc = None
+            except Exception as exc:  # transport / connection error
+                last_exc = exc
+
+            # Failed this attempt — back off before the next one (if any).
+            if attempt < attempts - 1:
+                delay = self._backoff.delay_for(attempt)
+                logger.debug(
+                    "[LMLinkManager] Health probe failed, backing off "
+                    "(operation=health_check, peer=%s, attempt=%d/%d, "
+                    "delay=%.2fs): %s",
+                    peer.name, attempt + 1, attempts, delay, last_exc,
+                )
+                # Interruptible sleep so shutdown is responsive.
+                if self._health_stop.wait(delay):
+                    break
+
+        # All attempts exhausted (or interrupted) → mark unhealthy once.
+        peer.reachable = False
+        peer.last_check = time.time()
+        peer.consecutive_failures += 1
+        logger.warning(
+            "[LMLinkManager] Peer unreachable after retries "
+            "(operation=health_check, peer=%s, attempts=%d, "
+            "consecutive_failures=%d): %s",
+            peer.name, attempts, peer.consecutive_failures, last_exc,
+        )
+        return False
 
     def check_all_peers(self) -> Dict[str, bool]:
         """Check health of all peers. Returns {name: reachable}."""
@@ -637,6 +794,14 @@ class LMLinkManager:
                 "enabled": self._failover_enabled,
                 "max_retries": self._max_retries,
                 "fallback_to_local": self._fallback_to_local,
+            },
+            # v1.60.0 [2026-06-13] — Surface health backoff config for observability
+            "health_backoff": {
+                "base_seconds": self._backoff.base_seconds,
+                "max_seconds": self._backoff.max_seconds,
+                "factor": self._backoff.factor,
+                "max_attempts": self._backoff.max_attempts,
+                "jitter_ratio": self._backoff.jitter_ratio,
             },
             "metrics": {
                 "routing_decisions": self._routing_decisions,

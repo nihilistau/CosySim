@@ -7,6 +7,19 @@ time.
 
 Integrates with PlayerProfile for relationship data and PlayerState for credits.
 
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.60.0 [2026-06-13] — Crew skill-checks & graded operation outcomes (Living
+        Systems). Operations now resolve via a probabilistic skill check derived
+        from assigned crew levels, role-fit, and average loyalty rather than
+        always succeeding. Added SUCCESS / PARTIAL / FAILURE outcome tiers with
+        scaled credit/XP rewards (and a failure penalty), per-outcome loyalty
+        shifts on each crew member, and fully configurable difficulty knobs read
+        from ``crew.skill_check.*`` via get_config().
+    v1.54.0 [2026-03-26] — Warn when PlayerProfile is unavailable.
+
 Usage::
 
     from engine.world.crew import get_crew_manager
@@ -19,14 +32,42 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+try:
+    from engine.config import get_config as _get_config
+except Exception as _cfg_exc:  # pragma: no cover
+    # v1.60.0 [2026-06-13] — Degrade gracefully if config layer is unavailable;
+    # skill-check knobs fall back to module defaults below.
+    logger.warning("[Crew] get_config unavailable (operation=import): %s", _cfg_exc)
+    _get_config = None  # type: ignore[assignment]
+
+
+def _cfg(path: str, default: Any) -> Any:
+    """Read a config value, tolerating a missing config layer.
+
+    Args:
+        path: Dotted config path (e.g. ``crew.skill_check.base_chance``).
+        default: Value returned when config is unavailable or the key is unset.
+
+    Returns:
+        The configured value, or *default*.
+    """
+    if _get_config is None:
+        return default
+    try:
+        return _get_config().get(path, default)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("[Crew] config read failed (operation=cfg, path=%s): %s", path, exc)
+        return default
 
 try:
     from engine.characters.player_profile import get_player_profile as _get_player_profile
@@ -68,10 +109,76 @@ OPERATION_TYPES = {
     "hack":      {"label": "Hack",      "min_crew": 1, "skill_weight": {"hacker": 3}},
 }
 
+# Per-operation intrinsic difficulty (0.0 = trivial, 1.0 = brutal). Subtracted
+# from success chance, scaled by the configurable difficulty multiplier.
+# v1.60.0 [2026-06-13] — difficulty tuning per op type
+OPERATION_DIFFICULTY = {
+    "recon": 0.10,
+    "deal": 0.15,
+    "hack": 0.25,
+    "extraction": 0.30,
+    "hit": 0.35,
+    "heist": 0.45,
+}
+
 # Minimum relationship score to recruit
 _MIN_RECRUIT_SCORE = 40.0
 # Max active crew size
 _MAX_CREW_SIZE = 8
+
+
+# ──── Skill-check / outcome model (v1.60.0) ───────────────────────────────────
+
+# Outcome tiers. A skill check yields a probability; a roll against it places the
+# operation into one of these bands.
+OUTCOME_SUCCESS = "success"
+OUTCOME_PARTIAL = "partial"
+OUTCOME_FAILURE = "failure"
+
+# Module-level defaults for every configurable knob. Each is overridable via
+# ``get_config().get("crew.skill_check.<key>")`` — see integration_requests.
+_SKILL_CHECK_DEFAULTS: Dict[str, float] = {
+    # Baseline success chance before any crew contribution.
+    "base_chance": 0.20,
+    # How much each effective crew "skill point" (level, role-weighted) adds.
+    "level_weight": 0.06,
+    # How much average loyalty (0–100) contributes at full loyalty.
+    "loyalty_weight": 0.20,
+    # How strongly per-op intrinsic difficulty bites.
+    "difficulty_weight": 0.55,
+    # Clamp bounds so nothing is ever a guaranteed win or guaranteed loss.
+    "min_chance": 0.05,
+    "max_chance": 0.95,
+    # If the success roll fails, a result within this margin of the success
+    # threshold is graded a PARTIAL success rather than an outright FAILURE.
+    "partial_band": 0.20,
+    # Reward/penalty scaling per outcome tier.
+    "partial_reward_mult": 0.45,   # credits & xp on partial success
+    "failure_reward_mult": 0.0,    # credits & xp on failure
+    "failure_credit_penalty_mult": 0.10,  # credits lost on failure (of reward)
+    # Loyalty deltas applied to each assigned member per outcome.
+    "loyalty_on_success": 4.0,
+    "loyalty_on_partial": 1.0,
+    "loyalty_on_failure": -6.0,
+}
+
+
+def _skill_cfg(key: str) -> float:
+    """Return a skill-check knob, config-overridable, falling back to defaults.
+
+    Args:
+        key: Bare knob name (e.g. ``base_chance``).
+
+    Returns:
+        The configured float value or the module default.
+    """
+    default = _SKILL_CHECK_DEFAULTS[key]
+    return float(_cfg(f"crew.skill_check.{key}", default))
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    """Clamp *value* into the inclusive ``[low, high]`` range."""
+    return max(low, min(high, value))
 
 
 # ──── Data structures ─────────────────────────────────────────────────────────
@@ -148,6 +255,9 @@ class CrewOperation:
     reward_credits: int = 0
     reward_xp: int = 0
     notes: str = ""
+    # v1.60.0 [2026-06-13] — graded outcome metadata, populated on resolution
+    outcome: str = ""          # success | partial | failure (empty while active)
+    success_chance: float = 0.0  # computed skill-check chance, for transparency
 
     @property
     def complete_at(self) -> float:
@@ -170,6 +280,8 @@ class CrewOperation:
             "reward_credits": self.reward_credits,
             "reward_xp": self.reward_xp,
             "notes": self.notes,
+            "outcome": self.outcome,
+            "success_chance": round(self.success_chance, 4),
             "time_remaining": max(0, int(self.complete_at - time.time())),
         }
 
@@ -186,6 +298,8 @@ class CrewOperation:
             reward_credits=int(data.get("reward_credits", 0)),
             reward_xp=int(data.get("reward_xp", 0)),
             notes=data.get("notes", ""),
+            outcome=data.get("outcome", ""),
+            success_chance=float(data.get("success_chance", 0.0)),
         )
 
 
@@ -404,6 +518,8 @@ class CrewManager:
                 reward_credits=reward_credits,
                 reward_xp=reward_xp,
             )
+            # v1.60.0 [2026-06-13] — record projected odds for HUD/transparency
+            op.success_chance, _ = self.compute_success_chance(op_type, assigned_crew)
             self._operations.append(op)
 
             # Mark crew as unavailable
@@ -412,8 +528,15 @@ class CrewManager:
                     self._members[cid].available = False
 
         self._save()
-        logger.info("CrewManager: started %s op '%s' with %d crew", op_type, op.label, len(assigned_crew))
-        return True, f"Operation '{op.label}' started! {len(assigned_crew)} crew deployed. ETA: {int(duration_secs // 60)} min."
+        logger.info(
+            "[CrewManager] Operation started (operation=start_operation, type=%s, "
+            "label=%s, crew=%d, odds=%.0f%%)",
+            op_type, op.label, len(assigned_crew), op.success_chance * 100,
+        )
+        return True, (
+            f"Operation '{op.label}' started! {len(assigned_crew)} crew deployed. "
+            f"Odds: {op.success_chance * 100:.0f}%. ETA: {int(duration_secs // 60)} min."
+        )
 
     def check_operations(self) -> List[Dict[str, Any]]:
         """Check all active operations and complete any that are ready.
@@ -432,40 +555,186 @@ class CrewManager:
             self._save()
         return completed
 
-    def _resolve_operation(self, op: CrewOperation) -> Dict[str, Any]:
-        """Resolve a completed operation and apply rewards.
+    # v1.60.0 [2026-06-13] — Skill-check probability model
+    # CONNECTS: CrewMember (level/role/loyalty), OPERATION_TYPES skill_weight,
+    #           OPERATION_DIFFICULTY, get_config (crew.skill_check.*)
+    # CALLED BY: _resolve_operation, preview_success_chance
+    def compute_success_chance(
+        self,
+        op_type: str,
+        assigned_crew: List[str],
+    ) -> Tuple[float, Dict[str, float]]:
+        """Compute an operation's success probability from crew + difficulty.
+
+        The chance is built as::
+
+            base
+              + level_weight   * effective_skill   (role-weighted crew levels)
+              + loyalty_weight * (avg_loyalty / 100)
+              - difficulty_weight * op_difficulty
+
+        then clamped into ``[min_chance, max_chance]``.
+
+        Members whose role matches the operation's ``skill_weight`` contribute
+        their level multiplied by that weight; off-role members still help, but
+        at a flat 1x. This rewards assigning the right specialists.
 
         Args:
-            op: The completed CrewOperation.
+            op_type: Operation type key (see OPERATION_TYPES).
+            assigned_crew: character_ids assigned to the operation.
 
         Returns:
-            Result dict with outcome details.
+            Tuple of (success_chance, breakdown) where *breakdown* exposes each
+            contributing term for transparency/HUD/debugging.
         """
-        # Mark crew available again
-        for cid in op.assigned_crew:
-            if cid in self._members:
-                self._members[cid].available = True
-                self._members[cid].operations += 1
-                levelled_up = self._members[cid].add_xp(op.reward_xp)
-                if levelled_up:
-                    logger.info("Crew member %s levelled up to %d!", cid, self._members[cid].level)
+        op_info = OPERATION_TYPES.get(op_type, {})
+        skill_weight: Dict[str, int] = op_info.get("skill_weight", {})  # type: ignore[assignment]
 
-        # Apply credit reward
-        if op.reward_credits > 0:
+        effective_skill = 0.0
+        loyalties: List[float] = []
+        for cid in assigned_crew:
+            member = self._members.get(cid)
+            if not member:
+                continue
+            weight = float(skill_weight.get(member.role, 1))
+            effective_skill += member.level * weight
+            loyalties.append(member.loyalty)
+
+        avg_loyalty = (sum(loyalties) / len(loyalties)) if loyalties else 0.0
+        difficulty = float(OPERATION_DIFFICULTY.get(op_type, 0.30))
+
+        base = _skill_cfg("base_chance")
+        level_term = _skill_cfg("level_weight") * effective_skill
+        loyalty_term = _skill_cfg("loyalty_weight") * (avg_loyalty / 100.0)
+        difficulty_term = _skill_cfg("difficulty_weight") * difficulty
+
+        raw = base + level_term + loyalty_term - difficulty_term
+        chance = _clamp(raw, _skill_cfg("min_chance"), _skill_cfg("max_chance"))
+
+        breakdown = {
+            "base": base,
+            "effective_skill": effective_skill,
+            "level_term": level_term,
+            "avg_loyalty": avg_loyalty,
+            "loyalty_term": loyalty_term,
+            "difficulty": difficulty,
+            "difficulty_term": difficulty_term,
+            "raw": raw,
+            "chance": chance,
+        }
+        return chance, breakdown
+
+    def preview_success_chance(self, op_type: str, assigned_crew: List[str]) -> float:
+        """Thread-safe preview of an operation's success chance (no side effects)."""
+        with self._lock:
+            chance, _ = self.compute_success_chance(op_type, assigned_crew)
+        return chance
+
+    # v1.60.0 [2026-06-13] — Graded outcome resolution (skill check + loyalty loop)
+    # EMITS: nothing directly; returns result dict consumed by check_operations
+    def _resolve_operation(self, op: CrewOperation) -> Dict[str, Any]:
+        """Resolve a completed operation via a skill check and apply outcomes.
+
+        Rolls against the computed success chance to grade the operation as
+        SUCCESS, PARTIAL, or FAILURE, then scales credit/XP rewards (or applies a
+        failure penalty) accordingly, shifts each assigned member's loyalty, and
+        awards scaled XP. Credits flow through the existing PlayerState API.
+
+        Args:
+            op: The completed CrewOperation (already marked status="complete").
+
+        Returns:
+            Result dict with graded outcome details.
+        """
+        # ── Skill check ──────────────────────────────────────────────────────
+        chance, breakdown = self.compute_success_chance(op.op_type, op.assigned_crew)
+        roll = random.random()
+        op.success_chance = chance
+
+        # Grade the outcome. A roll under the chance is a clean success. A roll
+        # that misses but lands within partial_band of the threshold is a costly
+        # partial success; anything worse is a failure.
+        partial_band = _skill_cfg("partial_band")
+        if roll <= chance:
+            outcome = OUTCOME_SUCCESS
+        elif roll <= chance + partial_band:
+            outcome = OUTCOME_PARTIAL
+        else:
+            outcome = OUTCOME_FAILURE
+        op.outcome = outcome
+        op.status = "complete" if outcome != OUTCOME_FAILURE else "failed"
+
+        # ── Scale rewards / penalty by outcome ───────────────────────────────
+        if outcome == OUTCOME_SUCCESS:
+            credit_mult, xp_mult, loyalty_delta = 1.0, 1.0, _skill_cfg("loyalty_on_success")
+        elif outcome == OUTCOME_PARTIAL:
+            credit_mult = _skill_cfg("partial_reward_mult")
+            xp_mult = _skill_cfg("partial_reward_mult")
+            loyalty_delta = _skill_cfg("loyalty_on_partial")
+        else:  # FAILURE
+            credit_mult = _skill_cfg("failure_reward_mult")
+            xp_mult = _skill_cfg("failure_reward_mult")
+            loyalty_delta = _skill_cfg("loyalty_on_failure")
+
+        credits_earned = int(round(op.reward_credits * credit_mult))
+        xp_each = int(round(op.reward_xp * xp_mult))
+        credits_lost = 0
+        if outcome == OUTCOME_FAILURE:
+            credits_lost = int(round(op.reward_credits * _skill_cfg("failure_credit_penalty_mult")))
+
+        # ── Apply per-member effects: availability, op count, XP, loyalty ────
+        levelled: List[str] = []
+        for cid in op.assigned_crew:
+            member = self._members.get(cid)
+            if not member:
+                continue
+            member.available = True
+            member.operations += 1
+            if xp_each > 0 and member.add_xp(xp_each):
+                levelled.append(cid)
+                logger.info(
+                    "[CrewManager] Crew member levelled up (operation=resolve, member=%s, level=%d)",
+                    cid, member.level,
+                )
+            # Loyalty shifts on outcome (clamped 0–100).
+            member.loyalty = _clamp(member.loyalty + loyalty_delta, 0.0, 100.0)
+            member.notes.append(
+                f"{op.label}: {outcome} (loyalty {loyalty_delta:+.0f})"
+            )
+
+        # ── Apply credits through existing PlayerState API ───────────────────
+        if credits_earned > 0 or credits_lost > 0:
             try:
                 from engine.world.player_state import get_player_state
-                get_player_state().earn_credits(op.reward_credits, reason=f"crew_op:{op.op_type}")
+                ps = get_player_state()
+                if credits_earned > 0:
+                    ps.earn_credits(credits_earned, reason=f"crew_op:{op.op_type}:{outcome}")
+                if credits_lost > 0:
+                    ps.spend_credits(credits_lost, reason=f"crew_op:{op.op_type}:penalty")
             except Exception as e:
-                logger.debug("[CrewManager] Credit reward failed (operation=complete_op): %s", e)
+                logger.debug("[CrewManager] Credit settlement failed (operation=resolve): %s", e)
+
+        logger.info(
+            "[CrewManager] Operation resolved (operation=resolve, op=%s, type=%s, "
+            "outcome=%s, chance=%.2f, roll=%.2f, credits=%+d, xp=%d)",
+            op.op_id, op.op_type, outcome, chance, roll, credits_earned - credits_lost, xp_each,
+        )
 
         return {
             "op_id": op.op_id,
             "label": op.label,
             "op_type": op.op_type,
-            "status": "complete",
-            "credits_earned": op.reward_credits,
-            "xp_earned": op.reward_xp,
+            "status": op.status,
+            "outcome": outcome,
+            "success_chance": round(chance, 4),
+            "roll": round(roll, 4),
+            "credits_earned": credits_earned,
+            "credits_lost": credits_lost,
+            "xp_earned": xp_each,
+            "loyalty_delta": loyalty_delta,
+            "levelled_up": levelled,
             "crew": op.assigned_crew,
+            "breakdown": breakdown,
         }
 
     # ── Queries ───────────────────────────────────────────────────────────────

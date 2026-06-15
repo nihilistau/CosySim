@@ -19,10 +19,20 @@ The Oracle wires together 10+ dormant subsystems that were never activated:
   - ErrorAggregator → fingerprint, group, count errors
   - Error callbacks → Oracle dashboard SocketIO feed
 
-Version: v1.57.0 [2026-03-26]
+Version: v1.60.0 [2026-06-13]
 Author:  CosySim Team
 
 Change Log:
+    v1.60.0 [2026-06-13] — Observability hardening: bounded (LRU) flood_guard so
+                            a flood of unique fingerprints can't grow memory
+                            without bound; error-callback exceptions now logged
+                            at DEBUG with a trace instead of silent pass;
+                            default high-visibility error-rate alert hook wired
+                            into the aggregator; ensure_initialized() now runs a
+                            post-install self-check (handlers_installed()) that
+                            confirms the structured-logging + Oracle handlers
+                            actually attached, warning loudly if not. All caps
+                            configurable via get_config() with safe defaults.
     v1.57.0 [2026-03-26] — File Search + Context Cache metrics in diagnose() output (GEMINI SERVICES section)
     v1.56.0 [2026-03-26] — Nexus KB metrics + LMStudio model health in diagnose() output
     v1.54.0 [2026-03-26] — Upgrade silent except-pass in OracleHandler.emit to traceback.print_exc
@@ -38,13 +48,39 @@ import logging
 import sys
 import threading
 import time
+from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ──── Module state ───────────────────────────────────────────────────────────
 
 _initialized = False
 _init_lock = threading.Lock()
 _error_callbacks: List[Callable[[Dict[str, Any]], None]] = []
+
+# v1.60.0 [2026-06-13] — Records the result of the post-init self-check so
+# tests / diagnose() / scripts can confirm handlers actually attached.
+_self_check: Dict[str, Any] = {}
+
+
+def _cfg(path: str, default: Any) -> Any:
+    """Read a config value, tolerating a missing/unloadable config layer.
+
+    Args:
+        path: Dot-notation config path.
+        default: Fallback when config is unavailable or the key is unset.
+
+    Returns:
+        The configured value or ``default``.
+    """
+    try:
+        from engine.config import get_config
+
+        val = get_config().get(path, default)
+        return default if val is None else val
+    except Exception:
+        return default
 
 
 # ──── Initialization ─────────────────────────────────────────────────────────
@@ -66,25 +102,189 @@ def ensure_initialized() -> None:
         if _initialized:
             return
 
+        structured_ok = False
+        cosy_ok = False
+        oracle_ok = False
+
         # 1. Structured logger → SQLite + JSONL
         try:
             from engine.observability.structured_logger import install_root_handler
             install_root_handler()
+            structured_ok = True
         except Exception as exc:
+            # v1.60.0 — Surface (don't silently suppress) init failures: stderr
+            # for visibility AND the logging pipeline for capture/aggregation.
+            logger.warning(
+                "[Oracle] StructuredLogger init failed (operation=init_structured): %s", exc
+            )
             print(f"[Oracle] WARNING: StructuredLogger init failed: {exc}", file=sys.stderr)
 
         # 2. CosyLogger ring buffer → Phone panel
         try:
             from engine.logging.cosy_logger import install_logger
             install_logger()
+            cosy_ok = True
         except Exception as exc:
+            logger.warning(
+                "[Oracle] CosyLogger init failed (operation=init_cosy): %s", exc
+            )
             print(f"[Oracle] WARNING: CosyLogger init failed: {exc}", file=sys.stderr)
 
         # 3. Oracle error handler → ErrorAggregator + callbacks
-        root = logging.getLogger()
-        root.addHandler(_OracleHandler())
+        try:
+            root = logging.getLogger()
+            root.addHandler(_OracleHandler())
+            oracle_ok = True
+        except Exception as exc:
+            logger.error(
+                "[Oracle] OracleHandler install failed (operation=init_oracle): %s", exc
+            )
+            print(f"[Oracle] WARNING: OracleHandler init failed: {exc}", file=sys.stderr)
+
+        # 4. v1.60.0 — Wire the default high-visibility error-rate alert hook so
+        #    a sustained error storm gets ONE loud line, not silence.
+        try:
+            from engine.observability.error_aggregator import get_error_aggregator
+            get_error_aggregator().register_alert_hook(_default_rate_alert_hook)
+        except Exception as exc:
+            logger.warning(
+                "[Oracle] Rate-alert hook wiring failed (operation=init_alert): %s", exc
+            )
 
         _initialized = True
+
+    # 5. v1.60.0 — Post-install self-check (outside the init lock): confirm the
+    #    handlers we believe we installed are actually attached to the root
+    #    logger. A silent no-op install is exactly the failure mode the audit
+    #    flagged — so we verify and warn loudly if reality disagrees.
+    check = _run_self_check(structured_ok=structured_ok, cosy_ok=cosy_ok, oracle_ok=oracle_ok)
+    if not check.get("ok"):
+        logger.warning(
+            "[Oracle] Self-check FAILED (operation=self_check): %s",
+            check.get("problems"),
+        )
+        print(
+            f"[Oracle] WARNING: handler self-check failed: {check.get('problems')}",
+            file=sys.stderr,
+        )
+
+
+# ──── Self-check ─────────────────────────────────────────────────────────────
+# CONNECTS: root logger handlers, structured_logger._root_handler_installed
+# CALLED BY: ensure_initialized(), handlers_installed(), diagnose(), tests
+# EMITS: dict describing which handlers attached + any problems
+
+def _run_self_check(
+    structured_ok: bool = True,
+    cosy_ok: bool = True,
+    oracle_ok: bool = True,
+) -> Dict[str, Any]:
+    """Verify that the structured-logging + Oracle handlers actually installed.
+
+    Inspects the root logger for an attached ``_OracleHandler`` and consults the
+    structured logger's install flag, rather than trusting that the install
+    calls had any effect. The result is cached in module state.
+
+    Args:
+        structured_ok: Whether the structured-logger install call succeeded.
+        cosy_ok: Whether the CosyLogger install call succeeded.
+        oracle_ok: Whether the OracleHandler install call succeeded.
+
+    Returns:
+        Dict with ``ok`` (bool), per-handler booleans, and a ``problems`` list.
+    """
+    problems: List[str] = []
+
+    root = logging.getLogger()
+    oracle_attached = any(isinstance(h, _OracleHandler) for h in root.handlers)
+    if not oracle_attached:
+        problems.append("OracleHandler not attached to root logger")
+
+    structured_attached = False
+    try:
+        from engine.observability import structured_logger as _sl
+
+        structured_attached = bool(getattr(_sl, "_root_handler_installed", False))
+    except Exception as exc:  # pragma: no cover - import guard
+        problems.append(f"structured_logger introspection failed: {exc}")
+    if structured_ok and not structured_attached:
+        problems.append("StructuredLogger root handler flag not set")
+
+    result: Dict[str, Any] = {
+        "ok": not problems,
+        "oracle_handler_attached": oracle_attached,
+        "structured_handler_installed": structured_attached,
+        "structured_install_ok": structured_ok,
+        "cosy_install_ok": cosy_ok,
+        "oracle_install_ok": oracle_ok,
+        "problems": problems,
+        "checked_at": time.time(),
+    }
+    _self_check.clear()
+    _self_check.update(result)
+    return result
+
+
+def handlers_installed() -> Dict[str, Any]:
+    """Return the latest Oracle self-check result (running one if needed).
+
+    Confirms the structured-logging and Oracle ERROR handlers are actually
+    attached. Useful from ``diagnose()``, health endpoints, and tests.
+
+    Returns:
+        The self-check dict (see :func:`_run_self_check`).
+    """
+    if not _self_check:
+        return _run_self_check()
+    return dict(_self_check)
+
+
+# ──── Default rate-alert hook ────────────────────────────────────────────────
+# CONNECTS: ErrorAggregator.register_alert_hook, _error_callbacks
+# CALLED BY: ErrorAggregator._dispatch_alert (throttled)
+# EMITS: one CRITICAL log line + a synthetic 'rate_alert' callback event
+
+def _default_rate_alert_hook(payload: Dict[str, Any]) -> None:
+    """High-visibility handler for a tripped error-rate threshold.
+
+    Logs a single CRITICAL line (already throttled by the aggregator) and fans
+    the alert out to registered error callbacks as a ``rate_alert`` event so the
+    Oracle dashboard can surface it. Never raises.
+
+    Args:
+        payload: Alert payload from the aggregator.
+    """
+    try:
+        rate = payload.get("rate")
+        window = payload.get("window_seconds")
+        threshold = payload.get("threshold")
+        uniq = payload.get("unique_fingerprints")
+        logger.critical(
+            "[Oracle] ERROR-RATE ALERT (operation=rate_alert): %s errors in %ss "
+            "exceeds threshold %s across %s fingerprints",
+            rate, window, threshold, uniq,
+        )
+        event = {
+            "type": "rate_alert",
+            "level": "CRITICAL",
+            "module": "engine.observability.oracle",
+            "scene": "",
+            "message": (
+                f"Error-rate alert: {rate} errors in {window}s "
+                f"(threshold {threshold})"
+            ),
+            "rate_alert": payload,
+            "timestamp": payload.get("timestamp", time.time()),
+        }
+        for cb in list(_error_callbacks):
+            try:
+                cb(event)
+            except Exception as exc:
+                logger.debug(
+                    "[Oracle] rate_alert callback raised (operation=rate_alert_cb): %s", exc
+                )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("[Oracle] rate-alert hook failed (operation=rate_alert): %s", exc)
 
 
 # ──── Oracle Error Handler ───────────────────────────────────────────────────
@@ -100,8 +300,18 @@ class _OracleHandler(logging.Handler):
 
     def __init__(self) -> None:
         super().__init__(level=logging.ERROR)
-        self._flood_guard: Dict[str, float] = {}  # fingerprint → last emitted ts
-        self._FLOOD_COOLDOWN = 5.0  # Don't fire callback for same fingerprint within 5s
+        # v1.60.0 — Bounded LRU flood_guard (audit fix: unbounded growth under
+        # many unique fingerprints). OrderedDict + move_to_end gives O(1) LRU;
+        # the oldest entry is evicted once the cap is hit, so memory is capped
+        # regardless of fingerprint cardinality.
+        self._flood_guard: "OrderedDict[str, float]" = OrderedDict()  # fp → last-emitted ts
+        self._FLOOD_COOLDOWN: float = float(
+            _cfg("observability.oracle.flood_cooldown_sec", 5.0)
+        )  # Don't fire callback for same fingerprint within this window.
+        self._FLOOD_MAX_KEYS: int = int(
+            _cfg("observability.oracle.flood_guard_max_keys", 1000)
+        )  # Hard cap on retained fingerprints in the flood guard.
+        self._lock = threading.Lock()  # Guards _flood_guard mutation.
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -129,10 +339,30 @@ class _OracleHandler(logging.Handler):
             )
 
             # Fire callbacks (Oracle dashboard SocketIO, etc.)
-            # Flood guard: don't fire for same fingerprint within cooldown
+            # Flood guard: don't fire for same fingerprint within cooldown.
             now = time.time()
-            if fp not in self._flood_guard or (now - self._flood_guard[fp]) > self._FLOOD_COOLDOWN:
-                self._flood_guard[fp] = now
+            should_fire = False
+            with self._lock:
+                last = self._flood_guard.get(fp)
+                if last is None or (now - last) > self._FLOOD_COOLDOWN:
+                    should_fire = True
+                    self._flood_guard[fp] = now
+                    # v1.60.0 — LRU touch so the hottest fingerprints survive eviction.
+                    self._flood_guard.move_to_end(fp, last=True)
+
+                    # v1.60.0 — Time-based prune (stale beyond 5 min) AND hard
+                    # size cap via LRU eviction. Either alone is insufficient: a
+                    # burst of >cap distinct fingerprints inside the window would
+                    # still blow memory without the size cap.
+                    if len(self._flood_guard) > self._FLOOD_MAX_KEYS:
+                        cutoff = now - 300
+                        self._flood_guard = OrderedDict(
+                            (k, v) for k, v in self._flood_guard.items() if v > cutoff
+                        )
+                        while len(self._flood_guard) > self._FLOOD_MAX_KEYS:
+                            self._flood_guard.popitem(last=False)  # drop least-recent
+
+            if should_fire:
                 event = {
                     "fingerprint": fp,
                     "level": record.levelname,
@@ -142,18 +372,18 @@ class _OracleHandler(logging.Handler):
                     "error_type": error_type,
                     "timestamp": now,
                 }
-                for cb in _error_callbacks:
+                for cb in list(_error_callbacks):
                     try:
                         cb(event)
-                    except Exception:
-                        pass  # Never crash the log handler
-
-                # Clean flood guard (keep only last 5 minutes)
-                if len(self._flood_guard) > 200:
-                    cutoff = now - 300
-                    self._flood_guard = {
-                        k: v for k, v in self._flood_guard.items() if v > cutoff
-                    }
+                    except Exception as exc:
+                        # v1.60.0 — Audit fix: log (don't silently pass) a raising
+                        # callback. DEBUG keeps it non-spammy while preserving a
+                        # trace; the handler still never crashes.
+                        logger.debug(
+                            "[Oracle] error callback raised (operation=error_cb): %s",
+                            exc,
+                            exc_info=True,
+                        )
         except Exception:
             # v1.54.0 [2026-03-26] — Log handler errors instead of swallowing
             import traceback
@@ -314,11 +544,33 @@ def diagnose(verbose: bool = False) -> Dict[str, Any]:
     ensure_initialized()
     result: Dict[str, Any] = {}
 
+    # v1.60.0 — Surface the handler self-check so a broken observability
+    # pipeline is visible in the very report meant to diagnose the system.
+    try:
+        result["self_check"] = handlers_installed()
+    except Exception as exc:  # pragma: no cover - defensive
+        result["self_check"] = {"ok": False, "problems": [str(exc)]}
+
     print("")
     print("=" * 60)
     print("  ORACLE DIAGNOSTIC REPORT")
     print("  " + time.strftime("%Y-%m-%d %H:%M:%S"))
     print("=" * 60)
+
+    # ── Self-check ────────────────────────────────────────────
+    # v1.60.0 — Confirm the observability handlers actually attached.
+    sc = result.get("self_check", {})
+    if sc:
+        if sc.get("ok"):
+            print("")
+            print("-- OBSERVABILITY SELF-CHECK --")
+            print("  [OK] Structured + Oracle handlers installed")
+        else:
+            print("")
+            print("-- OBSERVABILITY SELF-CHECK --")
+            print("  [!!] Handler self-check FAILED:")
+            for prob in sc.get("problems", []):
+                print(f"       - {prob}")
 
     # ── Health ────────────────────────────────────────────────
     print("")

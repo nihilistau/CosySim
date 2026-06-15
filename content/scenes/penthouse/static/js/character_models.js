@@ -17,6 +17,9 @@ const SKIN_TONES = {
 const HAIR_COLORS = {
     black: 0x1a1a1a, dark_brown: 0x3b2314, brown: 0x6b4423,
     auburn: 0x8b3a1a, red: 0xaa3322, blonde: 0xd4a853, platinum: 0xe8dcc8, pink: 0xff69b4,
+    // v1.58.0 [2026-06-11] — Dark Renaissance kit palette (Rei / Mira)
+    silver: 0xc9bfe2,      // Rei — silver-lavender (kit hair-silver gradient)
+    dark_plum: 0x2b1d38,   // Mira — plum-black bob (kit hair-dark gradient)
 };
 const NIPPLE_COL = 0xc4756a;
 const LIP_COL = 0xcc5566;
@@ -27,7 +30,11 @@ const CHAR_LOOKS = {
     viktor:  { gender: 'male',   skin: 'medium', hair: 'black',      iris: 0x3a5a3a },
     aria:    { gender: 'female', skin: 'light',  hair: 'blonde',     iris: 0x4488cc },
     frankie: { gender: 'male',   skin: 'tan',    hair: 'brown',      iris: 0x5a4030 },
-    mira:    { gender: 'female', skin: 'medium', hair: 'auburn',     iris: 0x654321 },
+    // v1.58.0 [2026-06-11] — rethemed to the Dark Renaissance kit identities:
+    // Mira (sofa, plum-black bob) · Rei (bar, silver-lavender) — see
+    // artifacts/new-assets/ui_kits_v2/penthouse.
+    mira:    { gender: 'female', skin: 'fair',   hair: 'dark_plum',  iris: 0x7a5a8c },
+    rei:     { gender: 'female', skin: 'pale',   hair: 'silver',     iris: 0x8d7ec9 },
 };
 
 // ═══════════════════════════════════════════════════════════════════════

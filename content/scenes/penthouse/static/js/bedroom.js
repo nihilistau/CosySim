@@ -134,10 +134,10 @@ function init() {
 //  LIGHTING
 // ═══════════════════════════════════════════════════════════════════════
 function createLighting() {
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.15 * LPI);
     scene.add(ambientLight);
 
-    directionalLight = new THREE.DirectionalLight(0xffeedd, 0.4);
+    directionalLight = new THREE.DirectionalLight(0xffeedd, 0.4 * LPI);
     directionalLight.position.set(5, 10, 5);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.set(2048, 2048);
@@ -158,7 +158,7 @@ function createLighting() {
         { x: -5, y: 2.5, z: -4.5, color: 0xffaa44, intensity: 0.15 }, // bed nightstand
     ];
     lampPositions.forEach(p => {
-        const pl = new THREE.PointLight(p.color, p.intensity, 8);
+        const pl = new THREE.PointLight(p.color, p.intensity * LPI, 8);
         pl.position.set(p.x, p.y, p.z);
         pl.castShadow = true;
         scene.add(pl);
@@ -169,11 +169,11 @@ function createLighting() {
 function applyLighting(preset) {
     if (!preset) return;
     const c = new THREE.Color(preset.color);
-    ambientLight.intensity = preset.ambient * 0.5;
-    directionalLight.intensity = preset.directional * 0.8;
+    ambientLight.intensity = preset.ambient * 0.5 * LPI;
+    directionalLight.intensity = preset.directional * 0.8 * LPI;
     directionalLight.color = c;
     const mul = (timeOfDay === 'night') ? 0.8 : (timeOfDay === 'morning') ? 0.3 : 0.5;
-    pointLights.forEach(l => { l.intensity = l.userData?.baseIntensity * mul || mul * 0.5; });
+    pointLights.forEach(l => { l.intensity = (l.userData?.baseIntensity * mul || mul * 0.5) * LPI; });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -441,11 +441,11 @@ function buildFireplace() {
     });
 
     // Fire glow
-    const fireLight1 = new THREE.PointLight(0xff6622, 0.8, 5);
+    const fireLight1 = new THREE.PointLight(0xff6622, 0.8 * LPI, 5);
     fireLight1.position.set(FX, 0.5, FZ);
     scene.add(fireLight1);
     pointLights.push(fireLight1);
-    const fireLight2 = new THREE.PointLight(0xff4400, 0.4, 3);
+    const fireLight2 = new THREE.PointLight(0xff4400, 0.4 * LPI, 3);
     fireLight2.position.set(FX - 0.2, 0.35, FZ + 0.05);
     scene.add(fireLight2);
     pointLights.push(fireLight2);
@@ -472,7 +472,7 @@ function buildFireplace() {
         );
         candleStick.position.set(FX + x, 2.43, FZ);
         scene.add(candleStick);
-        const flame = new THREE.PointLight(0xff8800, 0.15, 1.5);
+        const flame = new THREE.PointLight(0xff8800, 0.15 * LPI, 1.5);
         flame.position.set(FX + x, 2.53, FZ);
         scene.add(flame);
         pointLights.push(flame);
@@ -677,7 +677,7 @@ function buildBathroomFixtures() {
         );
         candle.position.set(BTX + ox, 0.82, BTZ + oz);
         scene.add(candle);
-        const glow = new THREE.PointLight(0xff8800, 0.12, 1.5);
+        const glow = new THREE.PointLight(0xff8800, 0.12 * LPI, 1.5);
         glow.position.set(BTX + ox, 0.90, BTZ + oz);
         scene.add(glow);
         pointLights.push(glow);
@@ -741,7 +741,7 @@ function buildDecorations() {
         crystal.position.set(Math.cos(angle) * 0.5, 3.4, Math.sin(angle) * 0.5);
         scene.add(crystal);
     }
-    const chanLight = new THREE.PointLight(0xffeecc, 0.5, 10);
+    const chanLight = new THREE.PointLight(0xffeecc, 0.5 * LPI, 10);
     chanLight.position.set(0, 3.4, 0);
     scene.add(chanLight);
     pointLights.push(chanLight);
@@ -780,7 +780,7 @@ function buildDecorations() {
         );
         sconce.position.set(side * 7.9, 2.2, -2);
         scene.add(sconce);
-        const sconceLight = new THREE.PointLight(0xffddaa, 0.2, 4);
+        const sconceLight = new THREE.PointLight(0xffddaa, 0.2 * LPI, 4);
         sconceLight.position.set(side * 7.8, 2.3, -2);
         scene.add(sconceLight);
         pointLights.push(sconceLight);
@@ -807,7 +807,7 @@ function buildDecorations() {
         );
         candle.position.set(-2.3 + i * 0.3, 1.2, -5.65);
         scene.add(candle);
-        const flame = new THREE.PointLight(0xff8800, 0.15, 2);
+        const flame = new THREE.PointLight(0xff8800, 0.15 * LPI, 2);
         flame.position.set(-2.3 + i * 0.3, 1.32, -5.65);
         scene.add(flame);
         pointLights.push(flame);
@@ -1039,7 +1039,7 @@ function animate() {
     for (let i = 0; i < pointLights.length; i++) {
         const pl = pointLights[i];
         if (pl.color.r > 0.8 && pl.position.y < 1.0) {
-            pl.intensity = 0.4 + 0.4 * Math.random() + 0.2 * Math.sin(t * 8 + i);
+            pl.intensity = (0.4 + 0.4 * Math.random() + 0.2 * Math.sin(t * 8 + i)) * LPI;
         }
     }
 
@@ -1853,7 +1853,7 @@ function triggerEventEffect(type) {
             setTimeout(() => applyLighting(sceneState.lighting || {}), 8000);
             break;
         case 'thunder':
-            const flash = new THREE.PointLight(0xffffff, 5, 50);
+            const flash = new THREE.PointLight(0xffffff, 5 * LPI, 50);
             flash.position.set(0, 10, 0);
             scene.add(flash);
             setTimeout(() => { flash.intensity = 0; }, 100);

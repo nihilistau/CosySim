@@ -3,6 +3,7 @@ import time
 import threading
 import pytest
 from unittest.mock import MagicMock, patch, call
+from contextlib import contextmanager
 
 
 from engine.scenes.nexus_mixin import NexusSceneMixin
@@ -20,6 +21,12 @@ def _make_mock_client(available: bool = True) -> MagicMock:
     """Build a mock NexusClient with sensible defaults."""
     client = MagicMock()
     client.is_available.return_value = available
+    # v1.62.0 [2026-06-15] — Since v1.50.1 the mixin no longer calls
+    # client.is_available(); availability is decided by a 2s HTTP probe of
+    # the client's _base_url + /api/health (see _init_scene, which mocks the
+    # probe at the urllib boundary). Pin _base_url so the probed URL is a real
+    # string rather than a MagicMock attribute.
+    client._base_url = "http://nexus.test"
     client.search.return_value = [
         {"title": "Lore A", "content": "Content alpha"},
         {"title": "Lore B", "content": "Content beta"},
@@ -31,10 +38,38 @@ def _make_mock_client(available: bool = True) -> MagicMock:
     return client
 
 
+@contextmanager
+def _patched_health_probe(available: bool):
+    """Mock the urllib /api/health probe the mixin runs during nexus_init.
+
+    v1.62.0 [2026-06-15] — The mixin switched (v1.50.1) from
+    ``client.is_available()`` to a non-blocking ``urllib.request.urlopen``
+    health check. Tests must mock that real client boundary so
+    ``_nexus_available`` reflects the requested availability. We patch
+    ``urllib.request.urlopen`` to yield a fake ``/api/health`` response of
+    ``{"ok": available}`` (or raise, mimicking an unreachable Nexus).
+    """
+    if available:
+        resp = MagicMock()
+        resp.read.return_value = b'{"ok": true}'
+        resp.__enter__.return_value = resp
+        resp.__exit__.return_value = False
+        with patch("urllib.request.urlopen", return_value=resp):
+            yield
+    else:
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=OSError("Nexus unreachable"),
+        ):
+            yield
+
+
 def _init_scene(mock_client: MagicMock, scene_id: str = "test_scene") -> DummyScene:
     """Shortcut: create a DummyScene and run nexus_init with a mock client."""
     scene = DummyScene()
-    with patch("engine.nexus.client.get_nexus_client", return_value=mock_client):
+    available = bool(mock_client.is_available.return_value)
+    with patch("engine.nexus.client.get_nexus_client", return_value=mock_client), \
+            _patched_health_probe(available):
         scene.nexus_init(scene_id)
     return scene
 

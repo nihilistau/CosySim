@@ -37,7 +37,8 @@ DEFAULT_SETTINGS = {
     "max_tokens": 4096,
     "top_p": 1.0,
     "system_prompt": "You are a helpful assistant.",
-    "account": "nihilistcod",
+    # v1.61.0 [2026-06-13] — default account from env, not hardcoded
+    "account": __import__("os").getenv("COSYSIM_DEFAULT_ACCOUNT", ""),
 }
 
 MAX_UPLOAD_MB = 50

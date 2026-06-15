@@ -409,9 +409,11 @@ def run_smoke_all() -> dict:
                 js_errors = []
                 page.on("console", lambda msg: js_errors.append(msg.text) if msg.type == "error" else None)
 
-                page.goto(url, timeout=8000)
-                page.wait_for_load_state("load", timeout=6000)
-                page.wait_for_timeout(1500)
+                # v1.58.0 [2026-06-11] — domcontentloaded + 20s: full-stack runs
+                # (30+ Flask procs) made the old 8s "load" wait flaky because
+                # each page fans out cross-scene health probes on load.
+                page.goto(url, timeout=20000, wait_until="domcontentloaded")
+                page.wait_for_timeout(2500)
 
                 html_len = len(page.content())
                 has_content = html_len > 2000
@@ -453,7 +455,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="CosySim Browser Test Suite")
-    parser.add_argument("--scene", default="http://localhost:5563", help="Scene URL")
+    parser.add_argument("--scene", default="http://localhost:5563",
+                        help="Scene name (e.g. penthouse) or full URL")
     parser.add_argument("--report", action="store_true", help="Just read last telemetry")
     parser.add_argument("--all", action="store_true", help="Quick smoke test all scenes")
     args = parser.parse_args()
@@ -463,6 +466,8 @@ if __name__ == "__main__":
     elif args.all:
         run_smoke_all()
     else:
-        SCENE_URL = args.scene
+        # v1.58.0 [2026-06-11] — Accept scene names (the documented usage
+        # `--scene penthouse` previously produced an invalid URL)
+        SCENE_URL = ALL_SCENES.get(args.scene, (args.scene,))[0]
         results = run_tests()
         read_telemetry(15)

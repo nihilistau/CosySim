@@ -10,6 +10,8 @@
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations
+ *                          (_onBedGameStarted/Action/Ended → CharacterBridge)
  *   v1.57.3 [2026-05-12] — Elevator reveal animation on page load
  *   v0.68   [prior]      — Dark Renaissance: full overlay UI + 3D canvas
  */
@@ -195,6 +197,12 @@ class PenthouseScene {
     s.on('paired_animation',   data => this._onPairedAnimation(data));
     s.on('outfit_change',      data => this._onOutfitChange(data));
     s.on('interaction_chain',  data => this._onInteractionChain(data));
+
+    // v1.62.0 [2026-06-15] — bed-game → paired pose animations.
+    //   Backend (penthouse_combat_mixin) emits these; drive the 3D pose chain.
+    s.on('bedgame_started',    data => this._onBedGameStarted(data));
+    s.on('bedgame_action',     data => this._onBedGameAction(data));
+    s.on('bedgame_ended',      data => this._onBedGameEnded(data));
   }
 
   _onConnect() {
@@ -235,6 +243,26 @@ class PenthouseScene {
     // ── Sync 3D character models via CharacterBridge ──
     if (window.CharacterBridge) {
       window.CharacterBridge.syncCharacters(chars, locs);
+    }
+
+    // ── Sync the Director avatar from scene_state ──
+    // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+    //   scene_state carries `director_avatar` (set in penthouse_social_mixin),
+    //   but it was never applied here, so the avatar only appeared on the manual
+    //   "Place Avatar" click and vanished on reload/reconnect (and never showed
+    //   for other clients). Re-place (or remove) it from state, de-duped by a
+    //   JSON signature so we don't respawn the model on every scene_state tick.
+    if (window.CharacterBridge) {
+      const avatar = data.director_avatar || null;
+      const sig = avatar ? JSON.stringify(avatar) : null;
+      if (sig !== this._directorAvatarSig) {
+        this._directorAvatarSig = sig;
+        if (avatar) {
+          window.CharacterBridge.placeDirectorAvatar(avatar);
+        } else if (window.CharacterBridge.isDirectorPlaced()) {
+          window.CharacterBridge.removeDirectorAvatar();
+        }
+      }
     }
 
     if (ids.length > 0) {
@@ -531,6 +559,66 @@ class PenthouseScene {
       }, step.delay);
     });
     _addActivityItem(`${character_id} started ${chain}`, '✨');
+  }
+
+  /* ── Bed-game → paired pose animation handlers ───────────────────── */
+
+  /**
+   * The bed game has started. The backend already enforces the adult/consent
+   * gate (≥2 explicitly-added players via /api/bedgame/start; director must opt
+   * in). Nothing to animate yet — the first `bedgame_action` drives the pose.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {Object} data — BedGameState.to_dict() payload
+   */
+  _onBedGameStarted(data) {
+    const players = (data && (data.player_names || data.players)) || {};
+    const names = Array.isArray(players) ? players : Object.values(players);
+    _addActivityItem(`Bed game started: ${names.join(', ')}`, '🔥');
+  }
+
+  /**
+   * A bed-game action fired on the backend. Maps the action → a paired 3D pose
+   * via CharacterBridge.startBedGamePose, which resolves participant models from
+   * the tracked `characters` map and sets the matching AnimManager intimate
+   * state. The backend payload carries action/player_id/target_id/mood_hint and
+   * is only emitted while the (gated) bed game is active.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {Object} data — { action, description, player_id, target_id, mood_hint, game_over }
+   */
+  _onBedGameAction(data) {
+    if (!data) return;
+    // Respect the backend adult/consent gate: pose_eligible === false means an
+    // explicit action was below the consent (openness) threshold — play the
+    // round text but suppress the explicit 3D pose.
+    if (window.CharacterBridge && data.pose_eligible !== false) {
+      const ok = window.CharacterBridge.startBedGamePose(data);
+      if (!ok) {
+        console.warn('[Penthouse] bed-game pose not started for "%s"',
+          data.action || data.description || '?');
+      }
+    } else if (data.pose_eligible === false) {
+      console.info('[Penthouse] bed-game pose suppressed by consent gate: "%s"',
+        data.action || data.description || '?');
+    }
+    if (data.description) {
+      _addActivityItem(`${data.player || 'Player'}: ${data.description}`, '💋');
+    }
+    // A game_over action is the last beat — ease everyone back to idle.
+    if (data.game_over && window.CharacterBridge) {
+      window.CharacterBridge.stopPose();
+    }
+  }
+
+  /**
+   * The bed game ended — release the active pose so participants ease back to a
+   * standing idle (CharacterBridge.stopPose reclaims the body for AnimManager).
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {Object} data — { rounds }
+   */
+  _onBedGameEnded(data) {
+    if (window.CharacterBridge) window.CharacterBridge.stopPose();
+    const rounds = (data && data.rounds) || 0;
+    _addActivityItem(`Bed game ended after ${rounds} round(s)`, '🛏');
   }
 
   /* ── Typing indicator ───────────────────────────────────────────── */
@@ -1232,13 +1320,20 @@ function exitScene() {
     .catch(err => console.warn('[Penthouse] Director exit scene failed:', err));
 }
 
+// v1.62.0 [2026-06-15] — director avatar render/persist fix:
+//   POST the backend's own key names (skin_tone/hair_color/location_id) so the
+//   user's selections are actually stored in scene_state.director_avatar — the
+//   old body used skin/hair/location, which the route ignored, persisting
+//   defaults. The 3D placement is now driven by the scene_state broadcast that
+//   this POST triggers (single source of truth via _onSceneState), which also
+//   makes the avatar appear for every connected client, not just this one.
 function placeDirectorAvatar() {
   const data = {
     gender: document.getElementById('dirAvatarGender')?.value || 'male',
-    skin: document.getElementById('dirAvatarSkin')?.value || 'fair',
-    hair: document.getElementById('dirAvatarHair')?.value || 'brown',
+    skin_tone: document.getElementById('dirAvatarSkin')?.value || 'fair',
+    hair_color: document.getElementById('dirAvatarHair')?.value || 'brown',
     outfit: document.getElementById('dirAvatarOutfit')?.value || 'casual',
-    location: document.getElementById('dirAvatarLocation')?.value || 'couch',
+    location_id: document.getElementById('dirAvatarLocation')?.value || 'couch',
   };
   fetch('/api/director/avatar', {
     method: 'POST',
@@ -1247,26 +1342,27 @@ function placeDirectorAvatar() {
   })
     .then(r => r.json())
     .then(() => {
-      // Spawn 3D director avatar
-      if (window.CharacterBridge) {
-        window.CharacterBridge.placeDirectorAvatar(data);
-      }
-      // Show interaction controls
+      // Show interaction controls (3D placement handled by scene_state broadcast)
       const ctrl = document.getElementById('directorInteractControls');
       if (ctrl) ctrl.style.display = 'block';
-      PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location);
+      PENTHOUSE._showSystemMessage('🎭 Avatar placed at ' + data.location_id);
     })
     .catch(err => console.warn('[Penthouse] Place director avatar failed:', err));
 }
 
+// v1.62.0 [2026-06-15] — director avatar render/persist fix:
+//   use the implemented POST {action:'remove'} route (there is no DELETE route —
+//   the old DELETE returned 405). Removal now persists and broadcasts, so the
+//   avatar disappears via scene_state for every client.
 function removeDirectorAvatar() {
-  fetch('/api/director/avatar', { method: 'DELETE' })
+  fetch('/api/director/avatar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'remove' }),
+  })
     .then(r => r.json())
     .then(() => {
-      if (window.CharacterBridge) {
-        window.CharacterBridge.removeDirectorAvatar();
-      }
-      // Hide interaction controls
+      // Hide interaction controls (3D removal handled by scene_state broadcast)
       const ctrl = document.getElementById('directorInteractControls');
       if (ctrl) ctrl.style.display = 'none';
       PENTHOUSE._showSystemMessage('🎭 Avatar removed');
@@ -1756,12 +1852,20 @@ function _addActivityItem(text, icon) {
 /** @type {PenthouseScene} */
 const PENTHOUSE = new PenthouseScene();
 
-document.addEventListener('DOMContentLoaded', () => {
+/* v1.58.0 [2026-06-11] — readyState guard: this file now loads via the
+   three_boot module chain AFTER DOMContentLoaded has already fired, so a
+   bare listener would never run. */
+function _penthouseBoot() {
   PENTHOUSE.init();
   _buildInteractGrid();
   setTimeout(_buildViewPresets, 2000);
   setTimeout(_refreshModelAssignList, 1500);
-});
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _penthouseBoot);
+} else {
+  _penthouseBoot();
+}
 
 // Expose globally for console debugging
 window.PENTHOUSE = PENTHOUSE;

@@ -10,25 +10,64 @@ This is the brain behind "hey! problem here!" — it turns 500 individual
 log lines into "LMStudio auth failed: 47 times in last 5min, affecting
 phone + lounge + tavern, started at 14:32."
 
-Version: v1.49.4 [2026-03-22]
+Version: v1.60.0 [2026-06-13]
 Author:  CosySim Team
 
 Change Log:
+    v1.60.0 [2026-06-13] — Hardening: bounded bucket store (LRU size cap so a
+                            flood of unique fingerprints can't grow memory
+                            without bound), throttled error-rate alert hook
+                            (fires once when rate exceeds a configurable
+                            threshold, then re-arms after cooldown), all caps
+                            configurable via get_config() with safe defaults.
     v1.49.4 [2026-03-22] — Initial Oracle error aggregation system
 
-CONNECTS: CosyLog handler (on ERROR+), Oracle dashboard, diagnose.py
+CONNECTS: CosyLog handler (on ERROR+), Oracle dashboard, diagnose.py, get_config
 CALLED BY: CosyLogHandler.emit(), Oracle API routes
-EMITS: error snapshots, rate alerts
+EMITS: error snapshots, rate alerts (via registered alert hooks)
 """
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import threading
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
-from typing import Any, Deque, Dict, List, Optional, Set
+from typing import Any, Callable, Deque, Dict, List, Optional, Set
+
+logger = logging.getLogger(__name__)
+
+# v1.60.0 [2026-06-13] — Tunable defaults; overridable via get_config().
+#   observability.error_aggregator.max_buckets       — LRU size cap on buckets
+#   observability.error_aggregator.alert_threshold   — errors/window to alert
+#   observability.error_aggregator.alert_window_sec  — rate window (seconds)
+#   observability.error_aggregator.alert_cooldown_sec— re-arm cooldown after alert
+_DEFAULT_MAX_BUCKETS = 2000
+_DEFAULT_ALERT_THRESHOLD = 100
+_DEFAULT_ALERT_WINDOW_SEC = 300
+_DEFAULT_ALERT_COOLDOWN_SEC = 300
+
+
+def _cfg(path: str, default: Any) -> Any:
+    """Read a config value, tolerating a missing/unloadable config layer.
+
+    Args:
+        path: Dot-notation config path.
+        default: Fallback when config is unavailable or the key is unset.
+
+    Returns:
+        The configured value or ``default``.
+    """
+    try:
+        from engine.config import get_config
+
+        val = get_config().get(path, default)
+        return default if val is None else val
+    except Exception:
+        # Config not available (e.g. early import, hermetic test) — use default.
+        return default
 
 
 # ──── Fingerprinting ─────────────────────────────────────────────────────────
@@ -113,11 +152,79 @@ class ErrorAggregator:
     CALLED BY: CosyLogHandler.emit() on every ERROR+ log event
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        max_buckets: Optional[int] = None,
+        alert_threshold: Optional[int] = None,
+        alert_window_sec: Optional[int] = None,
+        alert_cooldown_sec: Optional[float] = None,
+    ) -> None:
+        """Construct the aggregator.
+
+        Args:
+            max_buckets: Hard cap on retained fingerprint buckets (LRU eviction
+                of the least-recently-seen bucket past this). Defaults to config
+                ``observability.error_aggregator.max_buckets`` or 2000.
+            alert_threshold: Error count within ``alert_window_sec`` that trips a
+                high-visibility alert. Defaults to config or 100.
+            alert_window_sec: Sliding window (seconds) for the rate alert.
+            alert_cooldown_sec: Minimum spacing between alerts (throttle), so a
+                sustained flood fires once, not on every ingest.
+        """
         self._lock = threading.Lock()
-        self._buckets: Dict[str, ErrorBucket] = {}
+        # v1.60.0 — OrderedDict gives O(1) LRU: move_to_end on touch, popitem(last=False)
+        # to evict the least-recently-seen bucket once the size cap is exceeded.
+        self._buckets: "OrderedDict[str, ErrorBucket]" = OrderedDict()
         self._total_count: int = 0
+        self._evicted_count: int = 0
         self._start_time: float = time.time()
+
+        # ── Bounded growth (audit fix: flood of unique fingerprints) ──
+        self._max_buckets: int = int(
+            max_buckets if max_buckets is not None
+            else _cfg("observability.error_aggregator.max_buckets", _DEFAULT_MAX_BUCKETS)
+        )
+
+        # ── Error-rate alerting (audit fix: no rate alerting) ──
+        self._alert_threshold: int = int(
+            alert_threshold if alert_threshold is not None
+            else _cfg("observability.error_aggregator.alert_threshold", _DEFAULT_ALERT_THRESHOLD)
+        )
+        self._alert_window_sec: int = int(
+            alert_window_sec if alert_window_sec is not None
+            else _cfg("observability.error_aggregator.alert_window_sec", _DEFAULT_ALERT_WINDOW_SEC)
+        )
+        self._alert_cooldown_sec: float = float(
+            alert_cooldown_sec if alert_cooldown_sec is not None
+            else _cfg("observability.error_aggregator.alert_cooldown_sec", _DEFAULT_ALERT_COOLDOWN_SEC)
+        )
+        self._alert_hooks: List[Callable[[Dict[str, Any]], None]] = []
+        self._last_alert_ts: float = 0.0
+        self._alert_count: int = 0
+
+    # ──── Alert hook registration ────────────────────────────────────
+    # CONNECTS: oracle._OracleHandler (default high-visibility logging hook)
+    # CALLED BY: ensure_initialized(), Oracle dashboard, tests
+    # EMITS: throttled alert dicts to every registered hook
+
+    def register_alert_hook(self, fn: Callable[[Dict[str, Any]], None]) -> None:
+        """Register a hook fired (throttled) when the error rate is exceeded.
+
+        The hook receives a dict: ``rate``, ``threshold``, ``window_seconds``,
+        ``unique_fingerprints``, ``top_errors``, ``timestamp``, ``alert_count``.
+
+        Args:
+            fn: Callable invoked on each (throttled) rate-exceeded event.
+        """
+        with self._lock:
+            if fn not in self._alert_hooks:
+                self._alert_hooks.append(fn)
+
+    def unregister_alert_hook(self, fn: Callable[[Dict[str, Any]], None]) -> None:
+        """Remove a previously registered alert hook."""
+        with self._lock:
+            if fn in self._alert_hooks:
+                self._alert_hooks.remove(fn)
 
     def ingest(
         self,
@@ -143,6 +250,7 @@ class ErrorAggregator:
         """
         fp = _fingerprint(error_type, module, message)
         now = time.time()
+        fire_alert_payload: Optional[Dict[str, Any]] = None
 
         with self._lock:
             self._total_count += 1
@@ -176,7 +284,98 @@ class ErrorAggregator:
                 bucket.sample_trace_ids.append(trace_id)
             bucket._recent_timestamps.append(now)
 
+            # v1.60.0 — LRU touch: mark this fingerprint most-recently-seen so
+            # eviction always drops the stalest bucket, never a hot one.
+            self._buckets.move_to_end(fp, last=True)
+
+            # v1.60.0 — Bounded growth: evict least-recently-seen buckets when
+            # the unique-fingerprint count blows past the cap. This is the audit
+            # fix for unbounded memory under high-cardinality error storms.
+            while len(self._buckets) > self._max_buckets:
+                self._buckets.popitem(last=False)
+                self._evicted_count += 1
+
+            # v1.60.0 — Evaluate the rate alert while holding the lock (cheap),
+            # but DISPATCH hooks outside the lock to stay non-blocking.
+            fire_alert_payload = self._maybe_build_alert_locked(now)
+
+        if fire_alert_payload is not None:
+            self._dispatch_alert(fire_alert_payload)
+
         return fp
+
+    # ──── Rate alerting (internal) ───────────────────────────────────
+
+    def _maybe_build_alert_locked(self, now: float) -> Optional[Dict[str, Any]]:
+        """Return an alert payload if the rate is tripped and re-armed.
+
+        MUST be called while holding ``self._lock``. Does not dispatch — the
+        caller dispatches outside the lock so a slow hook can't stall ingest.
+
+        Args:
+            now: Current epoch time.
+
+        Returns:
+            Alert payload dict, or ``None`` if not tripping / still cooling down.
+        """
+        if self._alert_threshold <= 0:
+            return None
+        # Throttle: stay quiet until the cooldown since the last alert elapses.
+        if (now - self._last_alert_ts) < self._alert_cooldown_sec:
+            return None
+
+        cutoff = now - self._alert_window_sec
+        recent_total = 0
+        active_fps = 0
+        for b in self._buckets.values():
+            hits = sum(1 for ts in b._recent_timestamps if ts > cutoff)
+            if hits:
+                active_fps += 1
+                recent_total += hits
+
+        if recent_total < self._alert_threshold:
+            return None
+
+        self._last_alert_ts = now
+        self._alert_count += 1
+        minutes = max(self._alert_window_sec / 60, 1)
+        top = sorted(self._buckets.values(), key=lambda b: b.count, reverse=True)[:5]
+        return {
+            "rate": recent_total,
+            "rate_per_min": round(recent_total / minutes, 2),
+            "threshold": self._alert_threshold,
+            "window_seconds": self._alert_window_sec,
+            "unique_fingerprints": active_fps,
+            "alert_count": self._alert_count,
+            "timestamp": now,
+            "top_errors": [
+                {
+                    "fingerprint": b.fingerprint,
+                    "module": b.module,
+                    "count": b.count,
+                    "sample_message": b.sample_message[:200],
+                }
+                for b in top
+            ],
+        }
+
+    def _dispatch_alert(self, payload: Dict[str, Any]) -> None:
+        """Fire every registered alert hook; never let a hook crash ingest.
+
+        Args:
+            payload: The alert payload from :meth:`_maybe_build_alert_locked`.
+        """
+        with self._lock:
+            hooks = list(self._alert_hooks)
+        for hook in hooks:
+            try:
+                hook(payload)
+            except Exception as exc:
+                # v1.60.0 — Surface (don't swallow) a misbehaving alert hook.
+                logger.debug(
+                    "[ErrorAggregator] Alert hook raised (operation=alert_dispatch): %s",
+                    exc,
+                )
 
     # ──── Query API ──────────────────────────────────────────────────
 
@@ -231,6 +430,10 @@ class ErrorAggregator:
         with self._lock:
             total_unique = len(self._buckets)
             total_count = self._total_count
+            evicted = self._evicted_count
+            max_buckets = self._max_buckets
+            alert_count = self._alert_count
+            alert_threshold = self._alert_threshold
         return {
             "total_unique": total_unique,
             "total_count": total_count,
@@ -238,6 +441,11 @@ class ErrorAggregator:
             "error_rate": rate,
             "new_in_last_hour": len(new_1h),
             "uptime_seconds": round(time.time() - self._start_time, 1),
+            # v1.60.0 — Hardening telemetry: bucket pressure + alert activity.
+            "buckets_evicted": evicted,
+            "max_buckets": max_buckets,
+            "alerts_fired": alert_count,
+            "alert_threshold": alert_threshold,
         }
 
     def clear_old(self, hours: float = 24) -> int:

@@ -3,10 +3,13 @@ Penthouse Social Mixin
 ======================
 Character lifecycle, stats, spatial movement, scenarios, and utility routes.
 
-Version: v1.53.1 [2026-03-26]
+Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — Character cap derived from SCENE_METADATA
+                            (max_characters) instead of a hardcoded 2, so every
+                            present character can hold a live CharacterAgent
     v1.53.1 [2026-03-26] — Hot-register characters with running agent loop
     v1.50.0 [2026-03-24] — Initial extraction from penthouse_scene.py
 """
@@ -27,13 +30,24 @@ class PenthouseSocialMixin:
 
     # ── Character loading ───────────────────────────────────────────────
 
+    # v1.62.0 [2026-06-15] — Single source of truth for scene capacity.
+    def _max_characters(self) -> int:
+        """Maximum concurrent characters, from SCENE_METADATA (default 3)."""
+        try:
+            return int(self.SCENE_METADATA.get("max_characters", 3))
+        except Exception:
+            return 3
+
     def _load_character(self, char_id: str, personality_key: str = None) -> Optional[Any]:
         from content.scenes.penthouse.penthouse_scene import (
             OUTFITS, POSITIONS, PERSONALITY_PROFILES, AgentStats, CharacterProfile,
         )
         from content.simulation.character_system.character import Character
 
-        if len(self.characters) >= 2 and char_id not in self.characters:
+        # v1.62.0 [2026-06-15] — Respect the configured capacity instead of a
+        # hardcoded 2 so every slot (max_characters) can hold a live agent.
+        if (len(self.characters) >= self._max_characters()
+                and char_id not in self.characters):
             return None
         char = Character.load(char_id, db=self.db)
         if not char:
@@ -147,8 +161,10 @@ class PenthouseSocialMixin:
                 personality = data.get("personality")
                 if not cid:
                     return jsonify({"error": "No character_id"}), 400
-                if len(self.characters) >= 2 and cid not in self.characters:
-                    return jsonify({"error": "Maximum 2 characters in penthouse"}), 400
+                # v1.62.0 [2026-06-15] — Cap from SCENE_METADATA, not hardcoded 2.
+                cap = self._max_characters()
+                if len(self.characters) >= cap and cid not in self.characters:
+                    return jsonify({"error": f"Maximum {cap} characters in penthouse"}), 400
                 char = self._load_character(cid, personality)
                 if not char:
                     return jsonify({"error": "Character not found"}), 404

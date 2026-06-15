@@ -2,22 +2,29 @@
    THE RUSTY ANCHOR — Kit Scene Styles
    ====================================
    Generated from tavern_rebuild.json layout.
-   Accent: #92400e (dark amber)
+   Accent: #d97706 (amber-wood — Dark Renaissance v2)
 
-   Version: v1.50.0 [2026-03-22]
+   Version: v1.58.0 [2026-06-11]
    Change Log:
+     v1.58.0 [2026-06-11] — Dark Renaissance v2 alignment: scene palette
+                              re-pointed to var(--cs-scene-accent) tokens
+                              (#d97706 amber-wood, matching the template
+                              injection + [data-scene="tavern"] block);
+                              #92400e kept as the wood-dark dim tone.
      v1.50.0 [2026-03-22] — Initial Kit-generated palette + component styles.
    ============================================================ */
 
-/* ── Scene palette (derived from accent #92400e) ──────────── */
+/* ── Scene palette (v2 tokens, amber-wood #d97706) ────────── */
+/* v1.58.0 [2026-06-11] — Accent flows from design tokens; raw hex kept
+   only as fallback. Alpha tints compose via rgb(var() / a). */
 :root {
-  --scene-accent: #92400e;
-  --scene-accent-rgb: 146 64 14;
-  --scene-accent-dim: rgb(105, 46, 10);
-  --scene-accent-light: rgb(180, 83, 9);
-  --scene-accent-faint: rgba(146, 64, 14, 0.08);
-  --scene-accent-glow: rgba(146, 64, 14, 0.25);
-  --scene-accent-border: rgba(146, 64, 14, 0.3);
+  --scene-accent: var(--cs-scene-accent, #d97706);
+  --scene-accent-rgb: var(--cs-scene-accent-rgb, 217 119 6);
+  --scene-accent-dim: #92400e;
+  --scene-accent-light: #f59e0b;
+  --scene-accent-faint: rgb(var(--scene-accent-rgb) / 0.08);
+  --scene-accent-glow: rgb(var(--scene-accent-rgb) / 0.25);
+  --scene-accent-border: rgb(var(--scene-accent-rgb) / 0.3);
   --scene-bg: #0d0905;
   --scene-panel: #1a110a;
   --scene-border: #2e1c10;

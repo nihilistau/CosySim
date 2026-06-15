@@ -257,9 +257,11 @@ def _account_import(parsed: argparse.Namespace) -> int:
         account_name = parsed.name
         if not account_name:
             # Try to detect from filename
+            # v1.61.0 [2026-06-13] — known accounts from env (COSYSIM_KNOWN_ACCOUNTS), not hardcoded
             fname = os.path.basename(filepath).lower()
-            for known in ["knack112358", "knack122358", "nihilistcod", "nihilistau"]:
-                if known in fname:
+            _known = [a.strip() for a in os.getenv("COSYSIM_KNOWN_ACCOUNTS", "").split(",") if a.strip()]
+            for known in _known:
+                if known.lower() in fname:
                     account_name = known
                     break
             if not account_name:

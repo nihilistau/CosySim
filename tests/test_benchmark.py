@@ -1,7 +1,6 @@
 """Tests for engine.lmstudio.benchmark — InferenceBenchmark."""
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -129,32 +128,44 @@ def test_benchmark_summary_to_markdown():
 
 
 # ── InferenceBenchmark ──────────────────────────────────────────────────
+#
+# v1.62.0 [2026-06-15] — Rewrote mocks to match the v1.44.0 refactor: inference
+# goes through LMSClient.chat() (returns LMSResponse) and storage through
+# NexusClient.add_entry(), not raw requests.post + SSE parsing. The lazy imports
+# inside the methods are patched at their source modules.
 
-@patch("engine.lmstudio.benchmark.requests.post")
-def test_run_quick_success(mock_post, benchmark):
+def _fake_lms_response(tps=25.0, latency_ms=400.0):
+    """Build a stand-in LMSResponse with the metrics _run_single reads."""
+    resp = MagicMock()
+    resp.latency_ms = latency_ms
+    resp.time_to_first_token_s = 0.12
+    resp.input_tokens = 20
+    resp.output_tokens = 50
+    resp.server_tps = tps
+    return resp
+
+
+@patch("engine.lmstudio.lms_client.get_lms_client")
+def test_run_quick_success(mock_get_client, benchmark):
     """run_quick returns summary on successful LMStudio responses."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.iter_lines.return_value = [
-        b"data: " + json.dumps({"choices": [{"delta": {"content": "hello"}}]}).encode(),
-        b"data: " + json.dumps({"choices": [{"delta": {"content": " world"}}]}).encode(),
-        b"data: [DONE]",
-    ]
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_post.return_value = mock_response
+    client = MagicMock()
+    client.chat.return_value = _fake_lms_response()
+    mock_get_client.return_value = client
 
     summary = benchmark.run_quick(model="test-model", runs=2, prompt_type="short")
 
     assert summary.model == "test-model"
     assert summary.runs == 2
-    assert mock_post.call_count == 2
+    assert client.chat.call_count == 2
+    assert summary.success_rate == 1.0
 
 
-@patch("engine.lmstudio.benchmark.requests.post")
-def test_run_quick_handles_errors(mock_post, benchmark):
-    """run_quick handles request failures gracefully."""
-    mock_post.side_effect = Exception("connection refused")
+@patch("engine.lmstudio.lms_client.get_lms_client")
+def test_run_quick_handles_errors(mock_get_client, benchmark):
+    """run_quick handles inference failures gracefully."""
+    client = MagicMock()
+    client.chat.side_effect = Exception("connection refused")
+    mock_get_client.return_value = client
 
     summary = benchmark.run_quick(model="fail-model", runs=3, prompt_type="short")
 
@@ -163,18 +174,12 @@ def test_run_quick_handles_errors(mock_post, benchmark):
     assert summary.success_rate == 0.0
 
 
-@patch("engine.lmstudio.benchmark.requests.post")
-def test_run_matrix_iterates_prompt_types(mock_post, benchmark):
+@patch("engine.lmstudio.lms_client.get_lms_client")
+def test_run_matrix_iterates_prompt_types(mock_get_client, benchmark):
     """run_matrix tests multiple prompt types."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.iter_lines.return_value = [
-        b"data: " + json.dumps({"choices": [{"delta": {"content": "ok"}}]}).encode(),
-        b"data: [DONE]",
-    ]
-    mock_response.__enter__ = MagicMock(return_value=mock_response)
-    mock_response.__exit__ = MagicMock(return_value=False)
-    mock_post.return_value = mock_response
+    client = MagicMock()
+    client.chat.return_value = _fake_lms_response()
+    mock_get_client.return_value = client
 
     results = benchmark.run_matrix(
         model="test-model",
@@ -186,19 +191,19 @@ def test_run_matrix_iterates_prompt_types(mock_post, benchmark):
     assert len(results) >= 2
 
 
-@patch("engine.lmstudio.benchmark.requests.post")
-def test_store_results_sends_to_nexus(mock_post, benchmark):
-    """store_results sends markdown to Nexus API."""
+@patch("engine.nexus.client.get_nexus_client")
+def test_store_results_sends_to_nexus(mock_get_client, benchmark):
+    """store_results sends markdown to Nexus via NexusClient."""
     results = [
         BenchmarkResult("m", "s", 0.7, 256, 8192, 1, tokens_per_second=20.0),
     ]
     summary = BenchmarkSummary(model="m", config_label="test", runs=1, results=results)
 
-    nexus_response = MagicMock()
-    nexus_response.ok = True
-    nexus_response.json.return_value = {"id": "test-123"}
-    mock_post.return_value = nexus_response
+    nexus = MagicMock()
+    nexus.add_entry.return_value = "test-123"
+    mock_get_client.return_value = nexus
 
     entry_id = benchmark.store_results(summary)
 
     assert entry_id == "test-123"
+    nexus.add_entry.assert_called_once()

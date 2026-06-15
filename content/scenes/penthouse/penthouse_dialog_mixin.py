@@ -3,10 +3,12 @@ Penthouse Dialog Mixin
 ======================
 Director directives, conversation starters, events, and agent-loop wiring.
 
-Version: v1.53.1 [2026-03-26]
+Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — Runtime invariant log: agents registered == present
+                            characters (warn if any character lacks an agent)
     v1.53.1 [2026-03-26] — Added _register_char_with_loop() for hot-registration
     v1.50.0 [2026-03-24] — Initial extraction from penthouse_scene.py
 """
@@ -100,7 +102,29 @@ class PenthouseDialogMixin:
         self.agent_loop.set_action_callback(self._on_agent_action)
         self.agent_loop.start(interval=interval)
         self.scene_state["agent_loop_running"] = True
+        # v1.62.0 [2026-06-15] — start the cheap scripted ambient layer alongside
+        # the LLM agent loop so idle characters feel alive between slow ticks.
+        self._start_ambient_loop()
         self._broadcast_state()
+
+        # v1.62.0 [2026-06-15] — Runtime invariant: every present character must
+        # have its own registered agent so all take agent-driven turns.
+        n_agents = len(self.agent_loop._agents)
+        n_chars = len(self.characters)
+        if n_agents != n_chars:
+            logger.warning(
+                "[penthouse] agent/character count mismatch — only some characters "
+                "are agent-driven (operation=start_agent_loop, agents=%d, characters=%d, "
+                "missing=%s)",
+                n_agents, n_chars,
+                [c for c in self.characters if c not in self.agent_loop._agents],
+            )
+        else:
+            logger.info(
+                "[penthouse] all characters registered with agents "
+                "(operation=start_agent_loop, agents=%d, characters=%d)",
+                n_agents, n_chars,
+            )
 
     # v1.53.0 [2026-03-26] — Hot-register a single character with a running agent loop
     def _register_char_with_loop(self, char) -> None:
@@ -141,6 +165,14 @@ class PenthouseDialogMixin:
             pass
 
         self.agent_loop.register_character(char, agent=agent)
+
+        # v1.62.0 [2026-06-15] — Confirm the hot-added character actually got an
+        # agent (not just a character entry), so it takes agent-driven turns.
+        if char.id not in self.agent_loop._agents:
+            logger.warning(
+                "[penthouse] hot-added character has no agent — it will stay idle "
+                "(operation=register_char, character=%s)", char.id,
+            )
 
         # Inject roleplay context for the new character
         profile = self.profiles.get(char.id, CharacterProfile())
@@ -239,6 +271,8 @@ class PenthouseDialogMixin:
         @self.app.route("/api/director/broadcast", methods=["POST"])
         def director_broadcast():
             msg = (request.json or {}).get("message", "")
+            # v1.62.0 [2026-06-15] — director input counts as player activity.
+            self._mark_player_activity()
             name = self.director_name if self.director_in_scene else "(The Director)"
             self._inject_to_loop(name, msg, "director")
             self.socketio.emit("director_speaks", {"name": name, "message": msg,
@@ -464,6 +498,8 @@ class PenthouseDialogMixin:
         def stop_agent_loop():
             if self.agent_loop:
                 self.agent_loop.stop()
+            # v1.62.0 [2026-06-15] — stop the ambient layer with the agent loop.
+            self._stop_ambient_loop()
             self.scene_state["agent_loop_running"] = False
             self._broadcast_state()
             return jsonify({"success": True})

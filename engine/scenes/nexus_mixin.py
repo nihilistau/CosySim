@@ -174,10 +174,26 @@ class NexusSceneMixin:
             description: Human-readable event description.
             tags: Optional list of tags for categorisation.
         """
+        # v1.62.0 [2026-06-15] — Guard against an uninitialised Nexus layer.
+        # nexus_store_event is called from per-action callbacks (e.g. the
+        # penthouse agent-action callback). When _connect_nexus() has not run
+        # (manual tick path, tests, scenes constructed without serving), the
+        # buffer attributes are unset; accessing self._nexus_scene_id then
+        # raised AttributeError, which AgentLoop.tick() caught and turned into
+        # a duplicate idle/error action per character. Fail safe (no-op) here.
+        if not hasattr(self, "_nexus_event_buffer"):
+            # v1.62.0 [2026-06-15] — review: fail-loud nexus breadcrumb +
+            # behavioral cap test. Leave a trace instead of silently dropping.
+            logger.debug(
+                "[nexus] store_event before init — dropping event "
+                "(operation=store_event, type=%s)",
+                event_type,
+            )
+            return
         event = {
             "type": event_type,
             "description": description,
-            "scene": self._nexus_scene_id,
+            "scene": getattr(self, "_nexus_scene_id", "unknown"),
             "timestamp": time.time(),
             "tags": tags or [],
         }

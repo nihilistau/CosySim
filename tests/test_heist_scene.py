@@ -111,7 +111,9 @@ class TestHeistImport:
         assert "ghost" in CREW_TEMPLATES
         assert "tank" in CREW_TEMPLATES
         assert "silk" in CREW_TEMPLATES
-        assert "wheels" in CREW_TEMPLATES
+        # v1.59.0: 'wheels' was renamed to 'jet' (the getaway driver) in the
+        # crew roster rework; assert the current driver template instead.
+        assert "jet" in CREW_TEMPLATES
 
     def test_scene_id_constant(self):
         from content.scenes.heist.heist_scene import SCENE_ID

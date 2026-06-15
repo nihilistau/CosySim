@@ -217,15 +217,20 @@ class TestIndexRoute:
         assert b"THE TERMINAL" in resp.data
 
     def test_index_contains_version(self, client):
-        resp = client.get("/")
+        # v1.62.0 [2026-06-15] — v1.58 made "/" the NEONCITY landing page (it
+        # renders a {{ version }} string injected from package metadata); the
+        # plugin "0.68" version + scene catalogue moved to /terminal.
+        resp = client.get("/terminal")
         assert b"0.68" in resp.data
 
     def test_index_has_scene_grid(self, client):
-        resp = client.get("/")
+        # v1.62.0 [2026-06-15] — scene grid moved from "/" to /terminal (v1.58).
+        resp = client.get("/terminal")
         assert b"scene-grid" in resp.data
 
     def test_index_has_system_bar(self, client):
-        resp = client.get("/")
+        # v1.62.0 [2026-06-15] — bench-hud system bar moved from "/" to /terminal (v1.58).
+        resp = client.get("/terminal")
         assert b"bench-hud" in resp.data
 
 

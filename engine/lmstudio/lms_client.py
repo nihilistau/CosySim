@@ -58,11 +58,23 @@ Usage::
 
     # Speculative decoding
     client.enable_speculative("qwen2.5-7b-instruct", "qwen2.5-0.5b-instruct")
+
+Version: v1.60.0 [2026-06-13]
+Author:  CosySim Team
+
+Change Log:
+    v1.60.0 [2026-06-13] — ``close()`` / ``__del__`` are now hardened against
+        interpreter shutdown: when ``sys.is_finalizing()`` is True the HTTP
+        client is closed best-effort and any logging is suppressed, so the
+        garbage collector no longer emits "sys.meta_path is None" noise while
+        Python tears down. Added ``_is_finalizing()`` guard helper.
+    v1.49.2 [2026-03-22] — Auth circuit breaker.
 """
 from __future__ import annotations
 
 import json
 import logging
+import sys
 import time
 import uuid
 from typing import Any, Callable, Dict, Generator, List, Optional
@@ -173,8 +185,41 @@ class LMSClient:
         self._AUTH_FAILURE_THRESHOLD: int = 3
         self._AUTH_COOLDOWN_SECS: float = 300.0
 
+    # v1.60.0 [2026-06-13] — Interpreter-shutdown guard
+    # CONNECTS: close(), __del__
+    # CALLED BY: explicit close(), garbage collector during teardown
+    # EMITS: nothing — deliberately silent during finalization
+    @staticmethod
+    def _is_finalizing() -> bool:
+        """True if the interpreter is shutting down.
+
+        During finalization ``sys.meta_path`` is torn down and import-based
+        logging can raise; callers use this to close resources best-effort
+        and skip any logging that would otherwise emit shutdown noise.
+        """
+        try:
+            return bool(sys.is_finalizing())
+        except Exception:
+            # ``sys`` itself may be partially gone during teardown.
+            return True
+
     def close(self) -> None:
-        self._client.close()
+        """Close the underlying HTTP client.
+
+        Safe to call during interpreter shutdown — when finalizing, the
+        close is best-effort and never logs (avoids "sys.meta_path is None"
+        and similar teardown noise).
+        """
+        finalizing = self._is_finalizing()
+        try:
+            self._client.close()
+        except Exception:
+            if not finalizing:
+                logger.debug(
+                    "[LMSClient] HTTP client close failed (operation=close)",
+                    exc_info=True,
+                )
+            # During finalization: swallow silently.
 
     # ── Auth Circuit Breaker ───────────────────────────────────────
     # v1.49.2 [2026-03-22] — Prevent repeated auth failures from locking agents
@@ -1282,10 +1327,25 @@ class LMSClient:
         return f"<LMSClient url={self.base_url} api=native_v1 mcp={self._mcp_enabled} {auth}>"
 
     def __del__(self):
+        # v1.60.0 [2026-06-13] — Guard against interpreter shutdown: during
+        # finalization, close best-effort and NEVER log (logging imports may
+        # fail with "sys.meta_path is None"). Outside finalization, keep the
+        # prior best-effort debug log.
+        finalizing = self._is_finalizing()
         try:
-            self._client.close()
+            client = getattr(self, "_client", None)
+            if client is not None:
+                client.close()
         except Exception:
-            logger.debug("Suppressed exception", exc_info=True)
+            if not finalizing:
+                try:
+                    logger.debug(
+                        "[LMSClient] HTTP client close failed in __del__ "
+                        "(operation=del)",
+                        exc_info=True,
+                    )
+                except Exception:
+                    pass
 
 
 # ── MCP integration helpers ─────────────────────────────────────────────

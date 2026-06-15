@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   CLUB NOIR — casino_v2.css
+   Dark Renaissance v2 glow-up layer (loaded LAST — wins the cascade)
+   ════════════════════════════════════════════════════════════════════════
+   Neon-orange house, gold-chip shimmer. #f97316 marquee over the void,
+   gold money voice, glowing felt. Extrapolated from
+   docs/DESIGN_SYSTEM_V2.md (no kit): [data-scene="casino"] accent + the
+   4-layer background recipe from artifacts/new-assets/styles.css.
+
+   Version: v1.58.0 [2026-06-11]
+   Author:  CosySim Team
+
+   Change Log:
+     v1.58.0 [2026-06-11] — Scan-sweep styling hook on win events:
+                              .cn-result-banner.win plays the shared
+                              cs-scan-sweep-anim light band once when
+                              casino_ext.js lands the win class.
+     v1.58.0 [2026-06-11] — Initial v2 layer: palette re-pointed to
+                              var(--cs-scene-accent) tokens; 4-layer
+                              background stack; Orbitron marquee title
+                              (was Georgia serif) with CLUB/NOIR gradient;
+                              gold chip-shimmer on credits + pot (signature
+                              wow, reuses shared cs-shimmer keyframes);
+                              felt rim-light + inner glow; phase badge
+                              pulse; result banner glow; JetBrains Mono
+                              data voice on all money readouts.
+
+   CONNECTS: casino_kit.css (--scene-* palette), casino.css (--cn-* vars),
+             design_tokens_v2.css ([data-scene="casino"]),
+             cosysim-animations.css (cs-shimmer, cs-pulse-glow-text)
+   CALLED BY: casino.html {% block head_css %} (after casino.css)
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ──── 1 · Palette → v2 tokens ───────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Both var families (kit --scene-*, legacy --cn-*)
+   now flow from the design tokens; raw hex kept as fallback only. */
+:root {
+  --scene-accent:        var(--cs-scene-accent, #f97316);
+  --scene-accent-rgb:    var(--cs-scene-accent-rgb, 249 115 22);
+  --scene-accent-faint:  rgb(var(--scene-accent-rgb) / 0.08);
+  --scene-accent-glow:   rgb(var(--scene-accent-rgb) / 0.25);
+  --scene-accent-border: rgb(var(--scene-accent-rgb) / 0.3);
+  --cn-accent:      var(--cs-scene-accent, #f97316);
+  --cn-accent-dim:  rgb(var(--scene-accent-rgb) / 0.15);
+  --cn-border:      rgb(var(--scene-accent-rgb) / 0.1);
+  --cn-border-acc:  rgb(var(--scene-accent-rgb) / 0.35);
+  /* v2 typography voices (vendored woff2 via fonts.css) */
+  --cn-font-head: var(--cs-font-display, 'Orbitron', 'Share Tech Mono', monospace);
+  --cn-font-body: var(--cs-font-sans, 'Inter', system-ui, sans-serif);
+  --cn-font-mono: var(--cs-font-mono, 'JetBrains Mono', 'Courier New', monospace);
+  /* House gold — chips, pots, cashout */
+  --cn-gold-rgb: 212 169 51;
+}
+
+/* ──── 2 · 4-layer background stack (v2 recipe) ──────────────────────── */
+/* v1.58.0 [2026-06-11] — black #02030a base → 80px drift grid → radial
+   table glow rising from the pit. Layer 4 (CRT scanlines) is global via
+   .neon-scanlines. Grid drifts via animated background-position on body
+   itself — no pseudo-element, can never paint over the felt. */
+body {
+  background:
+    repeating-linear-gradient(90deg, rgb(var(--scene-accent-rgb) / 0.04) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--scene-accent-rgb) / 0.04) 0 1px, transparent 1px 80px),
+    radial-gradient(ellipse at 50% 85%, rgb(var(--scene-accent-rgb) / 0.12) 0%, transparent 60%),
+    #02030a;
+  animation: cn-grid-drift 30s linear infinite;
+}
+@keyframes cn-grid-drift {
+  from { background-position: 0 0,    0 0,    0 0; }
+  to   { background-position: 0 80px, 0 80px, 0 0; }
+}
+
+/* ──── 3 · Marquee — CLUB NOIR in Orbitron neon ──────────────────────── */
+/* v1.58.0 [2026-06-11] — Replaces the kit's Georgia serif. CLUB stays
+   thin-tracked accent; NOIR (--bold) burns hotter with a gold-tipped
+   gradient. */
+.ck-scene-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  font-size: 1.5rem;
+  letter-spacing: 0.3em;
+  color: var(--scene-accent);
+  text-shadow:
+    0 0 10px rgb(var(--scene-accent-rgb) / 0.7),
+    0 0 28px rgb(var(--scene-accent-rgb) / 0.35);
+}
+.ck-scene-title--bold {
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--scene-accent) 30%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.ck-scene-subtitle { letter-spacing: 0.22em; }
+
+/* Header — deeper house gradient + accent underline */
+.ck-scene-header {
+  background: linear-gradient(90deg, #0a0a10 0%, #16101e 55%, #0a0a10 100%);
+  border-bottom: 1px solid rgb(var(--scene-accent-rgb) / 0.45);
+  box-shadow: 0 0 24px rgb(var(--scene-accent-rgb) / 0.12);
+}
+
+/* VIP badge — gold foil */
+.cn-vip-badge {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  color: #e8c45c;
+  text-shadow: 0 0 10px rgb(var(--cn-gold-rgb) / 0.6);
+}
+
+/* ──── 4 · Panel titles — Orbitron display voice ─────────────────────── */
+/* v1.58.0 [2026-06-11] */
+.ck-glass-title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.22em;
+  text-shadow: 0 0 8px rgb(var(--scene-accent-rgb) / 0.3);
+}
+.ck-glass-panel {
+  background:
+    linear-gradient(180deg, rgb(var(--scene-accent-rgb) / 0.04) 0%, transparent 16%),
+    var(--scene-panel);
+  border: 1px solid rgb(var(--scene-accent-rgb) / 0.14);
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.ck-glass-panel:hover {
+  border-color: rgb(var(--scene-accent-rgb) / 0.32);
+  box-shadow: 0 0 14px rgb(var(--scene-accent-rgb) / 0.08);
+}
+
+/* ──── 5 · Gold chip shimmer — the signature wow ─────────────────────── */
+/* v1.58.0 [2026-06-11] — Money readouts wear a slow gold shimmer sweep
+   (shared cs-shimmer keyframes). Catches the eye exactly where the
+   stakes live: balance, pot, header credits. */
+.cn-credits-amount,
+.cn-pot-amount,
+.cn-balance__value {
+  font-family: var(--cn-font-mono);
+  background: linear-gradient(100deg,
+    #e8c45c 20%, #fff3c4 38%, var(--scene-accent) 50%, #fff3c4 62%, #e8c45c 80%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  animation: cs-shimmer 4.5s linear infinite;
+}
+.cn-credits-icon { color: #e8c45c; text-shadow: 0 0 10px rgb(var(--cn-gold-rgb) / 0.5); }
+
+/* Chip glyph — idle glow breath; the existing .spinning burst untouched */
+.cn-chip {
+  filter: drop-shadow(0 0 6px rgb(var(--cn-gold-rgb) / 0.45));
+  animation: cn-chip-breathe 3.5s ease-in-out infinite;
+}
+@keyframes cn-chip-breathe {
+  0%, 100% { filter: drop-shadow(0 0 4px rgb(var(--cn-gold-rgb) / 0.3)); }
+  50%      { filter: drop-shadow(0 0 10px rgb(var(--cn-gold-rgb) / 0.65)); }
+}
+
+/* ──── 6 · The felt — rim light + table lamp ─────────────────────────── */
+/* v1.58.0 [2026-06-11] — Warm rim on the rail, lamp pool in the middle */
+.cn-table {
+  border: 2px solid rgb(var(--scene-accent-rgb) / 0.30);
+  box-shadow:
+    inset 0 0 60px rgba(0, 0, 0, 0.55),
+    inset 0 0 110px rgba(10, 46, 28, 0.5),
+    0 0 30px rgb(var(--scene-accent-rgb) / 0.10);
+}
+.cn-table__felt {
+  background-image:
+    radial-gradient(ellipse at 50% 45%, rgba(255, 244, 200, 0.05) 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.01) 1px, transparent 1px);
+  background-size: auto, 4px 4px;
+}
+.cn-hand-label {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  color: rgba(255, 244, 200, 0.35);
+}
+.cn-hand-value { font-family: var(--cn-font-mono); }
+
+/* ──── 7 · Game pulse — phase badge + result banner ──────────────────── */
+/* v1.58.0 [2026-06-11] — The table phase breathes; results land loud */
+.cn-phase-badge {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  animation: cs-pulse-glow-text 3s ease-in-out infinite;
+}
+.cn-result-banner {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.18em;
+}
+.cn-result-banner.win {
+  box-shadow: 0 0 22px rgba(34, 197, 94, 0.25), inset 0 0 14px rgba(34, 197, 94, 0.08);
+}
+.cn-result-banner.loss {
+  box-shadow: 0 0 22px rgba(228, 55, 55, 0.2), inset 0 0 14px rgba(228, 55, 55, 0.06);
+}
+
+/* Character name plates — display voice */
+.cn-character__name { font-family: var(--cs-font-display, 'Orbitron', sans-serif); }
+
+/* ──── 8 · Data voice — every number is data ─────────────────────────── */
+/* v1.58.0 [2026-06-11] */
+.ck-hud-badge span,
+.ck-economy-val,
+.cn-world-value,
+.cn-npc__chips,
+.cn-tx {
+  font-family: var(--cn-font-mono);
+}
+.ck-economy-val { text-shadow: 0 0 10px rgb(var(--cn-gold-rgb) / 0.35); }
+
+/* Heat reads hot in the world rows */
+.cn-world-heat { color: var(--scene-accent); text-shadow: 0 0 8px rgb(var(--scene-accent-rgb) / 0.4); }
+
+/* ──── 9 · Cashout — gold foil button ────────────────────────────────── */
+/* v1.58.0 [2026-06-11] */
+.cn-btn--cashout {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  letter-spacing: 0.14em;
+}
+.cn-btn--cashout:hover:not(:disabled) {
+  box-shadow: 0 0 18px rgb(var(--cn-gold-rgb) / 0.4);
+  border-color: rgb(var(--cn-gold-rgb) / 0.7);
+}
+
+/* ──── 10 · Win events — scan-sweep styling hook ─────────────────────── */
+/* v1.58.0 [2026-06-11] — When casino_ext.js sets `cn-result-banner win`
+   (showResultBanner, line ~303), a light band sweeps the banner once.
+   Reuses the shared cs-scan-sweep-anim keyframes from
+   cosysim-animations.css — no duplicated keyframes, no JS changes. */
+.cn-result-banner {
+  position: relative;
+  overflow: hidden;
+}
+.cn-result-banner::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 35%;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(255, 244, 200, 0.18) 40%,
+    rgb(var(--scene-accent-rgb) / 0.10) 70%,
+    transparent 100%);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+}
+.cn-result-banner.win::after {
+  animation: cs-scan-sweep-anim 0.7s ease-in-out 0.15s forwards;
+}

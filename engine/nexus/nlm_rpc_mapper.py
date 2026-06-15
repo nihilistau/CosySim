@@ -111,7 +111,18 @@ class NLMRPCRegistry:
                 logger.debug("Loaded NLM RPC registry from %s", _REGISTRY_FILE)
                 return
             except Exception as exc:
-                logger.warning("Failed to load NLM RPC registry: %s", exc)
+                # v1.58.0 [2026-06-11] — Quarantine the corrupt file so the
+                # next automation/RpcidUpdater run regenerates it cleanly
+                # instead of erroring forever ("Extra data" parse loop).
+                logger.warning(
+                    "[nlm_rpc_mapper] Corrupt registry quarantined "
+                    "(operation=load, file=%s): %s", _REGISTRY_FILE, exc)
+                try:
+                    import os
+                    os.replace(_REGISTRY_FILE,
+                               _REGISTRY_FILE.with_suffix(".json.corrupt"))
+                except OSError:
+                    pass
         self._data = {"rpc_ids": {}, "updated_at": None}
         self._loaded_at = time.time()
 
@@ -194,9 +205,10 @@ class NLMRPCRegistry:
         self._data["updated_at"] = datetime.now().isoformat()
         if bl:
             self._data["bl"] = bl
-        _REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(_REGISTRY_FILE, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, indent=2)
+        # v1.58.0 [2026-06-11] — Atomic write (concurrent scene processes read
+        # this file; plain writes caused "Extra data" JSON corruption)
+        from engine.utils import atomic_write_json
+        atomic_write_json(_REGISTRY_FILE, self._data)
         self._loaded_at = _REGISTRY_FILE.stat().st_mtime + 1
         logger.info("RPC registry updated: %d operations", len(rpc_ids))
 

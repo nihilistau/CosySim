@@ -1,0 +1,147 @@
+/*
+ * CosySim Webfonts — locally vendored
+ * ====================================
+ * Latin woff2 subsets of the five design-system families, served from
+ * /shared/fonts/ so every scene renders offline (local-first rule).
+ *
+ * Families: Orbitron (display) · Inter (body) · JetBrains Mono (data) ·
+ *           Share Tech Mono (CRT terminal) · Press Start 2P (pixel)
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial vendoring (replaces Google Fonts <link>
+ *                           in neon_base.html; adds Share Tech Mono +
+ *                           Press Start 2P which were referenced by tokens
+ *                           but never loaded)
+ */
+
+/* Orbitron 400 */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/shared/fonts/Orbitron-400.woff2') format('woff2');
+}
+/* Orbitron 500 */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/shared/fonts/Orbitron-500.woff2') format('woff2');
+}
+/* Orbitron 700 */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/shared/fonts/Orbitron-700.woff2') format('woff2');
+}
+/* Orbitron 800 */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/shared/fonts/Orbitron-800.woff2') format('woff2');
+}
+/* Orbitron 900 */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('/shared/fonts/Orbitron-900.woff2') format('woff2');
+}
+/* Inter 300 */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('/shared/fonts/Inter-300.woff2') format('woff2');
+}
+/* Inter 400 */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/shared/fonts/Inter-400.woff2') format('woff2');
+}
+/* Inter 500 */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/shared/fonts/Inter-500.woff2') format('woff2');
+}
+/* Inter 600 */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/shared/fonts/Inter-600.woff2') format('woff2');
+}
+/* Inter 700 */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/shared/fonts/Inter-700.woff2') format('woff2');
+}
+/* JetBrains Mono 400 */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/shared/fonts/JetBrainsMono-400.woff2') format('woff2');
+}
+/* JetBrains Mono 500 */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/shared/fonts/JetBrainsMono-500.woff2') format('woff2');
+}
+/* JetBrains Mono 600 */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/shared/fonts/JetBrainsMono-600.woff2') format('woff2');
+}
+/* JetBrains Mono 700 */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/shared/fonts/JetBrainsMono-700.woff2') format('woff2');
+}
+/* Share Tech Mono 400 */
+@font-face {
+  font-family: 'Share Tech Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/shared/fonts/ShareTechMono-400.woff2') format('woff2');
+}
+/* Press Start 2P 400 */
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/shared/fonts/PressStart2P-400.woff2') format('woff2');
+}

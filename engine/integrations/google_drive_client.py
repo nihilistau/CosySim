@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 from typing import Any, Dict, List, Optional, Union
 
@@ -32,9 +33,10 @@ _DRIVE_REFERER = "https://drive.google.com/"
 _FOLDER_MIME = "application/vnd.google-apps.folder"
 
 # v2internal API keys — different keys for different operation categories
-_V2INT_KEY_READ = "REDACTED-GOOGLE-API-KEY"
-_V2INT_KEY_UPLOAD = "REDACTED-GOOGLE-API-KEY"
-_V2INT_KEY_PERMS = "REDACTED-GOOGLE-API-KEY"
+# v1.61.0 [2026-06-13] — move hardcoded Drive API keys to env (empty fallback)
+_V2INT_KEY_READ = os.getenv("GOOGLE_DRIVE_KEY_READ", "")
+_V2INT_KEY_UPLOAD = os.getenv("GOOGLE_DRIVE_KEY_UPLOAD", "")
+_V2INT_KEY_PERMS = os.getenv("GOOGLE_DRIVE_KEY_PERMS", "")
 
 _V2INT_COMMON_PARAMS: Dict[str, Any] = {
     "supportsTeamDrives": "true",

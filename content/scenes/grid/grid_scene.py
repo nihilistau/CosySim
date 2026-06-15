@@ -13,10 +13,11 @@ Four zones accessible via tab navigation:
 
 All zones react to the living world via Socket.IO and the EventCascade.
 
-Version: v1.49.5 [2026-03-22]
+Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.58.0 [2026-06-11] — __init__ accepts host= (fixes TUI launch crash)
     v1.49.5 [2026-03-22] — 18 tiered faction quests (3 per faction), 3 vendor NPCs with dialogue
     v1.51.0 [2026-03-22] — Migrated to FlaskScene base class
     v1.49.2 [2026-03-22] — API-first: template is a pure structural shell
@@ -64,6 +65,17 @@ MARKET_CATALOGUE: List[Dict[str, Any]] = [
     # Information
     {"id": "tip_bunker", "name": "Bunker Location Tip","vendor": "broker", "category": "intel",       "base_price": 750,  "stock": 3,  "rarity": "rare"},
     {"id": "tip_route",  "name": "Safe Route Map",     "vendor": "broker", "category": "intel",       "base_price": 300,  "stock": 5,  "rarity": "uncommon"},
+    # Phone-OS upgrades (v1.62.0 [2026-06-15] — PH-T2). Ids match
+    # engine.world.inventory.ITEM_CATALOG so buying grants the real item (added
+    # to the InventoryManager) that `install_phone_upgrade` can consume.
+    # Software → Mira (tech); hardware → Viktor (contraband).
+    {"id": "phone_encryption_patch", "name": "Encryption Patch", "vendor": "mira",   "category": "phone_upgrade", "base_price": 300,  "stock": 5, "rarity": "common"},
+    {"id": "phone_firewall_v1",      "name": "Firewall v1",      "vendor": "mira",   "category": "phone_upgrade", "base_price": 350,  "stock": 5, "rarity": "common"},
+    {"id": "phone_firewall_v2",      "name": "Firewall v2",      "vendor": "mira",   "category": "phone_upgrade", "base_price": 900,  "stock": 3, "rarity": "uncommon"},
+    {"id": "phone_comms_tap",        "name": "Comms Tap",        "vendor": "mira",   "category": "phone_upgrade", "base_price": 1200, "stock": 2, "rarity": "uncommon"},
+    {"id": "phone_modem_v2",         "name": "Modem v2",         "vendor": "viktor", "category": "phone_upgrade", "base_price": 1600, "stock": 2, "rarity": "uncommon"},
+    {"id": "phone_cpu_v2",           "name": "CPU v2",           "vendor": "viktor", "category": "phone_upgrade", "base_price": 1400, "stock": 2, "rarity": "uncommon"},
+    {"id": "phone_os_kernel_v2",     "name": "OS Kernel v2",     "vendor": "viktor", "category": "phone_upgrade", "base_price": 2500, "stock": 1, "rarity": "rare"},
 ]
 
 FACTION_DATA: List[Dict[str, Any]] = [
@@ -389,6 +401,16 @@ class _GridState:
             pass  # PlayerState optional
         self._stock[item_id] = max(0, stock - quantity)
         self._player_inventory.append({"item_id": item_id, "name": item["name"], "qty": quantity, "paid": total})
+        # v1.62.0 [2026-06-15] — PH-T2: items whose id matches a real
+        # ITEM_CATALOG entry (e.g. phone upgrades) are also granted to the
+        # InventoryManager so skills like `install_phone_upgrade` can consume
+        # them. Best-effort: never let an inventory hiccup fail the purchase.
+        try:
+            from engine.world.inventory import ITEM_CATALOG, get_inventory
+            if item_id in ITEM_CATALOG:
+                get_inventory().add_item(item_id, quantity=quantity)
+        except Exception as exc:
+            logger.debug("[grid] inventory grant skipped (item_id=%s): %s", item_id, exc)
         # v1.49.5 — Track vendor purchase count for dialogue triggers
         vendor_id = item.get("vendor", "unknown")
         self._vendor_purchase_count[vendor_id] = self._vendor_purchase_count.get(vendor_id, 0) + quantity
@@ -741,8 +763,10 @@ class GridScene(FlaskScene):
         "characters": ["mira", "viktor", "frankie"],
     }
 
-    def __init__(self, config: Any = None) -> None:
-        super().__init__(host="0.0.0.0", port=self.SCENE_METADATA["port"])
+    # v1.58.0 [2026-06-11] — Accept host= passthrough; constructor rejecting
+    # host= made THE GRID fail to launch from the TUI (same bug as lab_break).
+    def __init__(self, config: Any = None, host: str = "0.0.0.0") -> None:
+        super().__init__(host=host, port=self.SCENE_METADATA["port"])
         self._state = _get_grid_state()
         self._event_sub_id: Optional[str] = None
 

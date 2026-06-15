@@ -43,6 +43,21 @@ window.CharacterBridge = (function () {
   let _locationPositions = {};
   let _animRegistered = false;
   let _directorSprite = null;
+  // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+  //   holds a director descriptor that arrived before the 3D scene was ready.
+  let _pendingDirector = null;
+
+  /**
+   * Feet-origin Y for a location entry. Delegates to penthouse3D.resolveAnchorY
+   * so the posed body rests ON the surface; falls back to the raw surface Y if
+   * the helper is unavailable (older penthouse_3d.js).
+   * v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink).
+   */
+  function _anchorY(locPos) {
+    const p3d = window.penthouse3D;
+    if (p3d && typeof p3d.resolveAnchorY === 'function') return p3d.resolveAnchorY(locPos);
+    return (locPos && locPos.y) || 0;
+  }
 
   // ─── Initialise ──────────────────────────────────────────────────
   // v1.49.2 [2026-03-22] — Use onReady() callback instead of blind setTimeout polling
@@ -110,6 +125,15 @@ window.CharacterBridge = (function () {
         Object.keys(_pendingSync.chars || {}).length);
       syncCharacters(_pendingSync.chars, _pendingSync.locs);
       _pendingSync = null;
+    }
+
+    // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+    //   replay a director descriptor that arrived before the scene was ready.
+    if (_pendingDirector) {
+      console.info('[CharBridge] Replaying queued director avatar placement');
+      const pd = _pendingDirector;
+      _pendingDirector = null;
+      placeDirectorAvatar(pd);
     }
   }
 
@@ -193,11 +217,24 @@ window.CharacterBridge = (function () {
       if (count === 2) offsetX = (idx === 0) ? -BRIDGE_CONFIG.occupantOffset2P : BRIDGE_CONFIG.occupantOffset2P;
       else if (count >= 3) offsetX = (idx - 1) * BRIDGE_CONFIG.occupantOffsetNP;
 
-      sprite.targetPos.set(locPos.x + offsetX, locPos.y || 0, locPos.z);
+      // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink):
+      //   target the feet-origin Y for this location's anchor, and refresh the
+      //   pose system's base Y so its per-pose offset lands the body on-surface.
+      const baseY = _anchorY(locPos);
+      sprite.targetPos.set(locPos.x + offsetX, baseY, locPos.z);
+      if (sprite.model) sprite.model._baseY = baseY;
+      // v1.62.0 [2026-06-15] — track location so stopPose can re-infer idle state
+      sprite.locationId = locId;
     }
 
     // Remove characters no longer in state
+    // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+    //   the Director is tracked in this same `characters` map under 'director'
+    //   but is NEVER part of scene_state.characters (it lives in
+    //   scene_state.director_avatar). Skip it here, otherwise every scene_state
+    //   reaps the director right after it is placed.
     for (const cid of Object.keys(characters)) {
+      if (cid === 'director') continue;
       if (!chars[cid]) removeCharacter(cid);
     }
   }
@@ -257,9 +294,15 @@ window.CharacterBridge = (function () {
     _scene.add(model.group);
 
     // Position at initial location
+    // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink):
+    //   place the GROUP at the feet-origin Y for the anchor, and (re)seed
+    //   model._baseY — AnimManager.register() captured it BEFORE this position
+    //   was applied, so without this the pose offset would sink the body.
     const locId = info?.location_id || 'bed';
     const locPos = _locationPositions[locId] || { x: 0, y: 0, z: 0 };
-    model.group.position.set(locPos.x, locPos.y || 0, locPos.z);
+    const baseY = _anchorY(locPos);
+    model.group.position.set(locPos.x, baseY, locPos.z);
+    model._baseY = baseY;
 
     // Create name label sprite
     const label = createNameLabel(name, color);
@@ -267,7 +310,7 @@ window.CharacterBridge = (function () {
 
     const entry = {
       model: model,
-      targetPos: new THREE.Vector3(locPos.x, locPos.y || 0, locPos.z),
+      targetPos: new THREE.Vector3(locPos.x, baseY, locPos.z),
       currentOutfit: outfit,
       currentMood: 'neutral',
       label: label,
@@ -425,14 +468,36 @@ window.CharacterBridge = (function () {
 
   // ─── Director Avatar ─────────────────────────────────────────────
 
+  /**
+   * Place (or replace) the Director's 3D avatar in the scene.
+   * @param {Object} opts - avatar descriptor. Accepts BOTH the manual-click
+   *   shape (`location`/`skin`/`hair`) and the scene_state shape emitted by the
+   *   backend (`location_id`/`skin_tone`/`hair_color`), so persistence on
+   *   reload/reconnect renders identically to the manual placement.
+   * v1.62.0 [2026-06-15] — director avatar render/persist fix.
+   */
   function placeDirectorAvatar(opts) {
+    opts = opts || {};
+
+    // v1.62.0 [2026-06-15] — director avatar render/persist fix:
+    //   scene_state can arrive before the 3D scene is ready (e.g. on reload).
+    //   Mirror the syncCharacters() queue so the director is not silently
+    //   dropped (and so _scene.add() below never throws on null).
+    if (!_scene) {
+      console.info('[CharBridge] placeDirectorAvatar called but _scene is null — queuing');
+      _pendingDirector = opts;
+      init();
+      return;
+    }
+
     removeDirectorAvatar();
 
+    // Accept both the manual-click and scene_state key shapes.
     const gender = opts.gender || 'male';
-    const skin = opts.skin || 'fair';
-    const hair = opts.hair || 'brown';
+    const skin = opts.skin || opts.skin_tone || 'fair';
+    const hair = opts.hair || opts.hair_color || 'brown';
     const outfit = opts.outfit || 'casual';
-    const locationId = opts.location || 'couch';
+    const locationId = opts.location || opts.location_id || 'couch';
 
     const model = CharModels.create({
       name: 'Director',
@@ -443,8 +508,11 @@ window.CharacterBridge = (function () {
     CharModels.updateOutfit(model, outfit);
     _scene.add(model.group);
 
+    // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink)
     const locPos = _locationPositions[locationId] || { x: 0, y: 0, z: 0 };
-    model.group.position.set(locPos.x + 1.2, locPos.y || 0, locPos.z);
+    const baseY = _anchorY(locPos);
+    model.group.position.set(locPos.x + 1.2, baseY, locPos.z);
+    model._baseY = baseY;
 
     const label = createNameLabel('Director', '#ffd700');
     if (label) model.group.add(label);
@@ -452,6 +520,7 @@ window.CharacterBridge = (function () {
     // Register with AnimManager for full animation support
     if (window.PenthouseAnim && PenthouseAnim.AnimManager) {
       PenthouseAnim.AnimManager.register('Director', model);
+      model._baseY = baseY;  // re-seed: register() captures _baseY at call time
       const inferredState = PenthouseAnim.inferAnimState(locationId, 'idle');
       if (inferredState) {
         PenthouseAnim.AnimManager.setState('Director', inferredState);
@@ -461,7 +530,7 @@ window.CharacterBridge = (function () {
     // Track in characters map so director participates like agents
     characters['director'] = {
       model: model,
-      targetPos: new THREE.Vector3(locPos.x + 1.2, locPos.y || 0, locPos.z),
+      targetPos: new THREE.Vector3(locPos.x + 1.2, baseY, locPos.z),
       locationId: locationId,
       currentMood: 'neutral',
       label: label,
@@ -543,38 +612,143 @@ window.CharacterBridge = (function () {
     CharModels.animatePose(dt, t);
   }
 
-  // ─── Pose Control (exposed for director UI) ──────────────────────
+  // ─── Pose Control (exposed for director UI + bed game) ───────────
 
-  function startPose(poseName, participantCharIds) {
-    const participants = participantCharIds
+  /**
+   * Resolve the world-space anchor (centre point) a pose should orbit. The
+   * bed-game plays out on the bed, so default to the bed location; fall back to
+   * scene origin if the bed is unmapped.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {string} [locId='bed'] — location id from _locationPositions
+   * @returns {{anchorX:number, anchorZ:number}}
+   */
+  function _poseAnchor(locId) {
+    const locPos = _locationPositions[locId || 'bed'] || _locationPositions.bed || { x: 0, z: 0 };
+    return { anchorX: locPos.x || 0, anchorZ: locPos.z || 0 };
+  }
+
+  /**
+   * Drive a sexual interaction pose on the given participants. Resolves each id
+   * to its tracked model, hands the pair (initiator first) to CharModels'
+   * startSexPose with the bed anchor, and sets the matching AnimManager
+   * paired/intimate state + arousal expression so faces/breathing read intimate.
+   * The pose system (CharModels.animatePose, called last in animationTick) owns
+   * the body transform; AnimManager owns expression/breathing.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {string} poseName — key from SEX_POSES / BED_GAME_ACTIONS
+   * @param {Array<string>} participantCharIds — ordered: [initiator, receiver, third?]
+   * @param {Object} [opts] — { anchorLoc, mood }
+   */
+  function startPose(poseName, participantCharIds, opts) {
+    opts = opts || {};
+    const { anchorX, anchorZ } = _poseAnchor(opts.anchorLoc);
+
+    const participants = (participantCharIds || [])
       .map(cid => characters[cid])
-      .filter(Boolean)
+      .filter(entry => entry && entry.model)
       .map(entry => ({
         model: entry.model,
+        anchorX,
+        anchorZ,
         mood: entry.currentMood || 'neutral',
       }));
 
-    if (participants.length === 0) {
-      console.warn('[CharBridge] No valid participants for pose: %s', poseName);
-      return;
+    if (participants.length < 2) {
+      console.warn('[CharBridge] Need >=2 valid participants for pose "%s" (got %d)',
+        poseName, participants.length);
+      return false;
     }
 
-    // Set expressions for pose
+    // Matching AnimManager paired/intimate state (reuses inferAnimState's keyword
+    // map) + arousal expression so faces/breathing match the action.
+    const pairedState = window.PenthouseAnim
+      ? PenthouseAnim.inferAnimState(poseName, poseName) : null;
     for (const p of participants) {
-      const expressionMood = p.mood === 'neutral' ? 'aroused' : p.mood;
+      const expressionMood = (opts.mood && opts.mood !== 'neutral')
+        ? opts.mood
+        : (p.mood === 'neutral' ? 'aroused' : p.mood);
       if (window.PenthouseAnim) {
-        PenthouseAnim.AnimManager.setMood(p.model.name || '', expressionMood);
+        const nm = p.model.name || '';
+        PenthouseAnim.AnimManager.setMood(nm, expressionMood);
+        if (pairedState) PenthouseAnim.AnimManager.setState(nm, pairedState);
       } else {
         CharModels.setExpression(p.model, expressionMood);
       }
     }
 
     CharModels.startPose(poseName, participants);
-    console.info('[CharBridge] Started pose: %s with %d participants', poseName, participants.length);
+    console.info('[CharBridge] Started pose "%s" (state=%s) with %d participants',
+      poseName, pairedState || '—', participants.length);
+    return true;
   }
 
+  /**
+   * Map a `bedgame_action` socket payload to a paired pose. Resolves the active
+   * player + target (and any remaining cast for threesomes) from the tracked
+   * `characters` map, then delegates to startPose with the bed anchor.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   * @param {Object} data — { action, player_id, target_id, mood_hint }
+   * @returns {boolean} true if a pose was started
+   */
+  function startBedGamePose(data) {
+    if (!data) return false;
+    const poseName = data.action || data.description || '';
+    const playerId = data.player_id;
+    const targetId = data.target_id;
+
+    const ids = [];
+    if (playerId && characters[playerId]) ids.push(playerId);
+
+    if (targetId && targetId !== playerId && characters[targetId]) {
+      ids.push(targetId);
+    } else if (ids.length < 2) {
+      // No explicit (distinct) target — pull in the next available cast member.
+      for (const cid of Object.keys(characters)) {
+        if (cid !== playerId && cid !== 'director' && characters[cid].model) {
+          ids.push(cid);
+          break;
+        }
+      }
+    }
+
+    // Third participant for threesome actions (any remaining tracked character).
+    if (poseName.startsWith('threesome') && ids.length === 2) {
+      for (const cid of Object.keys(characters)) {
+        if (!ids.includes(cid) && cid !== 'director' && characters[cid].model) {
+          ids.push(cid);
+          break;
+        }
+      }
+    }
+
+    if (ids.length < 2) {
+      console.warn('[CharBridge] bed-game pose "%s": fewer than 2 participants in scene', poseName);
+      return false;
+    }
+
+    return startPose(poseName, ids, { anchorLoc: 'bed', mood: data.mood_hint || 'aroused' });
+  }
+
+  /**
+   * End the active pose and ease everyone back to a standing idle. Resets each
+   * participant's AnimManager state to idle so it reclaims the body cleanly once
+   * the pose finishes its reverse lerp.
+   * v1.62.0 [2026-06-15] — wire bed-game actions to paired pose animations.
+   */
   function stopPose() {
+    // Reclaim the body for AnimManager: re-infer each tracked character's idle
+    // state from its current location (the next scene_state would do this too,
+    // but resetting now avoids a stuck intimate state if none arrives promptly).
+    if (window.PenthouseAnim) {
+      for (const [cid, entry] of Object.entries(characters)) {
+        if (!entry.model || !entry.model.name) continue;
+        const locId = entry.locationId || 'bed';
+        const state = PenthouseAnim.inferAnimState(locId, 'idle');
+        PenthouseAnim.AnimManager.setState(entry.model.name, state || 'idle');
+      }
+    }
     CharModels.stopPose(false);
+    console.info('[CharBridge] Pose stopped — returning to idle');
   }
 
   // ─── Public API ──────────────────────────────────────────────────
@@ -586,6 +760,7 @@ window.CharacterBridge = (function () {
     placeDirectorAvatar,
     removeDirectorAvatar,
     startPose,
+    startBedGamePose,
     stopPose,
     getCharacter: (id) => characters[id] || null,
     getCharacterIds: () => Object.keys(characters),
@@ -617,8 +792,11 @@ window.CharacterBridge = (function () {
     moveDirectorTo: (locationId) => {
       const dir = characters['director'];
       if (!dir) return;
+      // v1.62.0 [2026-06-15] — anchor-aware placement (fix furniture sink)
       const locPos = _locationPositions[locationId] || { x: 0, y: 0, z: 0 };
-      dir.targetPos.set(locPos.x + 1.2, locPos.y || 0, locPos.z);
+      const baseY = _anchorY(locPos);
+      dir.targetPos.set(locPos.x + 1.2, baseY, locPos.z);
+      if (dir.model) dir.model._baseY = baseY;
       dir.locationId = locationId;
       if (window.PenthouseAnim) {
         const state = PenthouseAnim.inferAnimState(locationId, 'idle');

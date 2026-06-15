@@ -1195,7 +1195,7 @@ python -m scripts.argus.clients.sesame_client full        # Everything
 | Agent services | 5 instances (agent-service-0 through 4), behind Google IAP |
 | WebSocket protocol | 13 message types, WebRTC SDP/ICE, character selection (Maya, Miles) |
 | Public bucket | `sesame-dev-public` on GCS — no auth required for reads |
-| Firebase project | `sesame-ai-demo`, API key `REDACTED-GOOGLE-API-KEY` |
+| Firebase project | `sesame-ai-demo`, API key `AIza_REDACTED` |
 | User roles | `['USER', 'EMAIL_VERIFIED']`, `moderation_status: 'ALLOWED'` |
 | Audio | 44100 Hz, raw WebRTC Opus, TURN servers at `34.134.236.52:3478` |
 

@@ -58,7 +58,8 @@ SESAME_API_URL = "https://sesameai.app"
 SESAME_WS_URL = "wss://sesameai.app/agent-service-0/v1/connect"
 
 FIREBASE_PROJECT = "sesame-ai-demo"
-FIREBASE_API_KEY = "REDACTED-GOOGLE-API-KEY"
+# v1.61.0 [2026-06-13] — moved out of the repo; set FIREBASE_API_KEY in .env
+FIREBASE_API_KEY = __import__("os").getenv("FIREBASE_API_KEY", "")
 FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1"
 FIREBASE_APPCHECK_URL = "https://content-firebaseappcheck.googleapis.com/v1"
 
@@ -2240,7 +2241,10 @@ def run_interactive(tokens: TokenStore, har_path: Optional[Path] = None) -> None
 
             # ── sig-diff ──
             elif cmd == "sig-diff":
-                emails = ["knack112358@gmail.com", "test@sesame.com", "test@meta.com"]
+                # v1.61.0 — no real personal email in the repo; supply via env or arg.
+                import os as _os
+                emails = [_os.getenv("ARGUS_TEST_EMAIL", "user@example.com"),
+                          "test@sesame.com", "test@meta.com"]
                 if args:
                     emails.append(args[0])
                 client = SesameClient(tokens)

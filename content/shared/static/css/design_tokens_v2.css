@@ -1,0 +1,75 @@
+/*
+ * CosySim Design Tokens v2 — "Dark Renaissance" overrides
+ * ========================================================
+ * Delta layer over design_tokens.css (loaded immediately AFTER it in
+ * neon_base.html so these win the cascade). Source material:
+ * artifacts/new-assets/colors_and_type.css + _ds_manifest.json.
+ *
+ * What v2 changes:
+ *   1. Typography promotion — Orbitron becomes the display voice
+ *      (wordmarks/headers), Inter the body voice, Share Tech Mono the
+ *      CRT/terminal voice. design_tokens.css v0.68 had display=Inter.
+ *   2. --cs-scene-accent-rgb gains a :root default + a per-scene value in
+ *      every [data-scene] block, so rgba(var(--cs-scene-accent-rgb), x)
+ *      composes correctly even on pages that don't inject template vars
+ *      (previews, standalone tools).
+ *   3. [data-scene] accent coverage for ALL 24 live scene keys (v0.68
+ *      covered 16) — values mirror each scene template's injected accent,
+ *      so the fallback never fights the inline injection.
+ *
+ * Version: v1.58.0 [2026-06-11]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.58.0 [2026-06-11] — Initial v2 delta layer (Phase 2 of the scenes
+ *                           glow-up: fonts promoted, accent-rgb defaults,
+ *                           full scene coverage)
+ */
+
+/* ──── 1 · Typography promotion ──────────────────────────────────── */
+
+:root {
+    /* Display voice: Orbitron for wordmarks + section headers (ALL CAPS) */
+    --cs-font-display:  'Orbitron', 'Segoe UI', sans-serif;  /* @kind font */
+    /* Body voice: Inter first (was bare system stack) */
+    --cs-font-sans:     'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;  /* @kind font */
+    /* CRT terminal voice (hack-green panels, ghost messages) */
+    --cs-font-terminal: 'Share Tech Mono', 'JetBrains Mono', monospace;  /* @kind font */
+
+    /* ── 2 · Scene accent RGB default (hub blue) ────────────────── */
+    --cs-scene-accent-rgb: 59 130 246;  /* @kind color */
+
+    /* Glass border glow can now rely on the rgb default */
+    --cs-glass-border-glow: rgba(var(--cs-scene-accent-rgb), 0.25);
+}
+
+/* ──── 3 · Per-scene accent + RGB triplets (all 24 scene keys) ───────
+   Mirrors the inline template injection (single source of truth lives in
+   each scene template; keep these in sync via docs/design_system_v2.md). */
+
+[data-scene="penthouse"]      { --cs-scene-accent: #fb7185; --cs-scene-accent-rgb: 251 113 133; --cs-scene-glow: rgba(251, 113, 133, 0.35); }
+[data-scene="lounge"]         { --cs-scene-accent: #ec4899; --cs-scene-accent-rgb: 236 72 153;  --cs-scene-glow: rgba(236, 72, 153, 0.35); }
+[data-scene="tavern"]         { --cs-scene-accent: #d97706; --cs-scene-accent-rgb: 217 119 6;   --cs-scene-glow: rgba(217, 119, 6, 0.35); }
+[data-scene="casino"]         { --cs-scene-accent: #f97316; --cs-scene-accent-rgb: 249 115 22;  --cs-scene-glow: rgba(249, 115, 22, 0.35); }
+[data-scene="gallery"]        { --cs-scene-accent: #818cf8; --cs-scene-accent-rgb: 129 140 248; --cs-scene-glow: rgba(129, 140, 248, 0.35); }
+[data-scene="heist"]          { --cs-scene-accent: #f59e0b; --cs-scene-accent-rgb: 245 158 11;  --cs-scene-glow: rgba(245, 158, 11, 0.35); }
+[data-scene="realm"]          { --cs-scene-accent: #6366f1; --cs-scene-accent-rgb: 99 102 241;  --cs-scene-glow: rgba(99, 102, 241, 0.35); }
+[data-scene="neoncity"]       { --cs-scene-accent: #06b6d4; --cs-scene-accent-rgb: 6 182 212;   --cs-scene-glow: rgba(6, 182, 212, 0.35); }
+[data-scene="arena"]          { --cs-scene-accent: #dc2626; --cs-scene-accent-rgb: 220 38 38;   --cs-scene-glow: rgba(220, 38, 38, 0.35); }
+[data-scene="phone"]          { --cs-scene-accent: #10b981; --cs-scene-accent-rgb: 16 185 129;  --cs-scene-glow: rgba(16, 185, 129, 0.35); }
+[data-scene="coders"]         { --cs-scene-accent: #34d399; --cs-scene-accent-rgb: 52 211 153;  --cs-scene-glow: rgba(52, 211, 153, 0.35); }
+[data-scene="games"]          { --cs-scene-accent: #f43f5e; --cs-scene-accent-rgb: 244 63 94;   --cs-scene-glow: rgba(244, 63, 94, 0.35); }
+[data-scene="hub"]            { --cs-scene-accent: #3b82f6; --cs-scene-accent-rgb: 59 130 246;  --cs-scene-glow: rgba(59, 130, 246, 0.35); }
+[data-scene="intel_hub"]      { --cs-scene-accent: #8b5cf6; --cs-scene-accent-rgb: 139 92 246;  --cs-scene-glow: rgba(139, 92, 246, 0.35); }
+[data-scene="admin"]          { --cs-scene-accent: #00ff41; --cs-scene-accent-rgb: 0 255 65;    --cs-scene-glow: rgba(0, 255, 65, 0.35); }
+[data-scene="grid"]           { --cs-scene-accent: #22d3ee; --cs-scene-accent-rgb: 34 211 238;  --cs-scene-glow: rgba(34, 211, 238, 0.35); }
+[data-scene="oracle"]         { --cs-scene-accent: #a855f7; --cs-scene-accent-rgb: 168 85 247;  --cs-scene-glow: rgba(168, 85, 247, 0.35); }
+[data-scene="neonos"]         { --cs-scene-accent: #00e5ff; --cs-scene-accent-rgb: 0 229 255;   --cs-scene-glow: rgba(0, 229, 255, 0.35); }
+[data-scene="lab_break"]      { --cs-scene-accent: #00ff88; --cs-scene-accent-rgb: 0 255 136;   --cs-scene-glow: rgba(0, 255, 136, 0.35); }
+[data-scene="cyberspace"]     { --cs-scene-accent: #00ff41; --cs-scene-accent-rgb: 0 255 65;    --cs-scene-glow: rgba(0, 255, 65, 0.35); }
+[data-scene="auction"]        { --cs-scene-accent: #fbbf24; --cs-scene-accent-rgb: 251 191 36;  --cs-scene-glow: rgba(251, 191, 36, 0.35); }
+[data-scene="asset_studio"]   { --cs-scene-accent: #a855f7; --cs-scene-accent-rgb: 168 85 247;  --cs-scene-glow: rgba(168, 85, 247, 0.35); }
+[data-scene="command_center"] { --cs-scene-accent: #14b8a6; --cs-scene-accent-rgb: 20 184 166;  --cs-scene-glow: rgba(20, 184, 166, 0.35); }
+[data-scene="system_control"] { --cs-scene-accent: #14b8a6; --cs-scene-accent-rgb: 20 184 166;  --cs-scene-glow: rgba(20, 184, 166, 0.35); }
+[data-scene="dashboard"]      { --cs-scene-accent: #667eea; --cs-scene-accent-rgb: 102 126 234; --cs-scene-glow: rgba(102, 126, 234, 0.35); }
+[data-scene="creation_kit"]   { --cs-scene-accent: #a855f7; --cs-scene-accent-rgb: 168 85 247;  --cs-scene-glow: rgba(168, 85, 247, 0.35); }

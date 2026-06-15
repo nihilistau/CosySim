@@ -341,7 +341,7 @@ def _start_external_proc(...):
 - MAJOR: Breaking architecture changes (pillars, engine rewrites)
 - MINOR: Feature sprints (each numbered session = +1 minor)
 - PATCH: Within-session refinements
-- Current: **v1.57.2** (RPC System Overhaul — call-time get_rpcid(), RpcidUpdater, 60 gRPC methods, 92 scheduler tasks)
+- Current: **v1.61.0** (Public Release Prep — credential security audit: all live secrets externalized to gitignored `.env`/`config/secrets.yaml` with `${ENV}` placeholders + `.env.example`, auto-loaded by `engine/config.py`; nlm_rpcids.yaml gitignored + redacted example; `.gitignore` hardened; flagship sectioned README + `docs/assets/scenes/`. Local runtime verified intact. Built on v1.60 Living Systems / v1.59 Consequential World / v1.58 Dark Renaissance)
 
 ### Navigational Comments
 

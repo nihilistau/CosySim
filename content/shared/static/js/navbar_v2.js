@@ -653,7 +653,11 @@ class CosyNavbar {
         a.className = isDropdown
             ? 'cs-navbar__more-item' + (isCurrent ? ' cs-navbar__nav-item--active' : '')
             : 'cs-navbar__nav-item' + (isCurrent ? ' cs-navbar__nav-item--active' : '');
-        a.href = `http://localhost:${scene.port}/`;
+        // v1.58.0 [2026-06-11] — hub root is now the landing page; in-game
+        // navigation goes straight to the catalogue at /terminal.
+        a.href = scene.key === 'hub'
+            ? `http://localhost:${scene.port}/terminal`
+            : `http://localhost:${scene.port}/`;
         a.setAttribute('data-scene-nav', '');
         a.setAttribute('data-scene-key', scene.key);
         a.setAttribute('data-scene-port', String(scene.port));

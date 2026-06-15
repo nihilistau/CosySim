@@ -206,13 +206,15 @@ class TestSceneCategories:
         mod, _, _, _ = hub_module
         assert set(mod.SCENE_CATEGORIES.keys()) == {"core", "showcase", "tools"}
 
-    def test_core_has_six_scenes(self, hub_module):
+    def test_core_has_seven_scenes(self, hub_module):
         mod, _, _, _ = hub_module
-        assert len(mod.SCENE_CATEGORIES["core"]["scenes"]) == 6
+        # v1.62.0 [2026-06-15] — +executive_suite (6 → 7)
+        assert len(mod.SCENE_CATEGORIES["core"]["scenes"]) == 7
 
-    def test_showcase_has_four_scenes(self, hub_module):
+    def test_showcase_has_six_scenes(self, hub_module):
         mod, _, _, _ = hub_module
-        assert len(mod.SCENE_CATEGORIES["showcase"]["scenes"]) == 4
+        # v1.62.0 [2026-06-15] — +auction, +cyberspace (4 → 6)
+        assert len(mod.SCENE_CATEGORIES["showcase"]["scenes"]) == 6
 
     def test_tools_has_five_scenes(self, hub_module):
         mod, _, _, _ = hub_module

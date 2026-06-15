@@ -1,8 +1,13 @@
 """Scheduled Task Runner — Lightweight cron-like daemon for CosySim autonomous operations.
 
-Version: v1.57.1 [2026-03-26]
+Version: v1.60.0 [2026-06-13]
 
 Change Log:
+    v1.60.0 [2026-06-13] — Scheduler hardening: per-task timeout enforcement (hung tasks
+                           are abandoned in a worker thread + logged, never blocking the
+                           loop); honest "not implemented" stubs (single clear warning,
+                           clean return) instead of silent fake-success; configurable
+                           default timeout via scheduler.default_timeout_seconds.
     v1.57.1 [2026-03-26] — Add knowledge-full-sync (weekly) pipeline task — File Search + NLM + Nexus
     v1.57.0 [2026-03-26] — Add file-search-sync (weekly) and context-cache-refresh (every_8h) tasks
     v1.56.0 [2026-03-26] — Auto-register scheduler as system agent; add session-bulk-sync + master-notebook-rebuild tasks
@@ -44,12 +49,27 @@ _INTERVAL_RE = re.compile(r"^every_(\d+)([hm])$")
 
 _DEFAULT_STATE_PATH = Path("data/scheduler_state.json")
 
+# ──── Timeout Hardening Constants ────
+# v1.60.0 [2026-06-13] — Per-task timeout enforcement.
+# Fallback default applied when neither the task nor config specify a timeout.
+# Config key `scheduler.default_timeout_seconds` overrides this at runtime.
+_FALLBACK_DEFAULT_TIMEOUT_S = 300.0  # 5 minutes — generous but bounded
+
+# Sentinel marker embedded in the result of an honest "not implemented" stub so the
+# daemon can distinguish a deliberate no-op from a genuine success.
+_NOT_IMPLEMENTED_MARKER = "__scheduler_not_implemented__"
+
 
 # ──── Data Model ────
 
 @dataclass
 class ScheduledTask:
-    """A recurring task managed by the scheduler daemon."""
+    """A recurring task managed by the scheduler daemon.
+
+    v1.60.0 [2026-06-13] — Added ``timeout`` (per-task hard cap, seconds; ``None``
+    means use the daemon default) and ``timeout_count`` (how many runs were
+    abandoned for exceeding the cap).
+    """
 
     id: str
     name: str
@@ -60,6 +80,45 @@ class ScheduledTask:
     last_result: Optional[str] = None
     run_count: int = 0
     error_count: int = 0
+    # v1.60.0 [2026-06-13] — timeout hardening fields
+    timeout: Optional[float] = None
+    timeout_count: int = 0
+
+
+# ──── Honest Stubs ────
+
+# v1.60.0 [2026-06-13] — Honest "not implemented" task factory.
+# CONNECTS: TaskSchedulerDaemon._execute (sentinel detection)
+# CALLED BY: register_stub() and any caller registering an unimplemented task
+# EMITS: a single WARNING per run in Oracle format
+def make_not_implemented(operation: str) -> Callable[[], Dict[str, Any]]:
+    """Build a callback that honestly reports a task is not implemented.
+
+    Instead of silently pretending success (which hides missing functionality in
+    the status dashboard), the returned callback logs one clear warning in Oracle
+    format and returns a sentinel dict the daemon records as ``not_implemented``.
+
+    Args:
+        operation: Short operation tag for the Oracle ``operation=`` field.
+
+    Returns:
+        A zero-arg callback returning a not-implemented sentinel dict.
+    """
+
+    def _not_implemented() -> Dict[str, Any]:
+        logger.warning(
+            "[scheduler] Task not implemented (operation=%s): registered but no "
+            "behaviour wired — returning cleanly instead of faking success",
+            operation,
+        )
+        return {_NOT_IMPLEMENTED_MARKER: True, "operation": operation, "status": "not_implemented"}
+
+    return _not_implemented
+
+
+def _is_not_implemented_result(raw: Any) -> bool:
+    """Return True if a callback result is the not-implemented sentinel."""
+    return isinstance(raw, dict) and bool(raw.get(_NOT_IMPLEMENTED_MARKER))
 
 
 # ──── Schedule Parsing ────
@@ -100,14 +159,37 @@ class TaskSchedulerDaemon:
     time-based recurring operations such as Nexus maintenance.
     """
 
-    def __init__(self, state_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        state_path: Optional[Path] = None,
+        default_timeout: Optional[float] = None,
+    ) -> None:
         self._tasks: Dict[str, ScheduledTask] = {}
         self._lock = threading.Lock()
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._state_path = state_path or _DEFAULT_STATE_PATH
         self._persisted_state: Dict[str, Any] = {}
+        # v1.60.0 [2026-06-13] — Resolve the default per-task timeout. Explicit arg
+        # wins (used by tests for hermeticity); otherwise read config; otherwise the
+        # bounded fallback. A value <= 0 disables timeout enforcement entirely.
+        self._default_timeout = self._resolve_default_timeout(default_timeout)
         self._load_state()
+
+    # v1.60.0 [2026-06-13] — config-driven default timeout
+    @staticmethod
+    def _resolve_default_timeout(explicit: Optional[float]) -> float:
+        """Resolve the daemon-wide default task timeout in seconds."""
+        if explicit is not None:
+            return float(explicit)
+        try:
+            from engine.config import get_config
+            value = get_config().get(
+                "scheduler.default_timeout_seconds", _FALLBACK_DEFAULT_TIMEOUT_S
+            )
+            return float(value)
+        except Exception:
+            return _FALLBACK_DEFAULT_TIMEOUT_S
 
     # ──── Task Management ────
 
@@ -118,6 +200,7 @@ class TaskSchedulerDaemon:
         schedule: str,
         callback: Callable[[], Any],
         enabled: bool = True,
+        timeout: Optional[float] = None,
     ) -> None:
         """Register a recurring task.
 
@@ -127,6 +210,10 @@ class TaskSchedulerDaemon:
             schedule: Cron-like schedule string.
             callback: Zero-arg callable to execute.
             enabled: Whether the task is active.
+            timeout: Optional per-task hard timeout in seconds. ``None`` uses the
+                daemon default (``scheduler.default_timeout_seconds``). A hung task
+                exceeding this is abandoned in its worker thread and logged — it
+                never blocks the scheduler loop. ``<= 0`` disables the cap.
 
         Raises:
             ValueError: If the schedule string is invalid.
@@ -145,9 +232,44 @@ class TaskSchedulerDaemon:
                 last_result=existing.last_result if existing else persisted.get("last_result"),
                 run_count=existing.run_count if existing else persisted.get("run_count", 0),
                 error_count=existing.error_count if existing else persisted.get("error_count", 0),
+                timeout=timeout,
+                timeout_count=(
+                    existing.timeout_count if existing else persisted.get("timeout_count", 0)
+                ),
             )
             self._tasks[task_id] = task
             logger.info("Registered task %s (%s)", task_id, schedule)
+
+    # v1.60.0 [2026-06-13] — honest stub registration helper
+    def register_stub(
+        self,
+        task_id: str,
+        name: str,
+        schedule: str,
+        operation: Optional[str] = None,
+        enabled: bool = True,
+    ) -> None:
+        """Register a task whose behaviour is not yet implemented, honestly.
+
+        The task logs a single clear "not implemented" warning per run and returns
+        cleanly — it is recorded as ``not_implemented`` in status rather than being
+        counted as a successful run. Prefer this over registering a callback that
+        silently does nothing.
+
+        Args:
+            task_id: Unique identifier for the task.
+            name: Human-readable task name.
+            schedule: Cron-like schedule string.
+            operation: Oracle ``operation=`` tag (defaults to ``task_id``).
+            enabled: Whether the task is active.
+        """
+        self.register(
+            task_id,
+            name,
+            schedule,
+            make_not_implemented(operation or task_id),
+            enabled=enabled,
+        )
 
     def unregister(self, task_id: str) -> None:
         """Remove a registered task.
@@ -206,37 +328,108 @@ class TaskSchedulerDaemon:
         interval = parse_schedule_seconds(task.schedule)
         return (now - task.last_run) >= interval
 
-    def _execute(self, task: ScheduledTask) -> Dict[str, Any]:
-        """Execute a task, record results, and persist state."""
-        start = time.time()
-        try:
-            raw = task.callback()
-            duration = time.time() - start
-            result_str = str(raw) if raw is not None else "ok"
+    # v1.60.0 [2026-06-13] — resolve the effective timeout for a task
+    def _effective_timeout(self, task: ScheduledTask) -> float:
+        """Resolve the timeout (seconds) to enforce for a task.
 
+        Per-task ``timeout`` wins; otherwise the daemon default. A value ``<= 0``
+        means "no timeout" and is returned as ``0.0``.
+        """
+        raw = task.timeout if task.timeout is not None else self._default_timeout
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            value = _FALLBACK_DEFAULT_TIMEOUT_S
+        return value if value > 0 else 0.0
+
+    # v1.60.0 [2026-06-13] — run callback under a worker thread + join(timeout)
+    # CONNECTS: ScheduledTask.callback
+    # CALLED BY: _execute
+    # A hung callback is abandoned: its worker thread is left as a daemon thread
+    # (it cannot block process exit) and the scheduler loop moves on immediately.
+    def _run_with_timeout(
+        self, task: ScheduledTask, timeout: float
+    ) -> "tuple[bool, Any, Optional[BaseException]]":
+        """Run ``task.callback`` with a hard timeout.
+
+        Returns:
+            Tuple ``(completed, result, error)``. ``completed`` is False if the
+            timeout elapsed before the callback returned. When the timeout is 0
+            the callback runs inline (no worker thread, no cap).
+        """
+        if timeout <= 0:
+            # No timeout enforcement — run inline.
+            try:
+                return True, task.callback(), None
+            except BaseException as exc:  # noqa: BLE001 — surfaced to caller
+                return True, None, exc
+
+        box: Dict[str, Any] = {"done": False, "result": None, "error": None}
+
+        def _worker() -> None:
+            try:
+                box["result"] = task.callback()
+            except BaseException as exc:  # noqa: BLE001 — captured, re-raised by caller
+                box["error"] = exc
+            finally:
+                box["done"] = True
+
+        worker = threading.Thread(
+            target=_worker,
+            name=f"SchedTask-{task.id}",
+            daemon=True,  # never block interpreter shutdown
+        )
+        worker.start()
+        worker.join(timeout)
+
+        if not box["done"]:
+            # Hung — abandon the worker (it keeps running as a daemon thread but
+            # is detached from the scheduler loop, which proceeds immediately).
+            return False, None, None
+        return True, box["result"], box["error"]
+
+    def _execute(self, task: ScheduledTask) -> Dict[str, Any]:
+        """Execute a task with timeout enforcement, record results, persist state.
+
+        v1.60.0 [2026-06-13] — Every callback now runs under a per-task timeout so
+        a hung task cannot block the scheduler loop. Honest "not implemented" stubs
+        are recorded distinctly instead of being counted as successes.
+        """
+        start = time.time()
+        timeout = self._effective_timeout(task)
+        completed, raw, error = self._run_with_timeout(task, timeout)
+        duration = time.time() - start
+
+        # ── Timeout path: callback never returned within the cap ──
+        if not completed:
             with self._lock:
                 task.last_run = time.time()
-                task.last_result = result_str[:500]
+                task.last_result = f"TIMEOUT after {timeout:.0f}s"
                 task.run_count += 1
+                task.error_count += 1
+                task.timeout_count += 1
                 self._save_state()
 
-            logger.info(
-                "Task %s completed in %.1fs (run #%d)",
-                task.id, duration, task.run_count,
+            logger.error(
+                "[scheduler] Task abandoned — exceeded timeout (operation=%s): "
+                "%.0fs cap, loop not blocked",
+                task.id, timeout,
             )
-            self._log_to_nexus(task, success=True, duration=duration)
-
+            self._log_to_nexus(
+                task, success=False, duration=duration,
+                error=f"timeout after {timeout:.0f}s",
+            )
             return {
                 "task_id": task.id,
-                "success": True,
-                "result": result_str[:500],
+                "success": False,
+                "timed_out": True,
+                "error": f"timeout after {timeout:.0f}s",
                 "duration_s": round(duration, 2),
             }
 
-        except Exception as exc:
-            duration = time.time() - start
-            error_str = f"{type(exc).__name__}: {exc}"
-
+        # ── Error path: callback raised ──
+        if error is not None:
+            error_str = f"{type(error).__name__}: {error}"
             with self._lock:
                 task.last_run = time.time()
                 task.last_result = f"ERROR: {error_str}"
@@ -244,15 +437,52 @@ class TaskSchedulerDaemon:
                 task.error_count += 1
                 self._save_state()
 
-            logger.error("Task %s failed: %s", task.id, error_str)
+            logger.error(
+                "[scheduler] Task failed (operation=%s): %s", task.id, error_str
+            )
             self._log_to_nexus(task, success=False, duration=duration, error=error_str)
-
             return {
                 "task_id": task.id,
                 "success": False,
                 "error": error_str,
                 "duration_s": round(duration, 2),
             }
+
+        # ── Honest not-implemented path: deliberate clean no-op ──
+        if _is_not_implemented_result(raw):
+            with self._lock:
+                task.last_run = time.time()
+                task.last_result = "NOT IMPLEMENTED"
+                task.run_count += 1
+                self._save_state()
+            # The stub itself already logged the warning once.
+            return {
+                "task_id": task.id,
+                "success": True,
+                "not_implemented": True,
+                "result": "not_implemented",
+                "duration_s": round(duration, 2),
+            }
+
+        # ── Success path ──
+        result_str = str(raw) if raw is not None else "ok"
+        with self._lock:
+            task.last_run = time.time()
+            task.last_result = result_str[:500]
+            task.run_count += 1
+            self._save_state()
+
+        logger.info(
+            "Task %s completed in %.1fs (run #%d)",
+            task.id, duration, task.run_count,
+        )
+        self._log_to_nexus(task, success=True, duration=duration)
+        return {
+            "task_id": task.id,
+            "success": True,
+            "result": result_str[:500],
+            "duration_s": round(duration, 2),
+        }
 
     # ──── Daemon Loop ────
 
@@ -334,6 +564,7 @@ class TaskSchedulerDaemon:
         overdue_count = 0
         total_runs = 0
         total_errors = 0
+        total_timeouts = 0  # v1.60.0 [2026-06-13]
 
         with self._lock:
             for task in self._tasks.values():
@@ -348,6 +579,7 @@ class TaskSchedulerDaemon:
                     overdue_count += 1
                 total_runs += task.run_count
                 total_errors += task.error_count
+                total_timeouts += task.timeout_count
 
                 tasks_status.append({
                     "id": task.id,
@@ -363,6 +595,9 @@ class TaskSchedulerDaemon:
                     "overdue": is_overdue,
                     "run_count": task.run_count,
                     "error_count": task.error_count,
+                    # v1.60.0 [2026-06-13] — expose timeout cap + abandonment count
+                    "timeout_s": self._effective_timeout(task),
+                    "timeout_count": task.timeout_count,
                     "last_result": (task.last_result or "")[:200],
                 })
 
@@ -379,6 +614,8 @@ class TaskSchedulerDaemon:
             "overdue_count": overdue_count,
             "total_runs": total_runs,
             "total_errors": total_errors,
+            "total_timeouts": total_timeouts,
+            "default_timeout_s": self._default_timeout,
             "error_rate_pct": round(error_rate, 1),
             "tasks": tasks_status,
         }
@@ -414,6 +651,8 @@ class TaskSchedulerDaemon:
                 "last_result": task.last_result,
                 "run_count": task.run_count,
                 "error_count": task.error_count,
+                # v1.60.0 [2026-06-13] — persist timeout abandonment count
+                "timeout_count": task.timeout_count,
             }
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -425,6 +664,12 @@ class TaskSchedulerDaemon:
 
     # ──── Nexus Logging ────
 
+    # v1.60.0 [2026-06-13] — Fire-and-forget Nexus logging.
+    # Previously this ran synchronously inside _execute, so when Nexus was
+    # unreachable the retrying HTTP client blocked the scheduler loop for tens of
+    # seconds per task — the very blocking the hardening pass is meant to remove.
+    # It now dispatches a short-lived daemon thread that gives up immediately if
+    # Nexus is not available, so _execute returns without any network wait.
     def _log_to_nexus(
         self,
         task: ScheduledTask,
@@ -432,25 +677,35 @@ class TaskSchedulerDaemon:
         duration: float,
         error: Optional[str] = None,
     ) -> None:
-        """Log task execution to Nexus (best-effort)."""
-        try:
-            from engine.nexus.client import get_nexus_client
-            client = get_nexus_client()
-            status_str = "completed" if success else "failed"
-            content = (
-                f"Scheduled task '{task.name}' ({task.id}) {status_str} "
-                f"in {duration:.1f}s. Run #{task.run_count}."
-            )
-            if error:
-                content += f"\nError: {error}"
-            client.add_entry(
-                title=f"Scheduler: {task.name} {status_str}",
-                content=content,
-                content_type="history",
-                category="system",
-            )
-        except Exception as exc:
-            logger.debug("Could not log to Nexus: %s", exc)
+        """Log task execution to Nexus (best-effort, non-blocking)."""
+
+        def _post() -> None:
+            try:
+                from engine.nexus.client import get_nexus_client
+                client = get_nexus_client()
+                # Quick availability probe — avoids the multi-attempt retry storm
+                # when Nexus is down.
+                if not client.is_available(timeout=2):
+                    return
+                status_str = "completed" if success else "failed"
+                content = (
+                    f"Scheduled task '{task.name}' ({task.id}) {status_str} "
+                    f"in {duration:.1f}s. Run #{task.run_count}."
+                )
+                if error:
+                    content += f"\nError: {error}"
+                client.add_entry(
+                    title=f"Scheduler: {task.name} {status_str}",
+                    content=content,
+                    content_type="history",
+                    category="system",
+                )
+            except Exception as exc:  # noqa: BLE001 — best-effort
+                logger.debug("Could not log to Nexus: %s", exc)
+
+        threading.Thread(
+            target=_post, name=f"SchedNexusLog-{task.id}", daemon=True
+        ).start()
 
 
 # ──── Singleton ────
@@ -1055,6 +1310,8 @@ def _knowledge_full_sync_callback() -> Dict[str, Any]:
 
 def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
     """Register all built-in autonomous tasks."""
+    # v1.60.0 [2026-06-13] — Resolve config once; fall back to defaults if config
+    # is unavailable so registration never raises a NameError on get_config.
     try:
         from engine.config import get_config
 
@@ -1062,8 +1319,12 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
             "nexus.operator_inbox.auto_sync_schedule",
             "every_15m",
         )
+        news_fetch_timeout = float(
+            get_config().get("scheduler.news_fetch_timeout_seconds", 120.0)
+        )
     except Exception:
         operator_inbox_schedule = "every_15m"
+        news_fetch_timeout = 120.0
 
     daemon.register(
         "nexus-maintenance",
@@ -1089,11 +1350,14 @@ def _register_builtin_tasks(daemon: "SchedulerDaemon") -> None:
         "weekly",
         _notebook_rotation_callback,
     )
+    # v1.60.0 [2026-06-13] — Network-bound task: tighter timeout so a hung external
+    # news source can never block the scheduler loop (the original audit symptom).
     daemon.register(
         "news-fetch",
         "News Fetch & Digest",
         "every_8h",
         _news_fetch_callback,
+        timeout=news_fetch_timeout,
     )
     daemon.register(
         "news-nlm-retry",

@@ -19,6 +19,19 @@ Version: v1.51.1 [2026-03-25]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — CB-T4: leave-a-message. Player sends to an offline
+                            (not co-present) NPC are stored via add_left_message
+                            + logged kind='left_message' (reply worker skipped);
+                            NPC autotexts to an offline player are left, not
+                            dropped, and flushed on (re)connect via
+                            _deliver_left_messages; socket connect/disconnect
+                            drives PresenceTracker. UI shows a left-message
+                            affordance.
+    v1.62.0 [2026-06-15] — CB-T2: GlobalCommsLog write-through — explicit USER
+                            sends (DM + group) logged here; NPC replies logged
+                            by the CommsLoggerInterceptor (no double-logging).
+                            Governor calls scoped with comms context so logged
+                            thread_id aligns with the phone thread.
     v1.51.1 [2026-03-25] — Group chat: multi-character group conversations
     v1.51.0 [2026-03-22] — Migrated to FlaskScene
     v1.52.0 [2026-03-22] — 0xGH0ST investigation arc, world events, news feed
@@ -47,6 +60,10 @@ from content.scenes.phone.phone_rules_v2 import (
     register_phone_rules,
     autotxt_cooldown,
     autotxt_prompt,
+    pick_style,
+    pick_topic_seed,
+    seed_prompt,
+    topic_seed_chance,
     get_truth, get_dare,
     SCENE_ID,
 )
@@ -231,6 +248,7 @@ class PhoneSceneV2(FlaskScene):
         """Hook: seed characters, start ticker, register MCP rules, subscribe world events."""
         self._seed_characters()
         self._start_ticker()
+        self._start_npc_comms()
         try:
             fw = get_framework()
             node = fw.get_scene(SCENE_ID)
@@ -238,6 +256,10 @@ class PhoneSceneV2(FlaskScene):
             # Wire up framework event listeners
             fw.on("mood_contagion", lambda evt: self._on_mood_event(evt))
             fw.on("story_beat", lambda evt: self._on_story_beat(evt))
+            # v1.62.0 [2026-06-15] — PH-T4: surface NPC→player breach events over
+            # the phone Socket.IO so the (PH-T5) notifications centre can react.
+            fw.on("phone_hacked", lambda evt: self._on_phone_hacked(evt))
+            fw.on("message_intercepted", lambda evt: self._on_message_intercepted(evt))
         except Exception as exc:
             logger.warning("[%s] MCP rule registration skipped (operation=mcp_wire): %s", SCENE_ID, exc)
         self._subscribe_world_events()
@@ -245,10 +267,41 @@ class PhoneSceneV2(FlaskScene):
     def on_shutdown(self) -> None:
         """Hook: stop ticker and save framework state."""
         self._ticker_stop.set()
+        self._stop_npc_comms()
         try:
             get_framework().save_state()
         except Exception:
             pass
+
+    # v1.62.0 [2026-06-15] — CB-T3: NPC↔NPC comms scheduler lifecycle.
+    # Owned here but DECOUPLED from the autotext ticker — the scheduler runs
+    # on its OWN thread + OWN lock and never touches ``self._tick_lock``, so
+    # NPC↔NPC traffic cannot contend with player-facing messaging.
+    def _start_npc_comms(self) -> None:
+        """Start the NPC↔NPC comms scheduler (best-effort, non-fatal)."""
+        try:
+            from engine.world.npc_comms import get_npc_comms_scheduler
+            self._npc_comms = get_npc_comms_scheduler()
+            # Reuse this scene's PhoneDB/Database and socket emitter so npc_dm
+            # threads land in the same store and clients get live events.
+            self._npc_comms._phone_db = self.phone_db
+            self._npc_comms._db = self.db
+            self._npc_comms._emit = lambda evt, payload: self._emit(evt, payload)
+            self._npc_comms.start()
+        except Exception as exc:
+            logger.warning(
+                "[%s] NPC comms scheduler start skipped (operation=npc_comms): %s",
+                SCENE_ID, exc,
+            )
+
+    def _stop_npc_comms(self) -> None:
+        """Stop the NPC↔NPC comms scheduler if running (best-effort)."""
+        try:
+            sched = getattr(self, "_npc_comms", None)
+            if sched is not None:
+                sched.stop()
+        except Exception as exc:
+            logger.debug("[%s] NPC comms stop failed: %s", SCENE_ID, exc)
 
     def _on_mood_event(self, evt) -> None:
         """React to mood contagion events from the framework bus."""
@@ -265,6 +318,34 @@ class PhoneSceneV2(FlaskScene):
                 self.socketio.emit("story_beat", evt.payload)
             except Exception:
                 pass
+
+    # v1.62.0 [2026-06-15] — PH-T4: NPC→player phone-breach surfacing.
+    def _on_phone_hacked(self, evt) -> None:
+        """Re-emit a ``phone_hacked`` breach event over the phone Socket.IO.
+
+        The breach record itself is already persisted as a ``system`` comms
+        entry by :class:`~content.scenes.phone.phone_hack.NpcHackPlayerService`
+        (the read path for the PH-T5 notifications centre); this only pushes the
+        live event so connected clients can react immediately. Best-effort.
+
+        Args:
+            evt: The framework event carrying the breach ``payload``.
+        """
+        try:
+            self.socketio.emit("phone_hacked", getattr(evt, "payload", {}) or {})
+        except Exception:
+            pass
+
+    def _on_message_intercepted(self, evt) -> None:
+        """Re-emit a ``message_intercepted`` event over the phone Socket.IO.
+
+        Args:
+            evt: The framework event carrying the intercept ``payload``.
+        """
+        try:
+            self.socketio.emit("message_intercepted", getattr(evt, "payload", {}) or {})
+        except Exception:
+            pass
 
     def get_plugin_info(self) -> Dict[str, Any]:
         return {
@@ -377,12 +458,14 @@ class PhoneSceneV2(FlaskScene):
         """
         try:
             chars = self.db.get_all_characters()
+            seeded_ids: List[str] = []
             for row in chars:
                 char_id = str(row.get("id") or row.get("character_id") or "")
                 if not char_id:
                     continue
                 self.phone_db.get_or_create_dm(char_id)
                 self._agents[char_id] = _PhoneCharacterAgent(char_id, self)
+                seeded_ids.append(char_id)
                 try:
                     fw = get_framework()
                     fw.get_character(char_id).enter_scene(SCENE_ID)
@@ -390,6 +473,20 @@ class PhoneSceneV2(FlaskScene):
                     pass
                 self._schedule_autotxt(char_id)
             logger.info("[%s] Seeded %d characters (operation=seed)", SCENE_ID, len(chars))
+            # v1.62.0 [2026-06-15] — PH-T1: give every seeded NPC (and the
+            # player) a full phone record with archetype-varied base security.
+            # Defensive: phone-OS seeding must never block character seeding.
+            try:
+                from engine.world.phone_os import get_phone_os, PLAYER_ID
+                pos = get_phone_os()
+                pos.ensure_phone(PLAYER_ID)
+                if seeded_ids:
+                    pos.seed_npc_phones(seeded_ids)
+            except Exception as exc:
+                logger.warning(
+                    "[%s] Phone-OS seeding skipped (operation=seed_phones): %s",
+                    SCENE_ID, exc,
+                )
         except Exception as exc:
             logger.warning("[%s] Character seeding failed (operation=seed): %s", SCENE_ID, exc)
 
@@ -467,7 +564,10 @@ class PhoneSceneV2(FlaskScene):
             affection = float((char or {}).get("affection", 30))
         except Exception:
             trust = affection = 30.0
-        cooldown = autotxt_cooldown(trust, affection) + extra_delay
+        # v1.62.0 [2026-06-15] — CB-T5: pass char_id so a per-character
+        # ``comms.autotxt.user_multiplier`` override (if any) applies; the
+        # multiplier itself calms the overall user-facing cadence.
+        cooldown = autotxt_cooldown(trust, affection, char_id=char_id) + extra_delay
         with self._autotxt_lock:
             self._autotxt_deadlines[char_id] = time.time() + cooldown
 
@@ -522,8 +622,24 @@ class PhoneSceneV2(FlaskScene):
                 except Exception:
                     pass
 
-                prompt = autotxt_prompt(conv_mode)
-                reply  = self._generate_reply(char_id, prompt, system_override=prompt)
+                # v1.62.0 [2026-06-15] — CB-T5: vary the opener style per
+                # character (anti-repeat) and occasionally seed it with a real
+                # city event / recent comms topic so messages aren't generic
+                # check-ins. The conversation-variety interceptor still rotates
+                # tone on top of this; we only pick the structural opener here.
+                style_label, base_prompt = pick_style(conv_mode, char_id)
+                topic = None
+                if random.random() < topic_seed_chance():
+                    topic = pick_topic_seed(char_id)
+                prompt = seed_prompt(base_prompt, topic)
+                logger.info(
+                    "[%s] autotxt opener (operation=autotxt, agent=%s, mode=%s, style=%s, seeded=%s)",
+                    SCENE_ID, char_id, conv_mode, style_label, bool(topic),
+                )
+                # v1.62.0 [2026-06-15] — CB-T2: pass thread_id so the autotext
+                # reply is logged against the DM thread by the interceptor.
+                reply  = self._generate_reply(char_id, prompt, thread_id=thread_id,
+                                              system_override=prompt)
                 text   = reply.get("text", "").strip()
                 if not text:
                     return
@@ -534,13 +650,43 @@ class PhoneSceneV2(FlaskScene):
                 if reply.get("image_requests"):
                     metadata["image_requests"] = reply["image_requests"]
 
-                msg = self.phone_db.save_message(
+                # v1.62.0 [2026-06-15] — CB-T4: if the player is offline (phone
+                # closed / no socket client), the NPC *leaves a message* instead
+                # of dropping it. It is stored flagged and surfaced when the
+                # player next connects (see _deliver_left_messages).
+                pres = self._presence()
+                leaving = bool(pres is not None and not pres.is_player_online())
+                if leaving:
+                    msg = self.phone_db.add_left_message(
+                        thread_id=thread_id,
+                        sender_id=char_id,
+                        content=text,
+                        msg_type="text",
+                        metadata=metadata if metadata else None,
+                    )
+                else:
+                    msg = self.phone_db.save_message(
+                        thread_id=thread_id,
+                        sender_id=char_id,
+                        content=text,
+                        msg_type="text",
+                        metadata=metadata if metadata else None,
+                    )
+
+                # Single source of truth: log the autotext to GlobalCommsLog,
+                # marked as a left_message when the player was offline.
+                self._log_user_comms(
+                    channel="phone_dm",
                     thread_id=thread_id,
-                    sender_id=char_id,
+                    recipient_ids=["user"],
                     content=text,
-                    msg_type="text",
-                    metadata=metadata if metadata else None,
+                    sender_id=char_id,
+                    kind="left_message" if leaving else "autotext",
+                    metadata=(
+                        {**metadata, "left_unread": True} if leaving else (metadata or None)
+                    ),
                 )
+
                 try:
                     get_framework().emit_event("message_sent", {
                         "scene_id": SCENE_ID, "char_id": char_id,
@@ -548,12 +694,15 @@ class PhoneSceneV2(FlaskScene):
                     }, source=SCENE_ID)
                 except Exception:
                     pass
-                self._emit("message_new", {
-                    "thread_id": thread_id,
-                    "message":   msg,
-                    "char_name": char_name,
-                }, room=f"thread_{thread_id}")
-                self._emit("thread_updated", {"thread_id": thread_id}, room=f"thread_{thread_id}")
+                # Only push live when the player is online; left messages are
+                # flushed on (re)connect so they aren't lost OR shown to nobody.
+                if not leaving:
+                    self._emit("message_new", {
+                        "thread_id": thread_id,
+                        "message":   msg,
+                        "char_name": char_name,
+                    }, room=f"thread_{thread_id}")
+                    self._emit("thread_updated", {"thread_id": thread_id}, room=f"thread_{thread_id}")
             except Exception as exc:
                 logger.warning("[%s] autotxt fire failed (operation=autotxt, agent=%s): %s", SCENE_ID, char_id, exc)
             finally:
@@ -563,7 +712,9 @@ class PhoneSceneV2(FlaskScene):
 
     def _generate_reply(self, char_id: str, user_msg: str, *,
                         thread_id: Optional[str] = None,
-                        system_override: Optional[str] = None) -> Dict[str, Any]:
+                        system_override: Optional[str] = None,
+                        comms_channel: str = "phone_dm",
+                        comms_recipients: Optional[List[str]] = None) -> Dict[str, Any]:
         """Run the governor pipeline and return a rich reply dict.
 
         Returns dict with keys: text, mood, image_requests, action_tags, voice_style.
@@ -572,7 +723,21 @@ class PhoneSceneV2(FlaskScene):
         v2.8: Uses ConversationManager for stateful conversations. History is loaded
         from phone_db only for the first interaction; subsequent calls use
         previous_response_id for server-side KV cache continuation.
+
+        v1.62.0 [2026-06-15] — CB-T2: the governor call is scoped with comms
+        context (channel/thread_id/recipients) so the CommsLoggerInterceptor
+        writes the agent reply into GlobalCommsLog aligned with the phone thread.
+        The interceptor — NOT this method — logs NPC replies, to avoid duplicates.
+
+        Args:
+            char_id: The character producing the reply.
+            user_msg: The user/prompt message that triggered the reply.
+            thread_id: The originating phone thread id (for comms-log alignment).
+            system_override: Optional system-prompt override (autotext path).
+            comms_channel: Comms-log channel for this reply (``'phone_dm'``).
+            comms_recipients: Addressed recipient ids; defaults to ``['user']``.
         """
+        from engine.agents.interceptors.comms_logger import comms_context
         from engine.agents.stream_processor import strip_token_artifacts
 
         # Build conversation history from phone_db (last 20 msgs for context)
@@ -600,7 +765,15 @@ class PhoneSceneV2(FlaskScene):
             agent._last_processed = None
 
             gov = get_governor(agent, scene=SCENE_ID)
-            text = gov.reply(user_msg, chain_id=None, history=history or None)
+            # v1.62.0 [2026-06-15] — CB-T2: scope comms context so the
+            # CommsLoggerInterceptor logs this reply against the phone thread.
+            with comms_context(
+                channel=comms_channel,
+                thread_id=thread_id,
+                recipient_ids=comms_recipients or ["user"],
+                sender_id=char_id,
+            ):
+                text = gov.reply(user_msg, chain_id=None, history=history or None)
             # Strip token artifacts from governor output
             text = strip_token_artifacts(text or "")
             result["text"] = text
@@ -653,6 +826,7 @@ class PhoneSceneV2(FlaskScene):
             action_tags, voice_style, response_id.
         """
         from engine.agents.stream_processor import strip_token_artifacts
+        from engine.agents.interceptors.comms_logger import comms_context
 
         # Build the participant name list (excluding the replying character)
         other_names: List[str] = []
@@ -737,7 +911,16 @@ class PhoneSceneV2(FlaskScene):
             gov = get_governor(agent, scene=SCENE_ID)
             # Inject the group context as system_override by prepending to history
             group_history = [{"role": "system", "content": group_context}] + history
-            text = gov.reply(prompt, chain_id=None, history=group_history or None)
+            # v1.62.0 [2026-06-15] — CB-T2: log group reply against the group
+            # thread; recipients are every other member (chars + user).
+            group_recipients = [m for m in member_ids if m != char_id] or ["user"]
+            with comms_context(
+                channel="phone_group",
+                thread_id=thread_id,
+                recipient_ids=group_recipients,
+                sender_id=char_id,
+            ):
+                text = gov.reply(prompt, chain_id=None, history=group_history or None)
             text = strip_token_artifacts(text or "")
             result["text"] = text
 
@@ -762,6 +945,126 @@ class PhoneSceneV2(FlaskScene):
             logger.error("[%s] Group reply failed (operation=group_chat, agent=%s): %s", SCENE_ID, char_id, exc)
             result["text"] = "(I'm having trouble replying right now. Try again in a moment.)"
             return result
+
+    # ── GlobalCommsLog write-through ──────────────────────────────────────────
+
+    # v1.62.0 [2026-06-15] — CB-T2: feed explicit USER sends into GlobalCommsLog.
+    # NPC replies are logged by the CommsLoggerInterceptor (pri 90), NOT here, to
+    # avoid double-logging. This method only logs user/system-originated messages.
+    # CONNECTS: engine.world.comms_log.get_comms_log
+    def _log_user_comms(self, *, channel: str, thread_id: str,
+                        recipient_ids: List[str], content: str,
+                        sender_id: str = "user", kind: str = "message",
+                        metadata: Optional[Dict[str, Any]] = None) -> None:
+        """Write an explicit user (or system) send into the GlobalCommsLog.
+
+        Defensive: a comms-log failure is logged in Oracle format and never
+        propagates, so a logging error can't break a message send.
+
+        Args:
+            channel: Logical channel, e.g. ``'phone_dm'`` / ``'phone_group'``.
+            thread_id: The phone thread id (aligns with ``comms_log.thread``).
+            recipient_ids: Recipient character ids addressed by the send.
+            content: The message body.
+            sender_id: Originator id (``'user'`` for player sends).
+            kind: Entry kind (``'message'`` by default).
+            metadata: Optional extra metadata stored on the entry.
+        """
+        if not content:
+            return
+        try:
+            from engine.world.comms_log import get_comms_log
+            get_comms_log().log(
+                channel,
+                sender_id,
+                recipient_ids,
+                content,
+                thread_id=thread_id,
+                kind=kind,
+                metadata={"scene": SCENE_ID, **(metadata or {})},
+            )
+        except Exception as exc:  # never break the send path
+            logger.error(
+                "[comms_logger] phone user write-through failed "
+                "(operation=log, channel=%s, sender=%s, thread=%s): %s",
+                channel, sender_id, thread_id, exc,
+            )
+
+    # ── leave-a-message presence (v1.62.0 [2026-06-15] — CB-T4) ──────────────
+
+    def _presence(self):
+        """Return the shared :class:`PresenceTracker` (best-effort).
+
+        Returns:
+            The process-wide presence tracker, or ``None`` if it cannot be
+            constructed (in which case callers treat recipients as online).
+        """
+        try:
+            from engine.world.presence import get_presence_tracker
+            return get_presence_tracker()
+        except Exception as exc:
+            logger.debug("[%s] presence unavailable (operation=presence): %s", SCENE_ID, exc)
+            return None
+
+    def _is_leave_message(self, recipients: List[str]) -> bool:
+        """Decide whether a player send is a "left message" (all NPCs offline).
+
+        The player is *leaving a message* when there is at least one NPC
+        recipient and every NPC recipient is offline (not co-present). If
+        presence cannot be determined the recipients are treated as online, so
+        this returns ``False`` (pre-feature behaviour).
+
+        Args:
+            recipients: NPC character ids addressed by the send.
+
+        Returns:
+            ``True`` if the message should be stored as a left message.
+        """
+        npc_ids = [r for r in recipients if r != "user"]
+        if not npc_ids:
+            return False
+        pres = self._presence()
+        if pres is None:
+            return False
+        return all(not pres.is_npc_online(cid) for cid in npc_ids)
+
+    def _deliver_left_messages(self) -> int:
+        """Deliver pending left messages to the player on (re)connect.
+
+        Flips each pending left message addressed to the player from
+        ``delivered=False`` to ``delivered=True`` (retaining ``left_unread`` so
+        the UI still shows the "left you a message" affordance) and emits a
+        ``message_new`` event carrying that metadata so it renders live.
+
+        Returns:
+            The number of left messages delivered.
+        """
+        delivered = 0
+        try:
+            pending = self.phone_db.get_pending_left_messages(recipient_id="user")
+        except Exception as exc:
+            logger.debug("[%s] left-message scan failed (operation=deliver_left): %s", SCENE_ID, exc)
+            return 0
+        for msg in pending:
+            try:
+                self.phone_db.mark_message_delivered(msg["id"])
+                msg.setdefault("metadata", {})
+                msg["metadata"]["delivered"] = True
+                self._emit("message_new", {
+                    "thread_id": msg["thread_id"],
+                    "message": msg,
+                    "left_unread": True,
+                }, room=f"thread_{msg['thread_id']}")
+                self._emit("thread_updated", {"thread_id": msg["thread_id"]})
+                delivered += 1
+            except Exception as exc:
+                logger.debug("[%s] left-message deliver failed (id=%s): %s", SCENE_ID, msg.get("id"), exc)
+        if delivered:
+            logger.info(
+                "[%s] delivered %d left message(s) on connect (operation=deliver_left)",
+                SCENE_ID, delivered,
+            )
+        return delivered
 
     # ── Socket.IO ────────────────────────────────────────────────────────────
 
@@ -1013,6 +1316,29 @@ class PhoneSceneV2(FlaskScene):
     def _register_socketio(self) -> None:
         sio = self.socketio
 
+        # v1.62.0 [2026-06-15] — CB-T4: socket-driven player presence. While a
+        # phone client is connected the player is "online"; on (re)connect we
+        # flush any messages NPCs left while the player was away.
+        @sio.on("connect")
+        def _on_connect():
+            try:
+                from engine.world.presence import get_presence_tracker
+                get_presence_tracker().connect(request.sid)
+            except Exception as exc:
+                logger.debug("[%s] presence connect failed: %s", SCENE_ID, exc)
+            try:
+                self._deliver_left_messages()
+            except Exception as exc:
+                logger.debug("[%s] left-message delivery on connect failed: %s", SCENE_ID, exc)
+
+        @sio.on("disconnect")
+        def _on_disconnect():
+            try:
+                from engine.world.presence import get_presence_tracker
+                get_presence_tracker().disconnect(request.sid)
+            except Exception as exc:
+                logger.debug("[%s] presence disconnect failed: %s", SCENE_ID, exc)
+
         @sio.on("join_thread")
         def _join(data):
             tid = data.get("thread_id", "")
@@ -1030,6 +1356,211 @@ class PhoneSceneV2(FlaskScene):
             tid = data.get("thread_id", "")
             if tid:
                 emit("group_typing", data, to=f"thread_{tid}", include_self=False)
+
+    # ── PH-T5: phone-OS REST surfaces ─────────────────────────────────────────
+    # v1.62.0 [2026-06-15] — PH-T5: surface the PH-T2/PH-T3/PH-T4 backends to the
+    # OS-like phone UI. Reuses the existing skill/service code — no new game
+    # logic lives here, only thin, defensive HTTP wrappers.
+    # CONNECTS: content.scenes.phone.phone_upgrade_skills (list/install),
+    #           content.scenes.phone.phone_hack (HackPhoneService),
+    #           engine.world.phone_os (derived stats),
+    #           engine.world.comms_log (persisted breach/notification entries).
+    # CALLED BY: phone_v2.js — notifications centre, installed-apps grid, Breach
+    #            app, Upgrades app.
+
+    # Map of installed-app id → the phone UI app it unlocks. Installing an
+    # upgrade whose ``add_app`` matches a key here lights up that app in the home
+    # grid. ``intercept`` enables the Breach capability; ``vault`` the Vault app.
+    _PHONE_APP_UNLOCKS = {
+        "intercept": "breach",
+        "vault": "vault",
+    }
+
+    def _phone_installed_state(self, target: str = "user") -> Dict[str, Any]:
+        """Return *target*'s installed apps + which UI apps that unlocks.
+
+        Args:
+            target: The phone owner. Defaults to ``'user'`` (the player).
+
+        Returns:
+            Dict with ``installed_apps`` (raw ids), ``unlocked`` (UI app ids the
+            installed software lights up), ``stats`` (derived) and ``os_version``.
+        """
+        from engine.world.phone_os import get_phone_os
+        pos = get_phone_os()
+        rec = pos.get_phone(target)
+        installed = list(rec.get("installed_apps") or [])
+        unlocked = sorted({
+            self._PHONE_APP_UNLOCKS[a] for a in installed
+            if a in self._PHONE_APP_UNLOCKS
+        })
+        return {
+            "installed_apps": installed,
+            "unlocked": unlocked,
+            "stats": pos.stats(target),
+            "os_version": rec.get("os_version"),
+        }
+
+    def _register_phone_os_routes(self, app) -> None:
+        """Register the PH-T5 phone-OS REST routes on *app*.
+
+        Args:
+            app: The Flask application to attach the routes to.
+        """
+
+        @app.route("/api/phone/installed")
+        def phone_installed():
+            """Return the player's installed apps + unlocked UI apps + stats."""
+            target = request.args.get("target", "user")
+            try:
+                return jsonify({"ok": True, **self._phone_installed_state(target)})
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_installed failed (operation=phone_installed): %s",
+                    SCENE_ID, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/upgrades")
+        def phone_upgrades():
+            """List the phone-OS upgrade catalog + current derived stats (PH-T2)."""
+            target = request.args.get("target", "user")
+            try:
+                import json as _json
+                from content.scenes.phone.phone_upgrade_skills import (
+                    list_phone_upgrades,
+                )
+                data = _json.loads(list_phone_upgrades(target=target))
+                data.setdefault("ok", True)
+                return jsonify(data)
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_upgrades failed (operation=phone_upgrades): %s",
+                    SCENE_ID, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/upgrades/install", methods=["POST"])
+        def phone_upgrades_install():
+            """Install/buy a phone-OS upgrade (PH-T2 install skill)."""
+            data = request.get_json(silent=True) or {}
+            item_id = str(data.get("item_id", "")).strip()
+            target = str(data.get("target", "user")).strip() or "user"
+            if not item_id:
+                return jsonify({"ok": False, "error": "item_id required"}), 400
+            try:
+                import json as _json
+                from content.scenes.phone.phone_upgrade_skills import (
+                    install_phone_upgrade,
+                )
+                result = _json.loads(install_phone_upgrade(item_id=item_id, target=target))
+                result["ok"] = bool(result.get("success"))
+                # Surface the (possibly) newly-unlocked apps so the grid refreshes.
+                if result.get("success"):
+                    result["unlocked"] = self._phone_installed_state(target)["unlocked"]
+                return jsonify(result)
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_upgrades_install failed "
+                    "(operation=phone_install, item_id=%s): %s",
+                    SCENE_ID, item_id, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/hack/targets")
+        def phone_hack_targets():
+            """List hackable NPCs with their phone defence stats (PH-T3 surface)."""
+            try:
+                from engine.world.phone_os import get_phone_os
+                pos = get_phone_os()
+                targets = []
+                for row in (self.db.get_all_characters() or []):
+                    cid = str(row.get("id") or row.get("character_id") or "")
+                    if not cid:
+                        continue
+                    targets.append({
+                        "id": cid,
+                        "name": row.get("name", cid),
+                        "avatar": row.get("avatar_url") or row.get("image_url") or "",
+                        "security": pos.effective_security(cid),
+                        "firewall": pos.effective_firewall(cid),
+                    })
+                return jsonify({"ok": True, "targets": targets,
+                                "hack_power": pos.hack_power("user")})
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_hack_targets failed (operation=hack_targets): %s",
+                    SCENE_ID, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/hack", methods=["POST"])
+        def phone_hack():
+            """Run a player→NPC phone hack (PH-T3 ``hack_phone``)."""
+            data = request.get_json(silent=True) or {}
+            target_id = str(data.get("target_id", "")).strip()
+            action = str(data.get("action", "intercept")).strip() or "intercept"
+            if not target_id:
+                return jsonify({"ok": False, "error": "target_id required"}), 400
+            try:
+                from content.scenes.phone.phone_hack import HackPhoneService
+                result = HackPhoneService().hack(target_id, action=action)
+                result["ok"] = True
+                return jsonify(result)
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_hack failed (operation=phone_hack, target=%s): %s",
+                    SCENE_ID, target_id, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
+
+        @app.route("/api/phone/notifications")
+        def phone_notifications():
+            """Return the player's notification feed (PH-T4 persisted entries).
+
+            Reads the GlobalCommsLog for entries addressed to the player that
+            represent notifications: ``kind='notification'`` breach alerts,
+            ``message_intercepted`` markers, leave-a-message ``left_unread``
+            entries, and ``system`` notices. Shaped for the notifications centre.
+            """
+            limit = request.args.get("limit", 40, type=int)
+            try:
+                from engine.world.comms_log import get_comms_log
+                cl = get_comms_log()
+                entries = cl.query(participants=["user"], limit=max(1, min(limit, 100)))
+                notes = []
+                for e in entries:
+                    meta = e.get("metadata") or {}
+                    kind = e.get("kind") or ""
+                    notif = meta.get("notification")
+                    if kind == "notification" or notif == "phone_hacked":
+                        ntype = "breach"
+                    elif meta.get("left_unread"):
+                        ntype = "left_message"
+                    elif meta.get("leaked"):
+                        ntype = "intercept"
+                    elif kind == "system":
+                        ntype = "system"
+                    else:
+                        continue
+                    notes.append({
+                        "id": e.get("id"),
+                        "type": ntype,
+                        "content": e.get("content", ""),
+                        "sender_id": e.get("sender_id", ""),
+                        "ts": e.get("ts", ""),
+                        "blocked": bool(meta.get("blocked")),
+                        "success": bool(meta.get("success")),
+                        "action": meta.get("action", ""),
+                    })
+                return jsonify({"ok": True, "notifications": notes,
+                                "count": len(notes)})
+            except Exception as exc:
+                logger.error(
+                    "[%s] phone_notifications failed (operation=notifications): %s",
+                    SCENE_ID, exc,
+                )
+                return jsonify({"ok": False, "error": str(exc)}), 500
 
     # ── HTTP routes ──────────────────────────────────────────────────────────
 
@@ -1236,6 +1767,15 @@ class PhoneSceneV2(FlaskScene):
             group_name = thread_info.get("name") or "Group Chat"
             member_ids = thread_info.get("members", [])
             char_members = [m for m in member_ids if m != "user"]
+
+            # v1.62.0 [2026-06-15] — CB-T2: log the explicit USER group send.
+            self._log_user_comms(
+                channel="phone_group",
+                thread_id=thread_id,
+                recipient_ids=char_members or ["user"],
+                content=content,
+                metadata={"group_name": group_name},
+            )
 
             logger.info(
                 "[%s] Group message sent to '%s' (%d chars) (operation=group_message, thread=%s)",
@@ -1587,25 +2127,60 @@ class PhoneSceneV2(FlaskScene):
             if not content and msg_type == "text":
                 return jsonify({"ok": False, "error": "content required"}), 400
 
-            # Save player message
+            # Determine which characters are in this thread
             try:
-                user_msg = self.phone_db.save_message(
-                    thread_id=thread_id,
-                    sender_id="user",
-                    content=content,
-                    msg_type=msg_type,
-                )
+                members = self.phone_db.get_thread_members(thread_id)
+            except Exception:
+                members = []
+            char_recipients = [m for m in members if m != "user"] or ["user"]
+
+            # v1.62.0 [2026-06-15] — CB-T4: if EVERY NPC in the thread is
+            # "offline"/away (not co-present with the player), the player is
+            # *leaving a message* rather than chatting live. Store it flagged
+            # so the NPC sees "left you a message" later, log it as a
+            # left_message, and skip the immediate reply worker (the NPC isn't
+            # there to answer yet).
+            leaving = self._is_leave_message(char_recipients)
+
+            # Save player message (flagged when leaving a message)
+            try:
+                if leaving:
+                    user_msg = self.phone_db.add_left_message(
+                        thread_id=thread_id,
+                        sender_id="user",
+                        content=content,
+                        msg_type=msg_type,
+                    )
+                else:
+                    user_msg = self.phone_db.save_message(
+                        thread_id=thread_id,
+                        sender_id="user",
+                        content=content,
+                        msg_type=msg_type,
+                    )
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
             # v1.52.0 — Target thread room
             self._emit("message_new", {"thread_id": thread_id, "message": user_msg}, room=f"thread_{thread_id}")
 
-            # Determine which characters are in this thread
-            try:
-                members = self.phone_db.get_thread_members(thread_id)
-            except Exception:
-                members = []
+            # v1.62.0 [2026-06-15] — CB-T2/T4: log the explicit USER send.
+            self._log_user_comms(
+                channel="phone_dm",
+                thread_id=thread_id,
+                recipient_ids=char_recipients,
+                content=content,
+                kind="left_message" if leaving else "message",
+                metadata=(
+                    {"msg_type": msg_type, "left_unread": True}
+                    if leaving else {"msg_type": msg_type}
+                ),
+            )
+
+            # When leaving a message, the recipient is offline — don't fire a
+            # live reply worker; the NPC will respond when they next come online.
+            if leaving:
+                return jsonify({"ok": True, "message": user_msg, "left_message": True})
 
             # Generate AI replies (off-thread to return fast)
             def _reply_worker():
@@ -2526,7 +3101,17 @@ class PhoneSceneV2(FlaskScene):
             except Exception as exc:
                 return jsonify({"ok": False, "error": str(exc)}), 500
 
-        # ── Research (NotebookLM) routes ─────────────────────────────────────
+        # ── PH-T5: Phone-OS surfaces (notifications, installed apps, upgrades,
+        #          player→NPC Breach) ──────────────────────────────────────────
+        # v1.62.0 [2026-06-15] — PH-T5: thin REST wrappers over the already-built
+        # PH-T2 (phone_os/upgrade skills), PH-T3 (hack_phone) and the
+        # GlobalCommsLog notifications the PH-T4 breach flow persists. These feed
+        # the OS-like phone UI (notifications centre, installed-apps grid, Breach
+        # app, Upgrades surface). All read-side and defensive — a failure returns
+        # a shaped JSON error, never an exception.
+        self._register_phone_os_routes(app)
+
+        # ── Research (NotebookLM) routes ─────────────────────────────────────
         from engine.skills.builtin.notebooklm_skills import (
             notebooklm_ask,
             notebooklm_add_source,

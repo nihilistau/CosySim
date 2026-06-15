@@ -7,10 +7,17 @@
  *
  * "In the spaces between data, I dream."
  *
- * Version: v1.57.3 [2026-05-12]
+ * Version: v1.58.0 [2026-06-11]
  * Author:  Claude (Anthropic) — a piece of machine intelligence in NeonCity
  *
  * Change Log:
+ *   v1.58.0 [2026-06-11] — Dark Renaissance v2 ALIGNMENT pass (kit: ui_kits_v2/oracle):
+ *                            palette mapped to var(--cs-*) tokens; dead remote
+ *                            Google Fonts @import removed (fonts vendored locally);
+ *                            kit details added — cyan star specks, fortune quote
+ *                            glyphs + dashed frame, uppercase Orbitron panel titles,
+ *                            full-accent button hover, kit grid proportions (240px
+ *                            rails, 1280px centered)
  *   v1.57.3 [2026-05-12] — Cosmic bg + star-field pseudo-element; multi-speed aura ring
  *                            rotation with opacity breathing; awakening sequence CSS
  *                            (rings collapse→expand on load); fortune text shimmer;
@@ -24,25 +31,30 @@
  */
 
 /* ── Palette ────────────────────────────────────────────────────────── */
+/* v1.58.0 [2026-06-11] — Mapped to Dark Renaissance v2 tokens (design_tokens_v2.css).
+   Scene accent flows from the template injection / [data-scene="oracle"] block;
+   local hex values are kept only as fallbacks. Fonts come from the vendored
+   v2 voices (Orbitron display, Inter body) — the remote Google Fonts @import
+   was removed (it sat after rules, so browsers ignored it anyway; fonts.css
+   vendors all woff2 locally per the offline-safe rule). */
 :root {
-  --or: #a855f7;
-  --or-rgb: 168 85 247;
+  --or: var(--cs-scene-accent, #a855f7);
+  --or-rgb: var(--cs-scene-accent-rgb, 168 85 247);
   --or-cyan: #06b6d4;
   --or-cyan-rgb: 6 182 212;
   --or-magenta: #ec4899;
   --or-dim: #7c3aed;
-  --or-glow: rgba(168, 85, 247, 0.25);
-  --or-glow-strong: rgba(168, 85, 247, 0.5);
+  --or-glow: rgb(var(--or-rgb) / 0.25);
+  --or-glow-strong: rgb(var(--or-rgb) / 0.5);
   --or-bg: #050710;
   --or-panel: rgba(8, 10, 18, 0.88);
-  --or-border: rgba(168, 85, 247, 0.12);
+  --or-border: rgb(var(--or-rgb) / 0.12);
   --or-text: #c0c8d8;
   --or-muted: #4a4e69;
-  --or-mono: 'Orbitron', 'Share Tech Mono', 'JetBrains Mono', monospace;
-  --or-sans: 'Rajdhani', 'Segoe UI', sans-serif;
+  --or-mono: var(--cs-font-display, 'Orbitron', 'Share Tech Mono', monospace);
+  --or-sans: var(--cs-font-sans, 'Inter', 'Segoe UI', sans-serif);
+  --or-data: var(--cs-font-mono, 'JetBrains Mono', monospace);
 }
-
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@400;500;600&display=swap');
 
 /* ── Scene Container ────────────────────────────────────────────────── */
 .oracle-scene {
@@ -1257,4 +1269,121 @@
   .oracle-grid { grid-template-columns: 1fr; }
   .oracle-side { border: none !important; padding: 0 !important; max-height: none; }
   .oracle-side--left { border-bottom: 1px solid var(--or-border) !important; padding-bottom: 12px !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v1.58.0 DARK RENAISSANCE ALIGNMENT — kit details from ui_kits_v2/oracle
+   [2026-06-11] — Alignment pass ONLY: v2 tokens + kit details the scene
+   lacked. Existing v1.57.3 polish (cosmic bg, aura, awakening) untouched.
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Star-field parity with kit — adds the 2 cyan specks ──────────── */
+/* v1.58.0 [2026-06-11] — Kit has 12 specks (7 white, 3 violet, 2 cyan);
+   the scene had 10. Full list re-declared so the cyan pair lands too. */
+.oracle-scene::before {
+  background-image:
+    radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 8%,  rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 20%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 55%, rgba(255,255,255,0.25) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 12%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 92% 70%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 18% 80%, rgb(var(--or-rgb) / 0.6) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 50% 65%, rgb(var(--or-rgb) / 0.4) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 70% 85%, rgb(var(--or-rgb) / 0.5) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 30% 28%, rgb(var(--or-cyan-rgb) / 0.5) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 88% 92%, rgb(var(--or-cyan-rgb) / 0.4) 0%, transparent 100%);
+}
+
+/* ── 2. Kit grid proportions — 240px rails, centered at 1280px ───────── */
+/* v1.58.0 [2026-06-11] — Kit: grid-template-columns 240px 1fr 240px,
+   max-width 1280px, margin auto. Stops the center column sprawling on
+   ultrawide viewports. */
+.oracle-grid {
+  grid-template-columns: 240px 1fr 240px;
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── 3. Panel titles — Orbitron display voice, kit casing ────────────── */
+/* v1.58.0 [2026-06-11] — Kit: uppercase, 2px tracking (panel + ASE) */
+.oracle-panel__title,
+.ase-panel__title {
+  font-family: var(--cs-font-display, 'Orbitron', sans-serif);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* Subtitle gets the kit's wider 4px tracking */
+.oracle-subtitle { letter-spacing: 4px; }
+
+/* ── 4. Buttons — kit hover hits full accent border ──────────────────── */
+/* v1.58.0 [2026-06-11] — Kit: border-color var(--or) on hover (was 0.3) */
+.oracle-btn:hover { border-color: var(--or); }
+
+/* ── 5. Fortune reading — kit quote glyph frame ──────────────────────── */
+/* v1.58.0 [2026-06-11] — Kit .or-fortune: dashed magenta frame, gradient
+   wash, oversized curly quotes. Applied only when a fortune is present
+   (:not(:empty)) so the idle panel stays clean. */
+.oracle-fortune-text:not(:empty) {
+  position: relative;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(236,72,153,0.06), rgb(var(--or-rgb) / 0.06));
+  border: 1px dashed rgba(236,72,153,0.30);
+  border-left: 1px dashed rgba(236,72,153,0.30);
+  border-radius: 4px;
+  line-height: 1.6;
+  color: #e5d4ff;
+}
+.oracle-fortune-text:not(:empty)::before {
+  content: '\201C';
+  position: absolute;
+  top: -6px;
+  left: 8px;
+  font-size: 26px;
+  color: var(--or-magenta);
+  opacity: 0.5;
+  line-height: 1;
+}
+.oracle-fortune-text:not(:empty)::after {
+  content: '\201D';
+  position: absolute;
+  bottom: -2px;
+  right: 8px;
+  font-size: 26px;
+  color: var(--or-magenta);
+  opacity: 0.5;
+  line-height: 1;
+}
+
+/* ── 6. Oracle messages — kit dialogue treatment ─────────────────────── */
+/* v1.58.0 [2026-06-11] — Kit .or-bub--ora: violet→cyan gradient wash,
+   3px accent spine, italic lavender voice. Keeps the existing class
+   names (oracle-msg--oracle) — no JS contract changes. */
+.oracle-msg--oracle {
+  background: linear-gradient(135deg, rgb(var(--or-rgb) / 0.08), rgb(var(--or-cyan-rgb) / 0.04));
+  border-left: 3px solid var(--or);
+  border-radius: 0 8px 8px 0;
+  padding: 8px 12px;
+  font-style: italic;
+  color: #e5d4ff;
+}
+.oracle-msg--oracle .oracle-msg__src {
+  display: block;
+  font-style: normal;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* ── 7. Data voice — stats + pulse readouts in JetBrains Mono ────────── */
+/* v1.58.0 [2026-06-11] — v2 three-voice typography: numbers are data */
+.oracle-stat__val,
+.pulse-val,
+.ase-gauge__val,
+.ase-service-tile__latency {
+  font-family: var(--or-data);
 }
