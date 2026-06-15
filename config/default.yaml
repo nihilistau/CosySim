@@ -879,6 +879,10 @@ comms:
     relationship_context:     true    # inject player-NPC relationship into system prompt
     grammar_scanner:          true    # post-call grammar/quality scanner → training signal
   stats_poll_interval_ms: 2000  # how often the browser overlay polls /api/stats/live
+  # ── v1.62.0 [2026-06-15] — GlobalCommsLog backbone ──────────────────
+  log:
+    db_path: "data/comms_log.db"  # single source of truth for all communication
+    max_rows: 50000               # prune() cap to bound growth
 
 # Framework settings
 framework:
