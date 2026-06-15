@@ -1207,4 +1207,18 @@ emergent:
     lay_low_boost: 0.50      # added on top of the current max so LAY_LOW sorts first
     success_decay: 0.30      # subtracted from a satisfied goal's priority
     failure_bump: 0.30       # added to a thwarted goal's priority
+  # ── v1.63.0 [2026-06-15] — A4: hybrid planner tuning ──
+  # Weights for the PURE action planner (utility = priority * fit * feasibility)
+  # and the verb dispatcher. engine/world/emergent/planner.py reads these via
+  # get_config().get("emergent.planner.*", default). The planner DISPATCHES to
+  # the existing managers (market/territory/crew/phone_hack/relationship_effects/
+  # npc_comms) — it does not re-implement them.
+  planner:
+    priority_weight: 1.0     # weight on the goal's own priority
+    fit_weight: 1.0          # weight on how well the verb fits the goal
+    feasibility_weight: 1.0  # weight on whether the action is even possible
+    min_utility: 0.01        # below this, plan_action returns None
+    llm_chance: 0.05         # P(use_llm) for a PIVOTAL action (kept rare)
+    trade_default_qty: 1     # default quantity for a trade dispatch
+    contest_delta: 3.0       # control delta for a contest (clamped to CONTROL_SHIFT_RANGE)
 
