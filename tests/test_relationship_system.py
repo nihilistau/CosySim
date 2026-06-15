@@ -264,15 +264,29 @@ class TestRelationshipContextInterceptor:
             "system_prompt": "You are Lola.",
         }
 
+    # v1.62.0 [2026-06-15] — Test rewritten to match the interceptor's real
+    # contract: it reads PlayerProfile.relationships (keyed by agent_id) via
+    # get_player_profile() and injects a "[RELATIONSHIP CONTEXT — <ID>]" block.
+    # The previous version patched engine.agents.character_memory.get_character_memory
+    # and asserted a "relationship with player" string — neither the patched
+    # function nor that output format is used by RelationshipContextInterceptor
+    # (stale since the interceptor was switched to PlayerProfile). Pre-existing
+    # failure on origin/master; not related to the NPC↔NPC pair work on this branch.
     def test_injects_relationship_note(self):
+        from engine.characters.player_profile import PlayerProfile
+
         interceptor = self._make_interceptor()
-        mem = CharacterMemory("lola")
-        mem.set_relationship("player", 0.8)
+        profile = PlayerProfile()
+        profile.update_relationship("lola", 80.0, notes="helped me out")
         ctx = self._ctx()
-        # The interceptor does a lazy import, so patch the function at its source module
-        with patch("engine.agents.character_memory.get_character_memory", return_value=mem):
+        # The interceptor looks up the agent_id ("lola") in PlayerProfile.relationships.
+        with patch(
+            "engine.agents.relationship_interceptor.get_player_profile",
+            return_value=profile,
+        ):
             interceptor.pre_call(ctx)
-        assert "relationship with player" in ctx["system_prompt"]
+        assert "[RELATIONSHIP CONTEXT — LOLA]" in ctx["system_prompt"]
+        assert "helped me out" in ctx["system_prompt"]
 
     def test_missing_agent_id_skips_injection(self):
         interceptor = self._make_interceptor()
