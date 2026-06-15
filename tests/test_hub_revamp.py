@@ -121,7 +121,9 @@ class TestGetAllScenesStatusSkill:
         def _mock_port(port: int) -> bool:
             return all_online
 
-        with patch("content.scenes.hub.hub_skills._port_open", side_effect=_mock_port):
+        # v1.62.0 [2026-06-15] — hub_skills uses port_is_open (from engine.utils),
+        # not a local _port_open; patch the actual imported symbol.
+        with patch("content.scenes.hub.hub_skills.port_is_open", side_effect=_mock_port):
             result_str = get_all_scenes_status()
 
         return json.loads(result_str)
@@ -129,7 +131,7 @@ class TestGetAllScenesStatusSkill:
     def test_get_all_scenes_status_returns_json_string(self) -> None:
         """Skill must return a valid JSON string."""
         from content.scenes.hub.hub_skills import get_all_scenes_status
-        with patch("content.scenes.hub.hub_skills._port_open", return_value=False):
+        with patch("content.scenes.hub.hub_skills.port_is_open", return_value=False):
             result = get_all_scenes_status()
         assert isinstance(result, str)
         data = json.loads(result)
@@ -265,14 +267,19 @@ class TestHubStaticAssets:
         assert path.is_file(), f"Missing script: {path}"
 
     def test_hub_html_contains_scene_grid_neon_world(self) -> None:
-        """hub.html must define the neon_world scene grid container."""
+        """hub.html must define the NeonCity (game pillar) scene grid container."""
+        # v1.62.0 [2026-06-15] — v1.52 migrated hub.html to the three-pillar
+        # layout: grids are keyed by pillar id (game/service/creation), not the
+        # old presentation groups (neon_world/action/system).
         html = (_HUB_DIR / "templates" / "hub.html").read_text(encoding="utf-8")
-        assert "scene-grid-neon_world" in html
+        assert "scene-grid-game" in html
 
     def test_hub_html_contains_scene_grid_action(self) -> None:
-        """hub.html must define the action scene grid container."""
+        """hub.html must define the service-pillar scene grid container."""
+        # v1.62.0 [2026-06-15] — see note above; "action" group folded into the
+        # three pillars. Assert the service pillar grid exists.
         html = (_HUB_DIR / "templates" / "hub.html").read_text(encoding="utf-8")
-        assert "scene-grid-action" in html
+        assert "scene-grid-service" in html
 
     def test_hub_html_contains_world_state_panel(self) -> None:
         """hub.html must include the world-state panel."""
@@ -285,9 +292,13 @@ class TestHubStaticAssets:
         assert "economy-summary" in html
 
     def test_hub_html_has_data_scene_hub(self) -> None:
-        """body tag must carry data-scene='hub'."""
+        """hub.html must identify itself as the 'hub' scene."""
+        # v1.62.0 [2026-06-15] — v1.52 migrated hub.html to extend neon_base.html,
+        # which renders data-scene="{{ scene_key }}" on <html>/<body>. The hub
+        # template sets scene_key = "hub"; the literal data-scene attribute lives
+        # in the base template, so assert the scene_key declaration here.
         html = (_HUB_DIR / "templates" / "hub.html").read_text(encoding="utf-8")
-        assert 'data-scene="hub"' in html
+        assert 'set scene_key = "hub"' in html
 
     def test_hub_css_contains_scene_card(self) -> None:
         """hub.css must define .scene-card styles."""
@@ -376,7 +387,7 @@ class TestHubFlaskRoutes:
 
     def test_api_scenes_returns_200(self, hub_client) -> None:
         """GET /api/scenes → 200 JSON."""
-        with patch("content.scenes.hub.hub_flask._port_open", return_value=False):
+        with patch("content.scenes.hub.hub_flask.port_is_open", return_value=False):
             res = hub_client.get("/api/scenes")
         assert res.status_code == 200
         data = json.loads(res.data)
@@ -385,7 +396,7 @@ class TestHubFlaskRoutes:
 
     def test_api_scenes_contains_status_field(self, hub_client) -> None:
         """Each scene in /api/scenes must carry a 'status' field."""
-        with patch("content.scenes.hub.hub_flask._port_open", return_value=False):
+        with patch("content.scenes.hub.hub_flask.port_is_open", return_value=False):
             res = hub_client.get("/api/scenes")
         for scene in json.loads(res.data):
             assert "status" in scene
