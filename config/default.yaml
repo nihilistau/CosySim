@@ -1285,3 +1285,15 @@ war_room:
     - {min: 200, rank: "Power Player"}
     - {min: 320, rank: "Kingpin"}
 
+  # ── v1.63.0 [2026-06-16] — C-T4: War Room command knobs ──
+  # All read via get_config().get("war_room.*", default); built-in defaults exist.
+  contest_delta: 5.0             # control points a single contest command shifts
+  op_duration_secs: 1800         # default crew operation duration (30 min)
+  op_reward_credits: 1500        # base credit reward for a successful operation
+  op_reward_xp: 40               # base XP per crew member on a successful op
+  diplomacy:
+    ally_standing: 60            # player standing set when allying a faction
+    war_standing: -80            # player standing set when declaring war
+    neutral_standing: 0          # player standing set when going neutral
+    cascade: true                # propagate standing changes to related factions
+
