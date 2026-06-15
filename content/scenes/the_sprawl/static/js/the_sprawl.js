@@ -5,11 +5,19 @@
  * an SVG district map shaded by each district's dominant faction (contested
  * zones pulse + hatch), NPC tokens clustered per district, a faction
  * leaderboard, a live City Pulse event feed and a player HUD strip.
+ * v1.63.0 [2026-06-16] — Player agency (B-T4): a PLAYER avatar ("YOU") rendered
+ * in the player's district; click a district → "Travel here" (POST
+ * /api/sprawl/travel, optimistic + reconcile); click an NPC/district → a neon
+ * action menu (Talk/Hack/Deal/Recruit/Contest, POST /api/sprawl/intervene) with
+ * a toast result. Contest greys out with a tooltip when there's no allegiance.
  *
  * Data sources:
  *   - GET /api/sprawl/state  → {districts, factions, npcs, player, ts}
  *   - GET /api/sprawl/events?since=0 → {events, since}  (seeds the feed)
- *   - Socket.IO: `sprawl_update` (full state → re-render map/NPCs/leaderboard/HUD)
+ *   - GET /api/sprawl/actions → {faction, actions}  (gates the Contest item)
+ *   - POST /api/sprawl/travel {district}      (B-T4: move the avatar)
+ *   - POST /api/sprawl/intervene {action,...} (B-T4: act via existing verbs)
+ *   - Socket.IO: `sprawl_update` (full state → re-render map/NPCs/leaderboard/HUD/avatar)
  *                `sprawl_event`  (one event → prepend feed + flash its district)
  *                `state_update`  (scene identity / clock for the HUD)
  *
@@ -46,11 +54,33 @@
     OUTSKIRTS:     { x: 355, y: 510, w: 605, h: 210, label: 'OUTSKIRTS' }
   };
 
+  // v1.63.0 [2026-06-16] — B-T4: a non-district / "X" player location maps to a
+  // sensible default zone so the avatar always renders somewhere on the map.
+  var DEFAULT_DISTRICT = 'DOWNTOWN';
+
+  // v1.63.0 [2026-06-16] — B-T4: the intervention menu (mirrors backend
+  // _INTERVENE_ACTIONS / _available_actions in the_sprawl_scene.py).
+  var ACTION_DEFS = [
+    { action: 'talk', label: 'Talk', needs: 'target' },
+    { action: 'hack', label: 'Hack', needs: 'target' },
+    { action: 'deal', label: 'Deal', needs: 'district' },
+    { action: 'recruit', label: 'Recruit', needs: 'target' },
+    { action: 'contest', label: 'Contest', needs: 'faction' }
+  ];
+
   var $ = function (id) { return document.getElementById(id); };
 
   function setText(id, value) {
     var el = $(id);
     if (el) el.textContent = value;
+  }
+
+  /** Resolve a player location string to a canonical district id we can render. */
+  function districtForLocation(loc) {
+    if (loc && DISTRICT_LAYOUT.hasOwnProperty(loc)) return loc;
+    var up = (loc || '').toUpperCase();
+    if (DISTRICT_LAYOUT.hasOwnProperty(up)) return up;
+    return DEFAULT_DISTRICT;
   }
 
   function facColor(faction) {
@@ -97,6 +127,9 @@
       var group = el('g', { class: 'district-zone' + (d.contested ? ' is-contested' : '') });
       group.setAttribute('data-district', d.id);
       group.style.color = color; // for flash drop-shadow currentColor
+      // v1.63.0 [2026-06-16] — B-T4: click a district → travel / district menu.
+      group.addEventListener('click', onDistrictClick);
+      group.style.cursor = 'pointer';
 
       // Tinted fill (semi-transparent so the backdrop bleeds through).
       var fill = el('rect', {
@@ -196,12 +229,16 @@
           fill: color
         });
         dot.setAttribute('data-name', n.name || n.id || '');
+        dot.setAttribute('data-id', n.id || '');
+        dot.setAttribute('data-district', district);
         dot.setAttribute('data-sex', n.sex || '');
         dot.setAttribute('data-faction', n.faction || 'unaligned');
         dot.setAttribute('data-activity', n.activity || 'idle');
         dot.addEventListener('mouseenter', onTokenEnter);
         dot.addEventListener('mousemove', onTokenMove);
         dot.addEventListener('mouseleave', onTokenLeave);
+        // v1.63.0 [2026-06-16] — B-T4: click an NPC token → intervene menu.
+        dot.addEventListener('click', onTokenClick);
         g.appendChild(dot);
       });
     });
@@ -448,6 +485,228 @@
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  //  Player avatar (B-T4)
+  // ════════════════════════════════════════════════════════════════════════
+  // v1.63.0 [2026-06-16] — Render the PLAYER marker (a distinct double-ring glyph
+  // labelled "YOU") in the district resolved from state.player.location. Any
+  // non-district / "X" location maps to DEFAULT_DISTRICT with a small note.
+
+  var playerFaction = null; // cached from /api/sprawl/actions (gates Contest)
+
+  function renderAvatar(player) {
+    var g = $('sprawl-avatar');
+    if (!g) return;
+    g.innerHTML = '';
+    var loc = (player && player.location) || '';
+    var district = districtForLocation(loc);
+    var layout = DISTRICT_LAYOUT[district];
+    if (!layout) return;
+    var offmap = !(loc && (DISTRICT_LAYOUT.hasOwnProperty(loc) ||
+      DISTRICT_LAYOUT.hasOwnProperty((loc || '').toUpperCase())));
+
+    // Park the avatar at the top-right corner of its district block.
+    var cx = layout.x + layout.w - 30;
+    var cy = layout.y + 34;
+
+    var grp = el('g', { class: 'sprawl-avatar' });
+    grp.appendChild(el('circle', {
+      class: 'sprawl-avatar__halo', cx: cx, cy: cy, r: 16,
+      fill: 'none', stroke: 'var(--sprawl-accent)', 'stroke-width': 2
+    }));
+    grp.appendChild(el('circle', {
+      class: 'sprawl-avatar__core', cx: cx, cy: cy, r: 7,
+      fill: 'var(--sprawl-accent)'
+    }));
+    var lbl = el('text', {
+      class: 'sprawl-avatar__label', x: cx, y: cy - 22, 'text-anchor': 'middle'
+    });
+    lbl.textContent = 'YOU';
+    grp.appendChild(lbl);
+    if (offmap) {
+      var note = el('text', {
+        class: 'sprawl-avatar__note', x: cx, y: cy + 28, 'text-anchor': 'middle'
+      });
+      note.textContent = '(' + (loc || 'unknown') + ')';
+      grp.appendChild(note);
+    }
+    g.appendChild(grp);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  Action menu + toasts (B-T4)
+  // ════════════════════════════════════════════════════════════════════════
+
+  function hideMenu() {
+    var menu = $('sprawl-menu');
+    if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+  }
+
+  /** Position the menu near a click within the map container. */
+  function positionMenu(menu, clientX, clientY) {
+    var map = document.querySelector('.sprawl-map');
+    if (!map) return;
+    var rect = map.getBoundingClientRect();
+    var x = clientX - rect.left;
+    var y = clientY - rect.top;
+    // Keep it on-screen.
+    menu.style.left = Math.min(x, rect.width - 180) + 'px';
+    menu.style.top = Math.min(y, rect.height - 40) + 'px';
+  }
+
+  /**
+   * Open the neon action menu. ctx = {targetId?, targetName?, district}.
+   * Items are enabled/disabled per their requirement (target / district /
+   * faction allegiance) and show a tooltip explaining any disabled state.
+   */
+  function openMenu(ctx, clientX, clientY) {
+    var menu = $('sprawl-menu');
+    if (!menu) return;
+    menu.innerHTML = '';
+
+    var head = document.createElement('div');
+    head.className = 'sprawl-menu__head';
+    head.textContent = ctx.targetId
+      ? (ctx.targetName || ctx.targetId)
+      : (DISTRICT_LAYOUT[ctx.district] ? DISTRICT_LAYOUT[ctx.district].label : ctx.district);
+    menu.appendChild(head);
+
+    // Travel affordance when opening on a district the player isn't in.
+    var here = districtForLocation((lastState.player || {}).location || '');
+    if (ctx.district && ctx.district !== here && !ctx.targetId) {
+      var travelBtn = document.createElement('button');
+      travelBtn.type = 'button';
+      travelBtn.className = 'sprawl-menu__item sprawl-menu__item--travel';
+      travelBtn.textContent = 'Travel here';
+      travelBtn.addEventListener('click', function () {
+        hideMenu();
+        doTravel(ctx.district);
+      });
+      menu.appendChild(travelBtn);
+    }
+
+    ACTION_DEFS.forEach(function (def) {
+      var enabled = true, reason = '';
+      if (def.needs === 'target') {
+        enabled = !!ctx.targetId;
+        reason = 'select an NPC';
+      } else if (def.needs === 'district') {
+        enabled = !!ctx.district;
+        reason = 'no district';
+      } else if (def.needs === 'faction') {
+        enabled = !!playerFaction;
+        reason = 'no faction allegiance (set one in the War Room)';
+      }
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sprawl-menu__item' + (enabled ? '' : ' is-disabled');
+      btn.textContent = def.label;
+      if (!enabled) { btn.disabled = true; btn.title = reason; }
+      else {
+        btn.addEventListener('click', function () {
+          hideMenu();
+          doIntervene(def.action, ctx.targetId, ctx.district);
+        });
+      }
+      menu.appendChild(btn);
+    });
+
+    menu.hidden = false;
+    positionMenu(menu, clientX, clientY);
+  }
+
+  function onTokenClick(ev) {
+    ev.stopPropagation();
+    var t = ev.target;
+    openMenu({
+      targetId: t.getAttribute('data-id') || '',
+      targetName: t.getAttribute('data-name') || '',
+      district: t.getAttribute('data-district') || ''
+    }, ev.clientX, ev.clientY);
+  }
+
+  function onDistrictClick(ev) {
+    var grp = ev.currentTarget;
+    var district = grp.getAttribute('data-district') || '';
+    openMenu({ targetId: '', targetName: '', district: district },
+      ev.clientX, ev.clientY);
+  }
+
+  // ── Toasts ────────────────────────────────────────────────────────────────
+  function toast(message, ok) {
+    var wrap = $('sprawl-toasts');
+    if (!wrap || !message) return;
+    var t = document.createElement('div');
+    t.className = 'sprawl-toast ' + (ok ? 'is-ok' : 'is-bad');
+    t.textContent = message;
+    wrap.appendChild(t);
+    setTimeout(function () { t.classList.add('is-out'); }, 3200);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 3700);
+  }
+
+  // ── POST helpers ────────────────────────────────────────────────────────────
+  function postJson(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); });
+  }
+
+  function doTravel(district) {
+    // Optimistic: move the avatar now; reconcile on the response / sprawl_update.
+    var prev = (lastState.player || {}).location;
+    lastState.player = lastState.player || {};
+    lastState.player.location = district;
+    renderAvatar(lastState.player);
+
+    postJson('/api/sprawl/travel', { district: district })
+      .then(function (res) {
+        if (res && res.ok) {
+          if (res.player) { lastState.player = res.player; renderPlayer(res.player); }
+          renderAvatar(lastState.player);
+          var cost = res.energy_cost ? (' · -' + res.energy_cost + ' energy') : '';
+          toast('Travelled to ' + (res.location || district) + cost, true);
+        } else {
+          // Reconcile: roll back the optimistic move.
+          lastState.player.location = prev;
+          renderAvatar(lastState.player);
+          toast((res && res.reason) || 'Travel failed', false);
+        }
+      })
+      .catch(function (err) {
+        lastState.player.location = prev;
+        renderAvatar(lastState.player);
+        console.warn('[the_sprawl] travel failed', err);
+        toast('Travel failed', false);
+      });
+  }
+
+  function doIntervene(action, targetId, district) {
+    postJson('/api/sprawl/intervene', {
+      action: action, target_id: targetId || '', district: district || ''
+    })
+      .then(function (res) {
+        res = res || {};
+        var msg = res.message || res.reason ||
+          (res.ok ? (action + ' ok') : (action + ' failed'));
+        toast(msg, !!res.ok);
+        // The feed + map flash react via the server's sprawl_event broadcast.
+      })
+      .catch(function (err) {
+        console.warn('[the_sprawl] intervene failed', err);
+        toast(action + ' failed', false);
+      });
+  }
+
+  /** Fetch the player's faction once so the Contest item gates correctly. */
+  function refreshFaction() {
+    fetch('/api/sprawl/actions')
+      .then(function (r) { return r.json(); })
+      .then(function (data) { if (data) playerFaction = data.faction || null; })
+      .catch(function () { /* graceful: Contest just stays disabled */ });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   //  Full state apply
   // ════════════════════════════════════════════════════════════════════════
 
@@ -463,6 +722,7 @@
     renderNpcs(lastState.npcs);
     renderLeaderboard(lastState.factions);
     renderPlayer(lastState.player);
+    renderAvatar(lastState.player);
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -489,6 +749,16 @@
 
   function init() {
     startClock();
+    refreshFaction();
+
+    // v1.63.0 [2026-06-16] — B-T4: dismiss the action menu on outside click / Esc.
+    document.addEventListener('click', function (ev) {
+      var menu = $('sprawl-menu');
+      if (menu && !menu.hidden && !menu.contains(ev.target)) hideMenu();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') hideMenu();
+    });
 
     if (typeof io !== 'function') {
       console.warn('[the_sprawl] Socket.IO client unavailable');

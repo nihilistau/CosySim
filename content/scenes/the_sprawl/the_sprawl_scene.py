@@ -40,9 +40,18 @@ Change Log:
                             GET /api/sprawl/events?since=; EventBus subscription
                             pushing sprawl_update (throttled) + sprawl_event;
                             per-source defensive (never 500).
+    v1.63.0 [2026-06-16] — Player agency (B-T4): POST /api/sprawl/travel (avatar
+                            moves + small energy cost), POST /api/sprawl/intervene
+                            (talk/hack/deal/recruit/contest dispatched to EXISTING
+                            verbs — player relationship / phone_hack / market /
+                            crew / territory; contest gated on faction allegiance)
+                            and GET /api/sprawl/actions (the menu). Successful
+                            interventions log to the City Pulse feed + emit
+                            sprawl_event; all entry points defensive (never 500).
 
 CONNECTS: FlaskScene, SocketIO, TerritoryManager, RoutineManager, Database,
-          EmergentStore, PlayerState, EventBus, get_config
+          EmergentStore, PlayerState, PlayerProfile, CrewManager, Market,
+          phone_hack, EventBus, get_config
 CALLED BY: launcher.py, TUI, hub
 EMITS: state_update, sprawl_update, sprawl_event Socket.IO events
 """
@@ -66,6 +75,12 @@ SCENE_ID = "the_sprawl"
 _EVT_TICK = "living_world_tick"        # LivingWorld.tick → result.to_dict()
 _EVT_ACTION = "emergent_action"        # EmergentAgency → {npc_id,verb,target,ok,...}
 _EVT_TERRITORY = "territory_shift"     # TerritoryManager → TerritoryEvent.to_dict()
+
+# v1.63.0 [2026-06-16] — Canonical interventions the player can drive (B-T4).
+# Each dispatches to an EXISTING engine verb (talk→player relationship,
+# hack→phone_hack, deal→market, recruit→crew, contest→territory). Kept in sync
+# with the client action menu in static/js/the_sprawl.js.
+_INTERVENE_ACTIONS = ("talk", "hack", "deal", "recruit", "contest")
 
 
 # ──── Scene Implementation ────────────────────────────────────
@@ -160,6 +175,30 @@ class TheSprawlScene(FlaskScene):
         def get_sprawl_events():
             since = self._parse_since(request.args.get("since"))
             return jsonify({"events": self._merged_events(since=since), "since": since})
+
+        # v1.63.0 [2026-06-16] — Player avatar travel (B-T4)
+        @app.route("/api/sprawl/travel", methods=["POST"])
+        def post_sprawl_travel():
+            data = request.get_json(force=True, silent=True) or {}
+            return jsonify(self._do_travel(str(data.get("district", "")).strip()))
+
+        # v1.63.0 [2026-06-16] — Player interventions via existing verbs (B-T4)
+        @app.route("/api/sprawl/intervene", methods=["POST"])
+        def post_sprawl_intervene():
+            data = request.get_json(force=True, silent=True) or {}
+            return jsonify(self._do_intervene(
+                action=str(data.get("action", "")).strip(),
+                target_id=str(data.get("target_id", "")).strip() or None,
+                district=str(data.get("district", "")).strip() or None,
+            ))
+
+        # v1.63.0 [2026-06-16] — Available action menu for a target/district (B-T4)
+        @app.route("/api/sprawl/actions")
+        def get_sprawl_actions():
+            return jsonify(self._available_actions(
+                target_id=(request.args.get("target_id") or "").strip() or None,
+                district=(request.args.get("district") or "").strip() or None,
+            ))
 
     def _setup_socketio_handlers(self) -> None:
         """Register Socket.IO event handlers."""
@@ -479,6 +518,365 @@ class TheSprawlScene(FlaskScene):
             self._scene_to_district = mapping
         return self._scene_to_district.get(scene_name, "unknown")
 
+    # ──── Player agency: travel + intervene (B-T4) ───────────────────
+    # v1.63.0 [2026-06-16] — The player's avatar walks the city and acts on it
+    # through the EXISTING engine verbs. Every entry point is defensive: a bad
+    # request or a failing verb yields {ok: False, ...} and NEVER raises/500.
+
+    @staticmethod
+    def _canonical_districts() -> List[str]:
+        """Return the canonical 6-district list (reuses territory.DISTRICT_NAMES).
+
+        Falls back to the literal six on import failure so the validator always
+        works (the scene must never 500).
+        """
+        try:
+            from engine.world.territory import DISTRICT_NAMES  # noqa: PLC0415
+            if DISTRICT_NAMES:
+                return list(DISTRICT_NAMES)
+        except Exception:  # territory optional in minimal builds
+            pass
+        return ["DOWNTOWN", "COMBAT_ZONE", "HIGHRISE",
+                "UNDERWORLD", "TECH_DISTRICT", "OUTSKIRTS"]
+
+    def _player_faction(self) -> Optional[str]:
+        """Resolve the player's faction allegiance, or ``None`` if unset.
+
+        Sub-project C (the War Room) will set this; until then it is typically
+        absent. Checks, in order: a ``player_faction``/``faction`` attribute on
+        :class:`PlayerState`, then the ``emergent.player_faction`` config knob.
+        Returns ``None`` (never raises) when no allegiance is configured.
+        """
+        try:
+            from engine.world.player_state import get_player_state  # noqa: PLC0415
+            ps = get_player_state()
+            for attr in ("player_faction", "faction", "allegiance"):
+                val = getattr(ps, attr, None)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+        except Exception as exc:
+            logger.debug("[%s] player faction lookup failed (operation=intervene): %s",
+                         SCENE_ID, exc)
+        cfg_val = self._cfg("player_faction", None)
+        if isinstance(cfg_val, str) and cfg_val.strip():
+            return cfg_val.strip()
+        # Also honour emergent.player_faction (shared with the War Room sub-project).
+        try:
+            from engine.config import get_config  # noqa: PLC0415
+            emer = get_config().get("emergent.player_faction", None)
+            if isinstance(emer, str) and emer.strip():
+                return emer.strip()
+        except Exception:
+            pass
+        return None
+
+    def _do_travel(self, district: str) -> Dict[str, Any]:
+        """Move the player's avatar to *district* (B-T4).
+
+        Validates ``district`` against the canonical six, sets the player
+        location via :meth:`PlayerState.set_location`, applies a small energy
+        cost when that API exists, logs + emits a ``sprawl_update`` so every
+        connected client re-places the avatar, and returns the new player block.
+
+        Args:
+            district: A canonical district id (case-insensitive).
+
+        Returns:
+            ``{ok, location, player, energy_cost?}`` or ``{ok: False, reason}``.
+            Never raises.
+        """
+        canon = {d.upper(): d for d in self._canonical_districts()}
+        key = (district or "").upper()
+        if key not in canon:
+            return {
+                "ok": False,
+                "reason": f"unknown district '{district}'",
+                "districts": list(canon.values()),
+            }
+        target = canon[key]
+        energy_cost = int(self._cfg("travel_energy_cost", 5))
+        applied_cost = 0
+        try:
+            from engine.world.player_state import get_player_state  # noqa: PLC0415
+            ps = get_player_state()
+            # Apply a small energy/time cost if a clean API exists; else just move.
+            if energy_cost > 0 and hasattr(ps, "spend_energy"):
+                try:
+                    before = int(getattr(ps, "energy", 0) or 0)
+                    after = int(ps.spend_energy(energy_cost, reason="sprawl_travel"))
+                    applied_cost = max(0, before - after)
+                except Exception as exc:
+                    logger.debug("[%s] travel energy cost skipped (operation=travel): %s",
+                                 SCENE_ID, exc)
+            ps.set_location(target)
+        except Exception as exc:
+            logger.error("[%s] travel failed (operation=travel, district=%s): %s",
+                         SCENE_ID, target, exc)
+            return {"ok": False, "reason": "could not move player", "error": str(exc)}
+
+        logger.info("[%s] player travelled to %s (operation=travel, energy_cost=%d)",
+                    SCENE_ID, target, applied_cost)
+        # Re-place the avatar on every client.
+        self._push_state_force()
+        return {
+            "ok": True,
+            "location": target,
+            "energy_cost": applied_cost,
+            "player": self._build_player(),
+        }
+
+    def _do_intervene(self, action: str, target_id: Optional[str] = None,
+                      district: Optional[str] = None) -> Dict[str, Any]:
+        """Dispatch a player intervention to an EXISTING engine verb (B-T4).
+
+        Routes ``action`` to its reused verb (see :data:`_INTERVENE_ACTIONS`).
+        Each verb call is wrapped so a failure degrades to ``{ok: False, error}``
+        — the endpoint NEVER raises/500. On a successful intervention the result
+        is logged, written to the City Pulse feed (``EmergentStore.log_event``)
+        and broadcast as a ``sprawl_event`` so the feed + map flash react.
+
+        Args:
+            action: One of ``talk/hack/deal/recruit/contest``.
+            target_id: NPC id (required by talk/hack/recruit).
+            district: District id (used by deal/contest; defaults to the player's
+                current location when absent).
+
+        Returns:
+            A result dict, always carrying an ``ok`` flag. Never raises.
+        """
+        action = (action or "").lower()
+        if action not in _INTERVENE_ACTIONS:
+            return {"ok": False, "action": action,
+                    "reason": f"unknown action '{action}'",
+                    "actions": list(_INTERVENE_ACTIONS)}
+
+        dispatch = {
+            "talk": self._intervene_talk,
+            "hack": self._intervene_hack,
+            "deal": self._intervene_deal,
+            "recruit": self._intervene_recruit,
+            "contest": self._intervene_contest,
+        }
+        try:
+            result = dispatch[action](target_id=target_id, district=district)
+        except Exception as exc:  # belt-and-braces — handlers already guard
+            logger.error("[%s] intervene crashed (operation=intervene, action=%s): %s",
+                         SCENE_ID, action, exc)
+            return {"ok": False, "action": action, "error": str(exc)}
+
+        result.setdefault("ok", False)
+        result.setdefault("action", action)
+        if result.get("ok"):
+            self._record_intervention(action, target_id, district, result)
+        return result
+
+    def _intervene_talk(self, target_id: Optional[str] = None,
+                        district: Optional[str] = None) -> Dict[str, Any]:
+        """Friendly chat with an NPC → bumps the player↔NPC relationship.
+
+        Reuses :meth:`PlayerProfile.update_relationship` (the canonical player
+        relationship store; the same score the recruit gate reads).
+        """
+        if not target_id:
+            return {"ok": False, "reason": "talk needs a target_id"}
+        try:
+            from engine.characters.player_profile import get_player_profile  # noqa: PLC0415
+            delta = float(self._cfg("talk_relationship_delta", 3.0))
+            entry = get_player_profile().update_relationship(
+                target_id, delta, notes="Friendly chat in The Sprawl")
+            score = getattr(entry, "score", None)
+            return {
+                "ok": True,
+                "target_id": target_id,
+                "delta": delta,
+                "score": round(float(score), 1) if isinstance(score, (int, float)) else None,
+                "message": f"You talk with {target_id}. (relationship {delta:+.0f})",
+                "district": district,
+            }
+        except Exception as exc:
+            logger.error("[%s] talk failed (operation=intervene, target=%s): %s",
+                         SCENE_ID, target_id, exc)
+            return {"ok": False, "target_id": target_id, "error": str(exc)}
+
+    def _intervene_hack(self, target_id: Optional[str] = None,
+                        district: Optional[str] = None) -> Dict[str, Any]:
+        """Hack an NPC's phone → reuses ``phone_hack.hack_phone(target, 'intercept')``."""
+        if not target_id:
+            return {"ok": False, "reason": "hack needs a target_id"}
+        try:
+            from content.scenes.phone.phone_hack import hack_phone  # noqa: PLC0415
+            res = hack_phone(target_id, "intercept") or {}
+            success = bool(res.get("success"))
+            return {
+                "ok": success,
+                "target_id": target_id,
+                "success": success,
+                "message": res.get("message", "")
+                or (f"You breach {target_id}'s phone." if success
+                    else f"The hack on {target_id} failed."),
+                "result": res,
+                "district": district,
+            }
+        except Exception as exc:
+            logger.error("[%s] hack failed (operation=intervene, target=%s): %s",
+                         SCENE_ID, target_id, exc)
+            return {"ok": False, "target_id": target_id, "error": str(exc)}
+
+    def _intervene_deal(self, target_id: Optional[str] = None,
+                        district: Optional[str] = None) -> Dict[str, Any]:
+        """Work the market in a district → reuses ``market.get_prices(district)``.
+
+        A non-destructive price-scan: returns a small slice of the local market
+        so the player can size up a deal (a buy/sell is a deeper flow owned by
+        the market scene). The district defaults to the player's location.
+        """
+        dist = district or self._build_player().get("location", "") or ""
+        try:
+            from engine.world.market import get_market  # noqa: PLC0415
+            limit = int(self._cfg("deal_quote_limit", 5))
+            prices = get_market().get_prices(district=dist) or []
+            slim = [
+                {"name": p.get("name"), "price": p.get("shop_price"),
+                 "shop": p.get("shop_name"), "illegal": p.get("illegal")}
+                for p in prices[:limit]
+            ]
+            if not slim:
+                return {"ok": False, "district": dist,
+                        "reason": f"no market activity in {dist or 'this district'}"}
+            cheapest = min(slim, key=lambda g: g.get("price") or 1e9)
+            return {
+                "ok": True,
+                "district": dist,
+                "quotes": slim,
+                "message": (f"Street prices in {dist or 'the area'}: "
+                            f"{cheapest.get('name')} @ {cheapest.get('price')}c "
+                            f"({len(slim)} goods)"),
+            }
+        except Exception as exc:
+            logger.error("[%s] deal failed (operation=intervene, district=%s): %s",
+                         SCENE_ID, dist, exc)
+            return {"ok": False, "district": dist, "error": str(exc)}
+
+    def _intervene_recruit(self, target_id: Optional[str] = None,
+                           district: Optional[str] = None) -> Dict[str, Any]:
+        """Recruit an NPC into the crew → reuses ``crew.recruit`` (honours its gate)."""
+        if not target_id:
+            return {"ok": False, "reason": "recruit needs a target_id"}
+        try:
+            from engine.world.crew import get_crew_manager  # noqa: PLC0415
+            mgr = get_crew_manager()
+            # recruit() applies the relationship/capacity gate itself (skip_check=False).
+            ok, message = mgr.recruit(target_id)
+            return {
+                "ok": bool(ok),
+                "target_id": target_id,
+                "message": message,
+                "district": district,
+            }
+        except Exception as exc:
+            logger.error("[%s] recruit failed (operation=intervene, target=%s): %s",
+                         SCENE_ID, target_id, exc)
+            return {"ok": False, "target_id": target_id, "error": str(exc)}
+
+    def _intervene_contest(self, target_id: Optional[str] = None,
+                           district: Optional[str] = None) -> Dict[str, Any]:
+        """Contest a district for the player's faction → reuses ``shift_control``.
+
+        Gated on the player having a faction allegiance (set in the War Room /
+        sub-project C). With no allegiance this returns the graceful
+        ``{ok: False, reason: "no faction allegiance (set one in the War Room)"}``
+        rather than acting. The control delta is clamped to ``CONTROL_SHIFT_RANGE``.
+        """
+        faction = self._player_faction()
+        if not faction:
+            return {"ok": False,
+                    "reason": "no faction allegiance (set one in the War Room)"}
+        dist = district or self._build_player().get("location", "") or ""
+        canon = {d.upper(): d for d in self._canonical_districts()}
+        if dist.upper() not in canon:
+            return {"ok": False, "faction": faction,
+                    "reason": f"unknown district '{dist}'"}
+        dist = canon[dist.upper()]
+        try:
+            from engine.world.territory import (  # noqa: PLC0415
+                get_territory_manager, CONTROL_SHIFT_RANGE)
+            lo, hi = CONTROL_SHIFT_RANGE
+            # A single contest nudges control by the low end of the sanctioned range.
+            delta = float(self._cfg("contest_delta", lo))
+            delta = max(float(lo), min(float(hi), delta))
+            event = get_territory_manager().shift_control(
+                dist, faction, delta, reason="player", source_faction=faction)
+            ev = event.to_dict() if hasattr(event, "to_dict") else {}
+            applied = ev.get("delta", delta)
+            return {
+                "ok": True,
+                "faction": faction,
+                "district": dist,
+                "delta": applied,
+                "message": f"{faction} pushes {applied:+.1f}% control in {dist}.",
+                "event": ev,
+            }
+        except Exception as exc:
+            logger.error("[%s] contest failed (operation=intervene, district=%s): %s",
+                         SCENE_ID, dist, exc)
+            return {"ok": False, "faction": faction, "district": dist, "error": str(exc)}
+
+    def _available_actions(self, target_id: Optional[str] = None,
+                           district: Optional[str] = None) -> Dict[str, Any]:
+        """Return the action menu for a target/district so the UI can build it.
+
+        Per-action availability: ``talk/hack/recruit`` need a ``target_id``;
+        ``deal`` needs a district (or the player's location); ``contest`` needs a
+        faction allegiance. Each item carries ``{action, enabled, reason?}``.
+        """
+        faction = self._player_faction()
+        has_target = bool(target_id)
+        has_district = bool(district or self._build_player().get("location"))
+        items = [
+            {"action": "talk", "label": "Talk", "enabled": has_target,
+             "reason": None if has_target else "select an NPC"},
+            {"action": "hack", "label": "Hack", "enabled": has_target,
+             "reason": None if has_target else "select an NPC"},
+            {"action": "deal", "label": "Deal", "enabled": has_district,
+             "reason": None if has_district else "no district"},
+            {"action": "recruit", "label": "Recruit", "enabled": has_target,
+             "reason": None if has_target else "select an NPC"},
+            {"action": "contest", "label": "Contest", "enabled": bool(faction),
+             "reason": None if faction else "no faction allegiance (set one in the War Room)"},
+        ]
+        return {"target_id": target_id, "district": district,
+                "faction": faction, "actions": items}
+
+    def _record_intervention(self, action: str, target_id: Optional[str],
+                             district: Optional[str], result: Dict[str, Any]) -> None:
+        """Persist + broadcast a successful intervention (feed + map flash).
+
+        Writes a durable City Pulse row via :meth:`EmergentStore.log_event` (so
+        it survives a refresh / surfaces in ``/api/sprawl/events``) and emits a
+        ``sprawl_event`` so every connected client prepends the feed and flashes
+        the district. Fully defensive — a logging/emit failure is swallowed.
+        """
+        summary = result.get("message") or f"player {action} {target_id or district or ''}".strip()
+        dist = result.get("district") or district or ""
+        ts = ""
+        try:
+            self._emergent_store().log_event(
+                kind=f"player_{action}", actor="player", summary=summary,
+                payload={"action": action, "target_id": target_id, "district": dist},
+            )
+        except Exception as exc:
+            logger.debug("[%s] intervention feed write skipped (operation=intervene): %s",
+                         SCENE_ID, exc)
+        self._push_event({
+            "ts": ts,
+            "kind": f"player_{action}",
+            "actor": "player",
+            "summary": summary,
+            "district": dist,
+        })
+        logger.info("[%s] player %s ok (operation=intervene, target=%s, district=%s)",
+                    SCENE_ID, action, target_id, dist)
+
     # ──── Event feed (B-T2) ──────────────────────────────────────────
 
     @staticmethod
@@ -608,6 +1006,19 @@ class TheSprawlScene(FlaskScene):
             self.socketio.emit("sprawl_update", self._build_state())
         except Exception as exc:
             logger.error("[%s] state push failed (operation=push): %s", SCENE_ID, exc)
+
+    def _push_state_force(self) -> None:
+        """Emit a fresh ``sprawl_update`` to all clients immediately (never raises).
+
+        v1.63.0 [2026-06-16] — Unlike :meth:`_push_state_throttled` (driven by the
+        tick firehose), player-initiated changes (travel) must reflect at once, so
+        this bypasses the throttle while still resetting its window.
+        """
+        try:
+            self._last_push_ts = time.time()
+            self.socketio.emit("sprawl_update", self._build_state())
+        except Exception as exc:
+            logger.error("[%s] forced state push failed (operation=push): %s", SCENE_ID, exc)
 
     def _push_event(self, normalized: Dict[str, Any]) -> None:
         """Emit a single normalized ``sprawl_event`` to all clients (never raises).
