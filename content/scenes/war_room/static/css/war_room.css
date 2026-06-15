@@ -1,0 +1,131 @@
+/*
+ * war_room.css — THE WAR ROOM faction command center styles (C-T1 scaffold).
+ * =========================================================================
+ * v1.63.0 [2026-06-16] — Bootable placeholder (C-T1). A minimal neon
+ * faction-command backdrop (sky + scanlines + vignette) in the CosySim neon
+ * aesthetic with a RED faction accent, plus the centered "booting…" panel.
+ * The live command-center UI replaces this in later v1.63 tasks.
+ */
+
+:root {
+  /* Scene palette (red faction-command accent, deep-black glass foundation). */
+  --war-accent: #ef4444;
+  --war-bg: #0a0507;
+  --war-ink: #ffe0e0;
+  --war-dim: #7a4f53;
+  --war-border: rgba(239, 68, 68, 0.22);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--war-bg);
+  color: var(--war-ink);
+  font-family: "Inter", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.war-stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Sky gradient ──────────────────────────────────────────── */
+.war-sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(239, 68, 68, 0.10), transparent 60%),
+    radial-gradient(100% 100% at 50% 120%, rgba(120, 30, 40, 0.18), transparent 60%),
+    linear-gradient(180deg, #140409 0%, #0a0507 55%, #07040a 100%);
+}
+
+/* ─── Scanlines + vignette ──────────────────────────────────── */
+.war-scanlines {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    180deg, rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.16) 3px, rgba(0, 0, 0, 0) 4px);
+  mix-blend-mode: multiply;
+  opacity: 0.6;
+}
+.war-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.7) 100%);
+}
+
+/* ─── Booting panel ─────────────────────────────────────────── */
+.war-boot {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+  padding: 2rem;
+}
+.war-boot__logo {
+  font-size: 3.4rem;
+  color: var(--war-accent);
+  text-shadow: 0 0 24px rgba(239, 68, 68, 0.7);
+}
+.war-boot__title {
+  margin: 0;
+  font-family: "Orbitron", sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  font-size: 2rem;
+  color: var(--war-accent);
+  text-shadow: 0 0 18px rgba(239, 68, 68, 0.5);
+}
+.war-boot__tagline {
+  margin: 0.2rem 0 0.6rem;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  color: rgba(255, 224, 224, 0.7);
+}
+.war-boot__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--war-dim);
+}
+.war-boot__pulse {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--war-accent);
+  box-shadow: 0 0 10px var(--war-accent);
+  animation: war-pulse-blink 1.6s ease-in-out infinite;
+}
+@keyframes war-pulse-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.war-boot__link {
+  margin: 0.4rem 0 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  color: var(--war-dim);
+}
+.war-boot__link.is-live { color: var(--war-accent); }
+.war-boot__link.is-down { color: #ff8a8a; }

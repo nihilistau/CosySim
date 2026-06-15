@@ -284,6 +284,15 @@ def _build_scene_categories() -> Dict[str, Dict[str, Any]]:
                     "The living city map — territory, NPCs, your avatar",
                     "#39ff14",
                 ),
+                # v1.63.0 [2026-06-16] — The War Room faction command center (C-T1)
+                _scene_entry(
+                    "The War Room",
+                    "⚔",
+                    "war_room",
+                    "war_room",
+                    "Pick a faction and command the city",
+                    "#ef4444",
+                ),
                 _scene_entry(
                     "NeonCity",
                     "🌃",

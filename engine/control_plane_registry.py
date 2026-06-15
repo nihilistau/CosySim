@@ -15,6 +15,7 @@ Version: v1.42.1 [2026-03-21]
 Author:  CosySim Team
 
 Change Log:
+    v1.63.0 [2026-06-16] — Registered war_room scene (C-T1 scaffold, auto-start)
     v1.63.0 [2026-06-15] — Registered the_sprawl scene (B-T1 scaffold, auto-start)
     v1.62.0 [2026-06-15] — Registered executive_suite scene (ES-T1 scaffold, auto-start)
     v1.42.1 [2026-03-21] â€” Added module header, section dividers, version stamps
@@ -314,6 +315,14 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "type": "flask",
         "cls": "content.scenes.the_sprawl.the_sprawl_scene.TheSprawlScene",
         "label": "THE SPRAWL",
+        "auto_start": True,
+        "pillar": "game",
+    },
+    # v1.63.0 [2026-06-16] — The War Room faction command center (C-T1 scaffold)
+    "war_room": {
+        "type": "flask",
+        "cls": "content.scenes.war_room.war_room_scene.WarRoomScene",
+        "label": "THE WAR ROOM",
         "auto_start": True,
         "pillar": "game",
     },

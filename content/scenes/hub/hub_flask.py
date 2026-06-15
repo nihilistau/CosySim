@@ -242,6 +242,14 @@ _SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
         "accent": "#39ff14",
         "desc": "The living city map — territory, NPCs and your avatar walking the streets",
     },
+    # v1.63.0 [2026-06-16] — The War Room faction command center (C-T1)
+    "war_room": {
+        "subtitle": "Faction Command",
+        "icon": "⚔",
+        "group": "action",
+        "accent": "#ef4444",
+        "desc": "Pick a faction, command crews and take the city",
+    },
 }
 
 
