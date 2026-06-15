@@ -1242,4 +1242,17 @@ emergent:
     active_npcs_per_tick: 3       # NPCs that act per LivingWorld tick (calm cap)
     pivotal_per_tick: 1          # max NPCs flagged pivotal in one tick (rare)
     pivotal_chance: 0.05         # P(an acting NPC is considered for pivotal)
+  # ── v1.63.0 [2026-06-15] — A7: "populate the world" boot seeding ──
+  # The neoncity scene seeds a generated NPC population + canonical cast factions
+  # once on first serve (idempotent). engine/world/character_gen.py +
+  # neoncity_scene.on_before_serve read these via get_config().
+  population:
+    count: 15            # target total generated NPC population (idempotent top-up)
+    faction_count: 10    # how many generated NPCs get a canonical faction
+
+# ── v1.63.0 [2026-06-15] — A7: random character generator knobs ──
+# engine/world/character_gen.py reads these via get_config().get("char_gen.*").
+char_gen:
+  population_count: 15   # default target population for seed_generated_population
+  faction_count: 10      # default factioned count for seed_generated_population
 

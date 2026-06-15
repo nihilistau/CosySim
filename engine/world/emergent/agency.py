@@ -657,15 +657,34 @@ def _relationships_for(self: EmergentAgency, npc_id: str, others: List[str]) -> 
 
 
 def _faction_for(self: EmergentAgency, npc_id: str) -> Optional[str]:
-    """Return the NPC's faction via the faction-context lookup, or ``None``.
+    """Return the NPC's CANONICAL faction, preferring the character metadata.
+
+    v1.63.0 [2026-06-15] — A7: prefer the canonical faction stored on the
+    character's ``metadata.faction`` (via ``character_gen.character_faction``).
+    That id is TerritoryManager-compatible, so the planner's ``contest`` verb can
+    dispatch to ``shift_control`` LIVE. Only when no canonical faction is stored
+    do we fall back to the legacy ``faction_context`` taxonomy (which does NOT
+    match TerritoryManager and so cannot drive contests).
 
     Args:
         self: The agency instance (unused; monkeypatch symmetry).
         npc_id: The NPC id.
 
     Returns:
-        The faction name, or ``None`` if unknown / on failure.
+        The canonical faction id, the legacy fallback, or ``None`` on failure.
     """
+    try:
+        from engine.world.character_gen import character_faction
+
+        canonical = character_faction(npc_id)
+        if canonical:
+            return canonical
+    except Exception as exc:
+        logger.error(
+            "[emergent] canonical faction lookup failed (operation=faction, npc=%s): %s",
+            npc_id, exc,
+        )
+
     try:
         from engine.agents.interceptors.faction_context import _get_character_faction
 
@@ -675,22 +694,58 @@ def _faction_for(self: EmergentAgency, npc_id: str) -> Optional[str]:
         return None
 
 
+def _scene_to_district(scene: str) -> str:
+    """Map a RoutineManager scene name to a canonical TerritoryManager district.
+
+    v1.63.0 [2026-06-15] — A7: RoutineManager.get_npc_location returns a *scene*
+    name (e.g. ``"velvet_pit"``), but ``contest``/``shift_control`` operate on
+    canonical *districts* (e.g. ``"DOWNTOWN"``). This reverses
+    ``territory.DISTRICT_SCENES`` so ``ctx['district']`` is a district the
+    TerritoryManager already knows, keeping contests on the canonical map.
+
+    Args:
+        scene: A scene/location string (may already be a district name).
+
+    Returns:
+        The canonical district name, or the original string when no mapping is
+        found (e.g. it is already a district, or unknown).
+    """
+    if not scene:
+        return ""
+    try:
+        from engine.world.territory import DISTRICT_NAMES, DISTRICT_SCENES
+
+        if scene in DISTRICT_NAMES:
+            return scene
+        for district, scenes in DISTRICT_SCENES.items():
+            if scene in scenes:
+                return district
+    except Exception as exc:
+        logger.error("[emergent] scene->district map failed (operation=district, scene=%s): %s", scene, exc)
+    return scene
+
+
 def _district_for(self: EmergentAgency, npc_id: str) -> str:
-    """Return the NPC's current district via the RoutineManager, or ``""``.
+    """Return the NPC's current CANONICAL district via the RoutineManager.
+
+    v1.63.0 [2026-06-15] — A7: the raw RoutineManager location is a scene name;
+    map it to a canonical TerritoryManager district (via :func:`_scene_to_district`)
+    so the ``contest`` verb shifts control on the real district map.
 
     Args:
         self: The agency instance (unused; monkeypatch symmetry).
         npc_id: The NPC id.
 
     Returns:
-        The current location/district string, or empty on failure.
+        The current canonical district string, or empty on failure.
     """
     try:
         from engine.world.npc_routines import get_routine_manager
 
         loc = get_routine_manager().get_npc_location(npc_id)
         if isinstance(loc, dict):
-            return str(loc.get("location") or loc.get("district") or "")
+            raw = str(loc.get("district") or loc.get("location") or "")
+            return _scene_to_district(raw)
     except Exception as exc:
         logger.error("[emergent] district lookup failed (operation=district, npc=%s): %s", npc_id, exc)
     return ""
