@@ -10,6 +10,7 @@ Pytest plugin flags:
     --smoke-only   Run only the ~15 smoke-test files (one per domain)
     --cap N        Max test files to run; falls back to smoke if exceeded (default: 80)
 """
+import gc
 import sys
 import os
 import subprocess
@@ -54,6 +55,63 @@ _PROTECTED_MODULES = [
     "engine.world.world_state",
     "engine.world.world_sim",
 ]
+
+
+# v1.62.0 [2026-06-15] — Close lingering SQLite handles after every test so
+# Windows can delete the per-test tmp_path dirs. The training/metrics classes
+# (MetricsDB, MetaMetrics) keep a thread-local WAL connection open for the life
+# of the object; pytest's tmp_path_factory retains the last few temp dirs and
+# rmtree's older ones during a *later* test, which raised
+# ``PermissionError: [WinError 32]`` while that handle was still open. Forcing a
+# gc pass once the test's fixture objects have gone out of scope finalises those
+# connections (sqlite3.Connection releases its file handle on collection) before
+# the next rmtree runs. The per-test tmp dirs themselves are already unique
+# (pytest tmp_path), so this is purely a handle-lifetime fix, not a shared-dir one.
+@pytest.fixture(autouse=True)
+def _release_db_handles():
+    yield
+    # Close the DB-backed singletons whose open connection would otherwise
+    # outlive this test and block rmtree on Windows. Closing the handle directly
+    # is order-independent: it works even while a module global still references
+    # the object. The gc pass then finalises any non-singleton instances (held
+    # only by the test) and mops up TrainingFlywheel's per-call connections.
+    _wipe_db_singletons()
+    gc.collect()
+
+
+def _wipe_db_singletons() -> None:
+    """Close + clear the metrics/training DB singletons (handle-release)."""
+    try:
+        import engine.observability.metrics_db as _m
+        if getattr(_m, "_instance", None) is not None:
+            try:
+                _m._instance.close()
+            except Exception:
+                pass
+            _m._instance = None
+    except Exception:
+        pass
+    try:
+        import engine.nexus.meta_metrics as _m
+        if getattr(_m, "_metrics", None) is not None:
+            try:
+                _m._metrics.close()
+            except Exception:
+                pass
+            _m._metrics = None
+    except Exception:
+        pass
+    try:
+        import engine.lmstudio.router_data as _m
+        if getattr(_m.RouterDataCollector, "_instance", None) is not None:
+            _m.RouterDataCollector._instance = None
+    except Exception:
+        pass
+    try:
+        import engine.nexus.training_flywheel as _m
+        _m._flywheel = None
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True)
@@ -170,6 +228,12 @@ def _wipe_singletons() -> None:
             _m._client = None
     except Exception:
         pass
+    # v1.62.0 [2026-06-15] — Reset the training/metrics DB singletons. The
+    # test_singleton_* cases store a MetricsDB/MetaMetrics (each holding an open
+    # thread-local WAL connection) in these module globals; left set, the handle
+    # outlives the test's tmp_path dir and blocks rmtree on Windows (WinError 32).
+    # Close the connection before clearing so the backing file is released.
+    _wipe_db_singletons()
 
 
 @pytest.fixture(autouse=True, scope="module")
