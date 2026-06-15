@@ -44,6 +44,11 @@ Version: v1.62.0 [2026-06-15]
 Author:  CosySim Team
 
 Change Log:
+    v1.62.0 [2026-06-15] — PH-T4: reverse-hack trigger hook. Each tick now gives
+        one NPC a RARE, hostility-gated chance to hack the PLAYER's phone via
+        ``content.scenes.phone.phone_hack.maybe_npc_hack_player`` (all gating +
+        probability + magnitudes live there under ``phone.hack.npc.*``). The hook
+        is best-effort and cannot disrupt NPC↔NPC messaging.
     v1.62.0 [2026-06-15] — CB-T6: pairwise relationship effects. Each exchange
         now nudges the PAIR's ``relationship_level`` (warm tone / positive
         keywords → +, cool tone / negative keywords → −) via the canonical
@@ -288,7 +293,47 @@ class NPCCommsScheduler:
                     "[npc_comms] exchange failed (operation=tick, pair=%s/%s): %s",
                     a, b, exc,
                 )
+        # v1.62.0 [2026-06-15] — PH-T4: lighter-touch hook for the reverse hack.
+        # Once per tick, give one of this tick's NPCs a RARE, hostility-gated
+        # chance to hack the PLAYER's phone. All gating + probability live in
+        # phone_hack.maybe_npc_hack_player (config phone.hack.npc.*); this is
+        # just the trigger surface, kept best-effort so it can never break a tick.
+        self._maybe_hack_player(pairs, npcs)
         return written
+
+    def _maybe_hack_player(
+        self, pairs: Sequence[Tuple[str, str]], npcs: Sequence[str]
+    ) -> None:
+        """Roll a rare, hostile-driven NPC→player hack for one NPC this tick.
+
+        Picks a single candidate attacker (a sender from this tick's selected
+        pairs, else any known NPC) and delegates to
+        :func:`content.scenes.phone.phone_hack.maybe_npc_hack_player`, which
+        applies the hostility gate and the ``phone.hack.npc.trigger_probability``
+        roll. Best-effort: any failure is logged and swallowed so the reverse
+        hack can never disrupt NPC↔NPC messaging.
+
+        Args:
+            pairs: The ``(sender, recipient)`` pairs chosen this tick.
+            npcs: The full known-NPC roster (fallback candidate pool).
+        """
+        candidate: Optional[str] = None
+        if pairs:
+            candidate = pairs[0][0]
+        elif npcs:
+            candidate = npcs[0]
+        if not candidate:
+            return
+        try:
+            from content.scenes.phone.phone_hack import maybe_npc_hack_player
+            maybe_npc_hack_player(
+                candidate, db=self._get_db(), emit=self._emit,
+            )
+        except Exception as exc:
+            logger.debug(
+                "[npc_comms] npc->player hack hook failed "
+                "(operation=tick, attacker=%s): %s", candidate, exc,
+            )
 
     # ── roster ──────────────────────────────────────────────────────────
 
