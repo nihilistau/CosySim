@@ -177,6 +177,11 @@ scenes:
     host: "localhost"
     port: 5569
     debug: false
+    # v1.63.0 [2026-06-16] — D-T1 "The Exchange": which engine-Market district
+    # THE GRID's market surfaces. The Grid trades the live, NPC-driven economy
+    # (engine.world.market) for this district. PH-T2 phone-upgrade vendor items
+    # are layered on top as Grid specials.
+    market_district: "DOWNTOWN"
 
   lab_break:
     host: "localhost"
@@ -786,6 +791,13 @@ economy:
     enabled: true               # gates Market.subscribe_to_world_events() world-event→price loop
     scale: 1.0                  # global multiplier on every world-event supply/demand shock
 
+# v1.63.0 [2026-06-16] — D-T2 "The Exchange": the Executive Suite Markets app
+# trades the ONE engine economy (engine.world.market) for this district — the
+# SAME Market The Grid surfaces (D-T1). Default DOWNTOWN matches the Grid's
+# scenes.grid.market_district default so prices/trades line up across surfaces.
+executive_suite:
+  market_district: "DOWNTOWN"
+
 # ════════════════════════════════════════════════════════════════════════
 # v1.60.0 [2026-06-13] — "Living Systems" — feedback-loop tunables. Every key
 # below has a safe in-code default; these expose the knobs for retuning.
@@ -992,6 +1004,14 @@ framework:
   max_event_log: 500              # max events in the event bus log
   max_consequence_age_turns: 50   # auto-clean old fired consequences
 
+# Cross-scene EventBus
+# v1.63.0 [2026-06-17] — Non-blocking Nexus persistence toggle.
+events:
+  # When true (default), publish() enqueues Nexus history persistence to a
+  # daemon worker thread so publish latency is decoupled from Nexus
+  # speed/availability. Set false to persist synchronously inline (legacy).
+  persist_async: true
+
 # Nexus Knowledge System integration
 nexus:
   enabled: true
@@ -1183,4 +1203,117 @@ oracle:
     signal_reward_item: "intel_fragment"  # small intel item granted by read_the_signal ("" disables)
     signal_cooldown_sec: 900   # read_the_signal cooldown (also enforced by the @skill decorator)
     respect_sensitive: true    # skip/abstract comms flagged sensitive/mature/intimate (privacy + consent)
+
+# ── v1.63.0 [2026-06-15] — Emergent Engine (A1: persistent sim store) ──
+# The emergent engine persists the genuinely-new living-world state (NPC goals,
+# world events) across restarts in a single SQLite store. Faction/territory
+# state is owned by engine.world.territory.TerritoryManager — not duplicated
+# here (reuse-first slim retired the emergent FactionRegistry).
+emergent:
+  store:
+    db_path: "data/emergent.db"  # persistent sim store for the emergent engine
+  # v1.63.0 [2026-06-16] — B-T4: the player's faction allegiance (The Sprawl
+  # "contest" intervention + the War Room sub-project read this). Empty = no
+  # allegiance yet, so contesting a district is gracefully refused.
+  player_faction: ""
+  # ── v1.63.0 [2026-06-15] — A3: per-NPC goal generation tuning ──
+  # All weights/thresholds for the PURE goal generator + re-prioritiser. Tune
+  # NPC drives here without code changes; engine/world/emergent/goals.py reads
+  # these via get_config().get("emergent.goals.*", default).
+  goals:
+    rel_negative: -0.4       # relationship <= this is hostile -> revenge goal
+    rel_positive: 0.6        # relationship >= this is close   -> romance goal
+    # v1.63.0 [2026-06-15] — A6 live-run tuning: raise wealth so trade competes
+    # every tick (market stays lively) and damp romance so a single close pair
+    # cannot pin every pass; nudge rank/territory above baseline so faction NPCs
+    # actually pursue turf (contests) when present.
+    base_wealth: 0.35        # baseline priority of the always-on wealth goal
+    revenge_weight: 0.80     # multiplies |relationship| for revenge priority
+    romance_weight: 0.45     # multiplies relationship for romance priority
+    rank_priority: 0.50      # priority of a faction RANK goal
+    territory_priority: 0.50  # priority of a faction TERRITORY goal
+    lay_low_boost: 0.50      # added on top of the current max so LAY_LOW sorts first
+    success_decay: 0.30      # subtracted from a satisfied goal's priority
+    failure_bump: 0.30       # added to a thwarted goal's priority
+    # v1.63.0 [2026-06-15] — A6: a satisfied goal never decays below this floor,
+    # so always-on drives (WEALTH) stay above planner.min_utility and the world
+    # remains perpetually lively instead of going silent after a few ticks.
+    success_floor: 0.05
+  # ── v1.63.0 [2026-06-15] — A4: hybrid planner tuning ──
+  # Weights for the PURE action planner (utility = priority * fit * feasibility)
+  # and the verb dispatcher. engine/world/emergent/planner.py reads these via
+  # get_config().get("emergent.planner.*", default). The planner DISPATCHES to
+  # the existing managers (market/territory/crew/phone_hack/relationship_effects/
+  # npc_comms) — it does not re-implement them.
+  planner:
+    priority_weight: 1.0     # weight on the goal's own priority
+    fit_weight: 1.0          # weight on how well the verb fits the goal
+    feasibility_weight: 1.0  # weight on whether the action is even possible
+    min_utility: 0.01        # below this, plan_action returns None
+    llm_chance: 0.05         # P(use_llm) for a PIVOTAL action (kept rare — model stays calm)
+    trade_default_qty: 1     # default quantity for a trade dispatch
+    # v1.63.0 [2026-06-15] — A6: 2.0 keeps territory contests visible but not
+    # runaway (clamped to CONTROL_SHIFT_RANGE) so control shifts gradually.
+    contest_delta: 2.0       # control delta for a contest (clamped to CONTROL_SHIFT_RANGE)
+  # ── v1.63.0 [2026-06-15] — A5: agency driver (on the LivingWorld tick) ──
+  # The agency subscribes to the EXISTING living_world_tick EventBus event (no
+  # second daemon) and, each tick, runs a bounded goals→plan→execute pass over a
+  # handful of NPCs. engine/world/emergent/agency.py reads these via
+  # get_config().get("emergent.agency.*", default). Caps keep the world calm:
+  # only active_npcs_per_tick act per hour, and pivotal/LLM beats stay rare.
+  agency:
+    enabled: true                # master switch; start() is a no-op when false
+    active_npcs_per_tick: 3       # NPCs that act per LivingWorld tick (calm cap)
+    pivotal_per_tick: 1          # max NPCs flagged pivotal in one tick (rare)
+    pivotal_chance: 0.05         # P(an acting NPC is considered for pivotal)
+  # ── v1.63.0 [2026-06-15] — A7: "populate the world" boot seeding ──
+  # The neoncity scene seeds a generated NPC population + canonical cast factions
+  # once on first serve (idempotent). engine/world/character_gen.py +
+  # neoncity_scene.on_before_serve read these via get_config().
+  population:
+    count: 15            # target total generated NPC population (idempotent top-up)
+    faction_count: 10    # how many generated NPCs get a canonical faction
+
+# ── v1.63.0 [2026-06-15] — A7: random character generator knobs ──
+# engine/world/character_gen.py reads these via get_config().get("char_gen.*").
+char_gen:
+  population_count: 15   # default target population for seed_generated_population
+  faction_count: 10      # default factioned count for seed_generated_population
+
+# ── v1.63.0 [2026-06-16] — B-T4: THE SPRAWL player-agency knobs ──
+# content/scenes/the_sprawl/the_sprawl_scene.py reads these via
+# get_config().get("the_sprawl.*", default). All have built-in code defaults;
+# this block just makes them tunable without a redeploy.
+the_sprawl:
+  travel_energy_cost: 5          # energy spent moving the avatar between districts
+  talk_relationship_delta: 3.0   # player↔NPC relationship bump from a friendly talk
+  deal_quote_limit: 5            # goods returned by a market price-scan ("deal")
+  contest_delta: 1.0             # control % a single contest shifts (clamped to CONTROL_SHIFT_RANGE)
+  player_faction: ""             # optional override of emergent.player_faction (empty = none)
+
+# ── v1.63.0 [2026-06-16] — C-T2: THE WAR ROOM live dashboard knobs ──
+# content/scenes/war_room/war_room_scene.py reads these via
+# get_config().get("war_room.*", default). All have built-in code defaults.
+war_room:
+  push_throttle_secs: 2.0        # min seconds between warroom_update socket pushes
+  # Rank ladder mapped from a faction's total control (get_faction_total_control).
+  # Ascending: the highest band whose `min` is <= power wins. Tunable per-deploy.
+  rank_thresholds:
+    - {min: 0,   rank: "Unknown"}
+    - {min: 60,  rank: "Street Crew"}
+    - {min: 120, rank: "Contender"}
+    - {min: 200, rank: "Power Player"}
+    - {min: 320, rank: "Kingpin"}
+
+  # ── v1.63.0 [2026-06-16] — C-T4: War Room command knobs ──
+  # All read via get_config().get("war_room.*", default); built-in defaults exist.
+  contest_delta: 5.0             # control points a single contest command shifts
+  op_duration_secs: 1800         # default crew operation duration (30 min)
+  op_reward_credits: 1500        # base credit reward for a successful operation
+  op_reward_xp: 40               # base XP per crew member on a successful op
+  diplomacy:
+    ally_standing: 60            # player standing set when allying a faction
+    war_standing: -80            # player standing set when declaring war
+    neutral_standing: 0          # player standing set when going neutral
+    cascade: true                # propagate standing changes to related factions
 

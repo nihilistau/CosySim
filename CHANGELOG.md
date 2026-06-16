@@ -4,6 +4,135 @@ All notable changes to CosySim are documented here.
 
 ---
 
+## [1.63.0] — "EMERGENT LIVING WORLD" — 2026-06-16
+
+v1.63 ships **all four sub-projects (A–D)**: a per-NPC **emergent agency** engine
+(A) gives the city's characters genuine, self-directed behaviour — each runs a
+goal → plan → verb loop every world tick and acts on the world through the systems
+that already exist — and three player-facing surfaces open onto that living world:
+**The Sprawl** (B), the real-time city map; **The War Room** (C), the faction
+command center; and **The Exchange** (D), the one NPC-driven economy surfaced live
+in both The Grid and a new Executive Suite Markets app. No second daemon, no new
+managers: the agency rides the existing `living_world_tick` EventBus event and
+dispatches to Territory, Market, Crew, FactionAI, relationship_effects, npc_comms
+and phone_hack, and every scene only orchestrates the EXISTING managers. Verified
+live against the running LivingWorld with the model staying calm (rule-based
+actions; LLM use ≈ `emergent.planner.llm_chance`).
+
+### Emergent agency — per-NPC goal → verb on the LivingWorld loop
+- **Agency driver wired into the live boot** — `get_emergent_agency().start()` now
+  runs from `neoncity_scene.on_before_serve` immediately after the LivingWorld
+  daemon starts (and `stop()` on the matching shutdown), config-gated by
+  `emergent.agency.enabled`. The agency subscribes to the existing
+  `living_world_tick` event and, each tick, drives up to
+  `emergent.agency.active_npcs_per_tick` NPCs through a bounded
+  goals → plan → execute → reprioritize → persist → emit pass.
+- **Reuse-first dispatch** — verbs route to the existing managers: `trade` →
+  a non-settling `Market.apply_event` supply nudge (never drains the player
+  wallet), `contest` → `TerritoryManager.shift_control`, plus crew_op, romance,
+  hack and message via CrewManager / relationship_effects / phone_hack /
+  npc_comms. Each action logs to the persistent emergent store and emits an
+  `emergent_action` event for scenes/Oracle.
+- **Persistent goals & feed** — NPC goals (wealth, revenge, romance, faction
+  rank/territory, lay-low) persist across restarts in `data/emergent.db`; goal
+  priorities decay on success and bump on failure.
+- **Liveliness fix (`goals.success_floor`)** — a satisfied goal no longer decays
+  below a floor, so always-on drives (WEALTH) stay above `planner.min_utility`
+  and the world remains perpetually active instead of going silent after a few
+  ticks. Trades are now also logged to the emergent feed.
+- **Live-run tuning** — `goals.base_wealth` 0.30→0.35, `goals.romance_weight`
+  0.70→0.45, `goals.rank_priority` 0.45→0.50, `goals.territory_priority`
+  0.40→0.50, `goals.success_floor` 0.05 (new), `planner.contest_delta` 3.0→2.0.
+  Live run: trade×9 / romance×3 across the NPCs, avg good price 521→554, LLM
+  use 0/15 (≤ `llm_chance` 0.05). Knobs all read via `get_config()` —
+  designers retune without code changes.
+
+### The Sprawl — the living city map (sub-project B)
+- **A new living city-map scene** (`content/scenes/the_sprawl/`, port 5597) — a
+  full-screen, real-time SVG map of NEONCITY that composes the EXISTING managers
+  (no new world state). Six districts are shaded by their dominant faction with a
+  live control% label and a pulsing **CONTESTED** hatch; the faction power
+  **leaderboard** and a streaming **City Pulse** feed render alongside.
+- **Live, read-only world state** — `GET /api/sprawl/state` + `/api/sprawl/events`
+  are assembled from `TerritoryManager` (control + ranking + history),
+  `RoutineManager` (NPC location/activity), the character `Database`
+  (`metadata.faction`), `EmergentStore` (agency feed) and `PlayerState`. Socket.IO
+  pushes a throttled `sprawl_update` on every `living_world_tick` and individual
+  `sprawl_event`s on `emergent_action` / `territory_shift`. Every source sits
+  behind a defensive seam — the endpoints never 500.
+- **NPC tokens coloured by faction** — tokens read the canonical
+  `metadata.faction` persisted in the shared `data/simulation.db`; any
+  world-bearing scene now idempotently ensures the factioned population on boot
+  (the same `seed_cast_factions` + `seed_generated_population` neoncity uses), so a
+  standalone Sprawl process surfaces faction colours instead of grey unaligned
+  dots. The scene also re-reads persisted `territory.json` when it changes, so the
+  map reflects the live world's territory shifts across processes.
+- **Avatar travel + intervene via existing verbs** — the player's avatar walks the
+  city (`POST /api/sprawl/travel`) and acts on it (`POST /api/sprawl/intervene`):
+  **talk** (player relationship), **hack** (`phone_hack`), **deal** (market quote),
+  **recruit** (crew) and **contest** (`TerritoryManager.shift_control`, gated on
+  faction allegiance). Successful interventions write to the City Pulse feed and
+  flash the map.
+
+### The War Room — pick a faction, command the city (sub-project C)
+- **A new faction command-center scene** (`content/scenes/war_room/`, port 5598) —
+  pick an allegiance, then run the metagame from a live faction dashboard. The
+  scene only orchestrates; every effect routes to the EXISTING managers
+  (`TerritoryManager` / `CrewManager` / `FactionManager` / `FactionAI` /
+  `PlayerState`) — no new world state.
+- **Player allegiance (persisted)** — `PlayerState.allegiance` is a new persisted
+  field set via `POST /api/warroom/allegiance` and saved through the existing
+  debounced auto-save. Choosing a faction refreshes FactionAI's player context so
+  rivals react.
+- **Live faction dashboard** — `GET /api/warroom/{factions,allegiance,state}`
+  assemble the picker + command center from territory control (power, dominant
+  districts, `get_faction_total_control` → rank), crew roster, active wars, recent
+  FactionAI decisions and player standings. A throttled `warroom_update` socket
+  push is wired to the `living_world_tick` / `territory_shift` / `faction_decision`
+  EventBus events. Every source sits behind a defensive seam — the endpoints never
+  500.
+- **The command bar → existing managers** — `POST /api/warroom/command {cmd, ...}`
+  dispatches **contest** (`shift_control`), **assign_op** (`CrewManager`
+  start_operation, with a `GET /api/warroom/op_preview` success-chance preview),
+  **recruit** (honours the `can_recruit` trust gate), **build_hq** / **upgrade_room**
+  (`establish_hq` / `build_room` / `upgrade_room`) and **diplomacy**
+  (ally / war / neutral — writes the authoritative `PlayerState` standing, mirrors
+  into `FactionManager`, and registers/stands-down an active war so FactionAI and
+  the map react). Each command is defensively wrapped — a manager failure becomes a
+  clean gated result, never a 500.
+- **Closes the Sprawl contest gate** — with `PlayerState.allegiance` set, the
+  Sprawl's `_player_faction()` resolves it, so the city-map **contest** verb
+  (sub-project B) is now unlocked end-to-end. Verified live: choose Ghost_Net →
+  contest raises control in a district → declare war flips a rival to war
+  (standing −80) → rank reflects total control, with 0 console errors.
+
+### The Exchange — one economy, two surfaces (sub-project D)
+- **The Grid surfaces the live engine Market** — `THE GRID` now trades the
+  *existing* `engine/world/market.py` economy (`get_market()`) instead of a
+  parallel price book: `GET /api/grid/market` reads `Market.get_prices()`, and
+  `/api/grid/buy` · `/api/grid/sell` route through `Market.buy/sell` so credits,
+  inventory and heat settle on the shared `PlayerState` wallet. Prices carry a
+  live ▲/▼ trend derived from successive reads; the PH-T2 phone-upgrade specials
+  are layered on top of the live goods, and a Market outage degrades gracefully
+  (the Grid still renders, never 500s).
+- **A new Executive Suite Markets app** — the NeonOS desktop gains a **Markets**
+  app (`/api/markets/state` · `/api/markets/buy` · `/api/markets/sell`) that opens
+  onto the *same* `get_market()` economy and the *same* district (DOWNTOWN), with
+  the Grid's player id, so the two surfaces are two windows on one market. The app
+  shows live prices with a ▲/▼/▬ trend, the player's tradable positions priced at
+  the live market, the shared wallet balance and market stats — every sub-lookup
+  behind a defensive seam (the route never 500s).
+- **One economy, proven in sync** — NPC wealth-trades and world events move
+  supply/demand on the single Market, so a price moves identically in BOTH UIs;
+  a player buy in one surface and a sell in the other settle the same wallet and
+  `InventoryManager`. Verified live (district DOWNTOWN, both scenes booted
+  standalone alongside the running stack): Grid price == Markets-app price ==
+  `get_market().get_prices()` across 19 shared goods; one `tick()` moved the same
+  good in both surfaces; a Grid buy then a Markets-app sell debited/credited the
+  one PlayerState wallet, with the Markets app reading that same live balance.
+
+---
+
 ## [1.62.1] — "LIVING CITY — LOOP COMPLETIONS" — 2026-06-15
 
 Finished wiring the v1.62 "Living City" systems end-to-end: the Executive Suite

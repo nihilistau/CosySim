@@ -42,33 +42,22 @@ SCENE_ID = "grid"
 # v1.49.3 [2026-03-22] — Structured logging context (SCENE_ID prefix + operation tags)
 
 # ──── Catalogue ──────────────────────────────────────────────────────────────
+#
+# v1.63.0 [2026-06-16] — D-T1 "The Exchange". THE GRID's market is no longer a
+# self-contained price book. The tradable *goods* and their *prices* now come
+# from the live, NPC-driven engine economy (engine.world.market.get_market) via
+# :class:`_GridMarketAdapter`. The legacy ``MARKET_CATALOGUE`` below is retained
+# ONLY as the catalogue for the **PH-T2 phone-upgrade vendor specials** — Grid
+# exclusives whose ids match engine.world.inventory.ITEM_CATALOG (they are NOT
+# part of the engine Market's GOOD_CATALOG, so the Grid keeps selling them
+# itself, layered on top of the live economy goods).
 
-MARKET_CATALOGUE: List[Dict[str, Any]] = [
-    # Tech (Mira)
-    {"id": "stim_v1",    "name": "Stim-Pack v1",      "vendor": "mira",   "category": "tech",        "base_price": 120,  "stock": 10, "rarity": "common"},
-    {"id": "data_chip",  "name": "Data Chip",          "vendor": "mira",   "category": "tech",        "base_price": 250,  "stock": 5,  "rarity": "uncommon"},
-    {"id": "jammer",     "name": "Signal Jammer",      "vendor": "mira",   "category": "tech",        "base_price": 600,  "stock": 2,  "rarity": "rare"},
-    {"id": "neural_tap", "name": "Neural Tap",         "vendor": "mira",   "category": "tech",        "base_price": 1200, "stock": 1,  "rarity": "legendary"},
-    {"id": "dec_key",    "name": "Decrypt Key",        "vendor": "mira",   "category": "tech",        "base_price": 350,  "stock": 3,  "rarity": "uncommon"},
-    # Contraband (Viktor)
-    {"id": "ghost_id",   "name": "Ghost ID",           "vendor": "viktor", "category": "contraband",  "base_price": 800,  "stock": 4,  "rarity": "rare"},
-    {"id": "exp_round",  "name": "Explosive Rounds",   "vendor": "viktor", "category": "contraband",  "base_price": 450,  "stock": 6,  "rarity": "uncommon"},
-    {"id": "holo_mask",  "name": "Holo Mask",          "vendor": "viktor", "category": "contraband",  "base_price": 1100, "stock": 2,  "rarity": "rare"},
-    {"id": "corp_key",   "name": "Corp Access Card",   "vendor": "viktor", "category": "contraband",  "base_price": 2000, "stock": 1,  "rarity": "legendary"},
-    {"id": "wire_tap",   "name": "Wire-Tap Device",    "vendor": "viktor", "category": "contraband",  "base_price": 320,  "stock": 5,  "rarity": "uncommon"},
-    # Meds/Stims (Frankie)
-    {"id": "nano_heal",  "name": "Nano-Healer",        "vendor": "frankie","category": "meds",        "base_price": 180,  "stock": 8,  "rarity": "common"},
-    {"id": "rush_dose",  "name": "Rush Dose",          "vendor": "frankie","category": "meds",        "base_price": 80,   "stock": 15, "rarity": "common"},
-    {"id": "trauma_kit", "name": "Trauma Kit",         "vendor": "frankie","category": "meds",        "base_price": 450,  "stock": 3,  "rarity": "uncommon"},
-    {"id": "synth_calm", "name": "Synth-Calm",         "vendor": "frankie","category": "meds",        "base_price": 200,  "stock": 6,  "rarity": "common"},
-    {"id": "blackout_p", "name": "Blackout Patch",     "vendor": "frankie","category": "meds",        "base_price": 550,  "stock": 2,  "rarity": "rare"},
-    # Information
-    {"id": "tip_bunker", "name": "Bunker Location Tip","vendor": "broker", "category": "intel",       "base_price": 750,  "stock": 3,  "rarity": "rare"},
-    {"id": "tip_route",  "name": "Safe Route Map",     "vendor": "broker", "category": "intel",       "base_price": 300,  "stock": 5,  "rarity": "uncommon"},
-    # Phone-OS upgrades (v1.62.0 [2026-06-15] — PH-T2). Ids match
-    # engine.world.inventory.ITEM_CATALOG so buying grants the real item (added
-    # to the InventoryManager) that `install_phone_upgrade` can consume.
-    # Software → Mira (tech); hardware → Viktor (contraband).
+# PH-T2 phone-OS upgrades (v1.62.0 [2026-06-15]). Ids match
+# engine.world.inventory.ITEM_CATALOG so buying grants the real item (added to
+# the InventoryManager) that `install_phone_upgrade` can consume. These are
+# Grid-vendor specials, NOT engine-Market goods — software → Mira (tech),
+# hardware → Viktor (contraband).
+PHONE_UPGRADE_CATALOGUE: List[Dict[str, Any]] = [
     {"id": "phone_encryption_patch", "name": "Encryption Patch", "vendor": "mira",   "category": "phone_upgrade", "base_price": 300,  "stock": 5, "rarity": "common"},
     {"id": "phone_firewall_v1",      "name": "Firewall v1",      "vendor": "mira",   "category": "phone_upgrade", "base_price": 350,  "stock": 5, "rarity": "common"},
     {"id": "phone_firewall_v2",      "name": "Firewall v2",      "vendor": "mira",   "category": "phone_upgrade", "base_price": 900,  "stock": 3, "rarity": "uncommon"},
@@ -77,6 +66,28 @@ MARKET_CATALOGUE: List[Dict[str, Any]] = [
     {"id": "phone_cpu_v2",           "name": "CPU v2",           "vendor": "viktor", "category": "phone_upgrade", "base_price": 1400, "stock": 2, "rarity": "uncommon"},
     {"id": "phone_os_kernel_v2",     "name": "OS Kernel v2",     "vendor": "viktor", "category": "phone_upgrade", "base_price": 2500, "stock": 1, "rarity": "rare"},
 ]
+
+# The Grid's vendor stalls keep mapping engine good *categories* onto the three
+# Grid vendor NPCs so the live economy goods still slot under a familiar face.
+# CONNECTS: VENDOR_NPCS, engine.world.market GoodCategory
+_CATEGORY_VENDOR: Dict[str, str] = {
+    "weapons": "viktor",
+    "contraband": "viktor",
+    "intel": "viktor",
+    "tech": "mira",
+    "consumables": "frankie",
+    "luxury": "mira",
+}
+
+# Engine good rarity is an int 1–5; the Grid UI/CSS expects a rarity *name*.
+_RARITY_NAMES: Dict[int, str] = {
+    1: "common", 2: "uncommon", 3: "rare", 4: "legendary", 5: "legendary",
+}
+
+# Legacy alias — kept so the PH-T2 specials still resolve by their original
+# catalogue name in any code/tests that referenced MARKET_CATALOGUE for the
+# phone upgrades. The live economy goods are NOT listed here anymore.
+MARKET_CATALOGUE: List[Dict[str, Any]] = PHONE_UPGRADE_CATALOGUE
 
 FACTION_DATA: List[Dict[str, Any]] = [
     {"id": "OmniCorp",    "label": "OmniCorp",    "accent": "#3b82f6",  "archetype": "megacorp"},
@@ -350,45 +361,310 @@ CITY_MAP_NODES: List[Dict[str, Any]] = [
 ]
 
 
+# ──── Grid → Engine-Market adapter (v1.63.0 — D-T1 "The Exchange") ───────────
+# CONNECTS: engine.world.market.get_market (the ONE economy — same Market the
+#           emergent agency's wealth trades move), engine.config.get_config
+# CALLED BY: _GridState market methods, /api/market/* and /api/grid/* routes
+# The adapter is the single source of truth for the Grid's *live* tradable
+# goods + prices. PH-T2 phone-upgrade specials are layered on top separately.
+
+
+def _grid_market_district() -> str:
+    """Return the engine-Market district THE GRID surfaces (config-driven).
+
+    Returns:
+        The district id from ``scenes.grid.market_district`` (default
+        ``"DOWNTOWN"``).  Never raises — falls back to the default on any
+        config failure.
+    """
+    try:
+        from engine.config import get_config
+        return str(get_config().get("scenes.grid.market_district", "DOWNTOWN")) or "DOWNTOWN"
+    except Exception:
+        return "DOWNTOWN"
+
+
+class _GridMarketAdapter:
+    """Surfaces the live engine :class:`~engine.world.market.Market` for the Grid.
+
+    The Grid trades the *one* NPC-driven economy. This adapter reads prices from
+    ``get_market().get_prices(district)`` for the configured Grid district and
+    maps each engine ``Good`` onto the item shape the Grid UI already renders
+    (``id``/``name``/``vendor``/``category``/``price``/``trend``/``rarity``…).
+    Buy/sell are routed straight through ``get_market().buy``/``sell`` so credits,
+    inventory, and heat settle via the engine economy.
+
+    A per-good price snapshot from the previous read powers the ▲/▼ change
+    indicator, so Grid prices visibly move as the economy ticks / NPCs trade.
+
+    Every public method is defensive: an unreachable or failing Market degrades
+    to an empty/neutral result rather than raising, so the Grid never 500s.
+
+    Attributes:
+        _last_prices: Last-seen ``good_id -> shop_price`` per district, used to
+            derive the rising/falling/stable trend on the next read.
+    """
+
+    def __init__(self) -> None:
+        self._last_prices: Dict[str, Dict[str, int]] = {}
+
+    @staticmethod
+    def _get_market() -> Any:
+        """Return the live singleton Market, or ``None`` if unavailable.
+
+        Returns:
+            The :class:`~engine.world.market.Market` singleton, or ``None`` when
+            the engine economy cannot be imported/constructed.
+        """
+        try:
+            from engine.world.market import get_market
+            return get_market()
+        except Exception as exc:
+            logger.warning("[grid] engine Market unavailable (operation=market_get): %s", exc)
+            return None
+
+    def _trend(self, district: str, good_id: str, price: int) -> str:
+        """Compute the rising/falling/stable trend vs. the last read.
+
+        Args:
+            district: District the price belongs to.
+            good_id: Engine good id.
+            price: Current shop price.
+
+        Returns:
+            ``"rising"``, ``"falling"`` or ``"stable"``.
+        """
+        prev = self._last_prices.get(district, {}).get(good_id)
+        if prev is None or price == prev:
+            return "stable"
+        return "rising" if price > prev else "falling"
+
+    def get_items(self) -> List[Dict[str, Any]]:
+        """Return live engine-Market goods for the Grid district, UI-shaped.
+
+        Pulls ``get_market().get_prices(district)`` and maps each entry to the
+        item shape the Grid front-end expects. Each item carries a ``trend``
+        (▲/▼/▬ in the UI) derived from the previous read so prices visibly move
+        as the economy ticks. Snapshots the prices for the next trend diff.
+
+        Returns:
+            List of item dicts (empty list on any Market failure — never raises).
+        """
+        market = self._get_market()
+        if market is None:
+            return []
+        district = _grid_market_district()
+        try:
+            prices = market.get_prices(district)
+        except Exception as exc:
+            logger.warning("[grid] price fetch failed (operation=market_items, district=%s): %s",
+                           district, exc)
+            return []
+
+        items: List[Dict[str, Any]] = []
+        snapshot: Dict[str, int] = {}
+        seen: set = set()
+        for row in prices:
+            try:
+                gid = row["good_id"]
+                if gid in seen:  # one row per good (cheapest shop wins on buy anyway)
+                    continue
+                seen.add(gid)
+                price = int(row.get("shop_price", row.get("current_price", 0)))
+                snapshot[gid] = price
+                category = str(row.get("category", ""))
+                rarity_int = int(row.get("rarity", 1) or 1)
+                items.append({
+                    "id": gid,
+                    "name": row.get("name", gid),
+                    "vendor": _CATEGORY_VENDOR.get(category, "mira"),
+                    "category": category,
+                    "base_price": int(row.get("base_price", price)),
+                    "price": price,
+                    "stock": 99,  # engine Market is supply/demand priced, not stock-gated
+                    "trend": self._trend(district, gid, price),
+                    "rarity": _RARITY_NAMES.get(rarity_int, "common"),
+                    "illegal": bool(row.get("illegal", False)),
+                    "shop_name": row.get("shop_name", ""),
+                    "supply": row.get("supply"),
+                    "demand": row.get("demand"),
+                    "source": "engine_market",
+                })
+            except Exception as exc:  # one bad row never sinks the whole list
+                logger.debug("[grid] skipped malformed market row (operation=market_items): %s", exc)
+                continue
+
+        self._last_prices[district] = snapshot
+        return items
+
+    def buy(self, good_id: str, quantity: int = 1) -> Dict[str, Any]:
+        """Route a Grid purchase through the engine Market.
+
+        Args:
+            good_id: Engine good id to buy.
+            quantity: Units to buy.
+
+        Returns:
+            Grid-shaped result dict (``success``/``error``/...). Settlement
+            (credits, inventory, heat) is performed by the engine economy.
+        """
+        market = self._get_market()
+        if market is None:
+            return {"success": False, "error": "Market offline."}
+        district = _grid_market_district()
+        try:
+            res = market.buy(district, good_id, quantity=quantity, player_id="player1")
+        except Exception as exc:
+            logger.warning("[grid] buy failed (operation=market_buy, good=%s): %s", good_id, exc)
+            return {"success": False, "error": "Trade failed."}
+        if res.get("status") != "ok":
+            return {"success": False, "error": self._reason_text(res), "detail": res}
+        return {
+            "success": True,
+            "item": res.get("good_name", good_id),
+            "good_id": good_id,
+            "quantity": res.get("quantity", quantity),
+            "paid": res.get("total", 0),
+            "unit_price": res.get("unit_price", 0),
+            "balance": res.get("balance"),
+            "heat": res.get("heat"),
+            "shop": res.get("shop", ""),
+            "illegal": res.get("illegal", False),
+            "source": "engine_market",
+        }
+
+    def sell(self, good_id: str, quantity: int = 1) -> Dict[str, Any]:
+        """Route a Grid sale through the engine Market.
+
+        Args:
+            good_id: Engine good id to sell.
+            quantity: Units to sell.
+
+        Returns:
+            Grid-shaped result dict. The engine economy verifies possession and
+            credits the wallet.
+        """
+        market = self._get_market()
+        if market is None:
+            return {"success": False, "error": "Market offline."}
+        district = _grid_market_district()
+        try:
+            res = market.sell(district, good_id, quantity=quantity, player_id="player1")
+        except Exception as exc:
+            logger.warning("[grid] sell failed (operation=market_sell, good=%s): %s", good_id, exc)
+            return {"success": False, "error": "Trade failed."}
+        if res.get("status") != "ok":
+            return {"success": False, "error": self._reason_text(res), "detail": res}
+        return {
+            "success": True,
+            "item": res.get("good_name", good_id),
+            "good_id": good_id,
+            "quantity": res.get("quantity", quantity),
+            "earned": res.get("total", 0),
+            "unit_price": res.get("unit_price", 0),
+            "balance": res.get("balance"),
+            "source": "engine_market",
+        }
+
+    @staticmethod
+    def _reason_text(res: Dict[str, Any]) -> str:
+        """Translate an engine-Market error dict into player-facing text.
+
+        Args:
+            res: The Market result dict with a ``reason``.
+
+        Returns:
+            A friendly error string.
+        """
+        reason = res.get("reason", "Trade rejected.")
+        mapping = {
+            "insufficient_credits": f"Insufficient credits (need ₵{res.get('needed', 0):,}).",
+            "not_in_inventory": "You don't hold that item.",
+        }
+        return mapping.get(reason, str(reason))
+
+
 # ──── GridState singleton ─────────────────────────────────────────────────────
 
 class _GridState:
     """Runtime state for THE GRID scene — market prices, inventory, quests."""
 
     def __init__(self) -> None:
-        self._prices: Dict[str, float] = {item["id"]: float(item["base_price"]) for item in MARKET_CATALOGUE}
-        self._stock: Dict[str, int] = {item["id"]: item["stock"] for item in MARKET_CATALOGUE}
+        # v1.63.0 [2026-06-16] — D-T1: live engine Market is the source of truth
+        # for tradable goods + prices. The Grid keeps its OWN small ledger only
+        # for the PH-T2 phone-upgrade specials (Grid exclusives not in the
+        # engine GOOD_CATALOG).
+        self._market = _GridMarketAdapter()
+        self._upgrade_stock: Dict[str, int] = {item["id"]: item["stock"] for item in PHONE_UPGRADE_CATALOGUE}
         self._player_inventory: List[Dict[str, Any]] = []
         self._active_quest: Optional[str] = None  # faction id with active quest
         self._quest_complete: Dict[str, bool] = {}  # quest ID -> completed
         self._intel_feed: List[Dict[str, Any]] = []
-        self._price_trend: Dict[str, str] = {item["id"]: "stable" for item in MARKET_CATALOGUE}
         # v1.49.5 — Track cumulative purchases per vendor for dialogue triggers
         self._vendor_purchase_count: Dict[str, int] = {}
 
     # ── Market ────────────────────────────────────────────────────────────────
+    # v1.63.0 [2026-06-16] — D-T1 "The Exchange": goods + prices come from the
+    # live engine Market; PH-T2 phone-upgrade specials are layered on top.
 
-    def get_market_items(self) -> List[Dict[str, Any]]:
-        """Return current market catalogue with live prices."""
-        items = []
-        for item in MARKET_CATALOGUE:
+    def _phone_upgrade_items(self) -> List[Dict[str, Any]]:
+        """Return the PH-T2 phone-upgrade specials as Grid-shaped market items.
+
+        These are Grid-vendor exclusives (not engine-Market goods); their prices
+        are the static catalogue base prices and they retain stock gating.
+
+        Returns:
+            List of item dicts tagged ``source="grid_special"``.
+        """
+        items: List[Dict[str, Any]] = []
+        for item in PHONE_UPGRADE_CATALOGUE:
             iid = item["id"]
             items.append({
                 **item,
-                "price": int(self._prices[iid]),
-                "stock": self._stock[iid],
-                "trend": self._price_trend[iid],
+                "price": int(item["base_price"]),
+                "stock": self._upgrade_stock.get(iid, 0),
+                "trend": "stable",
+                "source": "grid_special",
             })
         return items
 
-    def buy_item(self, item_id: str, quantity: int = 1) -> Dict[str, Any]:
-        """Process a purchase. Returns result dict."""
-        item = next((i for i in MARKET_CATALOGUE if i["id"] == item_id), None)
+    def get_market_items(self) -> List[Dict[str, Any]]:
+        """Return the Grid market: live engine goods + PH-T2 upgrade specials.
+
+        The engine-Market goods are the live, NPC-driven economy; the phone
+        upgrades are appended as Grid exclusives. Defensive — a Market outage
+        still yields the upgrade specials so the Grid renders.
+
+        Returns:
+            Combined list of market item dicts.
+        """
+        return self._market.get_items() + self._phone_upgrade_items()
+
+    def _is_phone_upgrade(self, item_id: str) -> bool:
+        """Whether ``item_id`` is a PH-T2 phone-upgrade special."""
+        return any(i["id"] == item_id for i in PHONE_UPGRADE_CATALOGUE)
+
+    def _buy_phone_upgrade(self, item_id: str, quantity: int) -> Dict[str, Any]:
+        """Buy a PH-T2 phone-upgrade special (Grid-vendor path, preserved).
+
+        Mirrors the original Grid buy logic for the upgrade specials: spends
+        credits via PlayerState, decrements stock, records the purchase, and
+        grants the real ITEM_CATALOG item to the InventoryManager so
+        ``install_phone_upgrade`` can consume it.
+
+        Args:
+            item_id: The phone-upgrade id.
+            quantity: Units to buy.
+
+        Returns:
+            Grid-shaped result dict.
+        """
+        item = next((i for i in PHONE_UPGRADE_CATALOGUE if i["id"] == item_id), None)
         if not item:
             return {"success": False, "error": "Item not found."}
-        price = int(self._prices[item_id])
+        price = int(item["base_price"])
         total = price * quantity
-        stock = self._stock[item_id]
+        stock = self._upgrade_stock.get(item_id, 0)
         if stock < quantity:
             return {"success": False, "error": f"Insufficient stock ({stock} available)."}
         try:
@@ -399,39 +675,110 @@ class _GridState:
             ps.spend_credits(total, f"grid_buy:{item_id}")
         except Exception:
             pass  # PlayerState optional
-        self._stock[item_id] = max(0, stock - quantity)
+        self._upgrade_stock[item_id] = max(0, stock - quantity)
         self._player_inventory.append({"item_id": item_id, "name": item["name"], "qty": quantity, "paid": total})
-        # v1.62.0 [2026-06-15] — PH-T2: items whose id matches a real
-        # ITEM_CATALOG entry (e.g. phone upgrades) are also granted to the
-        # InventoryManager so skills like `install_phone_upgrade` can consume
-        # them. Best-effort: never let an inventory hiccup fail the purchase.
+        # v1.62.0 [2026-06-15] — PH-T2: grant the real ITEM_CATALOG item so
+        # `install_phone_upgrade` can consume it. Best-effort.
         try:
             from engine.world.inventory import ITEM_CATALOG, get_inventory
             if item_id in ITEM_CATALOG:
                 get_inventory().add_item(item_id, quantity=quantity)
         except Exception as exc:
             logger.debug("[grid] inventory grant skipped (item_id=%s): %s", item_id, exc)
-        # v1.49.5 — Track vendor purchase count for dialogue triggers
         vendor_id = item.get("vendor", "unknown")
         self._vendor_purchase_count[vendor_id] = self._vendor_purchase_count.get(vendor_id, 0) + quantity
-        return {"success": True, "item": item["name"], "quantity": quantity, "paid": total, "remaining_stock": self._stock[item_id]}
+        return {"success": True, "item": item["name"], "quantity": quantity, "paid": total,
+                "remaining_stock": self._upgrade_stock[item_id], "source": "grid_special"}
+
+    def buy_item(self, item_id: str, quantity: int = 1) -> Dict[str, Any]:
+        """Buy an item: engine-Market good OR a PH-T2 phone-upgrade special.
+
+        Phone upgrades route through the preserved Grid-vendor path; everything
+        else settles through the live engine Market.
+
+        Args:
+            item_id: Good id (engine) or phone-upgrade id.
+            quantity: Units to buy.
+
+        Returns:
+            Grid-shaped result dict.
+        """
+        if self._is_phone_upgrade(item_id):
+            return self._buy_phone_upgrade(item_id, quantity)
+        result = self._market.buy(item_id, quantity)
+        if result.get("success"):
+            self._player_inventory.append({
+                "item_id": item_id, "name": result.get("item", item_id),
+                "qty": result.get("quantity", quantity), "paid": result.get("paid", 0),
+            })
+            vendor_id = _CATEGORY_VENDOR.get(self._good_category(item_id), "mira")
+            self._vendor_purchase_count[vendor_id] = self._vendor_purchase_count.get(vendor_id, 0) + quantity
+        return result
+
+    def _good_category(self, good_id: str) -> str:
+        """Look up an engine good's category for vendor attribution.
+
+        Args:
+            good_id: Engine good id.
+
+        Returns:
+            The good's category, or ``""`` if unknown/unavailable.
+        """
+        try:
+            from engine.world.market import get_market
+            good = get_market().get_good(good_id)
+            return str(good.get("category", "")) if good else ""
+        except Exception:
+            return ""
 
     def sell_item(self, item_id: str, quantity: int = 1) -> Dict[str, Any]:
-        """Process a sale of player inventory."""
+        """Sell an item: engine-Market good OR a PH-T2 phone-upgrade special.
+
+        Args:
+            item_id: Good id (engine) or phone-upgrade id.
+            quantity: Units to sell.
+
+        Returns:
+            Grid-shaped result dict.
+        """
+        if self._is_phone_upgrade(item_id):
+            return self._sell_phone_upgrade(item_id, quantity)
+        result = self._market.sell(item_id, quantity)
+        if result.get("success"):
+            self._remove_from_local_inventory(item_id, quantity)
+        return result
+
+    def _sell_phone_upgrade(self, item_id: str, quantity: int) -> Dict[str, Any]:
+        """Sell back a PH-T2 phone-upgrade special (Grid-vendor path, preserved).
+
+        Args:
+            item_id: The phone-upgrade id.
+            quantity: Units to sell.
+
+        Returns:
+            Grid-shaped result dict.
+        """
         owned = sum(e["qty"] for e in self._player_inventory if e["item_id"] == item_id)
         if owned < quantity:
             return {"success": False, "error": f"You only own {owned} of that item."}
-        item = next((i for i in MARKET_CATALOGUE if i["id"] == item_id), None)
+        item = next((i for i in PHONE_UPGRADE_CATALOGUE if i["id"] == item_id), None)
         if not item:
             return {"success": False, "error": "Item not found."}
-        sell_price = int(self._prices[item_id] * 0.65)  # 65 % sell-back rate
+        sell_price = int(item["base_price"] * 0.65)  # 65 % sell-back rate
         total = sell_price * quantity
         try:
             from engine.world.player_state import get_player_state
             get_player_state().earn_credits(total, f"grid_sell:{item_id}")
         except Exception:
             pass
-        # Remove from inventory
+        self._remove_from_local_inventory(item_id, quantity)
+        self._upgrade_stock[item_id] = min(
+            self._upgrade_stock.get(item_id, 0) + quantity, item["stock"])
+        return {"success": True, "item": item["name"], "quantity": quantity,
+                "earned": total, "source": "grid_special"}
+
+    def _remove_from_local_inventory(self, item_id: str, quantity: int) -> None:
+        """Remove ``quantity`` of ``item_id`` from the Grid's display ledger."""
         remaining = quantity
         new_inv = []
         for e in self._player_inventory:
@@ -443,33 +790,24 @@ class _GridState:
             else:
                 new_inv.append(e)
         self._player_inventory = new_inv
-        self._stock[item_id] = min(self._stock[item_id] + quantity, item["stock"])
-        return {"success": True, "item": item["name"], "quantity": quantity, "earned": total}
 
     def economy_shock(self, event_type: str, economy_impact: int) -> List[Dict[str, Any]]:
-        """Apply an economy event to market prices.  Returns list of changed items."""
-        changed = []
-        for item in MARKET_CATALOGUE:
-            iid = item["id"]
-            base = float(item["base_price"])
-            factor = 1.0
-            if event_type in ("market_crash", "corp_tax", "blackout"):
-                factor = random.uniform(0.75, 0.95)  # prices drop
-                self._price_trend[iid] = "falling"
-            elif event_type in ("black_market_sale", "corp_raid"):
-                factor = random.uniform(1.05, 1.30)  # prices spike
-                self._price_trend[iid] = "rising"
-            elif event_type == "festival":
-                if item["category"] in ("meds", "tech"):
-                    factor = random.uniform(0.85, 0.95)
-                    self._price_trend[iid] = "falling"
-            else:
-                factor = random.uniform(0.95, 1.05)
-                self._price_trend[iid] = "stable"
-            new_price = max(1, int(base * factor))
-            if new_price != int(self._prices[iid]):
-                self._prices[iid] = float(new_price)
-                changed.append({"id": iid, "price": new_price, "trend": self._price_trend[iid]})
+        """React to an economy tick by re-reading live engine-Market prices.
+
+        v1.63.0 [2026-06-16] — D-T1: the Grid no longer mutates its own prices;
+        the engine Market owns supply/demand. This simply re-reads the live
+        prices (refreshing the ▲/▼ trend) so the front-end can push an update.
+
+        Args:
+            event_type: The economy event type (informational).
+            economy_impact: Impact magnitude (informational).
+
+        Returns:
+            List of ``{"id", "price", "trend"}`` for the live engine goods.
+        """
+        changed: List[Dict[str, Any]] = []
+        for item in self._market.get_items():
+            changed.append({"id": item["id"], "price": item["price"], "trend": item["trend"]})
         return changed
 
     # ── Faction ───────────────────────────────────────────────────────────────
@@ -846,6 +1184,49 @@ class GridScene(FlaskScene):
                 self.socketio.emit("inventory_update", {"inventory": self._state.get_player_inventory()})
             return Response(json.dumps(result, default=str), mimetype="application/json")
 
+        # ── The Exchange — live engine-Market API (v1.63.0 — D-T1) ─────────────
+        # CONNECTS: engine.world.market.get_market via _GridMarketAdapter
+        # These endpoints expose the *one* NPC-driven economy through the Grid.
+        # /api/market/* aliases are preserved above for the existing front-end.
+        @app.route("/api/grid/market")
+        def api_grid_market():
+            """Live engine-Market goods (+ PH-T2 specials) for the Grid district."""
+            try:
+                items = self._state.get_market_items()
+            except Exception as exc:
+                logger.warning("[grid] market endpoint degraded (operation=grid_market): %s", exc)
+                items = []
+            return Response(
+                json.dumps({
+                    "district": _grid_market_district(),
+                    "items": items,
+                    "inventory": self._state.get_player_inventory(),
+                }, default=str),
+                mimetype="application/json",
+            )
+
+        @app.route("/api/grid/buy", methods=["POST"])
+        def api_grid_buy():
+            """Buy via the live engine Market (settles credits/inventory/heat)."""
+            data = request.get_json(silent=True) or {}
+            result = self._state.buy_item(data.get("item_id", data.get("good_id", "")),
+                                          int(data.get("quantity", 1) or 1))
+            if result.get("success") and self.socketio:
+                self.socketio.emit("inventory_update", {"inventory": self._state.get_player_inventory()})
+                self.socketio.emit("price_update", {"items": self._state.get_market_items()})
+            return Response(json.dumps(result, default=str), mimetype="application/json")
+
+        @app.route("/api/grid/sell", methods=["POST"])
+        def api_grid_sell():
+            """Sell via the live engine Market (verifies possession, credits wallet)."""
+            data = request.get_json(silent=True) or {}
+            result = self._state.sell_item(data.get("item_id", data.get("good_id", "")),
+                                           int(data.get("quantity", 1) or 1))
+            if result.get("success") and self.socketio:
+                self.socketio.emit("inventory_update", {"inventory": self._state.get_player_inventory()})
+                self.socketio.emit("price_update", {"items": self._state.get_market_items()})
+            return Response(json.dumps(result, default=str), mimetype="application/json")
+
         # ── Station / Map API ─────────────────────────────────────────────────
 
         @app.route("/api/station/map")
@@ -1054,9 +1435,24 @@ class GridScene(FlaskScene):
                     self.socketio.emit("intel_update", {"intel": self._state.get_intel_feed()})
                     self.socketio.emit("world_event", data)
 
+            # v1.63.0 [2026-06-16] — D-T1: the engine Market emits market_buy /
+            # market_sell / market_event_applied whenever NPC/agency trades or
+            # world-event shocks move the live economy. Push the refreshed live
+            # prices to the Grid so The Exchange moves in real time.
+            def _on_market_change(data: Dict[str, Any]) -> None:
+                if not self.socketio:
+                    return
+                try:
+                    self.socketio.emit("price_update", {"items": self._state.get_market_items()})
+                except Exception as exc:
+                    logger.debug("[%s] market price push failed (operation=market_change): %s",
+                                 SCENE_ID, exc)
+
             bus = get_event_bus()
             bus.subscribe("world.economy_tick", _on_economy_tick, subscriber_id="grid")
             bus.subscribe("world.major_event", _on_world_event, subscriber_id="grid")
-            logger.debug("THE GRID: EventBus wired")
+            for et in ("market_buy", "market_sell", "market_event_applied"):
+                bus.subscribe(et, _on_market_change, subscriber_id="grid")
+            logger.debug("THE GRID: EventBus wired (incl. live market events)")
         except Exception as exc:
             logger.warning("[%s] EventBus wiring failed (operation=lifecycle): %s", SCENE_ID, exc)

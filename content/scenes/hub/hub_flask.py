@@ -13,6 +13,7 @@ Version: v1.58.0 [2026-06-11]
 Author:  CosySim Team
 
 Change Log:
+    v1.63.0 [2026-06-15] — Added the_sprawl hub presentation entry (B-T1)
     v1.58.0 [2026-06-11] — "/" serves the NEONCITY Dark Renaissance landing
                             page (landing.html); catalogue moved to /terminal
     v1.42.1 [2026-03-21] — Extensive documentation, section dividers, version stamps
@@ -232,6 +233,22 @@ _SCENE_PRESENTATION: Dict[str, Dict[str, str]] = {
         "group": "system",
         "accent": "#06b6d4",
         "desc": "A full neon OS desktop — mail, files, and your live AI assistant",
+    },
+    # v1.63.0 [2026-06-15] — The Sprawl living-city map (B-T1)
+    "the_sprawl": {
+        "subtitle": "The Living City",
+        "icon": "🌆",
+        "group": "neon_world",
+        "accent": "#39ff14",
+        "desc": "The living city map — territory, NPCs and your avatar walking the streets",
+    },
+    # v1.63.0 [2026-06-16] — The War Room faction command center (C-T1)
+    "war_room": {
+        "subtitle": "Faction Command",
+        "icon": "⚔",
+        "group": "action",
+        "accent": "#ef4444",
+        "desc": "Pick a faction, command crews and take the city",
     },
 }
 

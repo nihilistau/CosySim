@@ -16,6 +16,8 @@ pillars:
     - grid
     - lab_break
     - executive_suite
+    - the_sprawl
+    - war_room
     requires:
     - nexus_kms
     - hub
@@ -70,7 +72,11 @@ scenes:
     auto_start: true
   realm:
     auto_start: false
+  the_sprawl:
+    auto_start: true
   tavern:
+    auto_start: true
+  war_room:
     auto_start: true
 services:
   admin:
