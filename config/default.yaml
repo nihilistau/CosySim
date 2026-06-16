@@ -1004,6 +1004,14 @@ framework:
   max_event_log: 500              # max events in the event bus log
   max_consequence_age_turns: 50   # auto-clean old fired consequences
 
+# Cross-scene EventBus
+# v1.63.0 [2026-06-17] — Non-blocking Nexus persistence toggle.
+events:
+  # When true (default), publish() enqueues Nexus history persistence to a
+  # daemon worker thread so publish latency is decoupled from Nexus
+  # speed/availability. Set false to persist synchronously inline (legacy).
+  persist_async: true
+
 # Nexus Knowledge System integration
 nexus:
   enabled: true

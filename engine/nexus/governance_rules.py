@@ -45,6 +45,8 @@ AGENT_TYPES: Dict[str, Dict[str, Any]] = {
     "copilot":      {"tier": "expert",   "ops": ["read", "write", "delete", "admin"], "description": "Claude Code / GitHub Copilot CLI"},
     "claude_code":  {"tier": "expert",   "ops": ["read", "write", "delete", "admin"], "description": "Claude Code CLI agent"},
     "scene_agent":  {"tier": "worker",   "ops": ["read", "write"],                    "description": "In-scene character agent"},
+    # v1.63.0 [2026-06-17] — EventBus persistence actor: write-only history sink
+    "event_bus":    {"tier": "system",   "ops": ["read", "write"],                    "description": "Cross-scene EventBus Nexus history persister"},
     "scheduler":    {"tier": "system",   "ops": ["read", "write", "admin"],           "description": "Background scheduler daemon"},
     "training":     {"tier": "system",   "ops": ["read", "write"],                    "description": "Training pipeline worker"},
     "observer":     {"tier": "readonly", "ops": ["read"],                             "description": "Read-only monitoring agent"},
@@ -565,6 +567,7 @@ class GovernanceManager:
         prefix_map = {
             "copilot": "copilot",
             "claude": "claude_code",
+            "event_bus": "event_bus",  # v1.63.0 [2026-06-17] — EventBus persistence actor
             "scheduler": "scheduler",
             "training": "training",
             "system": "system",
