@@ -10,6 +10,32 @@ Pytest plugin flags:
     --smoke-only   Run only the ~15 smoke-test files (one per domain)
     --cap N        Max test files to run; falls back to smoke if exceeded (default: 80)
 """
+# v1.63.0 [2026-06-17] — Pre-seed platform.uname() BEFORE any engine imports.
+# On this Windows host, a bare ``pytest`` collection hangs (~40s+ / indefinitely)
+# because importing engine code transitively calls ``platform.uname()``, which on
+# a cold cache fires a slow/contended Windows WMI query. On this Python build both
+# the lazy ``processor`` lookup and ``platform.node()`` also probe WMI — node()
+# was verified to hang for 60s here — so we use a LITERAL hostname instead of
+# calling node(). Seeding ``platform._uname_cache`` up front makes every later
+# ``uname()`` call a trivial cache read, eliminating the collection hang
+# suite-wide. This block must run above all other (engine) imports; pytest imports
+# conftest.py before test collection, so the cache is warm in time.
+import collections as _collections
+import platform as _platform
+
+# Version-proof: don't rely on ``uname_result``'s constructor accepting a 6th
+# positional ``processor`` arg (it raises TypeError on this build), and don't
+# leave ``.processor`` lazy (accessing it re-probes WMI). Build a plain, fully
+# populated namedtuple and STUB both WMI-backed functions so NO code path
+# (``platform.uname()``, ``platform.uname().processor``, or the separate
+# ``platform.processor()``) can trigger the slow Windows WMI lookup.
+_UNAME = _collections.namedtuple(
+    "uname_result", "system node release version machine processor"
+)("Windows", "localhost", "11", "10.0.26200", "AMD64", "AMD64")
+_platform._uname_cache = _UNAME
+_platform.uname = lambda: _UNAME          # first-call uname WMI probe -> constant
+_platform.processor = lambda: "AMD64"     # separate processor() WMI probe -> constant
+
 import gc
 import sys
 import os

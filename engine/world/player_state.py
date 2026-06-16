@@ -120,6 +120,9 @@ class PlayerState:
         self._skills: Dict[str, int] = dict(_DEFAULT_SKILLS)
         self._implants: List[str] = []
         self._faction_standings: Dict[str, int] = {f: 0 for f in _FACTION_NAMES}
+        # v1.63.0 [2026-06-16] — C-T2: persisted War Room faction allegiance.
+        # Read by the_sprawl._player_faction() to gate the contest action.
+        self._allegiance: Optional[str] = None
         self._active_location: str = "NEON CITY"
         self._inventory: List[str] = []
         self._event_history: List[Dict[str, Any]] = []  # last 50 HUD events
@@ -159,6 +162,42 @@ class PlayerState:
         """Faction standings dict (copy)."""
         with self._lock:
             return dict(self._faction_standings)
+
+    # v1.63.0 [2026-06-16] — C-T2: War Room faction allegiance (persisted)
+    @property
+    def allegiance(self) -> Optional[str]:
+        """The player's chosen faction allegiance, or ``None`` if unset.
+
+        Returns:
+            One of the 6 canonical faction names, or ``None``.
+        """
+        with self._lock:
+            return self._allegiance
+
+    def set_allegiance(self, faction: Optional[str]) -> bool:
+        """Set (or clear) the player's faction allegiance and persist it.
+
+        Validates *faction* against the 6 canonical factions. Passing ``None``
+        clears the allegiance. Persists via the existing debounced auto-save and
+        emits a ``hud_update`` so connected HUDs reflect the change.
+
+        Args:
+            faction: A canonical faction name, or ``None`` to clear.
+
+        Returns:
+            True if the allegiance was set/cleared; False if *faction* was a
+            non-empty unknown value (state left unchanged).
+        """
+        if faction is not None and faction not in _FACTION_NAMES:
+            logger.debug("PlayerState: rejected unknown allegiance %r", faction)
+            return False
+        with self._lock:
+            self._allegiance = faction
+            self._last_updated = time.time()
+        self._emit_hud_update({"allegiance": faction})
+        self._schedule_auto_save()
+        logger.info("PlayerState: allegiance set to %s", faction)
+        return True
 
     @property
     def health(self) -> int:
@@ -692,6 +731,7 @@ class PlayerState:
                 "skills": dict(self._skills),
                 "implants": list(self._implants),
                 "faction_standings": dict(self._faction_standings),
+                "allegiance": self._allegiance,
                 "active_location": self._active_location,
                 "inventory": list(self._inventory),
                 "event_history": list(self._event_history[-10:]),
@@ -750,6 +790,9 @@ class PlayerState:
                 stored_factions = data.get("faction_standings", {})
                 for f in _FACTION_NAMES:
                     self._faction_standings[f] = int(stored_factions.get(f, 0))
+                # v1.63.0 [2026-06-16] — C-T2: allegiance (absent in old saves → None)
+                stored_alleg = data.get("allegiance")
+                self._allegiance = stored_alleg if stored_alleg in _FACTION_NAMES else None
                 self._active_location = str(data.get("active_location", "NEON CITY"))
                 self._inventory = list(data.get("inventory", []))
                 self._last_updated = float(data.get("last_updated", time.time()))
@@ -771,6 +814,7 @@ class PlayerState:
             self._skills = dict(_DEFAULT_SKILLS)
             self._implants = []
             self._faction_standings = {f: 0 for f in _FACTION_NAMES}
+            self._allegiance = None
             self._active_location = "NEON CITY"
             self._inventory = []
             self._event_history = []

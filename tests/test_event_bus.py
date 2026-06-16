@@ -295,12 +295,16 @@ class TestNexusPersistence:
         """Nexus add_entry is invoked once per published event."""
         _, mock_client = _patch_nexus
         bus.publish(EventTypes.ECONOMY_TRANSACTION, {"delta": 100}, scene="casino")
+        # v1.63.0 [2026-06-17] — Persistence is now async; drain before asserting.
+        bus.flush(timeout=5.0)
         mock_client.add_entry.assert_called_once()
 
     def test_nexus_add_entry_uses_history_content_type(self, bus: EventBus, _patch_nexus):
         """add_entry is called with content_type='history' and category='events'."""
         _, mock_client = _patch_nexus
         bus.publish(EventTypes.CASINO_MAJOR_WIN, {"winnings": 9999}, scene="casino")
+        # v1.63.0 [2026-06-17] — Persistence is now async; drain before asserting.
+        bus.flush(timeout=5.0)
         call_kwargs = mock_client.add_entry.call_args
         assert call_kwargs.kwargs.get("content_type") == "history"
         assert call_kwargs.kwargs.get("category") == "events"

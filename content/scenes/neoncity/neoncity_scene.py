@@ -1904,8 +1904,48 @@ class NeonCityScene(FlaskScene):
             lw = get_living_world()
             lw.start()
             logger.info("[%s] LivingWorld daemon started (operation=lifecycle)", SCENE_ID)
+            # v1.63.0 [2026-06-15] — A6: live-wire emergent agency to the running
+            # LivingWorld. start() is idempotent + config-gated (emergent.agency.
+            # enabled); it subscribes to the EXISTING living_world_tick event so a
+            # bounded goals->plan->execute pass runs whenever the world ticks.
+            from engine.world.emergent.agency import get_emergent_agency
+            get_emergent_agency().start()
+            logger.info("[emergent] agency started (operation=lifecycle)")
         except Exception as exc:
             logger.warning("[%s] LivingWorld start failed (operation=lifecycle): %s", SCENE_ID, exc)
+
+        # v1.63.0 [2026-06-15] — A7 "populate the world": seed canonical factions
+        # onto the existing cast and an idempotent generated NPC population so the
+        # emergent agency has factioned NPCs to drive LIVE territory contests.
+        # Both calls are idempotent (cast factions never overwritten; population
+        # only tops up to the target count), and the once-guard avoids re-running
+        # the scan on every serve. Defensive: a failure never blocks serving.
+        if not getattr(self, "_population_seeded", False):
+            try:
+                from engine.world import character_gen
+
+                count = character_gen.get_config().get(
+                    "emergent.population.count", 15
+                )
+                faction_count = character_gen.get_config().get(
+                    "emergent.population.faction_count", 10
+                )
+                cast = character_gen.seed_cast_factions()
+                pop = character_gen.seed_generated_population(
+                    count=int(count), faction_count=int(faction_count)
+                )
+                self._population_seeded = True
+                logger.info(
+                    "[char_gen] boot seeding done (operation=lifecycle, cast=%d, "
+                    "created=%d, factioned=%d, total=%d)",
+                    len(cast), pop.get("created", 0), pop.get("factioned", 0),
+                    pop.get("total", 0),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[%s] population seeding failed (operation=lifecycle): %s",
+                    SCENE_ID, exc,
+                )
 
         # v1.51.0 [2026-03-25] — Auto-load NeonCity welcome story pack for new players
         try:
@@ -1981,6 +2021,14 @@ class NeonCityScene(FlaskScene):
         try:
             from engine.world.living_world import get_living_world
             get_living_world().stop()
+        except Exception:
+            pass
+        # v1.63.0 [2026-06-15] — A6: stop the emergent agency on the matching
+        # shutdown (idempotent unsubscribe; never raises).
+        try:
+            from engine.world.emergent.agency import get_emergent_agency
+            get_emergent_agency().stop()
+            logger.info("[emergent] agency stopped (operation=lifecycle)")
         except Exception:
             pass
         for sub_id in self._bus_subs:

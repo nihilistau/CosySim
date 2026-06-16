@@ -79,6 +79,12 @@ GridScene.prototype._initMarket = function() {
   this._loadMarketItems();
   this._loadInventory_ext();
 
+  // v1.63.0 [2026-06-16] — D-T1 "The Exchange": poll the live engine Market so
+  // Grid prices (and ▲/▼ trend) move as the economy ticks / NPCs trade, even
+  // when no Socket.IO push arrives. Re-renders silently in the background.
+  if (this._marketPollTimer) clearInterval(this._marketPollTimer);
+  this._marketPollTimer = setInterval(() => { this._loadMarketItems(); }, 15000);
+
   // Vendor filter tabs
   $$('.vendor-tab').forEach(btn => {
     btn.addEventListener('click', () => {
