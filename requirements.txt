@@ -114,6 +114,7 @@ hydra-optuna-sweeper
 hyperpyyaml
 identify
 idna
+ijson  # v1.63.1 [2026-06-17] — streaming JSON parser for ARGUS heap_deep_parser.py (V8 graph walk); dropped during the py313 dep reinstall, restored after ARGUS smoke test
 importlib-metadata
 importlib-resources
 iniconfig
