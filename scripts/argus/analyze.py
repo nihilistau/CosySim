@@ -11,11 +11,18 @@ Usage:
     python -m scripts.argus.analyze har path/to/file.har --json
     python -m scripts.argus.analyze heap path/to/snapshot.heapsnapshot
     python -m scripts.argus.analyze dir path/to/har_folder/
+    python -m scripts.argus.analyze deep path/to/captures_folder/
+    python -m scripts.argus.analyze auto path/to/captures_folder/
     python -m scripts.argus.analyze compare file1.har file2.har
     python -m scripts.argus.analyze heap-diff before.heap after.heap
 
-Version: v1.50.0 [2026-03-25]
+Version: v1.63.1 [2026-06-17]
 Author:  CosySim Team
+
+Change Log:
+    v1.63.1 [2026-06-17] — Added `auto` subcommand (CLI surface for
+                            toolkit.auto_analyze) to match documented usage
+    v1.50.0 [2026-03-25] — Initial generic API discovery CLI
 """
 from __future__ import annotations
 
@@ -56,6 +63,13 @@ def main() -> None:
     deep_p = sub.add_parser("deep", help="Full automated deep analysis (HAR + heap + probing)")
     deep_p.add_argument("path", type=Path, help="Directory containing HAR and heap files")
 
+    # auto — toolkit master pipeline (mine + deep parse + extractors + JWT decode)
+    auto_p = sub.add_parser(
+        "auto",
+        help="Full automated toolkit pipeline (mine_heap + V8 deep parse + intel extractors + JWT decode)",
+    )
+    auto_p.add_argument("path", type=Path, help="File or directory of captures (.heapsnapshot / .har)")
+
     # compare
     cmp_p = sub.add_parser("compare", help="Diff two HAR files")
     cmp_p.add_argument("file_a", type=Path)
@@ -74,6 +88,8 @@ def main() -> None:
 
     if args.command == "deep":
         _deep_analyze(args.path)
+    elif args.command == "auto":
+        _auto_analyze(args.path)
     elif args.command == "har":
         _analyze_har(args.path, args.json, getattr(args, 'report', False))
     elif args.command == "heap":
@@ -95,6 +111,58 @@ def _deep_analyze(path: Path) -> None:
         return
     analyzer = DeepAnalyzer()
     analyzer.analyze(str(path))
+
+
+# ──── Auto Analysis (toolkit master pipeline) ──────────────────────────────────
+
+# v1.63.1 [2026-06-17] — CLI surface for toolkit.auto_analyze, so the documented
+# `analyze auto <path>` command (CLAUDE.md) actually exists. Per-heap it runs the
+# regex miner, V8 deep parse, intel extractors and JWT decode; per-HAR it pulls
+# refresh tokens. Writes data/argus/reports/auto_analysis_report.json.
+def _auto_analyze(path: Path) -> None:
+    from scripts.argus.toolkit import auto_analyze
+
+    if not path.exists():
+        print(f"Path not found: {path}")
+        return
+
+    results = auto_analyze(str(path))
+
+    print()
+    print("=" * 60)
+    print("  ARGUS Auto Analysis (toolkit pipeline)")
+    print("=" * 60)
+    print(f"  Input:           {results.get('input')}")
+    print(f"  Heaps processed: {results.get('heaps_processed', 0)}")
+    print(f"  HARs processed:  {results.get('hars_processed', 0)}")
+    print()
+
+    for name, finding in results.get("findings", {}).items():
+        if "regex" in finding:  # heap
+            regex = finding.get("regex", {})
+            deep = finding.get("deep", {})
+            agents = finding.get("agents", {})
+            err = regex.get("error") or deep.get("error")
+            line = (
+                f"  {name}: regex={regex.get('findings', 0)} "
+                f"deep_files={deep.get('total_files', 0)} "
+                f"agents={agents.get('total_events', 0)} "
+                f"cot={finding.get('chain_of_thought', 0)} "
+                f"schemas={finding.get('app_schemas', 0)} "
+                f"proto={finding.get('protobuf_definitions', 0)} "
+                f"jwts={finding.get('jwts', 0)}"
+            )
+            if err:
+                line += f"  [!] {err}"
+            print(line)
+        else:  # har
+            tok = "yes" if finding.get("refresh_token_found") else "no"
+            print(f"  {name}: refresh_token={tok}")
+
+    print()
+    print(f"  Report: {results.get('report', 'n/a')}")
+    print("=" * 60)
+    print()
 
 
 # ──── HAR Analysis ───────────────────────────────────────────────────────────
