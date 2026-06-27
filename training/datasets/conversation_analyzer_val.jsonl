@@ -1,1 +1,0 @@
-{"instruction": "Extract structured user facts from this conversation snippet.", "input": "I'm John, a Python developer working on AI agents", "output": "{\"name\":\"John\",\"tech_level\":\"expert\",\"facts\":[\"Python developer\",\"works on AI agents\"]}", "model_type": "conversation_analyzer"}

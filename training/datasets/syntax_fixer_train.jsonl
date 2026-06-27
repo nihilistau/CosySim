@@ -1,5 +1,0 @@
-{"input": "def foo()\n    return 1", "output": "def foo():\n    return 1", "model_type": "syntax_fixer", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "{\"key\": \"value\"", "output": "{\"key\": \"value\"}", "model_type": "syntax_fixer", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "import os\nos.path.exists(path)", "output": "import os\nfound = os.path.exists(path)", "model_type": "syntax_fixer", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "def foo()\n    return 1", "output": "def foo():\n    return 1", "model_type": "syntax_fixer", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "{\"key\": \"value\"", "output": "{\"key\": \"value\"}", "model_type": "syntax_fixer", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}

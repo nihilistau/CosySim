@@ -1,1 +1,0 @@
-{"instruction": "Synthesize a concise answer from the provided context fragments.", "input": "How does MCP state work?", "output": "MCP state is managed through the MCPFramework tree, a hierarchical key-value store synced to SQLite.", "model_type": "knowledge_synthesizer"}
