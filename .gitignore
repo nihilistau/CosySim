@@ -185,3 +185,27 @@ Untitled.ipynb
 # ──── Large generated files ───────────────────────────────────────
 nlm_automation_log.json
 nlm_bundle.js
+
+# ──── v1.64 housekeeping — local scratch / runtime artifacts ───────
+# Local Claude Code session settings (machine-specific)
+.claude/settings.local.json
+# venv bootstrap log
+.venv-install-log.txt
+# Superpowers skill scratch (plans/specs are session artifacts)
+.superpowers/
+docs/superpowers/
+# Test fixture scene (not a launch target)
+content/scenes/test_scene/
+# Grok experiment scratch
+grok.md
+data/grok/
+scripts/argus/grok_*.py
+# data/ scratch probes + dumps not caught by existing data/* rules
+data/_*.py
+data/*.txt
+data/baseline/
+data/nexus_vectors/
+# Training runtime artifacts (datasets, run logs, registry — regenerated)
+training/*.jsonl
+training/datasets/**/*.jsonl
+training/model_registry.json

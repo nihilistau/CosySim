@@ -1,5 +1,0 @@
-{"input": "Search for interceptor docs", "output": "nexus_search", "model_type": "router_v2", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "What port is LMStudio on?", "output": "nexus_ask", "model_type": "router_v2", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "Start the penthouse scene", "output": "scene_control", "model_type": "router_v2", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "Synthesize speech for Aria", "output": "tts_request", "model_type": "router_v2", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
-{"input": "Run the backup now", "output": "backup_request", "model_type": "router_v2", "source": "synthetic_fallback", "quality": "bronze", "metadata": {}}
