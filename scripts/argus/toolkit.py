@@ -15,10 +15,13 @@ Generic tools for analyzing any web application:
 
 These tools are application-agnostic. Use them from any ARGUS client.
 
-Version: v1.52.1 [2026-03-26]
+Version: v1.63.1 [2026-06-17]
 Author:  CosySim Team
 
 Change Log:
+    v1.63.1 [2026-06-17] — mine_heap/mine_heap_deep now check subprocess returncode
+                            and log failures via Oracle (no more silent swallow when
+                            a miner crashes and a stale output dir masks it)
     v1.52.1 [2026-03-26] — Added agent message stream extraction, chain-of-thought
                             extraction, app schema extraction from heap strings
     v1.52.0 [2026-03-26] — Initial: bundle analysis, statsig injection,
@@ -500,8 +503,19 @@ def mine_heap(
 
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(root))
 
-    # Read the output JSON
+    # v1.63.1 [2026-06-17] — Surface subprocess failures loudly. Previously a
+    # crashed miner (e.g. a missing dependency) fell through to the output-file
+    # check, and a leftover file from a prior run silently masked the failure.
     heap_name = Path(heap_path).stem
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "unknown error").strip()
+        logger.error(
+            "[Toolkit] heap_miner.py failed (operation=mine_heap, heap=%s, rc=%d): %s",
+            Path(heap_path).name, result.returncode, err[-500:],
+        )
+        return {"file": str(heap_path), "error": err[-500:], "returncode": result.returncode}
+
+    # Read the output JSON
     findings_json = Path(output_dir) / f"{heap_name}_findings.json"
     if findings_json.exists():
         findings = json.loads(findings_json.read_text())
@@ -514,7 +528,11 @@ def mine_heap(
             "output": str(findings_json),
         }
 
-    return {"file": str(heap_path), "error": result.stderr[:500] if result.returncode else "no output"}
+    logger.error(
+        "[Toolkit] heap_miner.py produced no findings file (operation=mine_heap, heap=%s): expected %s",
+        Path(heap_path).name, findings_json,
+    )
+    return {"file": str(heap_path), "error": f"no findings file at {findings_json}"}
 
 
 def mine_heap_deep(
@@ -554,7 +572,18 @@ def mine_heap_deep(
 
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(root))
 
+    # v1.63.1 [2026-06-17] — Surface subprocess failures loudly. Previously a
+    # crashed parser (e.g. missing `ijson`) fell through to the dir check, and a
+    # leftover `*_deep` dir from a prior run silently reported success.
     heap_name = Path(heap_path).stem
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "unknown error").strip()
+        logger.error(
+            "[Toolkit] heap_deep_parser.py failed (operation=mine_heap_deep, heap=%s, rc=%d): %s",
+            Path(heap_path).name, result.returncode, err[-500:],
+        )
+        return {"file": str(heap_path), "error": err[-500:], "returncode": result.returncode}
+
     deep_dir = Path(output_dir) / f"{heap_name}_deep"
     if deep_dir.exists():
         files = list(deep_dir.iterdir())
@@ -565,7 +594,11 @@ def mine_heap_deep(
             "total_files": len(files),
         }
 
-    return {"file": str(heap_path), "error": result.stderr[:500] if result.returncode else "no output"}
+    logger.error(
+        "[Toolkit] heap_deep_parser.py produced no output dir (operation=mine_heap_deep, heap=%s): expected %s",
+        Path(heap_path).name, deep_dir,
+    )
+    return {"file": str(heap_path), "error": f"no output dir at {deep_dir}"}
 
 
 def decode_jwts_from_findings(findings_json_path: str) -> List[Dict[str, Any]]:

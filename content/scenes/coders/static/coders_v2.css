@@ -7,6 +7,8 @@
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: glass panel hover border glow,
+ *                           matrix-card lift + scanline shimmer
  *   v1.58.0 [2026-06-11] — Initial v2 glow-up (mint code-lab bg, glass agent
  *                           feed, mono output voice, pulse-glow run CTA)
  */
@@ -47,4 +49,67 @@ body::before {
 
 @media (prefers-reduced-motion: reduce) {
   .lab-btn--primary { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   Glass panel hover border glow + matrix-card lift + scanline shimmer
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ──── Glass panel hover border glow ──────────────────────────────── */
+/* v1.64.0 [2026-06-27] — accent-traced border on any glass panel hover */
+.cs-panel,
+.agent-feed-panel,
+.lab-sidebar,
+.lab-output-panel {
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), 0.12);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.cs-panel:hover,
+.agent-feed-panel:hover,
+.lab-sidebar:hover,
+.lab-output-panel:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.45);
+  box-shadow: 0 0 20px rgba(var(--cs-scene-accent-rgb), 0.10),
+              inset 0 0 12px rgba(var(--cs-scene-accent-rgb), 0.04);
+}
+
+/* ──── Matrix card lift — code block hover elevation ─────────────── */
+/* v1.64.0 [2026-06-27] — subtle lift + accent shadow on code cards */
+.feed-msg,
+.lab-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.feed-msg:hover,
+.lab-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(var(--cs-scene-accent-rgb), 0.08),
+              0 0 12px rgba(var(--cs-scene-accent-rgb), 0.06);
+}
+
+/* ──── Scanline shimmer — subtle top-edge sweep ──────────────────── */
+/* v1.64.0 [2026-06-27] — horizontal light sweep on panel headers */
+@keyframes cs-scanline-sweep {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.lab-header,
+.lab-title-block {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--cs-scene-accent-rgb), 0.06) 45%,
+    rgba(var(--cs-scene-accent-rgb), 0.12) 50%,
+    rgba(var(--cs-scene-accent-rgb), 0.06) 55%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: cs-scanline-sweep 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-header,
+  .lab-title-block { animation: none; background-image: none; }
+  .feed-msg:hover,
+  .lab-card:hover { transform: none; }
 }

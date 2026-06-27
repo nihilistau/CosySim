@@ -1,3 +1,11 @@
+/*
+ * Nexus Control Panel — Dark Theme
+ * =================================
+ * Version: v1.64.0 [2026-06-27]
+ * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: card hover glow, tab accent,
+ *                           stat value text shadow
+ */
 /* ── Nexus Control Panel — Dark Theme ─────────────────────────────── */
 :root {
   --bg-primary: #0d1117;
@@ -1231,4 +1239,24 @@ body {
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Card hover glow ─────────────────────────────────────────────────── */
+.card:hover {
+  border-color: var(--accent-glow);
+  box-shadow: 0 0 12px var(--accent-dim);
+}
+
+/* ── Tab active accent ───────────────────────────────────────────────── */
+.tab-btn.active {
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+/* ── Stat value text glow ────────────────────────────────────────────── */
+.stat-value {
+  text-shadow: 0 0 8px var(--accent-dim);
 }

@@ -211,10 +211,12 @@ class TestSceneCategories:
         # v1.62.0 [2026-06-15] — +executive_suite (6 → 7)
         assert len(mod.SCENE_CATEGORIES["core"]["scenes"]) == 7
 
-    def test_showcase_has_six_scenes(self, hub_module):
+    def test_showcase_has_eight_scenes(self, hub_module):
         mod, _, _, _ = hub_module
         # v1.62.0 [2026-06-15] — +auction, +cyberspace (4 → 6)
-        assert len(mod.SCENE_CATEGORIES["showcase"]["scenes"]) == 6
+        # v1.64.0 [2026-06-27] — stale assertion fix: v1.63 added The Sprawl +
+        #   The War Room to the showcase (6 → 8) but this count was never updated.
+        assert len(mod.SCENE_CATEGORIES["showcase"]["scenes"]) == 8
 
     def test_tools_has_five_scenes(self, hub_module):
         mod, _, _, _ = hub_module

@@ -5,11 +5,20 @@
 {%- set scene_accent_rgb = "59 130 246" -%}
 
 {#
-  THE TERMINAL — v1.52.0 [2026-03-22] Migrated to neon_base.html
-  ================================================================
+  THE TERMINAL — v1.64.0 Premium Glow-Up
+  =======================================
   Main navigation hub connecting all CosySim scenes.
-  v1.52.0 [2026-03-22] — Migrated from standalone HTML to neon_base template.
-  v0.68   [2026-03-20] — Original standalone hub.
+  3-pillar layout (Game / Service / Creation) with live world state,
+  faction territory bars, economy panel, and system bench HUD.
+
+  Version: v1.64.0 [2026-06-27]
+
+  Change Log:
+    v1.64.0 [2026-06-27] — Premium glow-up: Orbitron wordmark, scene count badges,
+                           faction territory bars, gold credit chip, Nexus tier in
+                           bench HUD, premium glass panels, enhanced section headers
+    v1.52.0 [2026-03-22] — Migrated from standalone HTML to neon_base template.
+    v0.68   [2026-03-20] — Original standalone hub.
 #}
 
 {% block head_css %}
@@ -23,11 +32,11 @@
 {% block scene_content %}
 <div class="hub-layout">
 
-  {# ── Hub header ────────────────────────────────────────────────── #}
+  {# ── Hub header ── v1.64.0 chrome wordmark + gold credit chip ──── #}
   <header class="hub-header">
     <div class="hub-title-block">
-      <div class="hub-title">THE TERMINAL</div>
-      <div class="hub-subtitle">v1.52 Three Pillars &middot; Navigation Hub</div>
+      <div class="hub-title">&#9654; THE TERMINAL</div>
+      <div class="hub-subtitle">v1.64 Neon Glow-Up &middot; Navigation Hub</div>
     </div>
 
     <div class="hub-header-right">
@@ -37,8 +46,8 @@
       </div>
 
       <div class="credit-chip" title="Player credit balance">
-        <span class="credit-icon">&#9672;</span>
-        <span class="credit-value" id="header-credits">&cent;&mdash;</span>
+        <span class="credit-icon">&#8373;</span>
+        <span class="credit-value" id="header-credits">&mdash;</span>
       </div>
 
       <div class="scenes-badge">
@@ -50,12 +59,13 @@
   {# ── Main content ──────────────────────────────────────────────── #}
   <main class="hub-main">
 
-    {# ── NEONCITY pillar ── #}
+    {# ── NEONCITY pillar ── v1.64.0 scene count badge ──────────────── #}
     <section aria-label="NeonCity scenes">
       <div class="section-header">
         <span class="section-icon">&#127961;</span>
         <span class="section-label">NeonCity</span>
         <div  class="section-line"></div>
+        <span class="section-count" id="section-count-game"></span>
       </div>
       <div class="scene-grid" id="scene-grid-game">
         <div class="loading-placeholder">SCANNING NEONCITY&hellip;</div>
@@ -68,6 +78,7 @@
         <span class="section-icon">&#128421;</span>
         <span class="section-label">Services</span>
         <div  class="section-line"></div>
+        <span class="section-count" id="section-count-service"></span>
       </div>
       <div class="scene-grid" id="scene-grid-service">
         <div class="loading-placeholder">SCANNING SERVICES&hellip;</div>
@@ -80,13 +91,14 @@
         <span class="section-icon">&#127912;</span>
         <span class="section-label">Creation Kit</span>
         <div  class="section-line"></div>
+        <span class="section-count" id="section-count-creation"></span>
       </div>
       <div class="scene-grid" id="scene-grid-creation">
         <div class="loading-placeholder">SCANNING CREATION KIT&hellip;</div>
       </div>
     </section>
 
-    {# ── Bottom panels ── #}
+    {# ── Bottom panels ── v1.64.0 faction territory + gold economy ── #}
     <div class="hub-panels">
       <div class="glass-panel world-state-panel" aria-label="World state">
         <div class="panel-title"><span>&#9672;</span> WORLD STATE</div>
@@ -95,12 +107,20 @@
         <div class="world-events-list"  id="world-events-list">
           <div class="loading-placeholder">Loading events&hellip;</div>
         </div>
+
+        {# v1.64.0 [2026-06-27] — Faction territory power bars #}
+        <div class="faction-territory" id="faction-territory">
+          <div class="faction-territory-title">FACTION TERRITORY</div>
+          <div id="faction-bars">
+            <div class="loading-placeholder">Loading factions&hellip;</div>
+          </div>
+        </div>
       </div>
 
       <div class="glass-panel economy-summary" aria-label="Economy summary">
         <div class="panel-title"><span>&#9672;</span> ECONOMY</div>
         <div class="balance-display">
-          <span class="balance-amount" id="economy-balance">&cent;&mdash;</span>
+          <span class="balance-amount" id="economy-balance">&mdash;</span>
           <span class="balance-label">Credits</span>
         </div>
         <div class="txn-list" id="txn-list">
@@ -111,43 +131,18 @@
 
   </main>
 
-  {# ── Bench HUD ─────────────────────────────────────────────────── #}
+  {# ── Bench HUD ── v1.64.0 Nexus tier + version bump ───────────── #}
   <footer class="bench-hud" aria-label="System status bar">
     <div class="bench-stat">&#128421; Scenes: <span class="bench-val" id="bench-scenes">&mdash;</span></div>
     <div class="bench-stat">&#129504; Agents: <span class="bench-val" id="bench-agents">&mdash;</span></div>
     <div class="bench-stat">&#128190; VRAM: <span class="bench-val" id="bench-vram">&mdash;</span></div>
-    <div class="bench-version">CosySim &middot; THE TERMINAL &middot; v1.52 Three Pillars</div>
+    <div class="bench-stat">&#9889; Nexus: <span class="bench-val" id="bench-nexus">&mdash;</span></div>
+    <div class="bench-version">CosySim &middot; THE TERMINAL &middot; v1.64</div>
   </footer>
 
 </div>
 {% endblock %}
 
 {% block body_scripts %}
-  <script src="/shared/js/cosysim-core.js"></script>
   <script src="{{ url_for('static', filename='hub.js') }}"></script>
-  <script>
-  (function () {
-    async function pollSystem() {
-      try {
-        const res  = await fetch('/api/system');
-        const data = await res.json();
-        const agEl = document.getElementById('bench-agents');
-        const vmEl = document.getElementById('bench-vram');
-        const scEl = document.getElementById('bench-scenes');
-        if (agEl) agEl.textContent = data.agent_count ?? '0';
-        if (vmEl) {
-          vmEl.textContent = data.vram_total_mb
-            ? `${Math.round(data.vram_used_mb)}/${Math.round(data.vram_total_mb)} MB`
-            : 'N/A';
-        }
-        if (scEl) {
-          const active = (data.active_scenes || []).length;
-          scEl.textContent = active ? `${active} active` : '\u2014';
-        }
-      } catch { /* silent */ }
-    }
-    pollSystem();
-    setInterval(pollSystem, 30_000);
-  })();
-  </script>
 {% endblock %}

@@ -76,6 +76,8 @@ scenes:
     auto_start: true
   tavern:
     auto_start: true
+  verdant:
+    auto_start: false
   war_room:
     auto_start: true
 services:

@@ -571,3 +571,19 @@ html, body {
   .sprawl-side { grid-template-rows: auto auto; }
   .sprawl-map { min-height: 360px; }
 }
+
+/* ── v1.64.0 [2026-06-27] — PREMIUM GLOW-UP ──────────────────────────── */
+
+/* Glass panel hover border glow */
+.sprawl-side > *,
+.sprawl-hud,
+.sprawl-map {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.sprawl-side > *:hover,
+.sprawl-hud:hover,
+.sprawl-map:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 57 255 20), 0.55);
+  box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 57 255 20), 0.25),
+              inset 0 0 8px rgba(var(--cs-scene-accent-rgb, 57 255 20), 0.06);
+}

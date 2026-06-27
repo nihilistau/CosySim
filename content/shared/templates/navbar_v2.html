@@ -16,10 +16,13 @@
   tags so scenes only need the single include. It also includes the
   Neon HUD partial and bootstraps the CosyNavbar JS controller.
 
-  @version v1.42.1 [2026-03-21]
+  @version v1.64.0 [2026-06-27]
   @author  CosySim Team
 
   Change Log:
+    v1.64.0 [2026-06-27] — Premium chrome treatment: gold CS hex mark with
+                           Orbitron font, csx-chrome-text scene name, scene-accent
+                           glow on active nav items. Neon City design system port.
     v1.42.1 [2026-03-21] — Extensive documentation, section dividers
     v1.42.0 [2026-03-21] — Pillar wiring, hub modernization
     v0.68   [prior]      — Initial B1 track implementation
@@ -79,13 +82,25 @@
   {# ── Left cluster: logo + scene identity ──────────────────── #}
   <div class="cs-navbar__left">
 
+    {# v1.64.0 [2026-06-27] — Gold chrome CS hex mark (csx-hexmark--gold) #}
     <a class="cs-navbar__logo" href="/" data-scene-nav aria-label="CosySim home">
-      <span class="cs-navbar__logo-mark" aria-hidden="true">CS</span>
+      <span class="cs-navbar__logo-mark csx-hexmark--gold" aria-hidden="true">
+        <svg class="csx-hexmark" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L21.5 7.5V16.5L12 22L2.5 16.5V7.5L12 2Z" fill="url(#csHexGrad)" stroke="var(--hex-c, #b45309)" stroke-width="0.8"/>
+          <text x="12" y="14.5" text-anchor="middle" font-family="Orbitron, sans-serif" font-size="7" font-weight="800" fill="var(--hex-c, #b45309)">CS</text>
+          <defs><linearGradient id="csHexGrad" x1="2.5" y1="2" x2="21.5" y2="22">
+            <stop offset="0%" stop-color="var(--hex-a, #fde68a)"/>
+            <stop offset="50%" stop-color="var(--hex-b, #f59e0b)"/>
+            <stop offset="100%" stop-color="var(--hex-a, #fde68a)"/>
+          </linearGradient></defs>
+        </svg>
+      </span>
     </a>
 
+    {# v1.64.0 [2026-06-27] — Scene name with accent glow #}
     <span
       class="cs-navbar__scene-name"
-      style="color: {{ scene_accent }};"
+      style="color: {{ scene_accent }}; text-shadow: 0 0 12px rgba({{ scene_accent_rgb | replace(' ', ', ') }}, 0.5);"
     >{{ scene_name }}</span>
 
     <span

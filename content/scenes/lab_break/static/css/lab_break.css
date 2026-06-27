@@ -1480,3 +1480,21 @@ body[data-scene="lab_break"] {
   background: var(--lb-accent-dim);
   border-radius: 2px;
 }
+
+/* ── v1.64.0 [2026-06-27] — PREMIUM GLOW-UP ──────────────────────────── */
+
+/* Glass panel hover border glow */
+.lb-observation,
+.lb-controls,
+.lb-chat-panel,
+.lb-item-grid {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.lb-observation:hover,
+.lb-controls:hover,
+.lb-chat-panel:hover,
+.lb-item-grid:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 255 136), 0.55);
+  box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 0 255 136), 0.25),
+              inset 0 0 8px rgba(var(--cs-scene-accent-rgb, 0 255 136), 0.06);
+}

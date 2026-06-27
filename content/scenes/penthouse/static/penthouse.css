@@ -4,10 +4,13 @@
  * Full overlay layout: all UI panels float over the interactive 3D canvas.
  * Requires: design_tokens.css · cosysim-components.css · cosysim-animations.css
  *
- * Version: v1.57.3 [2026-05-12]
+ * Version: v1.64.0 [2026-06-27]
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: emotion bar glow fills, enhanced
+ *                           portrait frame pulse, director panel glass upgrade,
+ *                           mood descriptor accent tint, stat bar value readout glow
  *   v1.57.3 [2026-05-12] — Warmer luxury purple accent, dark skyline+rain bg,
  *                           luxury glass panels, card hover lift, elevator reveal
  *   v0.70   [prior]      — Overlay Renaissance: all UI panels float over 3D canvas
@@ -1778,4 +1781,72 @@ body::after {
 .ph-agent-status--active {
   color: var(--cs-green, #22c55e);
   text-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Emotion bar glow fills ─────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Each emotion bar fill gets a matching glow */
+.cs-stat-bar--arousal .cs-stat-bar__fill {
+  background: linear-gradient(90deg, #ef4444, #f97316);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.35);
+}
+.cs-stat-bar--pleasure .cs-stat-bar__fill {
+  background: linear-gradient(90deg, #ec4899, #f472b6);
+  box-shadow: 0 0 8px rgba(236, 72, 153, 0.35);
+}
+.cs-stat-bar--happiness .cs-stat-bar__fill {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.35);
+}
+.cs-stat-bar--horniness .cs-stat-bar__fill {
+  background: linear-gradient(90deg, #e11d48, #f43f5e);
+  box-shadow: 0 0 8px rgba(225, 29, 72, 0.35);
+}
+.cs-stat-bar--dominance .cs-stat-bar__fill {
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.35);
+}
+
+/* ── Stat bar value readout glow ────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Value readout glows when bar is high (>70%) */
+.cs-stat-bar__value {
+  transition: color 0.3s, text-shadow 0.3s;
+}
+
+/* ── Portrait frame pulse ───────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Speaking ring gets a softer accent pulse */
+.ph-speaking-ring.active {
+  box-shadow: 0 0 16px rgba(var(--ph-accent-rgb), 0.5),
+              0 0 32px rgba(var(--ph-accent-rgb), 0.2);
+}
+
+/* ── Mood descriptor accent tint ────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Mood text picks up scene accent */
+.ph-mood-text {
+  color: rgba(var(--ph-accent-rgb), 0.7);
+  text-shadow: 0 0 12px rgba(var(--ph-accent-rgb), 0.15);
+  transition: color 0.4s ease;
+}
+
+/* ── Director panel glass upgrade ───────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Stronger glass blur on director panel */
+.ph-director-panel {
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+/* ── Director tab active glow ───────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Active tab gets accent underline glow */
+.ph-tab-btn.active {
+  box-shadow: 0 2px 0 rgba(var(--ph-accent-rgb), 0.6);
+}
+
+/* ── Character panel hover lift ─────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Subtle hover lift on character panel */
+.ph-character-panel:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+              0 0 24px rgba(var(--ph-accent-rgb), 0.08);
 }

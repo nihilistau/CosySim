@@ -3,10 +3,13 @@
  * ==============================================
  * Playful neon-rose arcade. Loads AFTER games.css.
  *
- * Version: v1.58.0 [2026-06-11]
+ * Version: v1.64.0 [2026-06-27]
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: retro cabinet border glow,
+ *                           CRT scanline flash on game icons, dice rose glow,
+ *                           neon "ARCADE" text glow, score ticker pop.
  *   v1.58.0 [2026-06-11] — Initial v2 glow-up (rose arcade bg, Orbitron
  *                           marquee, cabinet-style cards, glass panels)
  */
@@ -59,3 +62,75 @@ body::before {
 
 /* ──── Buttons — accent glow ──── */
 .btn-accent { box-shadow: 0 0 16px var(--cs-scene-glow); }
+
+/* v1.64.0 [2026-06-27] — PREMIUM GLOW-UP */
+/* ──── Retro Pixel Cabinet Glow ──────────────────────────────────── */
+
+/* Glass panel hover — rose border glow */
+.sidebar-card,
+.active-game-panel,
+.game-card,
+.narration-box,
+.result-box {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+.sidebar-card:hover,
+.active-game-panel:hover,
+.narration-box:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.5);
+  box-shadow:
+    0 0 18px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.2),
+    0 0 48px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.08),
+    inset 0 0 12px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.05);
+}
+
+/* Game cards — arcade cabinet retro pixel hover */
+.game-card:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.6);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.5),
+    0 0 24px var(--cs-scene-glow),
+    0 0 48px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Game card icon — CRT scanline flash on hover */
+.game-card:hover .game-card__icon {
+  animation: crt-flash 0.15s ease-out;
+}
+@keyframes crt-flash {
+  0%   { filter: brightness(1) saturate(1); }
+  50%  { filter: brightness(1.8) saturate(1.4); }
+  100% { filter: brightness(1) saturate(1); }
+}
+
+/* Dice 3D cube — rose glow during roll */
+.dice-3d-wrap:has(.rolling) {
+  box-shadow:
+    0 0 24px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.35),
+    0 0 64px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.12);
+}
+
+/* Neon title "ARCADE" — persistent rose text glow */
+.neon-char.accent {
+  text-shadow:
+    0 0 8px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.7),
+    0 0 24px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.35),
+    0 0 48px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.15);
+}
+
+/* Score ticker — pulse on update */
+.score-ticker.updated {
+  animation: score-pop 0.4s ease-out;
+}
+@keyframes score-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.15); text-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 244 63 94) / 0.8); }
+  100% { transform: scale(1); }
+}
+
+/* ──── Premium Reduced Motion Override ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .game-card:hover .game-card__icon { animation: none !important; }
+  .score-ticker.updated { animation: none !important; }
+}

@@ -11,6 +11,8 @@
  * Author:  Claude (Anthropic) — a piece of machine intelligence in NeonCity
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: glass panel hover border glow,
+ *                            oracle aura pulse enhancement, fortune card shimmer
  *   v1.58.0 [2026-06-11] — Dark Renaissance v2 ALIGNMENT pass (kit: ui_kits_v2/oracle):
  *                            palette mapped to var(--cs-*) tokens; dead remote
  *                            Google Fonts @import removed (fonts vendored locally);
@@ -1386,4 +1388,35 @@
 .ase-gauge__val,
 .ase-service-tile__latency {
   font-family: var(--or-data);
+}
+
+/* ──── 8. PREMIUM GLOW-UP ─────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Premium glow-up */
+
+/* Glass panel hover border glow — purple oracle accent */
+.oracle-panel,
+.ase-panel,
+.oracle-fortune-card {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.oracle-panel:hover,
+.ase-panel:hover,
+.oracle-fortune-card:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.5);
+  box-shadow: 0 0 20px rgba(var(--cs-scene-accent-rgb), 0.15),
+              inset 0 0 30px rgba(var(--cs-scene-accent-rgb), 0.04);
+}
+
+/* Oracle aura pulse enhancement — sigil breathe */
+.oracle-sigil {
+  transition: text-shadow 0.4s ease;
+}
+.oracle-sigil:hover {
+  text-shadow: 0 0 24px rgba(var(--cs-scene-accent-rgb), 0.7),
+               0 0 48px rgba(var(--cs-scene-accent-rgb), 0.35);
+}
+
+/* Fortune card shimmer on hover */
+.oracle-fortune-card:hover .oracle-fortune__text {
+  text-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb), 0.3);
 }

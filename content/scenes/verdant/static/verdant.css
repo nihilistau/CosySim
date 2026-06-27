@@ -1,0 +1,28 @@
+/*
+ * VERDANT REALMS — verdant.css (base layer)
+ * ==========================================
+ * Foundation styles for the Verdant Realms dual-agent LitRPG scene.
+ * The v2 layer (verdant_v2.css) loads after this to add premium
+ * glow-up effects and composited render card styles.
+ *
+ * Accent: #22c55e verdant green
+ *
+ * Version: v1.64.0 [2026-06-28]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.64.0 [2026-06-28] — Initial base layer for Verdant Realms scene.
+ */
+
+/* ──── Reset ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ──── FX Canvas ──────────────────────────────────────────────────── */
+.realm-fx-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}

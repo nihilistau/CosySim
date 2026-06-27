@@ -7,10 +7,13 @@
    docs/DESIGN_SYSTEM_V2.md (no kit): [data-scene="casino"] accent + the
    4-layer background recipe from artifacts/new-assets/styles.css.
 
-   Version: v1.58.0 [2026-06-11]
+   Version: v1.64.0 [2026-06-27]
    Author:  CosySim Team
 
    Change Log:
+     v1.64.0 [2026-06-27] — Premium glow-up: faction gate render panel,
+                              gold-border glass panel hover, enhanced credit
+                              display glow, VIP badge shimmer, heat value pulse
      v1.58.0 [2026-06-11] — Scan-sweep styling hook on win events:
                               .cn-result-banner.win plays the shared
                               cs-scan-sweep-anim light band once when
@@ -247,4 +250,108 @@ body {
 }
 .cn-result-banner.win::after {
   animation: cs-scan-sweep-anim 0.7s ease-in-out 0.15s forwards;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Faction gate render panel ──────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Composited scene render with hover reveal tag */
+.cn-gate-render {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--scene-accent-rgb) / 0.25);
+  margin-bottom: 8px;
+}
+.cn-gate-render img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transition: transform 0.3s ease;
+}
+.cn-gate-render:hover img {
+  transform: scale(1.03);
+}
+.cn-gate-tag {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-family: var(--cn-font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f5d9a8;
+  background: rgba(10, 6, 3, 0.72);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--scene-accent-rgb) / 0.3);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.cn-gate-render:hover .cn-gate-tag { opacity: 1; }
+
+.cn-gate-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+.cn-gate-label {
+  font-family: var(--cn-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: rgb(var(--cn-gold-rgb));
+  text-transform: uppercase;
+}
+.cn-gate-value {
+  font-family: var(--cn-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: #f5d9a8;
+}
+
+/* ── Glass panel hover gold border ──────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Subtle gold border on glass panel hover */
+.ck-glass-panel:hover {
+  border-color: rgb(var(--scene-accent-rgb) / 0.25);
+}
+
+/* ── Enhanced credit display glow ───────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Credits amount gets a gold text shadow */
+.cn-credits-amount {
+  text-shadow: 0 0 10px rgb(var(--cn-gold-rgb) / 0.3);
+}
+
+/* ── VIP badge shimmer ──────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — VIP badge uses gold shimmer */
+.cn-vip-badge {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(249, 115, 22, 0.08));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  font-family: var(--cn-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  animation: cs-shimmer 3s ease-in-out infinite;
+}
+
+/* ── Heat value pulse ───────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Heat value pulses red when high */
+.cn-world-heat {
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.cn-world-heat.high {
+  color: #ef4444;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+  animation: cs-pulse-glow-text 1.5s ease-in-out infinite;
+}
+
+/* ── Pot area enhanced glow ─────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Pot chip counter gets stronger gold glow */
+.cn-chip-counter {
+  text-shadow: 0 0 12px rgb(var(--cn-gold-rgb) / 0.25);
 }

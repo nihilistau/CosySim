@@ -1,6 +1,8 @@
 /*
  * war_room.css — THE WAR ROOM faction command center styles (C-T3 UI).
  * =========================================================================
+ * v1.64.0 [2026-06-27] — Premium glow-up: panel hover glow, faction crest
+ *   card accent border, command button hover halo, intel feed accent line
  * v1.63.0 [2026-06-16] — Command-center dashboard UI (C-T3). Replaces the
  * C-T1/C-T2 "booting…" placeholder styling with the full tactical situation
  * room: a layered neon backdrop (sky + tactical grid + scanlines + vignette)
@@ -1021,4 +1023,42 @@ select.war-field__input option { background: #140a0c; color: var(--war-ink); }
   .war-panel { min-height: 220px; }
   .war-myhead { flex-wrap: wrap; }
   .war-myhead__metrics { margin-left: 0; width: 100%; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Panel hover glow ────────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Red accent border on panel hover */
+.war-panel:hover {
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* ── Faction crest card accent ───────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Crest card gets faction-colored top bar on hover */
+.war-fac:hover {
+  box-shadow: 0 0 18px var(--war-accent-soft), 0 -2px 0 inset var(--fac-color, var(--war-accent));
+}
+
+/* ── Command button hover halo ───────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Command buttons get red glow halo on hover */
+.war-cmd.is-live:hover {
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.3);
+}
+
+/* ── Intel feed accent line ──────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Intel items get left accent border */
+.war-intel-item {
+  border-left: 2px solid rgba(239, 68, 68, 0.2);
+  transition: border-color 0.2s;
+}
+.war-intel-item:hover {
+  border-left-color: var(--war-accent);
+}
+
+/* ── Rival power bar glow ────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Rival power bar fills get subtle glow */
+.war-rivals__fill {
+  box-shadow: 0 0 6px currentColor;
 }

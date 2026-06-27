@@ -18,6 +18,7 @@ Version: v1.42.1 [2026-03-21]
 Author:  CosySim Team
 
 Change Log:
+    v1.64.0 [2026-06-27] — verdant port (5599) + hub catalogue + scenes group
     v1.63.0 [2026-06-16] — war_room port (5598) + hub catalogue + scenes group
     v1.63.0 [2026-06-15] — the_sprawl port (5597) + hub catalogue + scenes group
     v1.62.0 [2026-06-15] — executive_suite port (5596) + hub catalogue: surface
@@ -70,6 +71,7 @@ _DEFAULT_PORTS: Dict[str, int] = {
     "executive_suite": 5596,  # v1.62.0 — Executive Suite neon OS desktop (ES-T1)
     "the_sprawl": 5597,    # v1.63.0 — The Sprawl living-city map (B-T1)
     "war_room": 5598,      # v1.63.0 — The War Room faction command center (C-T1)
+    "verdant": 5599,       # v1.64.0 — Verdant Realms dual-agent LitRPG (Neon Glow-Up)
     "intel_hub": 5580,
     # ── Launcher-managed services (8500–8800) ──
     "hub": 8500,
@@ -121,6 +123,7 @@ SERVICE_GROUPS: Dict[str, List[str]] = {
         "executive_suite",
         "the_sprawl",
         "war_room",
+        "verdant",
         "intel_hub", "nexus_panel", "system_control",
     ],
     # v1.49.2 [2026-03-22] — dashboard migrated from Streamlit to Flask
@@ -202,6 +205,8 @@ HUB_CATALOGUE_TARGETS: Tuple[str, ...] = (
     "the_sprawl",      # v1.63.0 — The living city map
     # v1.63.0 [2026-06-16] — The War Room faction command center (C-T1)
     "war_room",        # v1.63.0 — Pick a faction and command the city
+    # v1.64.0 [2026-06-27] — Verdant Realms dual-agent LitRPG (Neon Glow-Up)
+    "verdant",         # v1.64.0 — Director + Companion guided fantasy RPG
 )
 
 HUB_HEALTH_TARGETS: Tuple[str, ...] = (
