@@ -1,0 +1,675 @@
+/*
+ * VERDANT REALMS — Premium Glow-Up v2 Layer
+ * ==========================================
+ * Loaded AFTER verdant.css so it wins the cascade. Composited scene
+ * render panels, glass hover glow, combat strip styling, dual-agent
+ * card layout with verdant green accent derived from the UI kit.
+ *
+ * Accent: #22c55e verdant green · Pale: #6ee7a0 · Deep: #059669
+ *
+ * Version: v1.64.0 [2026-06-28]
+ * Author:  CosySim Team
+ *
+ * Change Log:
+ *   v1.64.0 [2026-06-28] — Premium glow-up: palette tokens, 4-layer
+ *                           background, Orbitron title, composited
+ *                           render cards (director, companion, combat
+ *                           strip, skill check, banner), glass panel
+ *                           hover glow, stat bar glow, action rail,
+ *                           combat strip styling, reduced motion.
+ */
+
+/* ──── 1 · Palette Tokens ─────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Scene-prefixed tokens from --cs-scene-accent */
+:root {
+  --vd-accent:      var(--cs-scene-accent, #22c55e);
+  --vd-accent-rgb:  var(--cs-scene-accent-rgb, 34 197 94);
+  --vd-pale:        #6ee7a0;
+  --vd-pale-rgb:    110 231 160;
+  --vd-deep:        #059669;
+  --vd-deep-rgb:    5 150 105;
+  --vd-leaf:        #cdebd5;
+  --vd-bark:        #5a9c72;
+  --vd-bg-dark:     #050a07;
+  --vd-bg-panel:    #040705;
+  --vd-font-head:   var(--cs-font-display, 'Orbitron', sans-serif);
+  --vd-font-mono:   var(--cs-font-mono, 'JetBrains Mono', monospace);
+  --vd-font-sans:   var(--cs-font-sans, 'Inter', system-ui, sans-serif);
+}
+
+/* ──── 2 · 4-Layer Background Stack ───────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Deep forest floor + canopy glow + drift grid */
+/* CONNECTS: neon_base.html .neon-grid-bg / .neon-scanlines layers      */
+body[data-scene="verdant"] {
+  background: var(--vd-bg-dark);
+}
+
+/* Layer 3 — canopy glow: verdant from above, deep emerald from below */
+body[data-scene="verdant"] .neon-grid-bg {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 12%, rgb(var(--vd-accent-rgb) / 0.12) 0%, transparent 55%),
+    radial-gradient(circle at 85% 88%, rgb(var(--vd-deep-rgb) / 0.10) 0%, transparent 50%),
+    linear-gradient(180deg, #050a07 0%, #040705 100%);
+}
+
+/* Layer 2 — 80px drift grid (emerald lines) */
+body[data-scene="verdant"] .neon-grid-bg::before {
+  background-image:
+    repeating-linear-gradient(90deg, rgb(var(--vd-accent-rgb) / 0.04) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg,  rgb(var(--vd-accent-rgb) / 0.04) 0 1px, transparent 1px 80px);
+  animation: vd-grid-drift 30s linear infinite;
+}
+@keyframes vd-grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 80px, 0 80px; }
+}
+
+/* Layer 4 — CRT scanlines (subtle) */
+body[data-scene="verdant"] .neon-scanlines {
+  opacity: 0.45;
+}
+
+/* ──── 3 · Typography — Orbitron wordmark, verdant glow ───────────── */
+/* v1.64.0 [2026-06-28] — gradient wordmark with leaf-green shine      */
+.vd-header__title {
+  font-family: var(--vd-font-head);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: var(--vd-pale);
+  text-shadow: 0 0 14px rgb(var(--vd-accent-rgb) / 0.50);
+}
+
+.vd-header__subtitle {
+  font-family: var(--vd-font-mono);
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--vd-bark);
+  margin-top: 3px;
+}
+
+/* Section titles */
+.vd-section-title {
+  font-family: var(--vd-font-head);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgb(var(--vd-accent-rgb) / 0.85);
+  border-bottom: 1px solid rgb(var(--vd-accent-rgb) / 0.20);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+/* ──── 4 · Header Strip ───────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Status strip with live badge and stat chips  */
+.vd-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.045), transparent 70%), rgba(8,18,11,.9);
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.28);
+}
+
+.vd-header__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vd-header__crest {
+  flex-shrink: 0;
+}
+
+.vd-header__status {
+  margin-left: auto;
+}
+
+.vd-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--vd-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--vd-accent);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgb(var(--vd-accent-rgb) / 0.10);
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.30);
+}
+
+.vd-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vd-accent);
+  box-shadow: 0 0 7px var(--vd-accent);
+  animation: csx-pulse 1.6s infinite;
+}
+
+.vd-header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vd-header__chip {
+  font-family: var(--vd-font-mono);
+  font-size: 11px;
+  color: var(--vd-pale);
+  padding: 5px 13px;
+  border-radius: 9999px;
+  background: rgb(var(--vd-accent-rgb) / 0.10);
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.28);
+}
+.vd-header__chip small {
+  color: var(--vd-bark);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  display: block;
+}
+
+.vd-header__turn {
+  font-family: var(--vd-font-mono);
+  font-size: 11px;
+  color: var(--vd-bark);
+  letter-spacing: 0.08em;
+}
+
+/* ──── 5 · Banner ─────────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Full-width composited title banner           */
+.vd-banner {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+}
+.vd-banner img {
+  width: 100%;
+  max-width: 980px;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 0 30px rgb(var(--vd-accent-rgb) / 0.25));
+}
+
+/* ──── 6 · Board Layout — 3-column grid ───────────────────────────── */
+/* v1.64.0 [2026-06-28] — Director (left) / Theater (center) / Companion (right) */
+.vd-board {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 290px 1fr 290px;
+  gap: 14px;
+  align-items: start;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .vd-board { grid-template-columns: 1fr; }
+}
+
+/* ──── 7 · Glass Panels ───────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Frosted glass with hover glow               */
+.vd-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgb(4 7 5 / 0.62);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.22);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.vd-panel:hover {
+  border-color: rgb(var(--vd-accent-rgb) / 0.38);
+  box-shadow:
+    0 0 18px rgb(var(--vd-accent-rgb) / 0.12),
+    inset 0 0 8px rgb(var(--vd-accent-rgb) / 0.04),
+    0 6px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ──── 8 · Composited Scene Render Cards ──────────────────────────── */
+/* v1.64.0 [2026-06-28] — Director, Companion, Combat Strip, Skill Check
+   CONNECTS: UI kit .piece pattern — border brackets, hover-reveal tag  */
+.vd-render {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.22);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  cursor: pointer;
+  background: var(--vd-bg-panel);
+}
+.vd-render:hover {
+  transform: translateY(-3px);
+  border-color: var(--vd-accent);
+  box-shadow:
+    0 0 24px rgb(var(--vd-accent-rgb) / 0.30),
+    0 18px 40px rgba(0, 0, 0, 0.7);
+}
+.vd-render img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Hover-reveal tag */
+.vd-render__tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  font-family: var(--vd-font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--vd-leaf);
+  background: rgba(6, 14, 9, 0.78);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.30);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+.vd-render:hover .vd-render__tag {
+  opacity: 1;
+}
+
+/* Corner bracket decorations */
+.vd-render__brk {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgb(var(--vd-accent-rgb) / 0.65);
+  z-index: 2;
+  pointer-events: none;
+}
+.vd-render__brk--tl { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
+.vd-render__brk--br { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
+
+/* Wide renders (combat strip, skill check) — center column */
+.vd-render--wide {
+  border-radius: 10px;
+}
+
+/* ──── 9 · Stat Bars ──────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Dual-agent stat bars with glow on hover     */
+.vd-agent-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vd-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vd-stat__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.vd-stat__label {
+  font-family: var(--vd-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vd-bark);
+}
+
+.vd-stat__value {
+  font-family: var(--vd-font-mono);
+  font-size: 10px;
+  color: var(--vd-leaf);
+}
+
+.vd-stat__track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.vd-stat__fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--vd-deep), var(--vd-accent));
+  box-shadow: 0 0 6px rgb(var(--vd-accent-rgb) / 0.25);
+  transition: width 0.5s ease, box-shadow 0.3s ease;
+}
+.vd-stat:hover .vd-stat__fill {
+  box-shadow:
+    0 0 10px rgb(var(--vd-accent-rgb) / 0.40),
+    0 0 22px rgb(var(--vd-accent-rgb) / 0.16);
+}
+
+/* ──── 10 · Narrative Panel ───────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Story theater with inner glow on focus       */
+.narrative-panel {
+  background: rgb(4 7 5 / 0.50);
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.15);
+  border-radius: 8px;
+  padding: 14px;
+  min-height: 120px;
+  transition: box-shadow 0.25s ease;
+}
+.narrative-panel:focus-within,
+.narrative-panel:hover {
+  box-shadow:
+    inset 0 0 12px rgb(var(--vd-accent-rgb) / 0.06),
+    0 0 8px rgb(var(--vd-accent-rgb) / 0.08);
+}
+
+.narrative-panel__text {
+  font-family: var(--vd-font-sans);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--vd-leaf);
+}
+
+/* Narrative drop-cap — illuminated first letter */
+.narrative-panel__text::first-letter {
+  font-size: 1.85em;
+  line-height: 1;
+  color: var(--vd-pale);
+  text-shadow: 0 0 12px rgb(var(--vd-accent-rgb) / 0.50);
+  padding-right: 2px;
+}
+
+.narrative-cursor {
+  color: var(--vd-accent);
+  animation: csx-pulse 1s infinite;
+}
+
+/* ──── 11 · Input Row ─────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Free-text input with send button             */
+.vd-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.vd-input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.22);
+  background: rgb(4 7 5 / 0.70);
+  color: var(--vd-leaf);
+  font-family: var(--vd-font-sans);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.vd-input:focus {
+  border-color: var(--vd-accent);
+  box-shadow: 0 0 12px rgb(var(--vd-accent-rgb) / 0.20);
+}
+.vd-input::placeholder {
+  color: var(--vd-bark);
+  opacity: 0.7;
+}
+
+.vd-send-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.30);
+  background: linear-gradient(135deg, #16a34a, #064e2b);
+  color: #fff;
+  font-family: var(--vd-font-head);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgb(var(--vd-accent-rgb) / 0.30);
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.vd-send-btn:hover {
+  background: linear-gradient(135deg, #22c55e, #059669);
+  box-shadow: 0 0 20px rgb(var(--vd-accent-rgb) / 0.45);
+  transform: translateY(-1px);
+}
+
+/* ──── 12 · Action Rail ───────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Bottom action bar (Roll, Skill, Combat, Party) */
+.vd-rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.vd-act {
+  flex: 1;
+  text-align: center;
+  padding: 13px 8px;
+  border-radius: 10px;
+  font-family: var(--vd-font-head);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  background: rgba(10, 22, 13, 0.80);
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.30);
+  color: var(--vd-leaf);
+  transition: all 0.15s ease;
+}
+.vd-act:hover {
+  background: rgb(var(--vd-accent-rgb) / 0.16);
+  border-color: var(--vd-accent);
+  transform: translateY(-2px);
+}
+
+.vd-act--primary {
+  background: linear-gradient(135deg, #16a34a, #064e2b);
+  border-color: var(--vd-pale);
+  color: #fff;
+  box-shadow: 0 0 18px rgb(var(--vd-accent-rgb) / 0.40);
+}
+.vd-act--primary:hover {
+  box-shadow: 0 0 26px rgb(var(--vd-accent-rgb) / 0.55);
+}
+
+.vd-act--leave {
+  flex: 0 0 auto;
+  padding: 13px 20px;
+  color: var(--vd-bark);
+}
+
+/* ──── 13 · Quest Card ────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Parchment glow on hover                     */
+.quest-card {
+  position: relative;
+  overflow: hidden;
+  padding: 10px 12px 10px calc(0.75rem + 5px);
+  background: rgb(4 7 5 / 0.50);
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.15);
+  border-radius: 8px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.quest-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(var(--vd-accent-rgb) / 0.65) 0 4px,
+    rgb(var(--vd-deep-rgb) / 0.45) 4px 8px
+  );
+  box-shadow: 0 0 8px rgb(var(--vd-accent-rgb) / 0.30);
+}
+.quest-card:hover {
+  border-color: rgb(var(--vd-accent-rgb) / 0.30);
+  box-shadow:
+    0 4px 16px rgb(var(--vd-accent-rgb) / 0.12),
+    inset 0 0 6px rgb(var(--vd-accent-rgb) / 0.03);
+}
+
+.quest-card__title {
+  font-family: var(--vd-font-head);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--vd-pale);
+  margin: 0 0 4px;
+}
+.quest-card__objective {
+  font-size: 11px;
+  color: var(--vd-bark);
+  margin: 0 0 8px;
+}
+
+.quest-progress-wrap {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.quest-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--vd-deep), var(--vd-accent));
+  transition: width 0.5s ease;
+}
+.quest-progress-label {
+  font-family: var(--vd-font-mono);
+  font-size: 9px;
+  color: var(--vd-bark);
+  margin-top: 4px;
+  display: block;
+}
+
+/* ──── 14 · Faction Bars ──────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Faction entries with hover shimmer          */
+.faction-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  transition: background 0.2s ease;
+}
+.faction-entry:hover {
+  background: rgb(var(--vd-accent-rgb) / 0.05);
+}
+.faction-icon { font-size: 14px; }
+.faction-name {
+  flex: 1;
+  font-size: 11px;
+  color: var(--vd-leaf);
+}
+.faction-bar-wrap {
+  width: 80px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.05);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.faction-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--vd-deep), var(--vd-accent));
+  transition: box-shadow 0.25s ease;
+}
+.faction-entry:hover .faction-bar {
+  box-shadow: 0 0 8px rgb(var(--vd-accent-rgb) / 0.25);
+}
+
+/* ──── 15 · Timeline ──────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Realm event log                             */
+.timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.timeline-item {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.55);
+  padding: 5px 8px;
+  border-left: 2px solid rgb(var(--vd-accent-rgb) / 0.15);
+  margin-bottom: 2px;
+}
+.timeline-item:first-child {
+  background: rgb(var(--vd-accent-rgb) / 0.06);
+  border-radius: 0 4px 4px 0;
+}
+.timeline-item--system {
+  color: var(--vd-bark);
+  font-style: italic;
+}
+
+/* ──── 16 · Choice Buttons ────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Scan-sweep hover effect on choices          */
+.vd-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.choice-btn {
+  position: relative;
+  overflow: hidden;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--vd-accent-rgb) / 0.22);
+  background: rgba(10, 22, 13, 0.60);
+  color: var(--vd-leaf);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.choice-btn:hover {
+  background: rgb(var(--vd-accent-rgb) / 0.12);
+  border-color: var(--vd-accent);
+}
+.choice-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 30%;
+  background: linear-gradient(100deg, transparent, rgb(var(--vd-accent-rgb) / 0.14), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.45s ease;
+  pointer-events: none;
+}
+.choice-btn:hover::after {
+  left: 115%;
+}
+
+/* ──── 17 · Reduced Motion ────────────────────────────────────────── */
+/* v1.64.0 [2026-06-28] — Respect prefers-reduced-motion              */
+@media (prefers-reduced-motion: reduce) {
+  body[data-scene="verdant"] .neon-grid-bg::before {
+    animation: none !important;
+  }
+  .vd-live-dot {
+    animation: none !important;
+  }
+  .narrative-cursor {
+    animation: none !important;
+  }
+  .choice-btn::after {
+    display: none;
+  }
+  .vd-render:hover {
+    transform: none;
+  }
+  .vd-act:hover {
+    transform: none;
+  }
+}

@@ -6,10 +6,11 @@
   provides tab navigation for Dashboard / Characters / Personalities /
   Roles / Memories panels.
 
-  Version: v1.49.2 [2026-03-22]
+  Version: v1.64.0 [2026-06-27]
   Author:  CosySim Team
 
   Change Log:
+      v1.64.0 [2026-06-27] — Premium glow-up: glass panel hover border glow
       v1.49.2 [2026-03-22] — Initial Flask migration from Streamlit dashboard_v2
 #}
 
@@ -371,6 +372,20 @@
   }
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* ── v1.64.0 [2026-06-27] — PREMIUM GLOW-UP ────────────────────────── */
+
+  /* Glass panel hover border glow */
+  .glass-panel,
+  .stat-card {
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  .glass-panel:hover,
+  .stat-card:hover {
+    border-color: rgba(var(--cs-scene-accent-rgb, 102 126 234), 0.55);
+    box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 102 126 234), 0.25),
+                inset 0 0 8px rgba(var(--cs-scene-accent-rgb, 102 126 234), 0.06);
   }
 </style>
 {% endblock %}

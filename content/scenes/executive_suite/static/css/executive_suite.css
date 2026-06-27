@@ -1,5 +1,7 @@
 /* Executive Suite — NeonOS desktop shell styles + animations.
    ==========================================================
+   v1.64.0 [2026-06-27] — Premium glow-up: glass panel hover border glow,
+   dock icon hover pulse, window chrome accent treatment
    v1.62.0 [2026-06-15] — OS desktop shell (ES-T2). Ported and refactored from
    artifacts/new-assets/ui_kits_v2/executive_suite/index.html into the scene's
    own stylesheet, with CSS variables for theming. Owns: skyline/bezel layers,
@@ -522,3 +524,31 @@ body.es-reduced-motion .es-asst__typing span { animation: none !important; }
 .es-asst__pick-tag { font-size: 10px; color: #9ca3af; }
 .es-asst__picker-close { align-self: flex-end; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6b7280; background: none; border: none; cursor: pointer; }
 .es-asst__picker-close:hover { color: var(--es); }
+
+/* ──── PREMIUM GLOW-UP ────────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Premium glow-up */
+
+/* Glass panel hover border glow — cyan ES accent */
+.es-win {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.es-win:hover {
+  border-color: rgba(var(--es-rgb), 0.4);
+  box-shadow: 0 0 20px rgba(var(--es-rgb), 0.12),
+              inset 0 0 30px rgba(var(--es-rgb), 0.03);
+}
+
+/* Dock icon hover pulse */
+.es-dock__btn {
+  transition: background 0.2s ease, box-shadow 0.3s ease, transform 0.2s ease;
+}
+.es-dock__btn:hover {
+  box-shadow: 0 0 16px rgba(var(--es-rgb), 0.25);
+  transform: scale(1.08);
+}
+
+/* Window chrome accent — focused window top-border accent line */
+.es-win.focused .es-win__titlebar {
+  border-bottom: 1px solid rgba(var(--es-rgb), 0.3);
+  box-shadow: 0 1px 12px rgba(var(--es-rgb), 0.08);
+}

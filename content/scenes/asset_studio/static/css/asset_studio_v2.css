@@ -7,6 +7,8 @@
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: glass panel hover border glow,
+ *                           asset card prismatic edge + generation panel shine
  *   v1.58.0 [2026-06-11] — Initial v2 glow-up (violet studio bg, asset-card
  *                           glow lift, glass generation panel, grid stagger)
  */
@@ -60,4 +62,74 @@ body::before {
 
 @media (prefers-reduced-motion: reduce) {
   .cs-asset-grid > * { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   Glass panel hover border glow + asset card prismatic edge +
+   generation panel shine
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ──── Glass panel hover border glow ──────────────────────────────── */
+/* v1.64.0 [2026-06-27] — accent-traced border on any glass panel hover */
+.cs-panel,
+.cs-studio-sidebar,
+.cs-studio-main,
+.cs-studio-inspector {
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), 0.12);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.cs-panel:hover,
+.cs-studio-sidebar:hover,
+.cs-studio-main:hover,
+.cs-studio-inspector:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.45);
+  box-shadow: 0 0 20px rgba(var(--cs-scene-accent-rgb), 0.10),
+              inset 0 0 12px rgba(var(--cs-scene-accent-rgb), 0.04);
+}
+
+/* ──── Asset card prismatic edge — violet top-border shimmer ─────── */
+/* v1.64.0 [2026-06-27] — animated gradient top border on asset cards */
+@keyframes cs-prismatic-edge {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.cs-asset-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--cs-scene-accent-rgb), 0.6),
+    rgba(var(--cs-scene-accent-rgb), 0.2),
+    rgba(var(--cs-scene-accent-rgb), 0.6),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: cs-prismatic-edge 4s ease-in-out infinite;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.cs-asset-card { position: relative; overflow: hidden; }
+.cs-asset-card:hover::before { opacity: 1; }
+
+/* ──── Generation panel shine — soft inner glow ──────────────────── */
+/* v1.64.0 [2026-06-27] — breathing inner glow on the generation panel */
+@keyframes cs-gen-breathe {
+  0%, 100% { box-shadow: inset 0 0 30px rgba(var(--cs-scene-accent-rgb), 0.04); }
+  50%      { box-shadow: inset 0 0 30px rgba(var(--cs-scene-accent-rgb), 0.10); }
+}
+.cs-generate-panel,
+.cs-gen-area {
+  animation: cs-gen-breathe 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-asset-card::before { animation: none; }
+  .cs-generate-panel,
+  .cs-gen-area { animation: none; }
 }

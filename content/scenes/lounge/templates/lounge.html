@@ -11,8 +11,13 @@
   Uses lounge_kit.js (LoungeScene) + lounge_ext.js (game logic).
   Original template archived as lounge_original.html.
 
-  Version: v1.58.0 [2026-06-11]
+  Version: v1.64.0 [2026-06-27]
   Change Log:
+    v1.64.0 [2026-06-27] — Premium glow-up: composited scene render cards
+                             (broker, scene, cards, rep PNGs via .vp-render),
+                             Velvet Pit render gallery section, lounge_v2.css
+                             updated with render card styles + corner brackets
+                             + hover-reveal tags.
     v1.58.0 [2026-06-11] — Dark Renaissance v2 glow-up: lounge_v2.css
                              layer (pink speakeasy, velvet panels, neon
                              sign flicker, stage spotlight cone, gold
@@ -231,6 +236,49 @@
        v1.50.0 [2026-03-22] — Kit divider_line component
   ══════════════════════════════════════════════════════════════ -->
   <hr class="ck-divider" />
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SCENE RENDERS — Composited Velvet Pit gallery
+       v1.64.0 [2026-06-27] — Premium glow-up render cards with
+       corner brackets + hover-reveal tags. PNGs from neon-city-assets.
+       CONNECTS: lounge_v2.css (.vp-render, .vp-tag, .vp-brk)
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="ck-glass-panel" style="margin-bottom: 10px;">
+    <div class="ck-glass-title">SCENE RENDERS</div>
+    <div class="ck-glass-body">
+      <div class="vp-render-gallery">
+
+        {# Featured: main ambient bar scene (spans 2 cols) #}
+        <div class="vp-render vp-render--featured">
+          <span class="vp-brk tl"></span><span class="vp-brk br"></span>
+          <span class="vp-tag">Ambient Social Scene</span>
+          <img src="{{ url_for('static', filename='img/scene.png') }}" alt="The Velvet Pit — speakeasy bar" loading="lazy">
+        </div>
+
+        {# Broker deal line #}
+        <div class="vp-render">
+          <span class="vp-brk tl"></span><span class="vp-brk br"></span>
+          <span class="vp-tag">Broker Deal Line</span>
+          <img src="{{ url_for('static', filename='img/broker.png') }}" alt="Broker deal line" loading="lazy">
+        </div>
+
+        {# Character presence cards #}
+        <div class="vp-render">
+          <span class="vp-brk tl"></span><span class="vp-brk br"></span>
+          <span class="vp-tag">Character Presence Cards</span>
+          <img src="{{ url_for('static', filename='img/cards.png') }}" alt="Character presence cards" loading="lazy">
+        </div>
+
+        {# Reputation display #}
+        <div class="vp-render">
+          <span class="vp-brk tl"></span><span class="vp-brk br"></span>
+          <span class="vp-tag">Reputation &middot; Standing</span>
+          <img src="{{ url_for('static', filename='img/rep.png') }}" alt="Reputation standing" loading="lazy">
+        </div>
+
+      </div>
+    </div>
+  </div>
 
   <!-- ══════════════════════════════════════════════════════════════
        FOOTER: Drink Menu + Economy

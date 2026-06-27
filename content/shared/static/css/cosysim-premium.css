@@ -1,0 +1,318 @@
+/* ============================================================
+   COSYSIM — PREMIUM v2 FIDELITY LAYER
+   cosysim-premium.css · "3rd pass" AAA treatment
+
+   Reusable upgrade vocabulary that lifts any CosySim scene to the
+   premium bar: chrome-bevel frames, neon corner brackets, layered
+   premium glass, ambient scene backgrounds, telemetry glow,
+   metallic wordmarks, ornate (gothic) frames, and the animation set.
+
+   Depends on colors_and_type.css tokens (--cs-scene-accent,
+   --cs-scene-accent-rgb, --cs-scene-glow, fonts). Drive everything
+   per-scene with data-scene="<scene>" on a container.
+
+   Every class is namespaced .csx-* so it layers cleanly over the
+   existing .cs-* system without collision.
+   ============================================================ */
+
+/* ── Ambient scene background (4-layer + optional hero image) ──
+   Apply to a fixed full-viewport element behind content, OR to a
+   container with position:relative. Set --csx-img to a url() for a
+   blurred scene photo wash. */
+.csx-bg {
+  position: relative;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% 108%, var(--cs-scene-glow) 0%, transparent 58%),
+    linear-gradient(180deg, #050509 0%, #07070d 55%, #0a0a12 100%);
+  isolation: isolate;
+}
+.csx-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(var(--cs-scene-accent-rgb), .045) 0 1px, transparent 1px 88px),
+    repeating-linear-gradient(0deg,  rgba(var(--cs-scene-accent-rgb), .045) 0 1px, transparent 1px 88px);
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 30%, transparent 90%);
+          mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 30%, transparent 90%);
+  animation: csx-drift 32s linear infinite;
+}
+.csx-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .4;
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .09) 2px 4px);
+}
+.csx-bg--photo::before {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(var(--cs-scene-accent-rgb), .045) 0 1px, transparent 1px 88px),
+    repeating-linear-gradient(0deg,  rgba(var(--cs-scene-accent-rgb), .045) 0 1px, transparent 1px 88px),
+    var(--csx-img, none);
+  background-size: 88px 88px, 88px 88px, cover;
+  background-position: center, center, center;
+  background-blend-mode: normal, normal, overlay;
+  opacity: .9;
+}
+@keyframes csx-drift { from { background-position: 0 0; } to { background-position: 0 88px; } }
+
+/* ── PREMIUM GLASS PANEL ────────────────────────────────────
+   Layered black glass: top sheen, inner accent line, deep shadow. */
+.csx-panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .045) 0%, transparent 18%),
+    var(--cs-glass-bg-strong);
+  backdrop-filter: blur(var(--cs-glass-blur));
+  -webkit-backdrop-filter: blur(var(--cs-glass-blur));
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), .18);
+  border-radius: var(--cs-radius-xl);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, .7),
+    inset 0 1px 0 rgba(255, 255, 255, .07),
+    inset 0 0 0 1px rgba(0, 0, 0, .4);
+  padding: var(--cs-space-lg);
+}
+.csx-panel--glow {
+  border-color: rgba(var(--cs-scene-accent-rgb), .35);
+  box-shadow:
+    0 0 28px var(--cs-scene-glow),
+    0 18px 48px rgba(0, 0, 0, .7),
+    inset 0 1px 0 rgba(255, 255, 255, .07);
+}
+
+/* ── CHROME / METAL BEVEL FRAME ─────────────────────────────
+   The brushed-steel container from the AAA mockups: a gradient
+   metal border with bevel highlights. Put content in a child. */
+.csx-frame {
+  position: relative;
+  border-radius: 14px;
+  padding: 2px;
+  background:
+    linear-gradient(145deg, #6b7280 0%, #2a2f3a 18%, #0d0f15 50%, #2a2f3a 82%, #565b66 100%);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, .7),
+    inset 0 1px 0 rgba(255, 255, 255, .25),
+    inset 0 -1px 0 rgba(0, 0, 0, .6);
+}
+.csx-frame > * {
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .04) 0%, transparent 16%),
+    var(--cs-glass-bg-strong);
+}
+.csx-frame--accent {
+  background:
+    linear-gradient(145deg,
+      color-mix(in oklab, var(--cs-scene-accent) 70%, #fff) 0%,
+      var(--cs-scene-accent) 22%,
+      #0d0f15 52%,
+      var(--cs-scene-accent) 80%,
+      color-mix(in oklab, var(--cs-scene-accent) 60%, #fff) 100%);
+  box-shadow:
+    0 0 26px var(--cs-scene-glow),
+    0 16px 40px rgba(0, 0, 0, .7),
+    inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+
+/* ── NEON CORNER BRACKETS ───────────────────────────────────
+   Overlay L-brackets on the 4 corners of any positioned element. */
+.csx-bracket { position: relative; }
+.csx-bracket::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --b: var(--cs-scene-accent);
+  --t: 2px;   /* stroke thickness */
+  --l: 18px;  /* arm length */
+  background:
+    linear-gradient(var(--b), var(--b)) 0 0 / var(--l) var(--t) no-repeat,
+    linear-gradient(var(--b), var(--b)) 0 0 / var(--t) var(--l) no-repeat,
+    linear-gradient(var(--b), var(--b)) 100% 0 / var(--l) var(--t) no-repeat,
+    linear-gradient(var(--b), var(--b)) 100% 0 / var(--t) var(--l) no-repeat,
+    linear-gradient(var(--b), var(--b)) 0 100% / var(--l) var(--t) no-repeat,
+    linear-gradient(var(--b), var(--b)) 0 100% / var(--t) var(--l) no-repeat,
+    linear-gradient(var(--b), var(--b)) 100% 100% / var(--l) var(--t) no-repeat,
+    linear-gradient(var(--b), var(--b)) 100% 100% / var(--t) var(--l) no-repeat;
+  filter: drop-shadow(0 0 4px var(--cs-scene-glow));
+}
+
+/* ── ORNATE / GOTHIC FRAME (Realm, Tavern, fantasy scenes) ──
+   Double bevel + gem-tone glow + diamond corner accents. */
+.csx-ornate {
+  position: relative;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background:
+    linear-gradient(var(--cs-bg-deepest), var(--cs-bg-deepest)) padding-box,
+    linear-gradient(145deg, #5b6168, #20242b 30%, var(--cs-scene-accent) 50%, #20242b 70%, #5b6168) border-box;
+  box-shadow:
+    0 0 22px var(--cs-scene-glow),
+    inset 0 0 24px rgba(var(--cs-scene-accent-rgb), .08),
+    0 12px 36px rgba(0, 0, 0, .7);
+  padding: var(--cs-space-lg);
+}
+.csx-ornate::before,
+.csx-ornate::after {
+  content: '◆';
+  position: absolute;
+  top: -9px;
+  font-size: 13px;
+  color: var(--cs-scene-accent);
+  text-shadow: 0 0 8px var(--cs-scene-glow);
+}
+.csx-ornate::before { left: 10px; }
+.csx-ornate::after  { right: 10px; }
+
+/* ── PREMIUM HUD STRIP ──────────────────────────────────────*/
+.csx-hud {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-space-lg);
+  padding: 7px 16px;
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-xs);
+  color: var(--cs-text-secondary);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .05), transparent 60%),
+    var(--cs-glass-bg-strong);
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), .2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+.csx-hud__loc {
+  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
+  color: var(--cs-scene-accent); font-weight: 700; letter-spacing: .14em;
+  text-shadow: 0 0 10px var(--cs-scene-glow);
+}
+.csx-ticker { flex: 1; overflow: hidden; white-space: nowrap;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.csx-ticker > span { display: inline-block; padding-left: 100%; animation: csx-ticker 30s linear infinite; }
+@keyframes csx-ticker { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+
+/* ── METALLIC WORDMARK (chrome title text) ──────────────────*/
+.csx-chrome-text {
+  background: linear-gradient(180deg, #fff 0%, #cfd4dc 38%, #8b929e 55%, #f2f4f7 70%, #aab0ba 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  font-family: var(--cs-font-display); font-weight: 800; letter-spacing: .06em;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .6));
+}
+.csx-neon-text {
+  color: var(--cs-scene-accent);
+  font-family: var(--cs-font-display); font-weight: 800; letter-spacing: .06em;
+  text-shadow: 0 0 12px var(--cs-scene-glow), 0 0 30px var(--cs-scene-glow);
+}
+
+/* ── PANEL HEADER (mono caps + glyph + glow) ────────────────*/
+.csx-h {
+  margin: 0 0 var(--cs-space-md);
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--cs-font-mono); font-size: var(--cs-text-xs); font-weight: 700;
+  letter-spacing: .18em; text-transform: uppercase;
+  color: var(--cs-scene-accent); text-shadow: 0 0 12px var(--cs-scene-glow);
+}
+
+/* ── PREMIUM TELEMETRY BAR (glow fill, rounded track) ───────*/
+.csx-tel { display: flex; flex-direction: column; gap: 7px; }
+.csx-tel__row { display: flex; align-items: center; gap: 10px; font-family: var(--cs-font-mono); font-size: 9.5px; }
+.csx-tel__lbl { width: 78px; flex-shrink: 0; color: var(--cs-text-muted); letter-spacing: .08em; text-transform: uppercase; }
+.csx-tel__trk { flex: 1; height: 7px; border-radius: 9999px; background: rgba(0, 0, 0, .5);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .8); overflow: hidden; }
+.csx-tel__fl { display: block; height: 100%; border-radius: 9999px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--csx-c, var(--cs-scene-accent)) 55%, #000), var(--csx-c, var(--cs-scene-accent)));
+  box-shadow: 0 0 8px var(--csx-c, var(--cs-scene-accent)), 0 0 2px #fff inset;
+  transition: width var(--cs-duration-base) var(--cs-ease); }
+.csx-tel__v { width: 28px; text-align: right; color: var(--cs-text-primary); font-weight: 700; }
+
+/* ── STATUS DOT + PILL ──────────────────────────────────────*/
+.csx-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+  background: var(--cs-green); box-shadow: 0 0 7px var(--cs-green); animation: csx-pulse 2.4s ease-in-out infinite; }
+.csx-dot--off { background: var(--cs-text-dim); box-shadow: none; animation: none; }
+.csx-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 9999px;
+  font-family: var(--cs-font-mono); font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--cs-scene-accent); background: rgba(var(--cs-scene-accent-rgb), .12);
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), .3); }
+.csx-credit { color: var(--cs-credit-color); font-family: var(--cs-font-mono); font-weight: 700;
+  text-shadow: 0 0 8px var(--cs-credit-glow); }
+
+/* ── ANIMATIONS ─────────────────────────────────────────────*/
+@keyframes csx-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.82); } }
+@keyframes csx-breathe { 0%, 100% { opacity: .65; } 50% { opacity: 1; } }
+@keyframes csx-spin { to { transform: rotate(360deg); } }
+@keyframes csx-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.csx-glow-breathe { animation: csx-breathe 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: no-preference) {
+  .csx-rise { animation: csx-rise .5s var(--cs-ease) both; }
+}
+
+/* ── SCROLLBAR (premium thin) ───────────────────────────────*/
+.csx-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.csx-scroll::-webkit-scrollbar-track { background: transparent; }
+.csx-scroll::-webkit-scrollbar-thumb { background: rgba(var(--cs-scene-accent-rgb), .25); border-radius: 3px; }
+.csx-scroll::-webkit-scrollbar-thumb:hover { background: rgba(var(--cs-scene-accent-rgb), .45); }
+
+/* ════════════════════════════════════════════════════════════
+   v2 ADDITIONS — from the CosySim v1.58 design-system spec sheet
+   (gold chrome CS hex · wide cinematic top bar · chrome finishes)
+   ════════════════════════════════════════════════════════════ */
+
+/* ── WIDE CINEMATIC TOP BAR ─────────────────────────────────
+   The signature wide bar: gold-bevel location chip + dual EN/HT
+   meters + credits/REP readout, over a thin scene-accent line. */
+.csx-topbar { display: flex; align-items: stretch; gap: 14px; padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,.04), transparent 70%), var(--cs-glass-bg-strong);
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), .18);
+  border-radius: var(--cs-radius-lg); box-shadow: 0 10px 32px rgba(0,0,0,.6); }
+.csx-loc { display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 10px; flex-shrink: 0;
+  border-radius: var(--cs-radius-md);
+  background: linear-gradient(180deg, rgba(245,158,11,.10), rgba(245,158,11,.02));
+  border: 1px solid rgba(245,158,11,.45);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 18px rgba(245,158,11,.12); }
+.csx-loc__hex { width: 30px; height: 30px; flex-shrink: 0; }
+.csx-loc__name { font-family: var(--cs-font-display); font-size: 15px; font-weight: 800; letter-spacing: .06em; color: #fff; line-height: 1; }
+.csx-loc__sub { font-family: var(--cs-font-mono); font-size: 9px; letter-spacing: .18em; color: var(--cs-credit-color); text-transform: uppercase; margin-top: 3px; }
+.csx-loc__arr { margin-left: 6px; color: var(--cs-credit-color); font-size: 16px; }
+.csx-topbar__mid { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; }
+.csx-topbar__meter { display: flex; align-items: center; gap: 8px; font-family: var(--cs-font-mono); font-size: 9px; letter-spacing: .12em; }
+.csx-meter__trk { flex: 1; height: 7px; border-radius: 3px; background: rgba(0,0,0,.55); overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,.8); }
+.csx-meter__fl { display: block; height: 100%; border-radius: 3px; }
+.csx-topbar__right { display: flex; align-items: center; gap: 20px; flex-shrink: 0; padding-left: 6px; border-left: 1px solid rgba(255,255,255,.08); }
+.csx-readout { text-align: right; }
+.csx-readout__l { display: block; font-family: var(--cs-font-mono); font-size: 8px; letter-spacing: .2em; color: var(--cs-text-muted); text-transform: uppercase; }
+.csx-readout__v { font-family: var(--cs-font-display); font-size: 18px; font-weight: 800; color: #fff; line-height: 1.1; }
+.csx-readout__v.credit { color: var(--cs-credit-color); text-shadow: 0 0 12px var(--cs-credit-glow); }
+
+/* scene-accent rainbow underline */
+.csx-accent-line { height: 2px; border-radius: 2px; margin: 8px 0 4px;
+  background: linear-gradient(90deg, transparent, var(--cs-scene-accent) 20%, color-mix(in oklab, var(--cs-scene-accent) 50%, #fff) 50%, var(--cs-scene-accent) 80%, transparent);
+  box-shadow: 0 0 12px var(--cs-scene-glow); }
+
+/* ── GOLD CHROME CS HEX MARK ────────────────────────────────
+   Inline-SVG companion lives in markup; this styles the wrapper. */
+.csx-hexmark { filter: drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+.csx-hexmark--gold { --hex-a: #fde68a; --hex-b: #f59e0b; --hex-c: #b45309; }
+.csx-hexmark--chrome { --hex-a: #ffffff; --hex-b: #aab0ba; --hex-c: #585d68; }
+
+/* ── CHROME FINISH SWATCH (orbs) ────────────────────────────*/
+.csx-orb { width: 46px; height: 46px; border-radius: 50%;
+  box-shadow: inset 0 -6px 12px rgba(0,0,0,.7), inset 0 6px 10px rgba(255,255,255,.5), 0 4px 10px rgba(0,0,0,.5); }
+.csx-orb--polished { background: radial-gradient(circle at 38% 30%, #ffffff 0%, #d4d9e0 22%, #8b929e 55%, #2a2f3a 100%); }
+.csx-orb--brushed  { background: radial-gradient(circle at 38% 30%, #f2f4f7 0%, #c2c7d0 30%, #767c88 70%, #3a3f4a 100%); }
+.csx-orb--satin    { background: radial-gradient(circle at 38% 30%, #e4e7ec 0%, #aab0ba 40%, #686d78 80%, #303540 100%); }
+.csx-orb--dark     { background: radial-gradient(circle at 38% 30%, #9aa0ab 0%, #5a5f6a 35%, #2a2e38 75%, #0d0f15 100%); }
+
+/* ── DISTRICT / TURF TILE (The Sprawl) ──────────────────────*/
+.csx-turf { position: relative; border-radius: 10px; overflow: hidden; cursor: pointer;
+  border: 1.5px solid rgba(var(--cs-scene-accent-rgb), .5);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), inset 0 0 30px rgba(var(--cs-scene-accent-rgb), .14), 0 8px 24px rgba(0,0,0,.6);
+  transition: transform .2s var(--cs-ease), box-shadow .2s var(--cs-ease); }
+.csx-turf:hover { transform: translateY(-3px); box-shadow: 0 0 24px var(--cs-scene-glow), inset 0 0 40px rgba(var(--cs-scene-accent-rgb), .22), 0 12px 30px rgba(0,0,0,.7); }
+.csx-turf__glow { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 120%, rgba(var(--cs-scene-accent-rgb), .35) 0%, transparent 65%); pointer-events: none; }

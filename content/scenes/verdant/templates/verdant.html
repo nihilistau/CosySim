@@ -1,0 +1,310 @@
+{% extends 'neon_base.html' %}
+{% set scene_key = 'verdant' %}
+{% set scene_display_name = 'VERDANT REALMS' %}
+{% set scene_accent = '#22c55e' %}
+{% set scene_accent_rgb = '34 197 94' %}
+
+{# ──────────────────────────────────────────────────────────────────────
+   VERDANT REALMS — Dual-Agent LitRPG (Director & Companion)
+   ──────────────────────────────────────────────────────────────────────
+   Version: v1.64.0 [2026-06-27]
+   Author:  CosySim Team
+
+   Change Log:
+     v1.64.0 [2026-06-27] — Premium glow-up: composited scene render
+                             panels (banner, combat strip, companion,
+                             director, skill check PNGs), v2 CSS layer,
+                             glass hover glow, dual-agent card layout.
+   ────────────────────────────────────────────────────────────────────── #}
+
+{% block head_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='verdant.css') }}">
+  {# v1.64.0 — Premium glow-up v2 layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='verdant_v2.css') }}">
+{% endblock %}
+
+{% block head_style %}
+  <style>
+    /* v1.64.0 [2026-06-27] — Consequences slide-out panel */
+    .consequences-panel{position:fixed;right:0;top:50%;transform:translateY(-50%);width:36px;background:rgba(0,0,0,.85);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-right:none;border-radius:8px 0 0 8px;z-index:900;overflow:hidden;transition:width .25s ease;}
+    .consequences-panel.open{width:290px;}
+    .consequences-toggle{display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;color:var(--scene-accent,#22c55e);font-size:.7rem;letter-spacing:.08em;padding:10px 8px;cursor:pointer;white-space:nowrap;}
+    .csq-label,.consequences-body{display:none;}
+    .consequences-panel.open .csq-label,.consequences-panel.open .consequences-body{display:block;}
+    .consequences-body{padding:0 12px 12px;}
+    .consequences-section h4{color:rgba(255,255,255,.45);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;margin:8px 0 4px;}
+    .consequences-list{list-style:none;margin:0;padding:0;}
+    .consequences-list li{font-size:.68rem;color:rgba(255,255,255,.7);padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);}
+    .consequences-list li.empty{color:rgba(255,255,255,.3);font-style:italic;}
+  </style>
+{% endblock %}
+
+{% block scene_content %}
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  VERDANT HEADER — Realm status strip                      -->
+  <!--  v1.64.0 [2026-06-27] — Premium glow-up header            -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <header class="vd-header">
+    <div class="vd-header__left">
+      <svg class="vd-header__crest" viewBox="0 0 32 32" fill="none" width="36" height="36">
+        <path d="M16 3 C9 9 9 20 16 29 C23 20 23 9 16 3 Z" fill="rgba(34,197,94,.15)" stroke="#6ee7a0" stroke-width="1.5"/>
+        <path d="M16 9 v16" stroke="#6ee7a0" stroke-width="1.2"/>
+      </svg>
+      <div>
+        <h1 class="vd-header__title">VERDANT REALMS</h1>
+        <p class="vd-header__subtitle" id="world-subtitle">v1.64 — Dual-Agent LitRPG</p>
+      </div>
+    </div>
+
+    <div class="vd-header__status">
+      <span class="vd-live-badge"><span class="vd-live-dot"></span> REALM ACTIVE</span>
+    </div>
+
+    <div class="vd-header__right">
+      <span class="vd-header__chip"><small>GRID</small>E7</span>
+      <span class="vd-header__chip"><small>REALM TIER</small>4</span>
+      <span class="vd-header__chip"><small>PARTY</small>2 AGENTS</span>
+      <span class="vd-header__turn" id="turn-counter">Turn 0</span>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  BANNER — Composited scene render (sliced)                 -->
+  <!--  v1.64.0 [2026-06-27] — Premium glow-up banner             -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="vd-banner">
+    <img src="{{ url_for('static', filename='img/banner.png') }}" alt="Realm: Verdant Schism" loading="lazy">
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  MAIN LAYOUT — 3 columns (Director / Center / Companion)   -->
+  <!--  v1.64.0 [2026-06-27] — Composited render cards             -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="vd-board anim-stagger-in" id="verdant-main">
+
+    <!-- ─── LEFT: Director Agent Panel ─────────────────────── -->
+    <aside class="vd-panel vd-panel--left">
+
+      <!-- v1.64.0 — Director scene render card -->
+      <div class="vd-render">
+        <span class="vd-render__brk vd-render__brk--tl"></span>
+        <span class="vd-render__brk vd-render__brk--br"></span>
+        <span class="vd-render__tag">Director · LVL 12</span>
+        <img src="{{ url_for('static', filename='img/director.png') }}" alt="Director card — influence 87, threads 3/5" loading="lazy">
+      </div>
+
+      <!-- Director stats -->
+      <div class="vd-agent-stats">
+        <div class="vd-stat">
+          <div class="vd-stat__header">
+            <span class="vd-stat__label">Influence</span>
+            <span class="vd-stat__value" id="stat-influence-val">87 / 100</span>
+          </div>
+          <div class="vd-stat__track">
+            <div class="vd-stat__fill stat-bar influence" id="stat-influence" style="width:87%"></div>
+          </div>
+        </div>
+        <div class="vd-stat">
+          <div class="vd-stat__header">
+            <span class="vd-stat__label">Threads</span>
+            <span class="vd-stat__value" id="stat-threads-val">3 / 5</span>
+          </div>
+          <div class="vd-stat__track">
+            <div class="vd-stat__fill stat-bar threads" id="stat-threads" style="width:60%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Faction standings -->
+      <div class="vd-factions" id="vd-factions">
+        <h3 class="vd-section-title">⚖ Faction Standings</h3>
+        <div class="faction-list" id="faction-list">
+          <div class="faction-entry" data-faction="grove">
+            <span class="faction-icon">🌿</span>
+            <span class="faction-name">The Grove</span>
+            <div class="faction-bar-wrap"><div class="faction-bar" style="width:55%"></div></div>
+          </div>
+          <div class="faction-entry" data-faction="thorn">
+            <span class="faction-icon">🌑</span>
+            <span class="faction-name">Thornguard</span>
+            <div class="faction-bar-wrap"><div class="faction-bar" style="width:30%"></div></div>
+          </div>
+          <div class="faction-entry" data-faction="spore">
+            <span class="faction-icon">🍄</span>
+            <span class="faction-name">Spore Council</span>
+            <div class="faction-bar-wrap"><div class="faction-bar" style="width:45%"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ─── CENTER: Story Theater + Combat ─────────────────── -->
+    <section class="vd-panel vd-panel--center">
+
+      <!-- v1.64.0 — Combat strip scene render -->
+      <div class="vd-render vd-render--wide">
+        <span class="vd-render__brk vd-render__brk--tl"></span>
+        <span class="vd-render__brk vd-render__brk--br"></span>
+        <span class="vd-render__tag">Combat Strip · NAT 20</span>
+        <img src="{{ url_for('static', filename='img/combat-strip.png') }}" alt="Combat strip — d20 rolls" loading="lazy">
+      </div>
+
+      <!-- Narrative text panel -->
+      <div class="narrative-panel" id="narrative-panel">
+        <div class="narrative-panel__text" id="narrative-text">
+          <span class="narrative-cursor" id="narrative-cursor">▌</span>
+        </div>
+      </div>
+
+      <!-- v1.64.0 — Skill check scene render -->
+      <div class="vd-render vd-render--wide">
+        <span class="vd-render__brk vd-render__brk--tl"></span>
+        <span class="vd-render__brk vd-render__brk--br"></span>
+        <span class="vd-render__tag">Skill Check · Arcane Negotiation</span>
+        <img src="{{ url_for('static', filename='img/skill-check.png') }}" alt="Skill check — result 25 vs DC 18, success" loading="lazy">
+      </div>
+
+      <!-- Choice buttons -->
+      <div class="vd-choices" id="vd-choices">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Free-text input -->
+      <div class="vd-input-row">
+        <input
+          type="text"
+          class="vd-input"
+          id="custom-input"
+          placeholder="Speak freely or enter a command…"
+          autocomplete="off"
+        >
+        <button class="vd-send-btn" id="send-btn" onclick="VerdantRealms.sendMessage()">
+          ▶ Send
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ─── RIGHT: Companion Agent Panel ───────────────────── -->
+    <aside class="vd-panel vd-panel--right">
+
+      <!-- v1.64.0 — Companion scene render card -->
+      <div class="vd-render">
+        <span class="vd-render__brk vd-render__brk--tl"></span>
+        <span class="vd-render__brk vd-render__brk--br"></span>
+        <span class="vd-render__tag">Companion · Wayfarer</span>
+        <img src="{{ url_for('static', filename='img/companion.png') }}" alt="Companion card — loyalty 92, focus 4/4" loading="lazy">
+      </div>
+
+      <!-- Companion stats -->
+      <div class="vd-agent-stats">
+        <div class="vd-stat">
+          <div class="vd-stat__header">
+            <span class="vd-stat__label">Loyalty</span>
+            <span class="vd-stat__value" id="stat-loyalty-val">92 / 100</span>
+          </div>
+          <div class="vd-stat__track">
+            <div class="vd-stat__fill stat-bar loyalty" id="stat-loyalty" style="width:92%"></div>
+          </div>
+        </div>
+        <div class="vd-stat">
+          <div class="vd-stat__header">
+            <span class="vd-stat__label">Focus</span>
+            <span class="vd-stat__value" id="stat-focus-val">4 / 4</span>
+          </div>
+          <div class="vd-stat__track">
+            <div class="vd-stat__fill stat-bar focus" id="stat-focus" style="width:100%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active quest tracker -->
+      <div class="vd-quest-tracker" id="quest-tracker">
+        <h3 class="vd-section-title">📜 Active Quest</h3>
+        <div class="quest-card" id="quest-card">
+          <p class="quest-card__title" id="quest-title">No active quest</p>
+          <p class="quest-card__objective" id="quest-objective">—</p>
+          <div class="quest-progress-wrap">
+            <div class="quest-progress-bar" id="quest-progress-bar" style="width:0%"></div>
+          </div>
+          <span class="quest-progress-label" id="quest-progress-label">0 / 0</span>
+        </div>
+      </div>
+
+      <!-- Dark events timeline -->
+      <div class="vd-timeline" id="vd-timeline">
+        <h3 class="vd-section-title">🕯 Realm Events</h3>
+        <ul class="timeline-list" id="timeline-list">
+          <li class="timeline-item timeline-item--system">Awaiting the realm's reckoning…</li>
+        </ul>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  ACTION RAIL — d20, skill check, combat, party             -->
+  <!--  v1.64.0 [2026-06-27] — UI kit action buttons              -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="vd-rail">
+    <span class="vd-act vd-act--primary" onclick="VerdantRealms.rollD20()">⚄ ROLL d20</span>
+    <span class="vd-act" onclick="VerdantRealms.skillCheck()">✦ SKILL CHECK</span>
+    <span class="vd-act" onclick="VerdantRealms.combat()">⚔ COMBAT</span>
+    <span class="vd-act" onclick="VerdantRealms.party()">⚜ PARTY</span>
+    <span class="vd-act vd-act--leave" onclick="VerdantRealms.endTurn()">◖ END TURN</span>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  PARTICLES — realm FX canvas                                -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <canvas id="realm-fx-canvas" class="realm-fx-canvas" aria-hidden="true"></canvas>
+
+  <!-- ── Consequences Panel ──────────────────────────────────────── -->
+  <div id="consequences-panel" class="consequences-panel">
+    <button class="consequences-toggle" onclick="toggleConsequences()" title="Consequences">
+      ⚡ <span class="csq-label">Consequences</span> <span id="consequences-count"></span>
+    </button>
+    <div class="consequences-body" id="consequences-body">
+      <div class="consequences-section">
+        <h4>Recent</h4>
+        <ul id="consequences-recent" class="consequences-list"></ul>
+      </div>
+      <div class="consequences-section">
+        <h4>Pending</h4>
+        <ul id="consequences-pending" class="consequences-list"></ul>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block body_scripts %}
+  <script src="{{ url_for('static', filename='verdant.js') }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      window.VerdantRealms = new VerdantRealmsScene();
+      VerdantRealms.init();
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('custom-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') VerdantRealms.sendMessage();
+      });
+    });
+  </script>
+  <script src="/shared/js/cosysim-voice.js"></script>
+  <script>
+    function toggleConsequences(){document.getElementById('consequences-panel').classList.toggle('open');}
+    (function csqPoll(){
+      fetch('/api/consequences').then(function(r){return r.ok?r.json():{recent:[],pending:[]};}).then(function(d){
+        var r=d.recent||[],p=d.pending||[],ct=r.length+p.length;
+        document.getElementById('consequences-count').textContent=ct?'('+ct+')':'';
+        var render=function(id,items){var el=document.getElementById(id);if(!el)return;el.innerHTML=items.slice(0,5).map(function(c){return'<li>'+(c.description||'')+'</li>';}).join('')||'<li class="empty">None</li>';};
+        render('consequences-recent',r);render('consequences-pending',p);
+      }).catch(function(){});
+      setTimeout(csqPoll,30000);
+    })();
+  </script>
+  <script>window.SCENE_PARTICLE_CONFIG = { scene: 'verdant' };</script>
+{% endblock %}

@@ -113,6 +113,12 @@ scenes:
     port: 5562
     debug: false
 
+  # v1.64.0 [2026-06-27] — Verdant Realms dual-agent LitRPG (Neon Glow-Up)
+  verdant:
+    host: "localhost"
+    port: 5599
+    debug: false
+
   neoncity:
     host: "localhost"
     port: 5563
