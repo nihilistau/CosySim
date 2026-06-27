@@ -779,3 +779,21 @@
 .lot-progress-status.status-active   { color: var(--auction-accent); }
 .lot-progress-status.status-sold     { color: var(--auction-success); }
 .lot-progress-status.status-unsold   { color: var(--auction-danger); }
+
+/* ── v1.64.0 [2026-06-27] — PREMIUM GLOW-UP ──────────────────────────── */
+
+/* Glass panel hover border glow */
+.auction-lot-panel,
+.auction-npc-panel,
+.auction-history-panel,
+.auction-bid-section {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.auction-lot-panel:hover,
+.auction-npc-panel:hover,
+.auction-history-panel:hover,
+.auction-bid-section:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 251 191 36), 0.55);
+  box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 251 191 36), 0.25),
+              inset 0 0 8px rgba(var(--cs-scene-accent-rgb, 251 191 36), 0.06);
+}

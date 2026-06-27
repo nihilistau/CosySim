@@ -7,6 +7,8 @@
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: glass panel hover border glow,
+ *                           ops status pulse, scene card accent lift
  *   v1.58.0 [2026-06-11] — Initial v2 glow-up (teal ops bg, Orbitron header,
  *                           glass monitor panels, semantic alert nodes)
  */
@@ -58,3 +60,35 @@ body::before {
 
 /* primary action glow */
 .cc-btn { box-shadow: 0 0 14px var(--cs-scene-glow); }
+
+/* ──── PREMIUM GLOW-UP ────────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Premium glow-up */
+
+/* Glass panel hover border glow — teal ops accent */
+.cc-panel {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.cc-panel:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.5);
+  box-shadow: 0 0 20px rgba(var(--cs-scene-accent-rgb), 0.15),
+              inset 0 0 30px rgba(var(--cs-scene-accent-rgb), 0.04);
+}
+
+/* Ops status pulse — worst-alert badge glow */
+.alert-badge.red {
+  animation: cc-alert-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cc-alert-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+  50%      { box-shadow: 0 0 18px rgba(239, 68, 68, 0.7); }
+}
+
+/* Scene card accent lift on hover */
+.scene-card-grid > * {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+}
+.scene-card-grid > *:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.45);
+  box-shadow: 0 0 16px rgba(var(--cs-scene-accent-rgb), 0.12);
+  transform: translateY(-1px);
+}

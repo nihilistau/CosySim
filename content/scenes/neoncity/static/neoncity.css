@@ -4,8 +4,12 @@
  * Bloomberg Terminal meets Blade Runner. Dense, dark, information-rich.
  * Clean grid. No conflicts with neon_base.css or shared HUD.
  *
- * Version: v1.58.0 [2026-06-11]
+ * Version: v1.64.0 [2026-06-27]
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: stat bar glow fills, gold button
+ *                            variant, enhanced district hover halo, premium
+ *                            glass panel hover, faction bar glow, section title
+ *                            bracket treatment
  *   v1.58.0 [2026-06-11] — Dark Renaissance v2 alignment: palette re-pointed
  *                            at --cs-scene-accent tokens, Orbitron display
  *                            logo, kit 4-layer drift background, credits
@@ -785,4 +789,76 @@
   font-weight: 700;
   color: #fbbf24;
   margin-top: 2px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Stat bar glow fills ────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Subtle glow on stat bar fills */
+.nc-stat__fill--hp { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, 0.3); }
+.nc-stat__fill--en { background: #3b82f6; box-shadow: 0 0 6px rgba(59, 130, 246, 0.3); }
+.nc-stat__fill--ht { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.3); }
+.nc-stat__fill--rep { background: #8b5cf6; box-shadow: 0 0 6px rgba(139, 92, 246, 0.3); }
+
+/* ── Gold button variant ────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — nc-btn--gold for auction/trade buttons */
+.nc-btn--gold {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.06);
+}
+.nc-btn--gold:hover {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.2);
+}
+
+/* ── Enhanced district hover halo ───────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — District hover uses --dc color for accent halo */
+.nc-district:hover {
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--dc, var(--nc)) 20%, transparent),
+    -2px 0 12px color-mix(in srgb, var(--dc, var(--nc)) 12%, transparent),
+    0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Premium glass panel hover ──────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Subtle border glow on panel hover */
+.nc-panel:hover {
+  border-color: rgb(var(--nc-rgb) / 0.2);
+}
+
+.nc-chat:hover,
+.nc-economy:hover,
+.nc-events:hover {
+  border-color: rgb(var(--nc-rgb) / 0.2);
+}
+
+/* ── Faction bar glow ───────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Fill bar glow matching faction color */
+.nc-faction__fill {
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* ── Section title bracket treatment ────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Subtle accent underline on section titles */
+.nc-section-title::after {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--nc), transparent);
+  margin-top: 4px;
+}
+
+/* ── Tension meter premium ──────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Tension value pulses when high */
+.nc-tension__val.high {
+  animation: nc-pulse 1.5s ease-in-out infinite;
+}
+.nc-tension__val.critical {
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+  animation: nc-pulse 0.8s ease-in-out infinite;
 }

@@ -5,6 +5,8 @@
 
    Version: v1.58.0 [2026-06-11]
    Change Log:
+     v1.64.0 [2026-06-27] — Premium glow-up: glass panel hover border glow,
+                             blueprint panel amber edge pulse, crew card lift
      v1.58.0 [2026-06-11] — Dark Renaissance glow-up (appended
                              section): palette re-pointed at --cs-*
                              v2 tokens (amber), Orbitron job name +
@@ -972,3 +974,61 @@ body {
 }
 /* connector meets the chip's vertical center (chip 26px + gap 4 + label) */
 .step-connector { margin-bottom: 16px; width: 22px; }
+
+/* ══════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   Glass panel hover border glow + blueprint amber edge pulse +
+   crew card lift
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ──── Glass panel hover border glow ──────────────────────────────── */
+/* v1.64.0 [2026-06-27] — accent-traced border on any glass panel hover */
+.cs-panel,
+.heist-panel,
+.brief-panel,
+.crew-panel,
+.pinboard-panel {
+  border: 1px solid rgba(var(--cs-scene-accent-rgb), 0.12);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.cs-panel:hover,
+.heist-panel:hover,
+.brief-panel:hover,
+.crew-panel:hover,
+.pinboard-panel:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.45);
+  box-shadow: 0 0 20px rgba(var(--cs-scene-accent-rgb), 0.10),
+              inset 0 0 12px rgba(var(--cs-scene-accent-rgb), 0.04);
+}
+
+/* ──── Blueprint panel amber edge pulse ──────────────────────────── */
+/* v1.64.0 [2026-06-27] — pulsing amber left border on blueprint panels */
+@keyframes cs-amber-edge-pulse {
+  0%, 100% { border-left-color: rgba(var(--cs-scene-accent-rgb), 0.25); }
+  50%      { border-left-color: rgba(var(--cs-scene-accent-rgb), 0.60); }
+}
+.job-card,
+.pin-card {
+  border-left: 3px solid rgba(var(--cs-scene-accent-rgb), 0.25);
+  animation: cs-amber-edge-pulse 3s ease-in-out infinite;
+}
+
+/* ──── Crew card lift — hover elevation ──────────────────────────── */
+/* v1.64.0 [2026-06-27] — subtle lift + glow on crew member cards */
+.crew-member,
+.crew-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.crew-member:hover,
+.crew-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(var(--cs-scene-accent-rgb), 0.08),
+              0 0 12px rgba(var(--cs-scene-accent-rgb), 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .job-card,
+  .pin-card { animation: none; }
+  .crew-member:hover,
+  .crew-card:hover { transform: none; }
+}

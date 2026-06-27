@@ -8,10 +8,13 @@
  *
  * Accent: #6366f1 royal indigo · Gold: #d97706 / #fbbf24
  *
- * Version: v1.58.0 [2026-06-11]
+ * Version: v1.64.0 [2026-06-27]
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: glass hover border glow,
+ *                           stat bar glow, quest/faction depth, spell
+ *                           bar shimmer, inventory slot glow.
  *   v1.58.0 [2026-06-11] — Initial Dark Renaissance layer: bg stack,
  *                           typography, glass depth, parchment quest
  *                           strip, royal sigil halo + drop-cap wow.
@@ -252,4 +255,84 @@ body[data-scene="realm"] .neon-scanlines {
     animation: none !important;
   }
   .choice-btn::after { display: none; }
+}
+
+/* ──── PREMIUM GLOW-UP ─────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Premium glow-up: glass hover border glow,
+   stat bar fill glow, quest card depth, faction bar shimmer.          */
+
+/* Panel hover — royal indigo border glow */
+.realm-panel {
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.realm-panel:hover {
+  border-color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.35);
+  box-shadow:
+    0 0 14px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.10),
+    inset 0 0 8px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.04);
+}
+
+/* Stat bar fill — enhanced glow (HP, MP, XP, Sanity) */
+.realm-stat__fill {
+  box-shadow:
+    0 0 6px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.25),
+    0 0 14px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.10);
+  transition: width 0.5s ease, box-shadow 0.3s ease;
+}
+.realm-stat:hover .realm-stat__fill {
+  box-shadow:
+    0 0 10px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.40),
+    0 0 22px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.16);
+}
+
+/* Quest card depth — parchment glow on hover */
+.quest-card {
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.quest-card:hover {
+  border-color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.30);
+  box-shadow:
+    0 4px 16px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.12),
+    inset 0 0 6px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.03);
+}
+
+/* Faction bar hover shimmer */
+.faction-entry {
+  transition: background 0.2s ease;
+}
+.faction-entry:hover {
+  background: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.05);
+}
+.faction-entry:hover .faction-bar {
+  box-shadow: 0 0 8px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.25);
+}
+
+/* Narrative panel — subtle inner glow on focus */
+.narrative-panel:focus-within,
+.narrative-panel:hover {
+  box-shadow:
+    inset 0 0 12px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.06),
+    0 0 8px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.08);
+}
+
+/* Spell bar buttons — indigo glow on hover */
+.spell-btn {
+  transition: background 0.2s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.spell-btn:hover {
+  border-color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.40);
+  box-shadow: 0 0 12px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.25);
+}
+
+/* Inventory slot hover depth */
+.inventory-slot:hover {
+  border-color: rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.35);
+  box-shadow: 0 0 8px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.15);
+}
+
+/* Crown crest glow intensifier */
+.realm-header__crest {
+  text-shadow:
+    0 0 10px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.40),
+    0 0 28px rgb(var(--cs-scene-accent-rgb, 99 102 241) / 0.15);
 }

@@ -8,10 +8,13 @@
    [data-scene="lounge"] accent + the 4-layer background recipe from
    artifacts/new-assets/styles.css.
 
-   Version: v1.58.0 [2026-06-11]
+   Version: v1.64.0 [2026-06-27]
    Author:  CosySim Team
 
    Change Log:
+     v1.64.0 [2026-06-27] — Premium glow-up: composited scene render card
+                              styles (.vp-render), corner bracket decorations,
+                              hover-reveal tags, render gallery grid layout.
      v1.58.0 [2026-06-11] — Pulse-glow on primary CTAs (.ck-btn--accent)
                               reusing shared cs-pulse-glow keyframes.
      v1.58.0 [2026-06-11] — Initial v2 layer: scene palette re-pointed to
@@ -294,4 +297,96 @@ body {
 .ck-btn--accent:hover,
 .ck-btn--accent:disabled {
   animation: none;
+}
+
+/* ──── 11 · Composited Scene Render Cards (.vp-render) ───────────────── */
+/* v1.64.0 [2026-06-27] — Velvet Pit scene render gallery: composited PNG
+   cards with corner bracket decorations, hover-reveal tags, gold accent
+   borders. Follows the UI kit "piece" pattern from the Velvet Pit v2 kit. */
+
+/* Gallery grid — matches UI kit board layout */
+.vp-render-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 4px 0;
+}
+
+/* Individual render card */
+.vp-render {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--scene-accent-rgb) / 0.26);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  cursor: pointer;
+  background: var(--scene-bg, #0a040c);
+}
+.vp-render:hover {
+  transform: translateY(-3px);
+  border-color: var(--scene-accent-light, #f472b6);
+  box-shadow:
+    0 0 22px rgb(var(--scene-accent-rgb) / 0.34),
+    0 18px 40px rgba(0, 0, 0, 0.7);
+}
+.vp-render img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Hover-reveal tag — mono label fades in on hover */
+.vp-render .vp-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--scene-text, #dcc8d4);
+  background: rgba(10, 4, 12, 0.74);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--scene-accent-rgb) / 0.3);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
+}
+.vp-render:hover .vp-tag {
+  opacity: 1;
+}
+
+/* Corner brackets — art-deco gold trim */
+.vp-render .vp-brk {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(232, 184, 115, 0.7);
+  z-index: 2;
+  pointer-events: none;
+}
+.vp-render .vp-brk.tl {
+  top: 7px;
+  left: 7px;
+  border-right: 0;
+  border-bottom: 0;
+}
+.vp-render .vp-brk.br {
+  bottom: 7px;
+  right: 7px;
+  border-left: 0;
+  border-top: 0;
+}
+
+/* Featured render — larger span for the main scene.png */
+.vp-render--featured {
+  grid-column: span 2;
+}
+@media (max-width: 600px) {
+  .vp-render--featured {
+    grid-column: span 1;
+  }
 }

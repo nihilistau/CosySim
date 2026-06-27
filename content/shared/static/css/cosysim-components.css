@@ -1,5 +1,5 @@
 /*
- * CosySim Component Library — v1.57.3 [2026-05-12]
+ * CosySim Component Library — v1.64.0 [2026-06-27]
  * =====================================================
  * Reusable UI components for all scenes.
  * Requires: design_tokens.css · cosysim-animations.css
@@ -8,9 +8,13 @@
  *   Glass Panels · Buttons · Stat Bars · Portrait Frames ·
  *   Voice Toggle · Bench HUD · Arena Cards · Hacker Panel ·
  *   Economy Ticker · Agent Tag · Pixel Card · Scene Header ·
- *   Sidebar · Chip Badge · Online Dot · Investigation Board
+ *   Sidebar · Chip Badge · Online Dot · Investigation Board ·
+ *   Premium Button Variants · District Cards · Faction Bars
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium button variants (.cs-btn--glass/scene/terminal/danger),
+ *                           district cards (.cs-district), faction power bars (.cs-faction),
+ *                           compact scene buttons (.cs-btn--xs/sm), NPC tags
  *   v1.58.0 [2026-06-11] — Add .cs-chat-bubble / .cs-chat-log shared dialogue
  *                           components (ported from Dark Renaissance kit)
  *   v1.57.3 [2026-05-12] — Add glass-subtle/medium/deep depth tiers + cs-btn-scene standardized button
@@ -1238,4 +1242,409 @@
     border: 1px dashed var(--cs-border);
     border-radius: var(--cs-radius-full);
     letter-spacing: 0.04em;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PREMIUM BUTTON VARIANTS — v1.64.0 [2026-06-27]
+   Glass / scene-accent / terminal / danger variants from the
+   NeonCity design system. Compact sizes for dense UIs.
+   ══════════════════════════════════════════════════════════════ */
+
+/* v1.64.0 [2026-06-27] — Premium button variants */
+.cs-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px 14px;
+    border-radius: var(--cs-radius-sm);
+    font-family: var(--cs-font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all var(--cs-duration-fast) var(--cs-ease);
+    white-space: nowrap;
+    user-select: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--cs-text-secondary);
+}
+.cs-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: var(--cs-text-primary);
+}
+
+.cs-btn--scene {
+    border-color: rgba(var(--cs-scene-accent-rgb), 0.35);
+    color: var(--cs-scene-accent);
+    background: rgba(var(--cs-scene-accent-rgb), 0.08);
+}
+.cs-btn--scene:hover {
+    background: rgba(var(--cs-scene-accent-rgb), 0.18);
+    border-color: rgba(var(--cs-scene-accent-rgb), 0.5);
+    box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb), 0.2);
+}
+
+.cs-btn--terminal {
+    font-family: var(--cs-terminal-font);
+    border-color: var(--cs-hack-border);
+    color: var(--cs-hack-green);
+    background: var(--cs-hack-green-soft);
+}
+.cs-btn--terminal:hover {
+    background: rgba(0, 255, 65, 0.15);
+    box-shadow: 0 0 12px var(--cs-hack-green-glow);
+}
+
+.cs-btn--danger {
+    border-color: rgba(239, 68, 68, 0.35);
+    color: var(--cs-red);
+    background: rgba(239, 68, 68, 0.08);
+}
+.cs-btn--danger:hover {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.5);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+.cs-btn--gold {
+    border-color: rgba(245, 158, 11, 0.45);
+    color: var(--cs-credit-color);
+    background: rgba(245, 158, 11, 0.1);
+}
+.cs-btn--gold:hover {
+    background: rgba(245, 158, 11, 0.2);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+}
+
+.cs-btn--primary {
+    background: rgba(var(--cs-scene-accent-rgb), 0.9);
+    border-color: var(--cs-scene-accent);
+    color: #fff;
+}
+.cs-btn--primary:hover {
+    box-shadow: 0 0 20px rgba(var(--cs-scene-accent-rgb), 0.5);
+}
+
+.cs-btn--xs { padding: 2px 8px; font-size: 8.5px; }
+.cs-btn--sm { padding: 4px 10px; font-size: 9px; }
+.cs-btn--lg { padding: 8px 20px; font-size: 12px; }
+
+.cs-btn:disabled,
+.cs-btn[disabled] {
+    opacity: 0.35;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DISTRICT CARDS — v1.64.0 [2026-06-27]
+   3px left-accent cards for NeonCity district navigation.
+   Set --dc on each card for the district's faction color.
+   ══════════════════════════════════════════════════════════════ */
+
+/* v1.64.0 [2026-06-27] — District cards */
+.cs-district {
+    position: relative;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-left: 3px solid var(--dc, var(--cs-scene-accent));
+    border-radius: var(--cs-radius-md);
+    cursor: pointer;
+    transition: all var(--cs-duration-fast) var(--cs-ease);
+}
+.cs-district:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.12);
+    border-left-color: var(--dc, var(--cs-scene-accent));
+    box-shadow: 0 0 16px rgba(var(--cs-scene-accent-rgb), 0.1);
+}
+
+.cs-district__icon { font-size: 16px; margin-bottom: 4px; }
+.cs-district__name {
+    font-family: var(--cs-font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--cs-text-primary);
+}
+.cs-district__faction {
+    font-family: var(--cs-font-mono);
+    font-size: 8.5px;
+    color: var(--dc, var(--cs-scene-accent));
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 1px;
+}
+.cs-district__desc {
+    font-size: 11px;
+    color: var(--cs-text-muted);
+    margin-top: 4px;
+    line-height: 1.4;
+}
+.cs-district__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-family: var(--cs-font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.cs-district__npcs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.cs-district__actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+/* Activity / status indicators */
+.cs-activity { display: inline-flex; align-items: center; gap: 4px; }
+.cs-activity.quiet { color: var(--cs-green); }
+.cs-activity.busy { color: var(--cs-yellow); }
+.cs-activity.dangerous { color: var(--cs-red); }
+
+.cs-activity-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    display: inline-block;
+}
+.cs-activity-dot.quiet { background: var(--cs-green); box-shadow: 0 0 4px var(--cs-green); }
+.cs-activity-dot.busy { background: var(--cs-yellow); box-shadow: 0 0 4px var(--cs-yellow); }
+.cs-activity-dot.dangerous { background: var(--cs-red); box-shadow: 0 0 4px var(--cs-red); animation: csx-pulse 2.4s ease-in-out infinite; }
+
+.cs-status { display: inline-flex; align-items: center; gap: 4px; }
+.cs-status.on { color: var(--cs-green); }
+.cs-status.off { color: var(--cs-text-dim); }
+
+/* NPC tag chip */
+.cs-npc-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: var(--cs-radius-sm);
+    font-family: var(--cs-font-mono);
+    font-size: 8px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--cs-text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   FACTION POWER BARS — v1.64.0 [2026-06-27]
+   6-bar faction tension tracker for NeonCity dashboard.
+   ══════════════════════════════════════════════════════════════ */
+
+/* v1.64.0 [2026-06-27] — Faction power bars */
+.cs-factions { display: flex; flex-direction: column; gap: 6px; }
+.cs-faction {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--cs-font-mono);
+    font-size: 10px;
+}
+.cs-faction__name {
+    width: 90px;
+    flex-shrink: 0;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.cs-faction__track {
+    flex: 1;
+    height: 6px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+.cs-faction__fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.5s var(--cs-ease);
+}
+.cs-faction__power {
+    width: 24px;
+    text-align: right;
+    font-weight: 700;
+    color: var(--cs-text-primary);
+}
+.cs-faction__standing {
+    width: 56px;
+    text-align: right;
+    font-size: 8.5px;
+    letter-spacing: 0.1em;
+    color: var(--cs-text-muted);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SECTION HEADERS — v1.64.0 [2026-06-27]
+   Reusable panel/section title with glyph + glow accent.
+   ══════════════════════════════════════════════════════════════ */
+
+/* v1.64.0 [2026-06-27] — Section headers */
+.cs-section-title {
+    margin: 0 0 var(--cs-space-sm);
+    font-family: var(--cs-font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cs-scene-accent);
+    text-shadow: 0 0 10px rgba(var(--cs-scene-accent-rgb), 0.4);
+}
+
+.cs-panel-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 0 var(--cs-space-sm);
+    font-family: var(--cs-font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cs-text-secondary);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SCENE CARD — v1.64.0 [2026-06-27]
+   Hub scene navigation card with accent border + status.
+   ══════════════════════════════════════════════════════════════ */
+
+/* v1.64.0 [2026-06-27] — Scene cards for hub */
+.cs-scene-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--cs-radius-lg);
+    cursor: pointer;
+    transition: all var(--cs-duration-fast) var(--cs-ease);
+    text-decoration: none;
+    color: inherit;
+    position: relative;
+    overflow: hidden;
+}
+.cs-scene-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 3px;
+    background: var(--scene-accent, var(--cs-scene-accent));
+    border-radius: 3px 0 0 3px;
+    opacity: 0.6;
+    transition: opacity var(--cs-duration-fast) var(--cs-ease);
+}
+.cs-scene-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.cs-scene-card:hover::before { opacity: 1; }
+.cs-scene-card.offline { opacity: 0.5; }
+.cs-scene-card.offline:hover { opacity: 0.7; }
+
+.cs-scene-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.cs-scene-card__icon { font-size: 18px; }
+.cs-scene-card__name {
+    font-family: var(--cs-font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--cs-text-primary);
+}
+.cs-scene-card__subtitle {
+    font-family: var(--cs-font-mono);
+    font-size: 8px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cs-text-dim);
+}
+.cs-scene-card__desc {
+    font-size: 11px;
+    color: var(--cs-text-muted);
+    line-height: 1.4;
+}
+.cs-scene-card__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--cs-font-mono);
+    font-size: 9px;
+    color: var(--cs-text-dim);
+    margin-top: auto;
+}
+
+/* Scene card grid */
+.cs-scene-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--cs-space-md);
+}
+
+/* Pillar section header */
+.cs-section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: var(--cs-space-xl) 0 var(--cs-space-md);
+}
+.cs-section-header__icon { font-size: 16px; }
+.cs-section-header__label {
+    font-family: var(--cs-font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cs-text-primary);
+}
+.cs-section-header__line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+}
+.cs-section-header__count {
+    font-family: var(--cs-font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--cs-text-dim);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ONLINE STATUS DOT — v1.64.0 [2026-06-27]
+   ══════════════════════════════════════════════════════════════ */
+
+.cs-status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.cs-status-dot.online {
+    background: var(--cs-green);
+    box-shadow: 0 0 6px var(--cs-green);
+}
+.cs-status-dot.offline {
+    background: var(--cs-text-dim);
+    box-shadow: none;
 }

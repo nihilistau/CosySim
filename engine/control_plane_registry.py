@@ -15,6 +15,7 @@ Version: v1.42.1 [2026-03-21]
 Author:  CosySim Team
 
 Change Log:
+    v1.64.0 [2026-06-27] — Registered verdant scene (Neon Glow-Up dual-agent LitRPG)
     v1.63.0 [2026-06-16] — Registered war_room scene (C-T1 scaffold, auto-start)
     v1.63.0 [2026-06-15] — Registered the_sprawl scene (B-T1 scaffold, auto-start)
     v1.62.0 [2026-06-15] — Registered executive_suite scene (ES-T1 scaffold, auto-start)
@@ -324,6 +325,14 @@ SCENE_DEFS: Dict[str, Dict[str, Any]] = {
         "cls": "content.scenes.war_room.war_room_scene.WarRoomScene",
         "label": "THE WAR ROOM",
         "auto_start": True,
+        "pillar": "game",
+    },
+    # v1.64.0 [2026-06-27] — Verdant Realms dual-agent LitRPG (Neon Glow-Up)
+    "verdant": {
+        "type": "flask",
+        "cls": "content.scenes.verdant.verdant_scene.VerdantRealmsScene",
+        "label": "VERDANT REALMS",
+        "auto_start": False,
         "pillar": "game",
     },
 }

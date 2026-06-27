@@ -4,15 +4,18 @@
  *
  * Main controller for THE TERMINAL (CosySim navigation hub, port 8500).
  * Handles scene grid rendering (pillar-based + legacy fallback), world
- * clock, economy panel, world-state events, and data-stream background
- * particle animation.
+ * clock, economy panel, world-state events, faction territory bars,
+ * Nexus health, and data-stream background particle animation.
  *
  * Blue accent: #3b82f6
  *
- * @version v1.42.1 [2026-03-21]
- * @author  CosySim Team
+ * Version: v1.64.0 [2026-06-27]
+ * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: faction territory bars, section
+ *                           count badges, Nexus tier bench stat, gold credit
+ *                           chip via ₵, event timestamps, Orbitron card names
  *   v1.42.1 [2026-03-21] — Extensive documentation, section dividers, version stamps
  *   v1.42.0 [2026-03-21] — Pillar grid rendering, hub modernization
  *   v0.68   [prior]      — Dark Renaissance initial implementation
@@ -48,6 +51,16 @@ class TheTerminalHub {
     this._dsCtx     = null;
     this._dsParticles = [];
     this._dsRaf     = null;
+
+    /** v1.64.0 — Faction color palette */
+    this._factionColors = {
+      'omnicorp':       '#3b82f6',
+      'ghost_net':      '#06b6d4',
+      'iron_syndicate': '#ef4444',
+      'neon_dragons':   '#f59e0b',
+      'street_rats':    '#22c55e',
+      'void_runners':   '#a855f7',
+    };
   }
 
   // -------------------------------------------------------------------
@@ -63,6 +76,7 @@ class TheTerminalHub {
     this.loadScenes();
     this.loadWorldState();
     this.loadEconomy();
+    this._loadNexusHealth();
 
     // Periodic refresh intervals
     this._sceneTimer = setInterval(() => this.loadScenes(), 30_000);
@@ -70,12 +84,18 @@ class TheTerminalHub {
     this._ecoTimer   = setInterval(() => this.loadEconomy(), 45_000);
   }
 
+  // -------------------------------------------------------------------
+  // Scene Grid Renderer                                 [v1.64.0]
+  // -------------------------------------------------------------------
+
   /**
    * Fetch all scenes via pillar registry and render the scene grid.
    * Falls back to the legacy /api/scenes endpoint if the pillar
    * registry is unavailable.
    *
-   * @version v1.42.1 [2026-03-21]
+   * CONNECTS: /api/scene-registry, /api/scenes
+   * CALLED BY: init(), setInterval
+   * EMITS: DOM updates to scene-grid-{pillarId}, section-count-{pillarId}
    */
   async loadScenes() {
     try {
@@ -84,9 +104,9 @@ class TheTerminalHub {
       if (data && data.pillars) {
         this._renderPillarGrid(data.pillars);
         this._updateScenesBadgePillar(data.pillars);
+        this._updateSectionCounts(data.pillars);
       }
     } catch (err) {
-      // Fallback to legacy /api/scenes endpoint
       try {
         const res    = await fetch('/api/scenes');
         const scenes = await res.json();
@@ -99,46 +119,11 @@ class TheTerminalHub {
     }
   }
 
-  /** Fetch world state and update the world panel. */
-  async loadWorldState() {
-    try {
-      const res  = await fetch('/api/world_state');
-      const data = await res.json();
-      this._renderWorldState(data);
-    } catch (err) {
-      console.warn('[TheTerminal] loadWorldState failed:', err);
-    }
-  }
-
-  /** Fetch economy data and render the economy panel. */
-  async loadEconomy() {
-    try {
-      const res  = await fetch('/api/economy');
-      const data = await res.json();
-      this._renderEconomy(data);
-    } catch (err) {
-      console.warn('[TheTerminal] loadEconomy failed:', err);
-    }
-  }
-
-  /**
-   * Navigate to a scene URL.
-   * @param {string} url
-   */
-  navigateTo(url) {
-    window.location.href = url;
-  }
-
-  // -------------------------------------------------------------------
-  // Scene Grid Renderer                                 [v1.42.1]
-  // -------------------------------------------------------------------
-
   /**
    * Build and inject scene cards grouped by pillar (game/service/creation).
    * Each pillar maps to a DOM container with id="scene-grid-{pillarId}".
    *
    * @param {object} pillars  Pillar data from /api/scene-registry
-   * @version v1.42.1 [2026-03-21]
    */
   _renderPillarGrid(pillars) {
     const pillarIds = ['game', 'service', 'creation'];
@@ -167,10 +152,7 @@ class TheTerminalHub {
 
   /**
    * Update the scenes-online badge counter from pillar data.
-   * Counts all scenes across all pillars and displays "online/total".
-   *
    * @param {object} pillars
-   * @version v1.42.1 [2026-03-21]
    */
   _updateScenesBadgePillar(pillars) {
     let online = 0;
@@ -183,6 +165,21 @@ class TheTerminalHub {
     }
     const countEl = document.getElementById('scenes-badge-count');
     if (countEl) countEl.textContent = `${online}/${total}`;
+  }
+
+  /**
+   * v1.64.0 [2026-06-27] — Update per-pillar scene count badges.
+   * @param {object} pillars
+   */
+  _updateSectionCounts(pillars) {
+    const pillarMap = { game: 'game', service: 'service', creation: 'creation' };
+    for (const [pillarId, key] of Object.entries(pillarMap)) {
+      const el = document.getElementById(`section-count-${pillarId}`);
+      if (!el) continue;
+      const scenes = pillars[key] || [];
+      const online = scenes.filter(s => s.status === 'up').length;
+      el.textContent = `${online}/${scenes.length} SCENES`;
+    }
   }
 
   /**
@@ -207,6 +204,8 @@ class TheTerminalHub {
 
   /**
    * Build HTML for one scene card.
+   * v1.64.0 — Orbitron card names, JetBrains Mono meta
+   *
    * @param {object} s  Scene data from /api/scenes
    * @returns {string}
    */
@@ -249,7 +248,6 @@ class TheTerminalHub {
     const hh    = String(now.getHours()).padStart(2, '0');
     const mm    = String(now.getMinutes()).padStart(2, '0');
     const ss    = String(now.getSeconds()).padStart(2, '0');
-    // Night cycle runs 20:00–05:59, day cycle runs 06:00–19:59
     const cycle = (now.getHours() >= 20 || now.getHours() < 6) ? 'NIGHT CYCLE' : 'DAY CYCLE';
 
     const timeEl = document.getElementById('world-clock-time');
@@ -261,15 +259,33 @@ class TheTerminalHub {
   }
 
   // -------------------------------------------------------------------
-  // World State Renderer
+  // World State Renderer                                [v1.64.0]
   // -------------------------------------------------------------------
 
   /**
+   * Fetch world state and update the world panel + faction territory.
+   *
+   * CONNECTS: /api/world_state
+   * CALLED BY: init(), setInterval
+   * EMITS: DOM updates to world-time-display, world-events-list, faction-bars
+   */
+  async loadWorldState() {
+    try {
+      const res  = await fetch('/api/world_state');
+      const data = await res.json();
+      this._renderWorldState(data);
+      this._renderFactionTerritory(data);
+    } catch (err) {
+      console.warn('[TheTerminal] loadWorldState failed:', err);
+    }
+  }
+
+  /**
    * Render world state panel.
+   * v1.64.0 — event timestamps
    * @param {object} data  API response from /api/world_state
    */
   _renderWorldState(data) {
-    // Large time display (from server game-time if available)
     if (data.ok && data.time) {
       const t = data.time;
       const h = String(t.hour ?? 0).padStart(2, '0');
@@ -281,7 +297,6 @@ class TheTerminalHub {
       if (dayEl) dayEl.textContent = `DAY ${t.day ?? 0} · ${(t.day_name ?? '').toUpperCase()}`;
     }
 
-    // Active events
     const listEl = document.getElementById('world-events-list');
     if (!listEl) return;
 
@@ -290,12 +305,44 @@ class TheTerminalHub {
       listEl.innerHTML = '<div class="no-events">No active world events</div>';
       return;
     }
-    listEl.innerHTML = events.slice(0, 4).map(ev => {
+    listEl.innerHTML = events.slice(0, 5).map(ev => {
       const name = typeof ev === 'string' ? ev : (ev.name || JSON.stringify(ev));
+      const time = (typeof ev === 'object' && ev.time) ? ev.time : '';
       return `
 <div class="world-event-item">
   <span class="world-event-dot"></span>
   <span class="world-event-name">${this._escHtml(name)}</span>
+  ${time ? `<span class="world-event-time">${this._escHtml(time)}</span>` : ''}
+</div>`.trim();
+    }).join('');
+  }
+
+  /**
+   * v1.64.0 [2026-06-27] — Render faction territory power bars.
+   * @param {object} data  API response from /api/world_state
+   */
+  _renderFactionTerritory(data) {
+    const barsEl = document.getElementById('faction-bars');
+    if (!barsEl) return;
+
+    const factions = data.factions || data.faction_territory || [];
+    if (!factions.length) {
+      barsEl.innerHTML = '<div class="no-events">No faction data</div>';
+      return;
+    }
+
+    barsEl.innerHTML = factions.map(f => {
+      const name = this._escHtml(f.name || f.id || 'Unknown');
+      const pct  = Math.min(100, Math.max(0, f.territory ?? f.power ?? 0));
+      const key  = (f.id || f.name || '').toLowerCase().replace(/\s+/g, '_');
+      const color = this._factionColors[key] || f.color || '#3b82f6';
+      return `
+<div class="faction-bar">
+  <span class="faction-bar__name">${name}</span>
+  <div class="faction-bar__track">
+    <div class="faction-bar__fill" style="width:${pct}%;--faction-color:${this._escHtml(color)}"></div>
+  </div>
+  <span class="faction-bar__pct">${pct}%</span>
 </div>`.trim();
     }).join('');
   }
@@ -305,25 +352,40 @@ class TheTerminalHub {
   // -------------------------------------------------------------------
 
   /**
+   * Fetch economy data and render the economy panel.
+   *
+   * CONNECTS: /api/economy
+   * CALLED BY: init(), setInterval
+   * EMITS: DOM updates to economy-balance, header-credits, txn-list
+   */
+  async loadEconomy() {
+    try {
+      const res  = await fetch('/api/economy');
+      const data = await res.json();
+      this._renderEconomy(data);
+    } catch (err) {
+      console.warn('[TheTerminal] loadEconomy failed:', err);
+    }
+  }
+
+  /**
    * Render economy summary panel.
+   * v1.64.0 — ₵ symbol for credit display
    * @param {object} data  API response from /api/economy
    */
   _renderEconomy(data) {
-    // Balance
     const balEl = document.getElementById('economy-balance');
     if (balEl) {
       balEl.textContent = data.balance != null
-        ? `¢${Number(data.balance).toLocaleString()}`
-        : '¢—';
+        ? `₵${Number(data.balance).toLocaleString()}`
+        : '₵—';
     }
 
-    // Credit chip in header
     const chipEl = document.getElementById('header-credits');
     if (chipEl && data.balance != null) {
-      chipEl.textContent = `¢${Number(data.balance).toLocaleString()}`;
+      chipEl.textContent = `${Number(data.balance).toLocaleString()}`;
     }
 
-    // Transaction list
     const txnEl = document.getElementById('txn-list');
     if (!txnEl) return;
 
@@ -346,6 +408,34 @@ class TheTerminalHub {
   <span class="txn-amount ${cls}">${amount}</span>
 </div>`.trim();
     }).join('');
+  }
+
+  // -------------------------------------------------------------------
+  // Nexus Health                                        [v1.64.0]
+  // -------------------------------------------------------------------
+
+  /**
+   * v1.64.0 [2026-06-27] — Fetch Nexus health for bench HUD.
+   *
+   * CONNECTS: Nexus KMS /health endpoint
+   * EMITS: DOM update to bench-nexus
+   */
+  async _loadNexusHealth() {
+    const el = document.getElementById('bench-nexus');
+    if (!el) return;
+    try {
+      const nexusUrl = (window.COSYSIM?.services?.nexus) || 'http://localhost:8700';
+      const start = performance.now();
+      const res = await fetch(`${nexusUrl}/health`, { signal: AbortSignal.timeout(3000) });
+      const ms = Math.round(performance.now() - start);
+      if (res.ok) {
+        el.textContent = `online · ${ms}ms`;
+      } else {
+        el.textContent = 'degraded';
+      }
+    } catch {
+      el.textContent = 'offline';
+    }
   }
 
   // -------------------------------------------------------------------
@@ -372,7 +462,6 @@ class TheTerminalHub {
     this._dsResize();
     window.addEventListener('resize', () => this._dsResize());
 
-    // Spawn particles
     const COUNT = 60;
     for (let i = 0; i < COUNT; i++) {
       this._dsParticles.push(this._dsNewParticle(true));
@@ -413,11 +502,9 @@ class TheTerminalHub {
     if (!ctx || !cnv) return;
 
     ctx.clearRect(0, 0, cnv.width, cnv.height);
-    ctx.font = '11px "Courier New", monospace';
+    ctx.font = '11px "JetBrains Mono", "Courier New", monospace';
 
     this._dsParticles.forEach((p, i) => {
-      // Each particle displays a character that "rotates" to a new random
-      // glyph after charTTL frames, simulating a data-stream flicker effect.
       p.charAge++;
       if (p.charAge >= p.charTTL) {
         p.char    = this._dsRandomChar();
@@ -432,7 +519,6 @@ class TheTerminalHub {
       p.x += p.vx;
       p.y += p.vy;
 
-      // Reset particle when it exits screen
       if (p.y > cnv.height + 10) {
         this._dsParticles[i] = this._dsNewParticle(false);
       }
@@ -468,5 +554,33 @@ class TheTerminalHub {
 document.addEventListener('DOMContentLoaded', () => {
   const hub = new TheTerminalHub();
   hub.init();
-  window._theTerminalHub = hub; // Expose for debugging
+  window._theTerminalHub = hub;
 });
+
+// =====================================================================
+// System poll (bench HUD stats)                        [v1.64.0]
+// =====================================================================
+
+(function () {
+  async function pollSystem() {
+    try {
+      const res  = await fetch('/api/system');
+      const data = await res.json();
+      const agEl = document.getElementById('bench-agents');
+      const vmEl = document.getElementById('bench-vram');
+      const scEl = document.getElementById('bench-scenes');
+      if (agEl) agEl.textContent = data.agent_count ?? '0';
+      if (vmEl) {
+        vmEl.textContent = data.vram_total_mb
+          ? `${Math.round(data.vram_used_mb)}/${Math.round(data.vram_total_mb)} MB`
+          : 'N/A';
+      }
+      if (scEl) {
+        const active = (data.active_scenes || []).length;
+        scEl.textContent = active ? `${active} active` : '—';
+      }
+    } catch { /* silent */ }
+  }
+  pollSystem();
+  setInterval(pollSystem, 30_000);
+})();

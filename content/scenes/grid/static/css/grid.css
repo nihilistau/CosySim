@@ -1,8 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    THE GRID — CosySim  |  accent: var(--cs-scene-accent) (#22d3ee, was #00ff88)
 
-   Version: v1.58.0 [2026-06-11]
+   Version: v1.64.0 [2026-06-27]
    Change Log:
+     v1.64.0 [2026-06-27] — Premium glow-up: watchlist bookmark star,
+                             listing hover halo, ghost terminal CRT glow,
+                             zone tile enhanced hover, price alert badge,
+                             Intel feed accent line
      v1.58.0 [2026-06-11] — Dark Renaissance glow-up (appended section):
                              palette re-pointed at --cs-* v2 tokens, kit
                              4-layer drift background, Orbitron display
@@ -549,4 +553,104 @@ body { background: var(--grid-bg); }
 }
 @media (max-width: 720px) {
   .grid-tabs { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Watchlist bookmark star ─────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Bookmark star on market listings for watchlist */
+.listing__watchlist {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--grid-text-dim);
+  cursor: pointer;
+  transition: color 0.2s, transform 0.15s;
+  z-index: 2;
+  padding: 2px;
+  line-height: 1;
+}
+.listing__watchlist:hover {
+  color: #fbbf24;
+  transform: scale(1.2);
+}
+.listing__watchlist.active {
+  color: #fbbf24;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+}
+
+/* ── Listing hover halo ──────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Enhanced green glow halo on listing hover */
+.market-grid .listing:hover,
+.den-grid .listing:hover {
+  box-shadow:
+    0 0 18px rgb(var(--grid-accent-rgb, 0 255 136) / 0.3),
+    0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Ghost terminal CRT glow ─────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Ghost terminal output gets CRT green glow */
+.ghost-terminal {
+  box-shadow: inset 0 0 30px rgba(0, 255, 136, 0.03);
+}
+.ghost-terminal__output {
+  text-shadow: 0 0 4px rgba(0, 255, 136, 0.15);
+}
+.ghost-terminal__id {
+  text-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
+}
+
+/* ── Zone tile enhanced hover ────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Zone tile gets accent top bar on hover */
+.zone-card:hover::before,
+.grid-zone-tile:hover::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--grid-accent), transparent);
+}
+
+/* ── Price alert badge ───────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Price alert indicator for watchlisted items */
+.listing__alert {
+  font-family: var(--cs-font-mono, 'JetBrains Mono', monospace);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+.listing__alert--drop {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* ── Intel feed accent line ──────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Intel feed items get left accent border */
+.intel-feed .intel-item {
+  border-left: 2px solid rgb(var(--grid-accent-rgb, 0 255 136) / 0.3);
+  padding-left: 10px;
+  transition: border-color 0.2s;
+}
+.intel-feed .intel-item:hover {
+  border-left-color: var(--grid-accent);
+}
+
+/* ── Inventory panel glass ───────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Inventory panel gets stronger glass treatment */
+.inventory-panel {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }

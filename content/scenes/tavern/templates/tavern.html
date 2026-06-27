@@ -11,8 +11,11 @@
   Uses tavern_kit.js (TavernScene) + tavern_ext.js (game logic).
   Original template archived as tavern_original.html.
 
-  Version: v1.50.0 [2026-03-22]
+  Version: v1.64.0 [2026-06-27]
   Change Log:
+    v1.64.0 [2026-06-27] — Premium glow-up: composited scene renders (7 PNGs),
+                             barter render panel, NPC roster render, tavern_v2.css
+                             layer, Orbitron title, enhanced dice viz, version bump
     v1.50.0 [2026-03-22] — Kit rebuild. TavernScene class,
                              tavern_ext.js extensions, new layout.
 #}
@@ -20,6 +23,8 @@
 {% block head_css %}
   <link rel="stylesheet" href="{{ url_for('static', filename='tavern_kit.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='tavern.css') }}">
+  {# v1.64.0 [2026-06-27] — Premium glow-up v2 layer (must load last) #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='tavern_v2.css') }}">
 {% endblock %}
 
 {% block scene_content %}
@@ -153,7 +158,7 @@
 
     </div>
 
-    <!-- ─── COLUMN 3: Rumors & Investigation ──────────────────── -->
+    <!-- ─── COLUMN 3: Rumors, NPC Roster Render & Barter ─────── -->
     <div class="ck-col">
 
       <!-- Rumors & Whispers Panel -->
@@ -170,6 +175,22 @@
       <button class="ck-btn ck-btn--hack" id="btn-investigate" style="margin-top: 8px; width: 100%;">
         INVESTIGATE
       </button>
+
+      <!-- v1.64.0 [2026-06-27] — NPC Roster scene render -->
+      <div class="tv-render" style="margin-top: 12px;">
+        <span class="tv-render__brk tv-render__brk--tl"></span>
+        <span class="tv-render__brk tv-render__brk--br"></span>
+        <span class="tv-render__tag">NPC Roster</span>
+        <img src="{{ url_for('static', filename='img/roster.png') }}" alt="NPC roster" loading="lazy">
+      </div>
+
+      <!-- v1.64.0 [2026-06-27] — Barter scene render -->
+      <div class="tv-render" style="margin-top: 10px;">
+        <span class="tv-render__brk tv-render__brk--tl"></span>
+        <span class="tv-render__brk tv-render__brk--br"></span>
+        <span class="tv-render__tag">Barter &middot; Offer / Receive</span>
+        <img src="{{ url_for('static', filename='img/barter.png') }}" alt="Barter panel" loading="lazy">
+      </div>
 
     </div>
 

@@ -1,0 +1,215 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   THE RUSTY ANCHOR — tavern_v2.css
+   Premium Glow-Up layer (loaded LAST — wins the cascade)
+   ════════════════════════════════════════════════════════════════════════
+   Warm amber house, copper accents, tankard gold.
+   #d97706 amber over parchment-dark void. Composited scene renders,
+   barter panel styling, NPC roster render, enhanced dice viz.
+
+   Version: v1.64.0 [2026-06-27]
+   Author:  CosySim Team
+
+   Change Log:
+     v1.64.0 [2026-06-27] — Initial v2 layer: amber palette via --cs-*
+                              tokens, 4-layer background, composited scene
+                              renders, barter panel, NPC roster, enhanced
+                              dice visual, copper stat bar glow, Orbitron
+                              title treatment
+
+   CONNECTS: tavern_kit.css (--scene-* palette), tavern.css (legacy),
+             design_tokens_v2.css ([data-scene="tavern"]),
+             cosysim-animations.css (cs-shimmer, csx-pulse)
+   CALLED BY: tavern.html {% block head_css %} (after tavern.css)
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ──── 1 · Palette → v2 tokens ───────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Tavern amber tokens derived from scene accent */
+:root {
+  --tv-accent:      var(--cs-scene-accent, #d97706);
+  --tv-accent-rgb:  var(--cs-scene-accent-rgb, 217 119 6);
+  --tv-copper:      #b87333;
+  --tv-copper-rgb:  184 115 51;
+  --tv-gold:        #e0b060;
+  --tv-parchment:   #e8d4a8;
+  --tv-font-head:   var(--cs-font-display, 'Orbitron', sans-serif);
+  --tv-font-mono:   var(--cs-font-mono, 'JetBrains Mono', monospace);
+}
+
+/* ──── 2 · 4-layer background ────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Dark tavern interior: deep brown base,
+   warm amber radial from hearth, subtle drift grid */
+body {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 79px,
+      rgba(200, 150, 80, 0.03) 80px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 79px,
+      rgba(200, 150, 80, 0.03) 80px
+    ),
+    radial-gradient(ellipse 60% 50% at 50% 80%, rgba(217, 119, 6, 0.06) 0%, transparent 60%),
+    linear-gradient(180deg, #120c07 0%, #1a1008 60%, #120c07 100%);
+}
+
+/* ──── 3 · Orbitron title treatment ──────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Orbitron display font with amber gradient */
+.ck-scene-title {
+  font-family: var(--tv-font-head);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background: linear-gradient(135deg, var(--tv-gold), var(--tv-copper));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ck-scene-subtitle {
+  font-family: var(--tv-font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  color: rgba(var(--tv-copper-rgb), 0.6);
+  text-transform: uppercase;
+}
+
+/* ──── 4 · Gold HUD badge ────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Gold badge with JetBrains Mono */
+.ck-hud-badge {
+  font-family: var(--tv-font-mono);
+  color: var(--tv-gold);
+  animation: cs-shimmer 4s ease-in-out infinite;
+}
+
+/* ──── 5 · Scene render panels ───────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Composited render cards with hover reveal */
+.tv-render {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--tv-copper-rgb), 0.26);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transition: transform 0.16s, box-shadow 0.16s, border-color 0.16s;
+  cursor: pointer;
+  background: #120c07;
+}
+.tv-render:hover {
+  transform: translateY(-3px);
+  border-color: var(--tv-gold);
+  box-shadow: 0 0 20px rgba(var(--tv-copper-rgb), 0.3), 0 16px 36px rgba(0, 0, 0, 0.6);
+}
+.tv-render img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tv-render__tag {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  font-family: var(--tv-font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tv-parchment);
+  background: rgba(18, 12, 7, 0.76);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--tv-copper-rgb), 0.3);
+  opacity: 0;
+  transition: opacity 0.16s;
+}
+.tv-render:hover .tv-render__tag { opacity: 1; }
+
+/* Corner bracket decorations */
+.tv-render__brk {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(var(--tv-copper-rgb), 0.65);
+  z-index: 2;
+  pointer-events: none;
+}
+.tv-render__brk--tl { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
+.tv-render__brk--br { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
+
+/* ──── 6 · Copper stat bar glow ──────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Stat bar fills get copper/amber glow */
+.ck-stat-fill {
+  box-shadow: 0 0 6px rgba(var(--tv-copper-rgb), 0.25);
+  border-radius: 2px;
+}
+
+/* ──── 7 · Glass panel hover ─────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Amber border glow on panel hover */
+.ck-glass-panel:hover {
+  border-color: rgba(var(--tv-accent-rgb), 0.2);
+}
+
+/* ──── 8 · Dice visual enhancement ───────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Dice result with amber glow */
+.dice-visual {
+  text-shadow: 0 0 12px rgba(var(--tv-accent-rgb), 0.3);
+}
+.dice-visual.rolling {
+  animation: tv-dice-spin 0.4s ease-in-out;
+}
+@keyframes tv-dice-spin {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-15deg) scale(1.1); }
+  50% { transform: rotate(10deg) scale(0.95); }
+  75% { transform: rotate(-5deg) scale(1.05); }
+}
+
+/* ──── 9 · Drink menu button glow ────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Drink buttons get warm hover glow */
+.drink-menu-grid .ck-btn:hover {
+  box-shadow: 0 0 10px rgba(var(--tv-accent-rgb), 0.2);
+}
+
+/* ──── 10 · Barter panel styling ─────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Barter offer/receive panel */
+.tv-barter-panel {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.tv-barter-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tv-barter-label {
+  font-family: var(--tv-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tv-gold);
+  text-align: center;
+}
+.tv-barter-arrow {
+  font-size: 18px;
+  color: rgba(var(--tv-copper-rgb), 0.5);
+}
+.tv-barter-slot {
+  padding: 6px 10px;
+  border: 1px dashed rgba(var(--tv-copper-rgb), 0.25);
+  border-radius: 6px;
+  font-family: var(--tv-font-mono);
+  font-size: 10px;
+  color: var(--tv-parchment);
+  text-align: center;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tv-barter-slot--filled {
+  border-style: solid;
+  border-color: rgba(var(--tv-copper-rgb), 0.4);
+  background: rgba(var(--tv-copper-rgb), 0.06);
+}
