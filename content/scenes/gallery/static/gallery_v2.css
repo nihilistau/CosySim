@@ -8,10 +8,13 @@
  *
  * Accent: #818cf8 periwinkle · Secondary: #c084fc violet
  *
- * Version: v1.58.0 [2026-06-11]
+ * Version: v1.64.0 [2026-06-27]
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: art exhibition border glow,
+ *                           picture-light shimmer on artwork cards,
+ *                           curator badge pulse, exhibit title neon hover.
  *   v1.58.0 [2026-06-11] — Initial Dark Renaissance layer: bg stack,
  *                           museum frames + picture lights, roving
  *                           spotlight wow, deep-glass detail panel.
@@ -215,4 +218,68 @@ body[data-scene="gallery"] .neon-scanlines {
   .obscura-wrapper::after {
     animation: none !important;
   }
+}
+
+/* v1.64.0 [2026-06-27] — PREMIUM GLOW-UP */
+/* ──── 7 · Art Exhibition Glass Glow ─────────────────────────────── */
+
+/* Glass panel hover — periwinkle border glow + lift */
+.gallery-floor .gallery-card,
+.detail-panel,
+.commission-panel,
+.sidebar-card {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+.gallery-floor .gallery-card:hover,
+.detail-panel:hover,
+.commission-panel:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.55);
+  box-shadow:
+    0 0 18px rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.25),
+    0 0 48px rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.10),
+    inset 0 0 12px rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.06);
+}
+
+/* Museum picture-light shimmer on artwork cards */
+.gallery-floor .gallery-card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.15) 0%,
+    transparent 40%,
+    transparent 60%,
+    rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.08) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+.gallery-floor .gallery-card:hover::after {
+  opacity: 1;
+}
+
+/* Curator badge — soft periwinkle pulse */
+.curator-mood-badge {
+  animation: curator-pulse 3s ease-in-out infinite;
+}
+@keyframes curator-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.3); }
+  50%      { box-shadow: 0 0 16px rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.55); }
+}
+
+/* Exhibit title — subtle neon text glow on hover */
+.exhibit-title:hover {
+  text-shadow:
+    0 0 12px rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.6),
+    0 0 36px rgba(var(--cs-scene-accent-rgb, 129 140 248) / 0.25);
+}
+
+/* ──── 8 · Premium Reduced Motion Override ───────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .curator-mood-badge { animation: none !important; }
+  .gallery-floor .gallery-card::after { display: none; }
 }

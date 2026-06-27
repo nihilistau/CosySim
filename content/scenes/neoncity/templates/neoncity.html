@@ -6,17 +6,19 @@
 {# v1.52.0 — Keep shared HUD visible (slide-in panels work after v1.51 rebuild) #}
 
 {#
-  NeonCity v1.52 — Three Pillars
-  ==============================
+  NeonCity v1.64 — Premium Glow-Up
+  ================================
   Rebuilt from scratch. No inherited CSS conflicts, no canvas in flow,
   no announcer overlay. Clean grid layout, all 67 DOM IDs preserved
-  for JS compatibility. v1.52 adds district online/offline indicators
-  and enhanced faction data flow.
+  for JS compatibility.
 
-  Version: v1.58.0 [2026-06-11]
+  Version: v1.64.0 [2026-06-27]
   Author:  CosySim Team
 
   Change Log:
+    v1.64.0 [2026-06-27] — Premium glow-up: enhanced stat bar glow, premium
+                           glass panels, district action buttons on all cards,
+                           version bump, tension meter wired to aggregate heat
     v1.58.0 [2026-06-11] — Dark Renaissance alignment: version chip bumped,
                             CSS re-pointed at --cs-* v2 tokens (see neoncity.css)
     v1.57.3 [2026-05-12] — anim-stagger-in on districts container,
@@ -52,8 +54,8 @@
 <header class="nc-header neoncity-header">
   <div class="nc-header__left">
     <h1 class="nc-logo"><span class="nc-logo__neon">NEON</span> <span class="nc-logo__city">CITY</span></h1>
-    {# v1.58.0 [2026-06-11] — version chip aligned with Dark Renaissance release #}
-    <span class="nc-version">v1.58 <em>Dark Renaissance</em></span>
+    {# v1.64.0 [2026-06-27] — version chip bumped for Premium Glow-Up #}
+    <span class="nc-version">v1.64 <em>Neon Glow-Up</em></span>
   </div>
   <div class="nc-header__center header-center">
     <div class="nc-clock" id="world-clock">
@@ -177,6 +179,7 @@
               {% for npc in d.npcs %}<span class="nc-npc-tag">{{ npc }}</span>{% endfor %}
             </div>
           </div>
+          {# v1.64.0 [2026-06-27] — Action buttons on all district cards #}
           {% if d.key == 'hacker_den' %}
           <div class="nc-district__actions">
             <button class="nc-btn nc-btn--xs" onclick="event.stopPropagation();NeonCityApp.openHackTargets()">&#128187; HACK</button>
@@ -184,7 +187,20 @@
           </div>
           {% elif d.key == 'black_market' %}
           <div class="nc-district__actions">
-            <button class="nc-btn nc-btn--xs" style="border-color:#fbbf24;color:#fbbf24" onclick="event.stopPropagation();window.location.href='http://localhost:5574'">&#127963; AUCTION</button>
+            <button class="nc-btn nc-btn--xs nc-btn--gold" onclick="event.stopPropagation();window.location.href='http://localhost:5574'">&#127963; AUCTION</button>
+            <button class="nc-btn nc-btn--xs" onclick="event.stopPropagation();NeonCityApp.openShop()">&#128722; TRADE</button>
+          </div>
+          {% elif d.key == 'corporate_tower' %}
+          <div class="nc-district__actions">
+            <button class="nc-btn nc-btn--xs" onclick="event.stopPropagation();NeonCityApp.buyIntel()">&#9673; INTEL</button>
+          </div>
+          {% elif d.key == 'underground_club' %}
+          <div class="nc-district__actions">
+            <button class="nc-btn nc-btn--xs" style="border-color:#ec4899;color:#ec4899" onclick="event.stopPropagation();NeonCityApp.visitDistrict('underground_club')">&#127925; ENTER</button>
+          </div>
+          {% elif d.key == 'street_level' %}
+          <div class="nc-district__actions">
+            <button class="nc-btn nc-btn--xs" onclick="event.stopPropagation();NeonCityApp.loadWorldEvents()">&#9889; SCAN</button>
           </div>
           {% endif %}
         </div>

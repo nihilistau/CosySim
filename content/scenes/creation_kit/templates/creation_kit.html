@@ -9,6 +9,8 @@
 
   Version: v1.51.0 [2026-03-25]
   Change Log:
+    v1.64.0 [2026-06-27] — Premium glow-up: glass panel hover border glow,
+                            canvas component amber edge pulse, inspector shine
     v1.51.0 [2026-03-25] — Character Wizard overlay (6-stage character creation)
     v1.49.5 [2026-03-22] — Visual drop indicator, breadcrumb navigation,
                             component duplication (Ctrl+D), canvas minimap
@@ -921,6 +923,58 @@ body {
   text-align: center;
   padding: 4px;
   opacity: 0.5;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   Glass panel hover border glow + canvas component amber edge pulse +
+   inspector shine
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ──── Glass panel hover border glow ──────────────────────────────── */
+/* v1.64.0 [2026-06-27] — accent-traced border on any glass panel hover */
+.ck-palette,
+.ck-canvas-wrap,
+.ck-inspector,
+.ck-preview-wrap {
+  border: 1px solid rgba(var(--ck-accent-rgb), 0.12);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.ck-palette:hover,
+.ck-canvas-wrap:hover,
+.ck-inspector:hover,
+.ck-preview-wrap:hover {
+  border-color: rgba(var(--ck-accent-rgb), 0.45);
+  box-shadow: 0 0 20px rgba(var(--ck-accent-rgb), 0.10),
+              inset 0 0 12px rgba(var(--ck-accent-rgb), 0.04);
+}
+
+/* ──── Canvas component amber edge pulse ─────────────────────────── */
+/* v1.64.0 [2026-06-27] — pulsing amber left border on canvas components */
+@keyframes ck-amber-edge-pulse {
+  0%, 100% { border-left-color: rgba(var(--ck-accent-rgb), 0.20); }
+  50%      { border-left-color: rgba(var(--ck-accent-rgb), 0.55); }
+}
+.ck-canvas-item,
+.ck-component {
+  border-left: 3px solid rgba(var(--ck-accent-rgb), 0.20);
+  animation: ck-amber-edge-pulse 3s ease-in-out infinite;
+}
+
+/* ──── Inspector shine — breathing inner glow ────────────────────── */
+/* v1.64.0 [2026-06-27] — soft breathing glow on the property inspector */
+@keyframes ck-inspector-breathe {
+  0%, 100% { box-shadow: inset 0 0 30px rgba(var(--ck-accent-rgb), 0.03); }
+  50%      { box-shadow: inset 0 0 30px rgba(var(--ck-accent-rgb), 0.09); }
+}
+.ck-inspector {
+  animation: ck-inspector-breathe 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ck-canvas-item,
+  .ck-component { animation: none; }
+  .ck-inspector { animation: none; }
 }
 </style>
 </head>

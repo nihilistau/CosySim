@@ -1,6 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════════
-   THE TERMINAL — hub.css  |  v0.68 Dark Renaissance
+   THE TERMINAL — hub.css  |  v1.64.0 Premium Glow-Up
    Blue accent: #3b82f6
+
+   Version: v1.64.0 [2026-06-27]
+   Author:  CosySim Team
+
+   Change Log:
+       v1.64.0 [2026-06-27] — Premium glow-up: Orbitron titles, JetBrains Mono,
+                               chrome header, faction territory bars, premium
+                               glass panels, enhanced card hover, scene counts
+       v0.68   [2026-03-20] — Dark Renaissance initial implementation
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Design tokens ──────────────────────────────────────────────── */
@@ -20,6 +29,7 @@
   --hub-border-hover:  rgba(59, 130, 246, 0.30);
   --hub-green:         #22c55e;
   --hub-red:           #ef4444;
+  --hub-gold:          #f59e0b;
   --hub-radius:        10px;
   --hub-radius-lg:     16px;
   --hub-transition:    0.2s ease;
@@ -62,14 +72,15 @@ a { color: inherit; text-decoration: none; }
   min-height: 100vh;
 }
 
-/* ── Hub header ──────────────────────────────────────────────────── */
+/* ── Hub header ── v1.64.0 chrome treatment ─────────────────────── */
 .hub-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 20px 28px 16px;
   border-bottom: 1px solid var(--hub-border);
-  background: linear-gradient(180deg, rgba(59,130,246,0.06) 0%, transparent 100%);
+  background:
+    linear-gradient(180deg, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0.02) 40%, transparent 100%);
   gap: 20px;
   flex-wrap: wrap;
 }
@@ -80,6 +91,7 @@ a { color: inherit; text-decoration: none; }
   gap: 2px;
 }
 
+/* v1.64.0 [2026-06-27] — Orbitron wordmark with chrome glow */
 .hub-title {
   font-size: 22px;
   font-weight: 800;
@@ -87,7 +99,7 @@ a { color: inherit; text-decoration: none; }
   text-transform: uppercase;
   color: var(--hub-accent);
   text-shadow: var(--hub-accent-glow);
-  font-family: 'Courier New', 'Consolas', monospace;
+  font-family: 'Orbitron', 'Courier New', monospace;
 }
 
 .hub-subtitle {
@@ -95,6 +107,7 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--hub-text-muted);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .hub-header-right {
@@ -103,7 +116,7 @@ a { color: inherit; text-decoration: none; }
   gap: 20px;
 }
 
-/* ── World clock ─────────────────────────────────────────────────── */
+/* ── World clock ── v1.64.0 JetBrains Mono ──────────────────────── */
 .world-clock {
   display: flex;
   flex-direction: column;
@@ -112,7 +125,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .world-clock-time {
-  font-family: 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
   font-size: 15px;
   font-weight: 700;
   color: var(--hub-accent);
@@ -124,20 +137,27 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.15em;
   color: var(--hub-text-muted);
   text-transform: uppercase;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
-/* ── Credit balance chip ─────────────────────────────────────────── */
+/* ── Credit balance chip ── v1.64.0 gold accent ─────────────────── */
 .credit-chip {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
-  background: var(--hub-accent-dim);
-  border: 1px solid var(--hub-accent-border);
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.25);
   border-radius: 20px;
   font-size: 13px;
   font-weight: 700;
-  color: var(--hub-accent);
+  color: var(--hub-gold);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  transition: box-shadow var(--hub-transition);
+}
+
+.credit-chip:hover {
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
 }
 
 .credit-chip .credit-icon { font-size: 14px; }
@@ -148,6 +168,7 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px;
   color: var(--hub-text-muted);
   white-space: nowrap;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .scenes-badge .badge-count {
@@ -158,7 +179,7 @@ a { color: inherit; text-decoration: none; }
 /* ── Main content ────────────────────────────────────────────────── */
 .hub-main {
   flex: 1;
-  max-width: 1280px;
+  max-width: 1400px;
   width: 100%;
   margin: 0 auto;
   padding: 24px 28px;
@@ -167,7 +188,7 @@ a { color: inherit; text-decoration: none; }
   gap: 28px;
 }
 
-/* ── Section headers ─────────────────────────────────────────────── */
+/* ── Section headers ── v1.64.0 scene count badge ───────────────── */
 .section-header {
   display: flex;
   align-items: center;
@@ -186,6 +207,7 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--hub-text-muted);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .section-line {
@@ -194,34 +216,36 @@ a { color: inherit; text-decoration: none; }
   background: var(--hub-border);
 }
 
+/* v1.64.0 [2026-06-27] — Scene count badge in section header */
 .section-count {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
   font-size: 10px;
   color: var(--hub-text-dim);
   letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* ── Scene grid ──────────────────────────────────────────────────── */
 .scene-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
 }
 
-/* ── Scene card ──────────────────────────────────────────────────── */
-/* Scene cards are <a> links — reset anchor defaults */
+/* ── Scene card ── v1.64.0 premium hover + Orbitron titles ──────── */
 a.scene-card {
   color: inherit;
   text-decoration: none;
 }
 
 .scene-card {
-  --scene-accent: var(--hub-accent);       /* overridden per card via JS */
+  --scene-accent: var(--hub-accent);
 
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px;
+  gap: 8px;
+  padding: 14px 16px;
   background: var(--hub-bg-card);
   border: 1px solid var(--hub-border);
   border-radius: var(--hub-radius);
@@ -234,35 +258,38 @@ a.scene-card {
   outline: none;
 }
 
-/* Top accent bar */
+/* v1.64.0 — top accent bar with gradient */
 .scene-card::before {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
   height: 2px;
-  background: var(--scene-accent);
+  background: linear-gradient(90deg, var(--scene-accent), transparent 80%);
   opacity: 0.6;
-  transition: opacity var(--hub-transition);
+  transition: opacity var(--hub-transition), height var(--hub-transition);
 }
 
+/* v1.64.0 — premium hover with accent glow halo */
 .scene-card:hover,
 .scene-card:focus-visible {
   border-color: var(--scene-accent);
   background: var(--hub-bg-elevated);
   transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3),
-              0 0 0 1px var(--scene-accent) inset;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35),
+              0 0 0 1px var(--scene-accent) inset,
+              0 0 20px color-mix(in srgb, var(--scene-accent) 15%, transparent);
 }
 
-.scene-card:hover::before { opacity: 1; }
+.scene-card:hover::before {
+  opacity: 1;
+  height: 3px;
+}
 
-/* Offline dimming */
 .scene-card.offline {
   opacity: 0.55;
   filter: grayscale(0.4);
 }
 
-/* Card header row */
 .scene-card-header {
   display: flex;
   align-items: center;
@@ -271,7 +298,7 @@ a.scene-card {
 }
 
 .scene-card-icon {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1;
   filter: drop-shadow(0 0 6px var(--scene-accent));
   flex-shrink: 0;
@@ -303,25 +330,27 @@ a.scene-card {
   50%       { box-shadow: 0 0 12px rgba(34, 197, 94, 0.9); }
 }
 
-/* Card body */
+/* v1.64.0 [2026-06-27] — Orbitron card titles */
 .scene-card-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--hub-text);
   line-height: 1.2;
+  font-family: 'Orbitron', 'Inter', sans-serif;
 }
 
 .scene-card-subtitle {
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.10em;
   color: var(--hub-text-muted);
   text-transform: uppercase;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .scene-card-desc {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--hub-text-muted);
   line-height: 1.45;
   display: -webkit-box;
@@ -335,11 +364,12 @@ a.scene-card {
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
+  padding-top: 4px;
 }
 
 .scene-card-port {
   font-size: 10px;
-  font-family: 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
   color: var(--hub-text-dim);
   letter-spacing: 0.05em;
 }
@@ -347,6 +377,7 @@ a.scene-card {
 .scene-card-chars {
   font-size: 10px;
   color: var(--hub-text-dim);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 /* ── Bottom two-column panels ────────────────────────────────────── */
@@ -360,13 +391,18 @@ a.scene-card {
   .hub-panels { grid-template-columns: 1fr; }
 }
 
-/* ── Glass panel base ────────────────────────────────────────────── */
+/* ── Glass panel base ── v1.64.0 premium glass treatment ────────── */
 .glass-panel {
   background: var(--hub-bg-panel);
   border: 1px solid var(--hub-border);
   border-radius: var(--hub-radius-lg);
   padding: 18px 20px;
   backdrop-filter: blur(12px);
+  transition: border-color var(--hub-transition);
+}
+
+.glass-panel:hover {
+  border-color: var(--hub-border-hover);
 }
 
 .glass-panel .panel-title {
@@ -379,16 +415,15 @@ a.scene-card {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .glass-panel .panel-title span { color: var(--hub-accent); }
 
 /* ── World state panel ───────────────────────────────────────────── */
-.world-state-panel {}
-
 .world-time-display {
-  font-family: 'Courier New', monospace;
-  font-size: 24px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 26px;
   font-weight: 700;
   color: var(--hub-accent);
   letter-spacing: 0.08em;
@@ -402,6 +437,7 @@ a.scene-card {
   color: var(--hub-text-muted);
   text-transform: uppercase;
   margin-bottom: 16px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .world-events-list {
@@ -419,6 +455,11 @@ a.scene-card {
   border: 1px solid var(--hub-border);
   border-radius: 6px;
   font-size: 11px;
+  transition: border-color var(--hub-transition);
+}
+
+.world-event-item:hover {
+  border-color: var(--hub-border-hover);
 }
 
 .world-event-dot {
@@ -426,12 +467,21 @@ a.scene-card {
   height: 6px;
   border-radius: 50%;
   background: var(--hub-accent);
+  box-shadow: 0 0 4px var(--hub-accent);
   flex-shrink: 0;
 }
 
 .world-event-name {
   color: var(--hub-text);
   flex: 1;
+}
+
+/* v1.64.0 [2026-06-27] — Event timestamp */
+.world-event-time {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 10px;
+  color: var(--hub-text-dim);
+  white-space: nowrap;
 }
 
 .no-events {
@@ -441,9 +491,69 @@ a.scene-card {
   padding: 4px 0;
 }
 
-/* ── Economy summary ─────────────────────────────────────────────── */
-.economy-summary {}
+/* ── v1.64.0 Faction territory bars ─────────────────────────────── */
+.faction-territory {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hub-border);
+}
 
+.faction-territory-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hub-text-muted);
+  margin-bottom: 10px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+.faction-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.faction-bar__name {
+  width: 80px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hub-text-muted);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.faction-bar__track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.faction-bar__fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--faction-color, var(--hub-accent));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--faction-color, var(--hub-accent)) 40%, transparent);
+  transition: width 0.6s ease;
+}
+
+.faction-bar__pct {
+  width: 32px;
+  text-align: right;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--hub-text-dim);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+/* ── Economy summary ── v1.64.0 gold balance ────────────────────── */
 .balance-display {
   display: flex;
   align-items: baseline;
@@ -454,9 +564,10 @@ a.scene-card {
 .balance-amount {
   font-size: 30px;
   font-weight: 800;
-  font-family: 'Courier New', monospace;
-  color: var(--hub-accent);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  color: var(--hub-gold);
   letter-spacing: 0.05em;
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
 }
 
 .balance-label {
@@ -464,6 +575,7 @@ a.scene-card {
   letter-spacing: 0.12em;
   color: var(--hub-text-muted);
   text-transform: uppercase;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .txn-list {
@@ -482,6 +594,11 @@ a.scene-card {
   border-radius: 6px;
   font-size: 11px;
   gap: 10px;
+  transition: border-color var(--hub-transition);
+}
+
+.txn-item:hover {
+  border-color: var(--hub-border-hover);
 }
 
 .txn-desc {
@@ -497,10 +614,11 @@ a.scene-card {
   color: var(--hub-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .txn-amount {
-  font-family: 'Courier New', monospace;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -508,7 +626,7 @@ a.scene-card {
 .txn-amount.positive { color: var(--hub-green); }
 .txn-amount.negative { color: var(--hub-red); }
 
-/* ── Bench HUD ───────────────────────────────────────────────────── */
+/* ── Bench HUD ── v1.64.0 JetBrains Mono + Nexus tier ──────────── */
 .bench-hud {
   border-top: 1px solid var(--hub-border);
   padding: 10px 28px;
@@ -519,6 +637,7 @@ a.scene-card {
   gap: 12px;
   font-size: 11px;
   color: var(--hub-text-dim);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 .bench-stat {
@@ -530,7 +649,6 @@ a.scene-card {
 .bench-stat .bench-val {
   color: var(--hub-text-muted);
   font-weight: 600;
-  font-family: 'Courier New', monospace;
 }
 
 .bench-version {
@@ -546,6 +664,7 @@ a.scene-card {
   padding: 20px 0;
   text-align: center;
   letter-spacing: 0.08em;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 /* ── Responsive ──────────────────────────────────────────────────── */

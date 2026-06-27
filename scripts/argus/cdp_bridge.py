@@ -6,6 +6,14 @@ Connects to a running Chrome instance on :9223 and provides:
 - Event subscription and dispatch
 - Command execution with response awaiting
 - Heap snapshot capture
+
+Version: v1.63.1 [2026-06-17]
+Author:  CosySim Team
+
+Change Log:
+    v1.63.1 [2026-06-17] — Fix CDPSession.evaluate() result over-nesting
+                            (always returned None) + exceptionDetails check;
+                            found via live CDP test against app.sesame.com
 """
 from __future__ import annotations
 
@@ -119,14 +127,19 @@ class CDPSession:
 
     async def evaluate(self, expression: str, return_by_value: bool = True) -> Any:
         """Evaluate JavaScript in the page context."""
+        # v1.63.1 [2026-06-17] — send() returns the CDP command result object,
+        # i.e. {"result": <RemoteObject>, "exceptionDetails"?: ...}. The value
+        # lives at result["result"]["value"] and exceptionDetails is a sibling
+        # of "result" — the previous code over-nested by one level (always None)
+        # and checked exceptionDetails in the wrong place. Found via live CDP test.
         result = await self.send("Runtime.evaluate", {
             "expression": expression,
             "returnByValue": return_by_value,
             "awaitPromise": True,
         })
-        if "exceptionDetails" in result.get("result", {}):
-            raise RuntimeError(f"JS eval error: {result['result']['exceptionDetails']}")
-        return result.get("result", {}).get("result", {}).get("value")
+        if "exceptionDetails" in result:
+            raise RuntimeError(f"JS eval error: {result['exceptionDetails']}")
+        return result.get("result", {}).get("value")
 
     # ──── Network helpers ────
 

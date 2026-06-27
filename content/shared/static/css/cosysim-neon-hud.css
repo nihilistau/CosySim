@@ -2636,3 +2636,45 @@ body[data-weather="clear"] .cs-hud {
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   PREMIUM HUD UPGRADES — v1.64.0 [2026-06-27]
+   Glow location chip, accent-tinted ticker with mask-fade edges,
+   credits glow, heat pulse on high values. Applied via --premium
+   modifier classes on the HUD template elements.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* v1.64.0 [2026-06-27] — Premium glow location chip */
+.cs-hud__location--glow {
+  padding: 2px 10px;
+  border-radius: var(--cs-radius-sm, 4px);
+  background: rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.08);
+  border: 1px solid rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.3);
+  text-shadow: 0 0 10px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.5);
+  box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 0 229 255) / 0.1);
+}
+
+/* v1.64.0 [2026-06-27] — Accent-tinted ticker with mask-fade edges */
+.cs-hud__center--premium .cs-hud__ticker-wrap {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+/* v1.64.0 [2026-06-27] — Credits glow on hover */
+.cs-hud__credits {
+  transition: text-shadow 0.3s ease;
+}
+.cs-hud:hover .cs-hud__credits {
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+/* v1.64.0 [2026-06-27] — Heat pulse when value is high (>50%) */
+.cs-hud__heat--high {
+  color: var(--cs-red, #ef4444);
+  animation: csx-pulse 2.4s ease-in-out infinite;
+}
+.cs-hud__heat--critical {
+  color: var(--cs-red, #ef4444);
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  animation: csx-pulse 1.2s ease-in-out infinite;
+}
+

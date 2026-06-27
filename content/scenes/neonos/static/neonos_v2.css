@@ -16,6 +16,8 @@
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: launcher tile hover glow,
+ *                           window chrome accent border, taskbar active pulse
  *   v1.58.0 [2026-06-11] — Dark Renaissance: executive-suite panoramic
  *                           sky + skyline layer, kit launcher tile glass,
  *                           deeper window chrome glass, kit taskbar with
@@ -193,4 +195,34 @@
   color: #00e5ff;
   letter-spacing: 0.08em;
   text-shadow: 0 0 8px rgba(0, 229, 255, 0.45);
+}
+
+/* ──── PREMIUM GLOW-UP ────────────────────────────────────────────────── */
+/* v1.64.0 [2026-06-27] — Premium glow-up */
+
+/* Launcher tile hover glow — cyan accent */
+.neon-launcher__tile {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+}
+.neon-launcher__tile:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.5);
+  box-shadow: 0 0 22px rgba(var(--cs-scene-accent-rgb), 0.18),
+              inset 0 0 30px rgba(var(--cs-scene-accent-rgb), 0.04);
+  transform: translateY(-2px);
+}
+
+/* Window chrome accent border — subtle glow on focused window */
+.neon-win.focused {
+  border-color: rgba(var(--cs-scene-accent-rgb), 0.4);
+  box-shadow: 0 0 18px rgba(var(--cs-scene-accent-rgb), 0.12),
+              0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Taskbar active app pulse */
+.neon-taskbar__app-btn--active {
+  animation: neonos-taskbar-pulse 2s ease-in-out infinite;
+}
+@keyframes neonos-taskbar-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(0, 229, 255, 0.12); }
+  50%      { box-shadow: 0 0 20px rgba(0, 229, 255, 0.3); }
 }

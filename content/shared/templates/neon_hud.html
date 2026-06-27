@@ -19,6 +19,11 @@
     hud_command.html    — right panel (phone, travel, crew, shop, system)
     hud_phone.html      — phone overlay iframe
     hud_announcer.html  — announcer/radio widget
+
+  Change Log:
+    v1.64.0 [2026-06-27] — Premium HUD: glow location chip with scene-accent
+                           border, accent-tinted ticker with mask fade, credits
+                           glow, heat pulse on high values
 #}
 <link rel="stylesheet" href="/shared/css/cosysim-neon-hud.css">
 
@@ -45,15 +50,17 @@
   </button>
 
   {# ── Left: Location + Time + Weather ──────────────────────────────── #}
-  <div class="cs-hud__left">
+  {# v1.64.0 [2026-06-27] — Premium glow location chip with scene-accent border #}
+  <div class="cs-hud__left cs-hud__left--premium">
     <span class="cs-hud__weather" id="hud-weather" aria-label="Weather">🌧️</span>
-    <span class="cs-hud__location" id="hud-location" aria-label="Current location">NEON CITY</span>
+    <span class="cs-hud__location cs-hud__location--glow" id="hud-location" aria-label="Current location">NEON CITY</span>
     <span class="cs-hud__sep" aria-hidden="true">·</span>
     <span class="cs-hud__time" id="hud-time" aria-label="Game time">Day 1  00:00</span>
   </div>
 
   {# ── Center: Event ticker (click to open feed) ────────────────────── #}
-  <div class="cs-hud__center" id="hud-center-click" aria-label="World events" title="Click to open event feed">
+  {# v1.64.0 [2026-06-27] — Accent-tinted ticker with mask-fade edges #}
+  <div class="cs-hud__center cs-hud__center--premium" id="hud-center-click" aria-label="World events" title="Click to open event feed">
     <div class="cs-hud__ticker-wrap">
       <span class="cs-hud__ticker" id="hud-ticker">⚡ Neon City Online</span>
     </div>

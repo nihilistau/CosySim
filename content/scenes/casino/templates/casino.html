@@ -11,8 +11,11 @@
   Uses casino_kit.js (CasinoScene) + casino_ext.js (game logic).
   Original template archived as casino_original.html.
 
-  Version: v1.58.0 [2026-06-11]
+  Version: v1.64.0 [2026-06-27]
   Change Log:
+    v1.64.0 [2026-06-27] — Premium glow-up: composited scene renders (6 PNGs),
+                             VIP faction gate panel, version bump, enhanced
+                             visual treatments via casino_v2.css additions
     v1.58.0 [2026-06-11] — Dark Renaissance v2 glow-up: casino_v2.css
                              layer (Orbitron marquee, gold chip shimmer
                              on credits/pot, felt rim-light, 4-layer bg,
@@ -128,6 +131,21 @@
               <span class="cn-world-label">HEAT</span>
               <span class="cn-world-value cn-world-heat" id="ws-heat">&mdash;</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.64.0 [2026-06-27] — VIP Faction Gate (composited scene render) -->
+      <div class="ck-glass-panel cn-gate-panel" id="faction-gate-panel">
+        <div class="ck-glass-title">FACTION GATE</div>
+        <div class="ck-glass-body">
+          <div class="cn-gate-render">
+            <img src="{{ url_for('static', filename='img/faction-gate.png') }}" alt="Faction standing gate" loading="lazy">
+            <span class="cn-gate-tag">STANDING REQUIRED</span>
+          </div>
+          <div class="cn-gate-status" id="gate-status">
+            <span class="cn-gate-label">Your standing:</span>
+            <span class="cn-gate-value" id="gate-standing">&mdash;</span>
           </div>
         </div>
       </div>

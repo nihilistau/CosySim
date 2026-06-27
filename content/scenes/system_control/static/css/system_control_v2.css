@@ -3,10 +3,12 @@
  * ==========================================
  * Teal ops console. Loads AFTER system_control.css.
  *
- * Version: v1.58.0 [2026-06-11]
+ * Version: v1.64.0 [2026-06-27]
  * Author:  CosySim Team
  *
  * Change Log:
+ *   v1.64.0 [2026-06-27] — Premium glow-up: panel hover glow, nav item
+ *                           accent, metric value text shadow
  *   v1.58.0 [2026-06-11] — Initial v2 glow-up (teal ops bg, Orbitron titles,
  *                           glass cards, mono metric readouts)
  */
@@ -52,3 +54,23 @@ body::before {
 
 /* ──── Buttons — accent glow ──── */
 .sc-btn-save { box-shadow: 0 0 14px var(--cs-scene-glow); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   v1.64.0 [2026-06-27] — PREMIUM GLOW-UP
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Panel hover glow ────────────────────────────────────────────────── */
+.sc-card:hover {
+  border-color: rgb(var(--cs-scene-accent-rgb, 20 184 166) / 0.25);
+  box-shadow: 0 0 12px rgb(var(--cs-scene-accent-rgb, 20 184 166) / 0.12);
+}
+
+/* ── Nav item active accent ──────────────────────────────────────────── */
+.sc-nav-item.active {
+  box-shadow: -2px 0 0 var(--cs-scene-accent, #14b8a6);
+}
+
+/* ── Metric value text glow ──────────────────────────────────────────── */
+.sc-metric-value {
+  text-shadow: 0 0 8px rgb(var(--cs-scene-accent-rgb, 20 184 166) / 0.3);
+}

@@ -753,3 +753,21 @@
     font-size: 0.35rem;
   }
 }
+
+/* ── v1.64.0 [2026-06-27] — PREMIUM GLOW-UP ──────────────────────────── */
+
+/* Glass panel hover border glow */
+.cs-panel,
+.cs-grid-container,
+.cs-programs,
+.cs-narration {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.cs-panel:hover,
+.cs-grid-container:hover,
+.cs-programs:hover,
+.cs-narration:hover {
+  border-color: rgba(var(--cs-scene-accent-rgb, 0 255 65), 0.55);
+  box-shadow: 0 0 12px rgba(var(--cs-scene-accent-rgb, 0 255 65), 0.25),
+              inset 0 0 8px rgba(var(--cs-scene-accent-rgb, 0 255 65), 0.06);
+}
