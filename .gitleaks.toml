@@ -14,4 +14,7 @@ regexes = [
   '''REDACTED-LMSTUDIO-TOKEN''',     # history-scrub marker (2026-08-03)
   '''ghp_ABCDEF[A-Za-z0-9]*''',      # docs placeholder token
   '''ghp_0{5,}''',                   # docs placeholder token
+  '''2wpiqnS6W3104MQz7mwfyQjME6d''', # Sesame RudderStack write key (3rd-party recon; write keys are public by design)
+  '''8c76a2abba5510ab798298c7e6185fbf''', # Sesame Sentry DSN (3rd-party recon; DSNs are public by design)
+  '''gemma-2-9b-instruct''',         # model name, not a secret
 ]
