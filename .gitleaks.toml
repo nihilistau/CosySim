@@ -1,0 +1,17 @@
+# Gitleaks config for CosySim — extends the default ruleset.
+# Used by the pre-commit hook (scripts/hooks/pre-commit) and can be run
+# manually with:  gitleaks git --pre-commit --staged
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known-safe placeholders and scrub markers"
+regexes = [
+  '''AIzaSyA0{31}''',                # dummy Google key used in tests
+  '''sk-lm-YOUR_TOKEN_HERE''',       # .env.example placeholder
+  '''REDACTED-GOOGLE-API-KEY''',     # history-scrub marker (2026-08-03)
+  '''REDACTED-LMSTUDIO-TOKEN''',     # history-scrub marker (2026-08-03)
+  '''ghp_ABCDEF[A-Za-z0-9]*''',      # docs placeholder token
+  '''ghp_0{5,}''',                   # docs placeholder token
+]

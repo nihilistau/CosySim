@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-commit secret scan with gitleaks (blocks commits containing secrets).
+# Installed via: scripts/hooks/install-hooks.ps1  (sets core.hooksPath)
+# Bypass in an emergency with: git commit --no-verify
+
+GITLEAKS="$(command -v gitleaks || command -v gitleaks.exe)"
+if [ -z "$GITLEAKS" ] && [ -x "$HOME/.local/bin/gitleaks.exe" ]; then
+    GITLEAKS="$HOME/.local/bin/gitleaks.exe"
+fi
+
+if [ -z "$GITLEAKS" ]; then
+    echo "pre-commit: gitleaks not found (PATH or ~/.local/bin)." >&2
+    echo "Install: https://github.com/gitleaks/gitleaks/releases" >&2
+    echo "Commit blocked. Use 'git commit --no-verify' to bypass deliberately." >&2
+    exit 1
+fi
+
+"$GITLEAKS" git --pre-commit --staged --redact --no-banner
+status=$?
+if [ $status -ne 0 ]; then
+    echo "" >&2
+    echo "pre-commit: gitleaks found potential secrets in staged changes." >&2
+    echo "Fix them (move to env vars / .env, which is gitignored) and re-commit." >&2
+    echo "False positive? Add an allowlist entry to .gitleaks.toml." >&2
+    exit $status
+fi
+exit 0
