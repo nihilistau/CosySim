@@ -5,6 +5,24 @@
 [extend]
 useDefault = true
 
+# ──── Custom rules ────────────────────────────────────────────────
+# gitleaks' default ruleset does NOT catch Google account session
+# cookies or LMStudio tokens — both of which leaked into CosySim's
+# public history (2026-08-03). These close that gap so a re-committed
+# heap dump / cookie jar is blocked at commit time.
+
+[[rules]]
+id = "google-session-cookie"
+description = "Google account session cookie (SID/SAPISID/APISID/etc.)"
+regex = '''(?i)\b(?:__Secure-[13]P)?(?:SAPISID|APISID|SID|HSID|SSID|SIDCC|LOGIN_INFO)\b\s*[=:]\s*['"]?(?:g\.a000[\w./-]{20,}|[\w./+-]{20,})'''
+keywords = ["sapisid", "apisid", "__secure-1papisid", "__secure-3papisid", "sidcc"]
+
+[[rules]]
+id = "lmstudio-token"
+description = "LMStudio API token"
+regex = '''sk-lm-[A-Za-z0-9]{6,}:[A-Za-z0-9]{10,}'''
+keywords = ["sk-lm-"]
+
 [[allowlists]]
 description = "Known-safe placeholders and scrub markers"
 regexes = [
