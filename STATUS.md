@@ -3,6 +3,8 @@
 **Date:** 2026-08-29  
 **Class:** `HISTORICAL` / `PROVED` — flagship living-world + agent-governance epoch.
 
+**Zoo map:** [JOURNEY.md](https://github.com/nihilistau/Position_Is_Arithmetic/blob/main/JOURNEY.md)
+
 This repo is the journey artifact: 35 launch targets, interceptor pipeline, Nexus flywheel, ARGUS, scenes. It was built live with agents and left readable on purpose.
 
 ## What was proved here
@@ -14,7 +16,6 @@ This repo is the journey artifact: 35 launch targets, interceptor pipeline, Nexu
 
 ## What continued elsewhere
 
-- **Companion / durable memory / night-pass daemon** → [Kairos](https://github.com/nihilistau/Kairos)
 - **Harness-on-Shannon-Prime-daemon** (intermediate) → [shannon-prime-harness](https://github.com/nihilistau/shannon-prime-harness) (also historical)
 - **Hard-engine + LLM-agents RPG** → [clockwork-dark](https://github.com/nihilistau/clockwork-dark)
 
